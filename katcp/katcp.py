@@ -37,7 +37,10 @@ class Message(object):
         INFORM: "#",
     }
 
+    # pylint fails to realise TYPE_SYMBOLS is defined
+    # pylint: disable-msg=E0602
     TYPE_SYMBOL_LOOKUP = dict((v, k) for k, v in TYPE_SYMBOLS.items())
+    # pylint: enable-msg=E0602
 
     ESCAPE_LOOKUP = {
         "\\" : "\\",
@@ -49,7 +52,11 @@ class Message(object):
         "t": "\t",
     }
 
+    # pylint fails to realise ESCAPE_LOOKUP is defined
+    # pylint: disable-msg = E0602
     REVERSE_ESCAPE_LOOKUP = dict((v, k) for k, v in ESCAPE_LOOKUP.items())
+    # pylint: enable-msg = E0602
+
     ESCAPE_RE = re.compile(r"[\\ \0\n\r\x1b\t]")
 
     def __init__(self, mtype, name, arguments=None):
@@ -73,6 +80,10 @@ class Message(object):
         """Given a re.Match object, return the escape code for it."""
         return "\\" + self.REVERSE_ESCAPE_LOOKUP[match.group()]
 
+
+    # * and ** magic useful here
+    # pylint: disable-msg = W0142
+
     @classmethod
     def request(cls, *args, **kwargs):
         """Helper method for creating request messages."""
@@ -88,6 +99,7 @@ class Message(object):
         """Helper method for creating inform messages."""
         return cls(cls.INFORM, *args, **kwargs)
 
+    # pylint: enable-msg = W0142
 
 class DclSyntaxError(ValueError):
     """Exception raised by parsers on encountering syntax errors."""
@@ -547,6 +559,10 @@ class DeviceServer(DeviceServerBase):
 
     # request implementations
 
+    # all requests take sock and msg arguments regardless of whether
+    # they're used
+    # pylint: disable-msg = W0613
+
     def request_halt(self, sock, msg):
         """Halt the server."""
         self.stop()
@@ -628,6 +644,8 @@ class DeviceServer(DeviceServerBase):
     def request_watchdog(self, sock, msg):
         """Check that the server is still alive."""
         return Message.reply("watchdog", ["ok"])
+
+    # pylint: enable-msg = W0613
 
 
 class Sensor(object):
