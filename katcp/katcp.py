@@ -363,8 +363,8 @@ class DeviceServerBase(object):
             full_line = self._waiting_chunks[sock] + line
             self._waiting_chunks[sock] = ""
             if full_line:
-                m = self._parser.parse(full_line)
-                self.handle_message(sock, m)
+                msg = self._parser.parse(full_line)
+                self.handle_message(sock, msg)
 
         self._waiting_chunks[sock] += lines[-1]
 
@@ -376,10 +376,12 @@ class DeviceServerBase(object):
                 assert (reply.mtype == Message.REPLY)
                 assert (reply.name == msg.name)
                 log.info("%s OK" % (msg.name,))
-            except Exception, e:
-                e_type, e_value, tb = sys.exc_info()
+            # We do want to catch everything that inherits from Exception
+            # pylint: disable-msg = W0703
+            except Exception:
+                e_type, e_value, trace = sys.exc_info()
                 reason = "\n".join(traceback.format_exception(
-                    e_type, e_value, tb, self._tb_limit
+                    e_type, e_value, trace, self._tb_limit
                 ))
                 log.error("%s FAIL: %s" % (msg.name, reason))
                 reply = Message.reply(msg.name, ["fail", reason])
@@ -654,14 +656,14 @@ class Sensor(object):
     # Formatters and parsers
 
     @staticmethod
-    def lru_formatter(s, v):
+    def lru_formatter(sensor, value):
         """Format an LRU sensor value."""
-        return s.LRU_VALUES[v]
+        return sensor.LRU_VALUES[value]
 
     @staticmethod
-    def lru_parser(s, v):
+    def lru_parser(sensor, value):
         """Parse and LRU sensor value."""
-        return s.LRU_CONSTANTS[v]
+        return sensor.LRU_CONSTANTS[value]
 
     # Type names and formatters
     #
@@ -675,15 +677,15 @@ class Sensor(object):
     # type -> (name, formatter, parser)
     INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE = range(5)
     SENSOR_TYPES = {
-        INTEGER: ("integer", lambda s, v: "%d" % (v,),
-                             lambda s, v: int(v)),
-        FLOAT: ("float", lambda s, v: "%e" % (v,),
-                         lambda s, v: float(v)),
-        BOOLEAN: ("boolean", lambda s, v: v and "1" or "0",
-                             lambda s, v: v == "1"),
+        INTEGER: ("integer", lambda sensor, value: "%d" % (value,),
+                             lambda sensor, value: int(value)),
+        FLOAT: ("float", lambda sensor, valye: "%e" % (value,),
+                         lambda sensor, value: float(value)),
+        BOOLEAN: ("boolean", lambda sensor, value: value and "1" or "0",
+                             lambda sensor, value: value == "1"),
         LRU: ("lru", lru_formatter, lru_parser),
-        DISCRETE: ("discrete", lambda s, v: v,
-                               lambda s, v: v),
+        DISCRETE: ("discrete", lambda sensor, value: value,
+                               lambda sensor, value: value),
     }
 
     # Sensor status constants
@@ -704,7 +706,10 @@ class Sensor(object):
         EVENT: "event",
         DIFF: "diff",
     }
+    # pylint fails to find SAMPLING_LOOKUP
+    # pylint: disable-msg = E0602
     SAMPLING_LOOKUP_REV = dict((v, k) for k, v in SAMPLING_LOOKUP.items())
+    # pylint: enable-msg = E0602
 
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = range(2)
@@ -712,7 +717,10 @@ class Sensor(object):
         LRU_NOMINAL: "nominal",
         LRU_ERROR: "error",
     }
+    # pylint fails to find SAMPLING_LOOKUP
+    # pylint: disable-msg = E0602
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
+    # pylint: enable-msg = E0602
 
     def __init__(self, sensor_type, description, units, params=None):
         """Instantiate a new sensor object.
