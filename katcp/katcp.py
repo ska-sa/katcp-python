@@ -38,9 +38,9 @@ class Message(object):
     }
 
     # pylint fails to realise TYPE_SYMBOLS is defined
-    # pylint: disable-msg=E0602
+    # pylint: disable-msg = E0602
     TYPE_SYMBOL_LOOKUP = dict((v, k) for k, v in TYPE_SYMBOLS.items())
-    # pylint: enable-msg=E0602
+    # pylint: enable-msg = E0602
 
     ESCAPE_LOOKUP = {
         "\\" : "\\",
@@ -106,11 +106,11 @@ class DclSyntaxError(ValueError):
     pass
 
 
-# We only want one public method
-# pylint: disable-msg = R0903
-
 class MessageParser(object):
     """Parses lines into Message objects."""
+
+    # We only want one public method
+    # pylint: disable-msg = R0903
 
     SPECIAL = set([" ", "\t", "\x1b", "\n", "\r", "\\", "\0"])
     TYPE_SYMBOL_LOOKUP = Message.TYPE_SYMBOL_LOOKUP
@@ -185,8 +185,6 @@ class MessageParser(object):
         arguments = self._parse_arguments(sep, tail)
 
         return Message(mtype, name, arguments)
-
-# pylint: enable-msg = R0903
 
 
 class DeviceClient(object):
@@ -338,19 +336,16 @@ class DeviceServerBase(object):
         self._socks = [ self._sock ] # list of sockets
         self._waiting_chunks = {} # map from sockets to partial messages
 
-    # could be a function but we don't want it to be
-    # pylint: disable-msg = R0201
-
     def bind(self, bindaddr):
         """Create a listening server socket."""
+        # could be a function but we don't want it to be
+        # pylint: disable-msg = R0201
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setblocking(0)
         sock.bind(bindaddr)
         sock.listen(5)
         return sock
-
-    # pylint: enable-msg = R0201
 
     def add_socket(self, sock):
         """Add a socket to the socket and chunk lists."""
@@ -400,15 +395,12 @@ class DeviceServerBase(object):
             reply = Message.reply(msg.name, ["invalid", "Unknown request."])
         sock.send(str(reply) + "\n")
 
-    # could be a function but we don't want it to be
-    # pylint: disable-msg = R0201
-
     def inform(self, sock, msg):
         """Send an inform messages to a particular client."""
+        # could be a function but we don't want it to be
+        # pylint: disable-msg = R0201
         assert (msg.mtype == Message.INFORM)
         sock.send(str(msg) + "\n")
-
-    # pylint: enable-msg = R0201
 
     def inform_all(self, msg):
         """Send an inform message to all clients."""
@@ -512,6 +504,11 @@ class DeviceServer(DeviceServerBase):
        have no sensors to register, the method should just be a pass.
        """
 
+    # DeviceServer has a lot of methods because there is a method
+    # per request type and it's an abstract class which is only
+    # used outside this module
+    # pylint: disable-msg = R0904
+
     VERSION_INFO = ("device_stub", 0, 1)
     EXTRA_VERSION_INFO = ""
 
@@ -597,13 +594,16 @@ class DeviceServer(DeviceServerBase):
         """Return help on the available request methods."""
         if not msg.arguments:
             for name, method in sorted(self._request_handlers.items()):
-                self.inform(sock, Message.inform("help", [name, method.__doc__]))
-            return Message.reply("help", ["ok", str(len(self._request_handlers))])
+                doc = method.__doc__
+                self.inform(sock, Message.inform("help", [name, doc]))
+            num_methods = len(self._request_handlers)
+            return Message.reply("help", ["ok", str(num_methods)])
         else:
             name = msg.arguments[0]
             if name in self._request_handlers:
                 method = self._request_handlers[name]
-                self.inform(sock, Message.inform("help", [name, method.__doc__]))
+                doc = method.__doc__
+                self.inform(sock, Message.inform("help", [name, doc]))
                 return Message.reply("help", ["ok", "1"])
             return Message.reply("help", ["fail", "Unknown request method."])
 
@@ -642,16 +642,19 @@ class DeviceServer(DeviceServerBase):
                     [timestamp_ms, "1", name, status, value]))
                 return Message.reply("sensor-list", ["ok", "1"])
             else:
-                return Message.reply("sensor-list", ["fail", "Unknown sensor name."])
+                return Message.reply("sensor-list", ["fail",
+                                                     "Unknown sensor name."])
 
     def request_sensor_sampling(self, sock, msg):
         """Configure or query the way a sensor is sampled."""
         if not msg.arguments:
-            return Message.reply("sensor-sampling", ["fail", "No sensor name given."])
+            return Message.reply("sensor-sampling", ["fail",
+                                                     "No sensor name given."])
         name = msg.arguments[0]
 
         if name not in self._sensors:
-            return Message.reply("sensor-sampling", ["fail", "Unknown sensor name."])
+            return Message.reply("sensor-sampling", ["fail",
+                                                     "Unknown sensor name."])
         sensor = self._sensors[name]
 
         if len(msg.arguments) > 1:
@@ -663,19 +666,22 @@ class DeviceServer(DeviceServerBase):
         strategy, params = sensor.get_sampling_formatted()
         return Message.reply("sensor-sampling", ["ok", name, strategy] + params)
 
-    # not a function, just doesn't use self
-    # pylint: disable-msg = R0201
 
     def request_watchdog(self, sock, msg):
         """Check that the server is still alive."""
+        # not a function, just doesn't use self
+        # pylint: disable-msg = R0201
         return Message.reply("watchdog", ["ok"])
 
-    # pylint: enable-msg = R0201
     # pylint: enable-msg = W0613
 
 
 class Sensor(object):
     """Base class for sensor classes."""
+
+    # Sensor needs the instance attributes it has and
+    # is an abstract class used only outside this module
+    # pylint: disable-msg = R0902
 
     # Formatters and parsers
 
@@ -730,7 +736,9 @@ class Sensor(object):
         EVENT: "event",
         DIFF: "diff",
     }
-    # pylint fails to find SAMPLING_LOOKUP
+
+    # SAMPLING_LOOKUP not found by pylint
+    # 
     # pylint: disable-msg = E0602
     SAMPLING_LOOKUP_REV = dict((v, k) for k, v in SAMPLING_LOOKUP.items())
     # pylint: enable-msg = E0602
@@ -741,7 +749,9 @@ class Sensor(object):
         LRU_NOMINAL: "nominal",
         LRU_ERROR: "error",
     }
-    # pylint fails to find SAMPLING_LOOKUP
+
+    # LRU_VALUES not found by pylint
+    #
     # pylint: disable-msg = E0602
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
     # pylint: enable-msg = E0602
@@ -843,6 +853,7 @@ class Sensor(object):
         params = [self._parser(self, p) for p in params]
         self.set_sampling(strategy, params)
 
+
 class DeviceLogger(object):
     """Object for logging messages from a DeviceServer.
 
@@ -853,7 +864,8 @@ class DeviceLogger(object):
     # level values are used as indexes into the LEVELS list
     # so these to lists should be in the same order 
     ALL, TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL, OFF = range(8)
-    LEVELS = [ "all", "trace", "debug", "info", "warn", "error", "critical", "off" ]
+    LEVELS = [ "all", "trace", "debug", "info", "warn",
+               "error", "critical", "off" ]
 
     def __init__(self, device_server, root_logger="root"):
         self._device_server = device_server
