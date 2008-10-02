@@ -333,8 +333,8 @@ class DeviceServerBase(object):
         self._running = threading.Event()
 
         # sockets and data
-        self._socks = [ self._sock ] # list of sockets
-        self._waiting_chunks = {} # map from sockets to partial messages
+        self._socks = [] # list of client sockets
+        self._waiting_chunks = {} # map from client sockets to partial messages
 
     def bind(self, bindaddr):
         """Create a listening server socket."""
@@ -348,12 +348,12 @@ class DeviceServerBase(object):
         return sock
 
     def add_socket(self, sock):
-        """Add a socket to the socket and chunk lists."""
+        """Add a client socket to the socket and chunk lists."""
         self._socks.append(sock)
         self._waiting_chunks[sock] = ""
 
     def remove_socket(self, sock):
-        """Remove a socket from the socket and chunk lists."""
+        """Remove a client socket from the socket and chunk lists."""
         sock.close()
         self._socks.remove(sock)
         if sock in self._waiting_chunks:
@@ -416,21 +416,28 @@ class DeviceServerBase(object):
 
         self._running.set()
         while self._running.isSet():
+            all_socks = self._socks + [self._sock]
             readers, _writers, errors = select.select(
-                self._socks, [], self._socks, timeout
+                all_socks, [], all_socks, timeout
             )
 
             for sock in errors:
-                self.remove_socket(sock)
                 if sock is self._sock:
                     # server socket died, attempt restart
                     self._sock = self.bind(self._bindaddr)
-                    self.add_socket(self._sock)
+                else:
+                    # client socket died, remove it
+                    self.remove_socket(sock)
 
             for sock in readers:
                 if sock is self._sock:
-                    client, _addr = sock.accept()
+                    client, addr = sock.accept()
                     client.setblocking(0)
+                    if self._socks:
+                        old_client = self._socks[0]
+                        self.on_client_disconnect(old_client,
+                            "New client connected from %s" % (addr,))
+                        self.remove_socket(old_client)
                     self.add_socket(client)
                     self.on_client_connect(client)
                 else:
@@ -442,8 +449,7 @@ class DeviceServerBase(object):
                         self.remove_socket(sock)
 
         for sock in list(self._socks):
-            if not sock is self._sock:
-                self.on_client_disconnect(sock, "Device server shutting down.")
+            self.on_client_disconnect(sock, "Device server shutting down.")
             self.remove_socket(sock)
 
     def stop(self):

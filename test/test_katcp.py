@@ -116,12 +116,12 @@ class DeviceTestServer(katcp.DeviceServer):
 class TestDeviceServer(unittest.TestCase):
 
     def setUp(self):
-        host, port = "localhost", 11234
-
-        self.server = DeviceTestServer(host, port)
+        self.server = DeviceTestServer('', 0)
         self.server_thread = threading.Thread(target=self.server.run)
         self.server_thread.start()
         time.sleep(0.2)
+
+        host, port = self.server._sock.getsockname()
 
         self.client = DeviceTestClient(host, port)
         self.client_thread = threading.Thread(target=self.client.run)
