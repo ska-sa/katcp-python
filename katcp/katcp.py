@@ -106,6 +106,9 @@ class DclSyntaxError(ValueError):
     pass
 
 
+# We only want one public method
+# pylint: disable-msg = R0903
+
 class MessageParser(object):
     """Parses lines into Message objects."""
 
@@ -127,21 +130,21 @@ class MessageParser(object):
         arg = []
         tail_iter = iter(tail)
 
-        for c in tail_iter:
-            if c == "\\":
-                c = tail_iter.next()
-                if c in self.ESCAPE_LOOKUP:
-                    arg.append(self.ESCAPE_LOOKUP[c])
+        for char in tail_iter:
+            if char == "\\":
+                char = tail_iter.next()
+                if char in self.ESCAPE_LOOKUP:
+                    arg.append(self.ESCAPE_LOOKUP[char])
                 else:
                     raise DclSyntaxError("Invalid escape character '%r'."
-                                            % (c,))
-            elif c == " ":
+                                            % (char,))
+            elif char == " ":
                 arguments.append("".join(arg))
                 arg = []
-            elif c not in self.SPECIAL:
-                arg.append(c)
+            elif char not in self.SPECIAL:
+                arg.append(char)
             else:
-                raise DclSyntaxError("Unescaped special '%r'." % (c,))
+                raise DclSyntaxError("Unescaped special '%r'." % (char,))
 
         arguments.append("".join(arg))
         return arguments
@@ -182,6 +185,8 @@ class MessageParser(object):
         arguments = self._parse_arguments(sep, tail)
 
         return Message(mtype, name, arguments)
+
+# pylint: enable-msg = R0903
 
 
 class DeviceClient(object):
@@ -230,8 +235,8 @@ class DeviceClient(object):
             full_line = self._waiting_chunk + line
             self._waiting_chunk = ""
             if full_line:
-                m = self._parser.parse(full_line)
-                self.handle_message(m)
+                msg = self._parser.parse(full_line)
+                self.handle_message(msg)
 
         self._waiting_chunk += lines[-1]
 
@@ -251,7 +256,7 @@ class DeviceClient(object):
 
         self._running.set()
         while self._running.isSet():
-            readers, writers, errors = select.select(
+            readers, _writers, errors = select.select(
                 [self._sock], [], [self._sock], timeout
             )
 
@@ -286,15 +291,15 @@ class DeviceServerMetaclass(type):
        All request_* methods must have a doc string so that help
        can be generated.
        """
-    def __init__(cls, name, bases, dct):
-        super(DeviceServerMetaclass, cls).__init__(name, bases, dct)
-        cls._request_handlers = {}
-        for name in dir(cls):
+    def __init__(mcs, name, bases, dct):
+        super(DeviceServerMetaclass, mcs).__init__(name, bases, dct)
+        mcs._request_handlers = {}
+        for name in dir(mcs):
             if name.startswith("request_"):
                 request_name = name[len("request_"):]
                 request_name = request_name.replace("_", "-")
-                cls._request_handlers[request_name] = getattr(cls, name)
-                assert(hasattr(cls._request_handlers[request_name], "__doc__"))
+                mcs._request_handlers[request_name] = getattr(mcs, name)
+                assert(hasattr(mcs._request_handlers[request_name], "__doc__"))
 
 
 class DeviceServerBase(object):
@@ -333,6 +338,9 @@ class DeviceServerBase(object):
         self._socks = [ self._sock ] # list of sockets
         self._waiting_chunks = {} # map from sockets to partial messages
 
+    # could be a function but we don't want it to be
+    # pylint: disable-msg = R0201
+
     def bind(self, bindaddr):
         """Create a listening server socket."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -341,6 +349,8 @@ class DeviceServerBase(object):
         sock.bind(bindaddr)
         sock.listen(5)
         return sock
+
+    # pylint: enable-msg = R0201
 
     def add_socket(self, sock):
         """Add a socket to the socket and chunk lists."""
@@ -390,10 +400,15 @@ class DeviceServerBase(object):
             reply = Message.reply(msg.name, ["invalid", "Unknown request."])
         sock.send(str(reply) + "\n")
 
+    # could be a function but we don't want it to be
+    # pylint: disable-msg = R0201
+
     def inform(self, sock, msg):
         """Send an inform messages to a particular client."""
         assert (msg.mtype == Message.INFORM)
         sock.send(str(msg) + "\n")
+
+    # pylint: enable-msg = R0201
 
     def inform_all(self, msg):
         """Send an inform message to all clients."""
@@ -409,7 +424,7 @@ class DeviceServerBase(object):
 
         self._running.set()
         while self._running.isSet():
-            readers, writers, errors = select.select(
+            readers, _writers, errors = select.select(
                 self._socks, [], self._socks, timeout
             )
 
@@ -422,7 +437,7 @@ class DeviceServerBase(object):
 
             for sock in readers:
                 if sock is self._sock:
-                    client, addr = sock.accept()
+                    client, _addr = sock.accept()
                     client.setblocking(0)
                     self.add_socket(client)
                     self.on_client_connect(client)
@@ -500,11 +515,16 @@ class DeviceServer(DeviceServerBase):
     VERSION_INFO = ("device_stub", 0, 1)
     EXTRA_VERSION_INFO = ""
 
+    # * and ** magic fine here
+    # pylint: disable-msg = W0142
+
     def __init__(self, *args, **kwargs):
         super(DeviceServer, self).__init__(*args, **kwargs)
         self.log = DeviceLogger(self)
         self._sensors = {} # map names to sensor objects
         self.setup_sensors()
+
+    # pylint: enable-msg = W0142
 
     def on_client_connect(self, sock):
         """Inform client of build state and version on connect."""
@@ -643,10 +663,14 @@ class DeviceServer(DeviceServerBase):
         strategy, params = sensor.get_sampling_formatted()
         return Message.reply("sensor-sampling", ["ok", name, strategy] + params)
 
+    # not a function, just doesn't use self
+    # pylint: disable-msg = R0201
+
     def request_watchdog(self, sock, msg):
         """Check that the server is still alive."""
         return Message.reply("watchdog", ["ok"])
 
+    # pylint: enable-msg = R0201
     # pylint: enable-msg = W0613
 
 
@@ -679,7 +703,7 @@ class Sensor(object):
     SENSOR_TYPES = {
         INTEGER: ("integer", lambda sensor, value: "%d" % (value,),
                              lambda sensor, value: int(value)),
-        FLOAT: ("float", lambda sensor, valye: "%e" % (value,),
+        FLOAT: ("float", lambda sensor, value: "%e" % (value,),
                          lambda sensor, value: float(value)),
         BOOLEAN: ("boolean", lambda sensor, value: value and "1" or "0",
                              lambda sensor, value: value == "1"),
