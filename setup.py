@@ -17,7 +17,7 @@ setup (
     dependency = dep,
     test_suite = "test.suite",
     url='http://ska.ac.za/',
-    categories=[
+    classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
         "License :: Other/Proprietary License",
