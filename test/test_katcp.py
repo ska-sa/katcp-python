@@ -170,7 +170,7 @@ class TestDeviceServer(unittest.TestCase):
         self.client.request(katcp.Message.request("watchdog"))
         self.client.request(katcp.Message.request("restart"))
         self.client.request(katcp.Message.request("log-level"))
-        self.client.request(katcp.Message.request("log-level warn"))
+        self.client.request(katcp.Message.request("log-level trace"))
         self.client.request(katcp.Message.request("help"))
         self.client.request(katcp.Message.request("help watchdog"))
         self.client.request(katcp.Message.request("help unknown-request"))
@@ -182,6 +182,9 @@ class TestDeviceServer(unittest.TestCase):
 
         time.sleep(0.1)
 
+        self.server.log.trace("trace-msg")
+        self.server.log.debug("debug-msg")
+        self.server.log.info("info-msg")
         self.server.log.warn("warn-msg")
         self.server.log.error("error-msg")
         self.server.log.critical("critical-msg")
@@ -198,7 +201,7 @@ class TestDeviceServer(unittest.TestCase):
             r"!watchdog ok",
             r"!restart ok",
             r"!log-level ok off",
-            r"!log-level ok warn",
+            r"!log-level ok trace",
             r"#help halt",
             r"#help help",
             r"#help log-level",
@@ -219,6 +222,9 @@ class TestDeviceServer(unittest.TestCase):
             r"!sensor-list fail",
             r"!sensor-sampling ok an.int none",
             r"!sensor-sampling ok an.int diff 2",
+            (r"#log trace", r"root trace-msg"),
+            (r"#log debug", r"root debug-msg"),
+            (r"#log info", r"root info-msg"),
             (r"#log warn", r"root warn-msg"),
             (r"#log error", r"root error-msg"),
             (r"#log critical", r"root critical-msg"),
