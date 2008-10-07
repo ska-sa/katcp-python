@@ -132,7 +132,10 @@ class MessageParser(object):
 
         for char in tail_iter:
             if char == "\\":
-                char = tail_iter.next()
+                try:
+                    char = tail_iter.next()
+                except StopIteration:
+                    raise KatcpSyntaxError("Escape slash at end of line.")
                 if char in self.ESCAPE_LOOKUP:
                     arg.append(self.ESCAPE_LOOKUP[char])
                 else:
@@ -163,7 +166,7 @@ class MessageParser(object):
         if type_char not in self.TYPE_SYMBOL_LOOKUP:
             raise KatcpSyntaxError("Bad type character '%r'." % (type_char,))
 
-        mtype = self.TYPE_SYMBOL_LOOKUP[type_name[0]]
+        mtype = self.TYPE_SYMBOL_LOOKUP[type_char]
 
         # find command name and check validity
 

@@ -42,6 +42,7 @@ class TestMessageParser(unittest.TestCase):
         self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"? foo")
         self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"?1foo")
         self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r">foo")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "!foo \\")
 
     def test_message_to_string(self):
         """Test message to string round trip with escapes."""
