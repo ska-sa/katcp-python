@@ -67,9 +67,9 @@ class DclLexer(object):
     def t_error(self, t):
         """Error handler."""
         if t is None:
-            raise katcp.DclSyntaxError("Syntax error.")
+            raise katcp.KatcpSyntaxError("Syntax error.")
         else:
-            raise katcp.DclSyntaxError("Invalid token: %s " % t.value)
+            raise katcp.KatcpSyntaxError("Invalid token: %s " % t.value)
 
     # argument state
 
@@ -86,9 +86,9 @@ class DclLexer(object):
     def t_argument_error(self, t):
         """Argument error handler."""
         if t is None:
-            raise katcp.DclSyntaxError("Argument syntax error.")
+            raise katcp.KatcpSyntaxError("Argument syntax error.")
         else:
-            raise katcp.DclSyntaxError("Invalid argument token: %s " % t.value)
+            raise katcp.KatcpSyntaxError("Invalid argument token: %s " % t.value)
 
 
 
@@ -145,7 +145,7 @@ class DclGrammar(object):
         # Note: this error handler should be unreachable because the
         # anything the lexer can tokenise should be parsable in our
         # case.
-        raise katcp.DclSyntaxError("Parsing error (production: %r)." % (p,))
+        raise katcp.KatcpSyntaxError("Parsing error (production: %r)." % (p,))
 
 
 class Parser(object):
@@ -198,9 +198,9 @@ class TestBnf(unittest.TestCase):
 
     def test_lexer_errors(self):
         """Test errors which should be raised by the lexer."""
-        self.assertRaises(katcp.DclSyntaxError, self.p.parse, "")
-        self.assertRaises(katcp.DclSyntaxError, self.p.parse, "^foo")
-        self.assertRaises(katcp.DclSyntaxError, self.p.parse, "!foo tab\targ")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "^foo")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "!foo tab\targ")
 
     def test_empty_params(self):
         """Test parsing messages with empty parameters."""

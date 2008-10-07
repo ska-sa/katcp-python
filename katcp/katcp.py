@@ -101,7 +101,7 @@ class Message(object):
 
     # pylint: enable-msg = W0142
 
-class DclSyntaxError(ValueError):
+class KatcpSyntaxError(ValueError):
     """Exception raised by parsers on encountering syntax errors."""
     pass
 
@@ -136,7 +136,7 @@ class MessageParser(object):
                 if char in self.ESCAPE_LOOKUP:
                     arg.append(self.ESCAPE_LOOKUP[char])
                 else:
-                    raise DclSyntaxError("Invalid escape character '%r'."
+                    raise KatcpSyntaxError("Invalid escape character '%r'."
                                             % (char,))
             elif char == " ":
                 arguments.append("".join(arg))
@@ -144,7 +144,7 @@ class MessageParser(object):
             elif char not in self.SPECIAL:
                 arg.append(char)
             else:
-                raise DclSyntaxError("Unescaped special '%r'." % (char,))
+                raise KatcpSyntaxError("Unescaped special '%r'." % (char,))
 
         arguments.append("".join(arg))
         return arguments
@@ -156,12 +156,12 @@ class MessageParser(object):
         # find command type and check validity
 
         if not type_name:
-            raise DclSyntaxError("Command missing type code.")
+            raise KatcpSyntaxError("Command missing type code.")
 
         type_char = type_name[0]
 
         if type_char not in self.TYPE_SYMBOL_LOOKUP:
-            raise DclSyntaxError("Bad type character '%r'." % (type_char,))
+            raise KatcpSyntaxError("Bad type character '%r'." % (type_char,))
 
         mtype = self.TYPE_SYMBOL_LOOKUP[type_name[0]]
 
@@ -170,13 +170,13 @@ class MessageParser(object):
         name = type_name[1:]
 
         if not name:
-            raise DclSyntaxError("Command missing command name.")
+            raise KatcpSyntaxError("Command missing command name.")
         if not name.replace("-","").isalnum():
-            raise DclSyntaxError("Command name should consist only of"
+            raise KatcpSyntaxError("Command name should consist only of"
                                 " alphanumeric characters and dashes (got %r)."
                                 % (name,))
         if not name[0].isalpha():
-            raise DclSyntaxError("Command name should start with an"
+            raise KatcpSyntaxError("Command name should start with an"
                                 " alphabetic character (got %r)."
                                 % (name,))
 

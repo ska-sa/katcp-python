@@ -31,17 +31,17 @@ class TestMessageParser(unittest.TestCase):
         m = self.p.parse(r"?foo \\\ \0\n\r\e\t")
         self.assertEqual(m.arguments, ["\\ \0\n\r\x1b\t"])
 
-        self.assertRaises(katcp.DclSyntaxError, self.p.parse, r"?foo \z")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"?foo \z")
 
         # test unescaped tab
-        self.assertRaises(katcp.DclSyntaxError, self.p.parse, "?foo \t")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "?foo \t")
 
     def test_syntax_errors(self):
         """Test generation of syntax errors."""
-        self.assertRaises(katcp.DclSyntaxError, self.p.parse, r" ?foo")
-        self.assertRaises(katcp.DclSyntaxError, self.p.parse, r"? foo")
-        self.assertRaises(katcp.DclSyntaxError, self.p.parse, r"?1foo")
-        self.assertRaises(katcp.DclSyntaxError, self.p.parse, r">foo")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r" ?foo")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"? foo")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"?1foo")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r">foo")
 
     def test_message_to_string(self):
         """Test message to string round trip with escapes."""
@@ -55,7 +55,7 @@ class TestMessageParser(unittest.TestCase):
         """Test a variety of command names."""
         m = self.p.parse("!baz-bar")
         self.assertEqual(m.name, "baz-bar")
-        self.assertRaises(katcp.DclSyntaxError, self.p.parse, r"?-foo")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"?-foo")
 
     def test_empty_params(self):
         """Test parsing messages with empty parameters."""

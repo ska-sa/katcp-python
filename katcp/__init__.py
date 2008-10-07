@@ -8,6 +8,6 @@
 
 import initenv
 
-from katcp import Message, DclSyntaxError, MessageParser, DeviceClient, \
+from katcp import Message, KatcpSyntaxError, MessageParser, DeviceClient, \
                   DeviceServerMetaclass, DeviceServerBase, DeviceServer, \
                   Sensor 
