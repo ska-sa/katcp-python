@@ -14,6 +14,7 @@ setup (
     author = "Simon Cross",
     author_email = "simon.cross@ska.ac.za",
     packages = [ "katcp" ],
+    scripts = [ "scripts/exampleserver.py" ],
     dependency = dep,
     test_suite = "test.suite",
     url='http://ska.ac.za/',
