@@ -408,7 +408,8 @@ class DeviceServerBase(object):
         elif msg.mtype == msg.INFORM:
             pass
         else:
-            reason = "Reply message !%s received by server." % (msg.name,)
+            reason = "Unexpected reply message !%s received by server." \
+                     % (msg.name,)
             self.inform(sock, self._log_msg("error", reason, "root"))
 
     def handle_request(self, sock, msg):

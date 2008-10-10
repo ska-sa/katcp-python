@@ -225,7 +225,7 @@ class TestDeviceServer(unittest.TestCase):
         self._assert_msgs_like(msgs, [
             (r"#version device_stub-0.1", ""),
             (r"#build-state device_stub-0.1", ""),
-            (r"#log error", "Reply\\ message\\ !some\\ received\\ by\\ server."),
+            (r"#log error", "Unexpected\\ reply\\ message\\ !some\\ received\\ by\\ server."),
         ])
 
     def test_standard_requests(self):
