@@ -163,8 +163,9 @@ class TestDeviceServer(unittest.TestCase):
 
     def test_bad_requests(self):
         """Test request failure paths in device server."""
-        pass
-        # TODO: implement test
+        self.client.raw_send("bad msg\n")
+
+        time.sleep(0.1)
 
     def test_standard_requests(self):
         """Test standard request and replies."""
