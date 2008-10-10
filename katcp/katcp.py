@@ -402,7 +402,17 @@ class DeviceServerBase(object):
         self._waiting_chunks[sock] += lines[-1]
 
     def handle_message(self, sock, msg):
-        """Dispatch a message to the appropriate method."""
+        """Handle messages of all types from clients."""
+        if msg.mtype == msg.REQUEST:
+            self.handle_request(sock, msg)
+        elif msg.mtype == msg.INFORM:
+            pass
+        else:
+            reason = "Reply message !%s received by server." % (msg.name,)
+            self.inform(sock, self._log_msg("error", reason, "root"))
+
+    def handle_request(self, sock, msg):
+        """Dispatch a request message to the appropriate method."""
         if msg.name in self._request_handlers:
             try:
                 reply = self._request_handlers[msg.name](self, sock, msg)
