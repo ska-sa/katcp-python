@@ -135,6 +135,37 @@ class TestDeviceServer(unittest.TestCase):
         self.server.stop()
         self.server_thread.join()
 
+    def _assert_msgs_equal(self, actual_msgs, expected_msgs):
+        """Assert that the actual and expected messages are equal.
+
+           actual_msgs: list of message objects received
+           expected_msgs: expected message strings
+           """
+        for msg, msg_str in zip(actual_msgs, expected_msgs):
+            self.assertEqual(str(msg), msg_str)
+
+    def _assert_msgs_like(self, actual_msgs, expected):
+        """Assert that the actual messages start and end with
+           the expected strings.
+
+           actual_msgs: list of message objects received
+           expected_msgs: tuples of (expected_prefix, expected_suffix)
+           """
+        for msg, (prefix, suffix) in zip(actual_msgs, expected):
+            str_msg = str(msg)
+
+            if prefix and not str_msg.startswith(prefix):
+                self.assertEqual(str_msg, prefix,
+                    msg="Message '%s' does not start with '%s'."
+                    % (str_msg, prefix)
+                )
+
+            if suffix and not str_msg.endswith(suffix):
+                self.assertEqual(str_msg, suffix,
+                    msg="Message '%s' does not end with '%s'."
+                    % (str_msg, suffix)
+                )
+
     def test_simple_connect(self):
         """Test a simple server setup and teardown with client connect."""
         # basic send
@@ -148,24 +179,29 @@ class TestDeviceServer(unittest.TestCase):
         self.client.raw_send("m arg1 arg2")
         self.client.raw_send("\n")
 
-        time.sleep(0.2)
-        msgs = self.client.messages()
+        time.sleep(0.1)
 
-        for msg, msg_str in zip(msgs, [
+        msgs = self.client.messages()
+        self._assert_msgs_equal(msgs, [
             r"#version device_stub-0.1",
             r"#build-state device_stub-0.1",
             r"!foo invalid Unknown\ request.",
             r"!bar-boom invalid Unknown\ request.",
             r"!baz invalid Unknown\ request.",
             r"!boom invalid Unknown\ request.",
-        ]):
-            self.assertEqual(str(msg), msg_str)
+        ])
 
     def test_bad_requests(self):
         """Test request failure paths in device server."""
         self.client.raw_send("bad msg\n")
 
         time.sleep(0.1)
+        msgs = self.client.messages()
+        self._assert_msgs_like(msgs, [
+            (r"#version device_stub-0.1", ""),
+            (r"#build-state device_stub-0.1", ""),
+            (r"#log error", "KatcpSyntaxError:\\ Bad\\ type\\ character\\ 'b'.\\n"),
+        ])
 
     def test_standard_requests(self):
         """Test standard request and replies."""
@@ -196,58 +232,40 @@ class TestDeviceServer(unittest.TestCase):
         msgs = self.client.messages()
 
         self.assertEqual(self.server.restarted, True)
-
-        for msg, msg_test in zip(msgs, [
-            r"#version device_stub-0.1",
-            r"#build-state device_stub-0.1",
-            r"!watchdog ok",
-            r"!restart ok",
-            r"!log-level ok off",
-            r"!log-level ok trace",
-            r"#help halt",
-            r"#help help",
-            r"#help log-level",
-            r"#help restart",
-            r"#help sensor-list",
-            r"#help sensor-sampling",
-            r"#help watchdog",
-            r"!help ok 7",
-            r"#help watchdog",
-            r"!help ok 1",
-            r"!help fail",
-            r"#sensor-type an.int integer An\ Integer. count -5 5",
-            r"#sensor-status 12345 1 an.int nominal 3",
-            r"!sensor-list ok 1",
-            r"#sensor-type an.int integer An\ Integer. count -5 5",
-            r"#sensor-status 12345 1 an.int nominal 3",
-            r"!sensor-list ok 1",
-            r"!sensor-list fail",
-            r"!sensor-sampling ok an.int none",
-            r"!sensor-sampling ok an.int diff 2",
+        self._assert_msgs_like(msgs, [
+            (r"#version device_stub-0.1", ""),
+            (r"#build-state device_stub-0.1", ""),
+            (r"!watchdog ok", ""),
+            (r"!restart ok", ""),
+            (r"!log-level ok off", ""),
+            (r"!log-level ok trace", ""),
+            (r"#help halt", ""),
+            (r"#help help", ""),
+            (r"#help log-level", ""),
+            (r"#help restart", ""),
+            (r"#help sensor-list", ""),
+            (r"#help sensor-sampling", ""),
+            (r"#help watchdog", ""),
+            (r"!help ok 7", ""),
+            (r"#help watchdog", ""),
+            (r"!help ok 1", ""),
+            (r"!help fail", ""),
+            (r"#sensor-type an.int integer An\ Integer. count -5 5", ""),
+            (r"#sensor-status 12345 1 an.int nominal 3", ""),
+            (r"!sensor-list ok 1", ""),
+            (r"#sensor-type an.int integer An\ Integer. count -5 5", ""),
+            (r"#sensor-status 12345 1 an.int nominal 3", ""),
+            (r"!sensor-list ok 1", ""),
+            (r"!sensor-list fail", ""),
+            (r"!sensor-sampling ok an.int none", ""),
+            (r"!sensor-sampling ok an.int diff 2", ""),
             (r"#log trace", r"root trace-msg"),
             (r"#log debug", r"root debug-msg"),
             (r"#log info", r"root info-msg"),
             (r"#log warn", r"root warn-msg"),
             (r"#log error", r"root error-msg"),
             (r"#log critical", r"root critical-msg"),
-        ]):
-            str_msg = str(msg)
-            if type(msg_test) is tuple:
-                msg_prefix, msg_suffix = msg_test
-            else:
-                msg_prefix, msg_suffix = msg_test, None
-
-            if msg_prefix and not str_msg.startswith(msg_prefix):
-                self.assertEqual(str_msg, msg_prefix,
-                    msg="Message '%s' does not start with '%s'."
-                    % (str_msg, msg_prefix)
-                )
-
-            if msg_suffix and not str_msg.endswith(msg_suffix):
-                self.assertEqual(str_msg, msg_prefix,
-                    msg="Message '%s' does not end with '%s'."
-                    % (str_msg, msg_prefix)
-                )
+        ])
 
 class TestDeviceClient(unittest.TestCase):
     pass

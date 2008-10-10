@@ -164,7 +164,7 @@ class MessageParser(object):
         type_char = type_name[0]
 
         if type_char not in self.TYPE_SYMBOL_LOOKUP:
-            raise KatcpSyntaxError("Bad type character '%r'." % (type_char,))
+            raise KatcpSyntaxError("Bad type character %r." % (type_char,))
 
         mtype = self.TYPE_SYMBOL_LOOKUP[type_char]
 
@@ -339,6 +339,20 @@ class DeviceServerBase(object):
         self._socks = [] # list of client sockets
         self._waiting_chunks = {} # map from client sockets to partial messages
 
+    def _log_msg(self, level_name, msg, name):
+        """Create a katcp logging inform message.
+
+           Usually this will be called from inside a DeviceLogger object,
+           but it is also used by the methods in this class when errors
+           need to be reported to the client.
+           """
+        return Message.inform("log", [
+                level_name,
+                str(int(time.time() * 1000.0)), # time since epoch in ms
+                name,
+                msg,
+        ])
+
     def bind(self, bindaddr):
         """Create a listening server socket."""
         # could be a function but we don't want it to be
@@ -371,8 +385,19 @@ class DeviceServerBase(object):
             full_line = self._waiting_chunks[sock] + line
             self._waiting_chunks[sock] = ""
             if full_line:
-                msg = self._parser.parse(full_line)
-                self.handle_message(sock, msg)
+                try:
+                    msg = self._parser.parse(full_line)
+                # We do want to catch everything that inherits from Exception
+                # pylint: disable-msg = W0703
+                except Exception:
+                    e_type, e_value, trace = sys.exc_info()
+                    reason = "\n".join(traceback.format_exception(
+                        e_type, e_value, trace, self._tb_limit
+                    ))
+                    log.error("BAD COMMAND: %s" % (reason,))
+                    self.inform(sock, self._log_msg("error", reason, "root"))
+                else:
+                    self.handle_message(sock, msg)
 
         self._waiting_chunks[sock] += lines[-1]
 
@@ -906,12 +931,9 @@ class DeviceLogger(object):
         if level >= self._log_level:
             if name is None:
                 name = self._root_logger_name
-            self._device_server.inform_all(Message.inform("log", [
-                self.level_name(level),
-                str(int(time.time() * 1000.0)), # time since epoch in ms
-                name,
-                msg,
-            ]))
+            self._device_server.inform_all(
+                self._device_server._log_msg(self.level_name(level), msg, name)
+            )
 
     def trace(self, msg, name=None):
         """Log a trace message."""
