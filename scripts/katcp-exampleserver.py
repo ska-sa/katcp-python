@@ -11,8 +11,8 @@ import sys
 from optparse import OptionParser
 import katcp
 
-logging.basicConfig(level=logging.INFO, 
-                    stream=sys.stderr, 
+logging.basicConfig(level=logging.INFO,
+                    stream=sys.stderr,
                     format="%(asctime)s - %(name)s - %(filename)s:%(lineno)s - %(levelname)s - %(message)s")
 
 class DeviceExampleServer(katcp.DeviceServer):
@@ -23,9 +23,9 @@ class DeviceExampleServer(katcp.DeviceServer):
     def schedule_restart(self):
         #pylint: disable-msg=W0201
         self.restarted = True
-        
+
 if __name__ == "__main__":
-    
+
     usage = "usage: %prog [options]"
     parser = OptionParser(usage=usage)
     parser.add_option('-a', '--host', dest='host', type="string", default="", metavar='HOST',
@@ -33,7 +33,7 @@ if __name__ == "__main__":
     parser.add_option('-p', '--port', dest='port', type=long, default=1235, metavar='N',
                       help='attach to port N (default=1235)')
     (opts, args) = parser.parse_args()
-    
+
     print "Server listening on port %d, Ctrl-C to terminate server" % opts.port
     server = DeviceExampleServer(opts.host, opts.port)
     server.run()
