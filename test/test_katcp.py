@@ -135,6 +135,16 @@ class TestDeviceServer(unittest.TestCase):
         self.server.stop()
         self.server_thread.join()
 
+    def _assert_msgs_length(self, actual_msgs, expected_number):
+        """Assert that the number of messages is that expected."""
+        num_msgs = len(actual_msgs)
+        if num_msgs < expected_number:
+            self.assertEqual(num_msgs, expected_number,
+                             "Too few messages received.")
+        elif num_msgs > expected_number:
+            self.assertEqual(num_msgs, expected_number,
+                             "Too many messages received.")
+
     def _assert_msgs_equal(self, actual_msgs, expected_msgs):
         """Assert that the actual and expected messages are equal.
 
@@ -143,6 +153,7 @@ class TestDeviceServer(unittest.TestCase):
            """
         for msg, msg_str in zip(actual_msgs, expected_msgs):
             self.assertEqual(str(msg), msg_str)
+        self._assert_msgs_length(actual_msgs, len(expected_msgs))
 
     def _assert_msgs_like(self, actual_msgs, expected):
         """Assert that the actual messages start and end with
@@ -165,6 +176,7 @@ class TestDeviceServer(unittest.TestCase):
                     msg="Message '%s' does not end with '%s'."
                     % (str_msg, suffix)
                 )
+        self._assert_msgs_length(actual_msgs, len(expected))
 
     def test_simple_connect(self):
         """Test a simple server setup and teardown with client connect."""
@@ -201,6 +213,19 @@ class TestDeviceServer(unittest.TestCase):
             (r"#version device_stub-0.1", ""),
             (r"#build-state device_stub-0.1", ""),
             (r"#log error", "KatcpSyntaxError:\\ Bad\\ type\\ character\\ 'b'.\\n"),
+        ])
+
+    def test_server_ignores_informs_and_replies(self):
+        """Tests server ignores informs and replies."""
+        self.client.raw_send("#some inform")
+        self.client.raw_send("!some reply")
+
+        time.sleep(0.1)
+        msgs = self.client.messages()
+        self._assert_msgs_like(msgs, [
+            (r"#version device_stub-0.1", ""),
+            (r"#build-state device_stub-0.1", ""),
+            (r"#log error Reply\\ received\\ by\\ server.", ""),
         ])
 
     def test_standard_requests(self):
