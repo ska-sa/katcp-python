@@ -215,7 +215,7 @@ class DeviceClient(object):
         pass
 
     def request(self, msg):
-        """Send a messsage."""
+        """Send a request messsage."""
         assert(msg.mtype == Message.REQUEST)
         self._sock.send(str(msg) + "\n")
 
