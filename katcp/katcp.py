@@ -981,9 +981,9 @@ class DeviceLogger(object):
 
     # level values are used as indexes into the LEVELS list
     # so these to lists should be in the same order 
-    ALL, TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL, OFF = range(8)
+    ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF = range(8)
     LEVELS = [ "all", "trace", "debug", "info", "warn",
-               "error", "critical", "off" ]
+               "error", "fatal", "off" ]
 
     def __init__(self, device_server, root_logger="root"):
         self._device_server = device_server
@@ -1039,6 +1039,6 @@ class DeviceLogger(object):
         """Log an error message."""
         self.log(self.ERROR, msg, name)
 
-    def critical(self, msg, name=None):
-        """Log a critical error message."""
-        self.log(self.CRITICAL, msg, name)
+    def fatal(self, msg, name=None):
+        """Log a fatal error message."""
+        self.log(self.FATAL, msg, name)

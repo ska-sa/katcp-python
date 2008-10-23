@@ -342,7 +342,7 @@ class TestDeviceServer(unittest.TestCase):
         self.server.log.info("info-msg")
         self.server.log.warn("warn-msg")
         self.server.log.error("error-msg")
-        self.server.log.critical("critical-msg")
+        self.server.log.fatal("fatal-msg")
 
         time.sleep(0.1)
 
@@ -380,7 +380,7 @@ class TestDeviceServer(unittest.TestCase):
             (r"#log info", r"root info-msg"),
             (r"#log warn", r"root warn-msg"),
             (r"#log error", r"root error-msg"),
-            (r"#log critical", r"root critical-msg"),
+            (r"#log fatal", r"root fatal-msg"),
         ])
 
     def test_halt_request(self):
