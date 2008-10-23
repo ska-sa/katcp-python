@@ -76,11 +76,11 @@ class DclLexer(object):
     t_argument_PLAIN = r'[^ \t\e\n\r\\\0]'
 
     def t_argument_ESCAPE(self, t):
-        r'\\[\\ 0nret]'
+        r'\\[\\_0nret@]'
         return t
 
     def t_argument_WHITESPACE(self, t):
-        r'[ ]'
+        r'[ \t]+'
         return t
 
     def t_argument_error(self, t):
@@ -111,11 +111,12 @@ class DclGrammar(object):
 
     def p_arguments(self, p):
         """arguments : WHITESPACE argument arguments
+                     | WHITESPACE
                      | empty"""
         if len(p) == 4:
             p[0] = [p[2]] + p[3]
         else:
-            # empty production
+            # empty and whitespace productions
             p[0] = []
 
     def p_argument(self, p):
@@ -193,20 +194,29 @@ class TestBnf(unittest.TestCase):
 
     def test_escape_sequences(self):
         """Test escape sequences."""
-        m = self.p.parse(r"?foo \\\ \0\n\r\e\t")
+        m = self.p.parse(r"?foo \\\_\0\n\r\e\t")
         self.assertEqual(m.arguments, ["\\ \0\n\r\x1b\t"])
 
     def test_lexer_errors(self):
         """Test errors which should be raised by the lexer."""
         self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "")
         self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "^foo")
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "!foo tab\targ")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "!foo tab\0arg")
 
     def test_empty_params(self):
         """Test parsing messages with empty parameters."""
-        m = self.p.parse("!foo ") # 1 empty parameter
+        m = self.p.parse("!foo \@") # 1 empty parameter
         self.assertEqual(m.arguments, [""])
-        m = self.p.parse("!foo  ") # 2 empty parameter
+        m = self.p.parse("!foo \@ \@") # 2 empty parameter
         self.assertEqual(m.arguments, ["", ""])
-        m = self.p.parse("!foo \  \  ") # space, space, empty
+        m = self.p.parse("!foo \_  \_  \@") # space, space, empty
+        self.assertEqual(m.arguments, [" ", " ", ""])
+
+    def test_extra_whitespace(self):
+        """Test extra whitespace around parameters."""
+        m = self.p.parse("!foo \t\@  ") # 1 empty parameter
+        self.assertEqual(m.arguments, [""])
+        m = self.p.parse("!foo   \@    \@") # 2 empty parameter
+        self.assertEqual(m.arguments, ["", ""])
+        m = self.p.parse("!foo \_  \t\t\_\t  \@\t") # space, space, empty
         self.assertEqual(m.arguments, [" ", " ", ""])
