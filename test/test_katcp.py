@@ -67,6 +67,15 @@ class TestMessageParser(unittest.TestCase):
         m = self.p.parse("!foo \_ \_ \@") # space, space, empty
         self.assertEqual(m.arguments, [" ", " ", ""])
 
+    def test_whitespace(self):
+        """Test parsing of whitespace between parameters."""
+        m = self.p.parse("!baz   \@   ") # 1 empty parameter
+        self.assertEqual(m.arguments, [""])
+        m = self.p.parse("!baz\t\@\t\@") # 2 empty parameter
+        self.assertEqual(m.arguments, ["", ""])
+        m = self.p.parse("!baz\t \t\_\t\t\t \_\t\@   \t") # space, space, empty
+        self.assertEqual(m.arguments, [" ", " ", ""])
+
 
 class DeviceTestClient(katcp.DeviceClient):
     def __init__(self, *args, **kwargs):

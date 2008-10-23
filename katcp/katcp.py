@@ -141,29 +141,25 @@ class MessageParser(object):
             raise KatcpSyntaxError("Unescaped special %r." % (match.group(),))
         return self.UNESCAPE_RE.sub(self._unescape_match, arg)
 
-    def _parse_arguments(self, tail):
-        """Parse arguments out of tail of command."""
-        return [self._parse_arg(x) for x in tail.split()]
-
     def parse(self, line):
         """Parse a line, return a Message."""
-        type_name, sep, tail = line.partition(" ")
-
         # find command type and check validity
+        if not line:
+            raise KatcpSyntaxError("Empty message received.")
 
-        if not type_name:
-            raise KatcpSyntaxError("Command missing type code.")
-
-        type_char = type_name[0]
-
+        type_char = line[0]
         if type_char not in self.TYPE_SYMBOL_LOOKUP:
             raise KatcpSyntaxError("Bad type character %r." % (type_char,))
 
         mtype = self.TYPE_SYMBOL_LOOKUP[type_char]
 
-        # find command name and check validity
+        # find command and arguments name
+        parts = line.split()
 
-        name = type_name[1:]
+        name = parts[0][1:]
+        arguments = [self._parse_arg(x) for x in parts[1:]]
+
+        # check command name validity
 
         if not name:
             raise KatcpSyntaxError("Command missing command name.")
@@ -175,10 +171,6 @@ class MessageParser(object):
             raise KatcpSyntaxError("Command name should start with an"
                                 " alphabetic character (got %r)."
                                 % (name,))
-
-        # parse arguments
-
-        arguments = self._parse_arguments(tail)
 
         return Message(mtype, name, arguments)
 
