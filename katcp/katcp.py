@@ -444,7 +444,7 @@ class DeviceServerBase(object):
 
     def run(self):
         """Listen for clients and process their requests."""
-        timeout = 1.0 # s
+        timeout = 0.5 # s
 
         self._running.set()
         while self._running.isSet():
