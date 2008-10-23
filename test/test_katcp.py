@@ -306,7 +306,7 @@ class TestDeviceServer(unittest.TestCase):
         ])
 
     def test_server_ignores_informs_and_replies(self):
-        """Tests server ignores informs and replies."""
+        """Test server ignores informs and replies."""
         self.client.raw_send("#some inform\n")
         self.client.raw_send("!some reply\n")
 
