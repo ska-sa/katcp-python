@@ -144,6 +144,36 @@ class TestSensor(unittest.TestCase):
         )
         self.assertEqual(s.read_formatted(), ("12345", "failure", "error"))
 
+    def test_sampling(self):
+        """Test getting and setting the sampling."""
+        s = DeviceTestSensor(
+                katcp.Sensor.INTEGER, "An integer.", "count",
+                [-4, 3],
+                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
+        )
+        s.set_sampling(katcp.Sensor.NONE)
+        s.set_sampling(katcp.Sensor.PERIOD, 10)
+        s.set_sampling(katcp.Sensor.EVENT)
+        s.set_sampling(katcp.Sensor.DIFFERENTIAL, 2)
+        self.assertRaises(ValueError, s.set_sampling, "bad foo", [])
+        self.assertRaises(ValueError, s.set_sampling, katcp.Sensor.NONE, "foo")
+        self.assertRaises(ValueError, s.set_sampling, katcp.Sensor.PERIOD)
+        self.assertRaises(ValueError, s.set_sampling, katcp.Sensor.PERIOD, 1.5)
+        self.assertRaises(ValueError, s.set_sampling, katcp.Sensor.PERIOD, -1)
+        self.assertRaises(ValueError, s.set_sampling, katcp.Sensor.EVENT, "foo")
+        self.assertRaises(ValueError, s.set_sampling, katcp.Sensor.DIFFERENTIAL)
+        self.assertRaises(ValueError, s.set_sampling, katcp.Sensor.DIFFERENTIAL, -1)
+        self.assertRaises(ValueError, s.set_sampling, katcp.Sensor.DIFFERENTIAL, 1.5)
+
+        s.set_sampling_formatted("none")
+        s.set_sampling_formatted("period", "15")
+        s.set_sampling_formatted("event")
+        s.set_sampling_formatted("differential", "2")
+        self.assertRaises(ValueError, s.set_sampling_formatted, "random")
+        self.assertRaises(ValueError, s.set_sampling_formatted, "period", "foo")
+        self.assertRaises(ValueError, s.set_sampling_formatted, "differential", "bar")
+
+
 class DeviceTestClient(katcp.DeviceClient):
     def __init__(self, *args, **kwargs):
         super(DeviceTestClient, self).__init__(*args, **kwargs)
@@ -302,7 +332,8 @@ class TestDeviceServer(unittest.TestCase):
         self.client.request(katcp.Message.request("sensor-list", "an.int"))
         self.client.request(katcp.Message.request("sensor-list", "an.unknown"))
         self.client.request(katcp.Message.request("sensor-sampling", "an.int"))
-        self.client.request(katcp.Message.request("sensor-sampling", "an.int", "diff", "2"))
+        self.client.request(katcp.Message.request("sensor-sampling", "an.int",
+                                                  "differential", "2"))
 
         time.sleep(0.1)
 
@@ -343,7 +374,7 @@ class TestDeviceServer(unittest.TestCase):
             (r"!sensor-list ok 1", ""),
             (r"!sensor-list fail", ""),
             (r"!sensor-sampling ok an.int none", ""),
-            (r"!sensor-sampling ok an.int diff 2", ""),
+            (r"!sensor-sampling ok an.int differential 2", ""),
             (r"#log trace", r"root trace-msg"),
             (r"#log debug", r"root debug-msg"),
             (r"#log info", r"root info-msg"),

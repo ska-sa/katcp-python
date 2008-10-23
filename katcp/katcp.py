@@ -748,7 +748,7 @@ class DeviceServer(DeviceServerBase):
             # attempt to set sampling strategy
             strategy = msg.arguments[1]
             params = msg.arguments[2:]
-            sensor.set_sampling_formatted(strategy, params)
+            sensor.set_sampling_formatted(strategy, *params)
 
         strategy, params = sensor.get_sampling_formatted()
         return Message.reply("sensor-sampling", "ok", name, strategy, *params)
@@ -805,12 +805,12 @@ class Sensor(object):
     }
 
     # Sampling strategy constants
-    NONE, PERIOD, EVENT, DIFF = range(4)
+    NONE, PERIOD, EVENT, DIFFERENTIAL = range(4)
     SAMPLING_LOOKUP = {
         NONE: "none",
         PERIOD: "period",
         EVENT: "event",
-        DIFF: "diff",
+        DIFFERENTIAL: "differential",
     }
 
     # SAMPLING_LOOKUP not found by pylint
@@ -845,6 +845,7 @@ class Sensor(object):
 
         self._sampling_strategy = self.NONE
         self._sampling_params = []
+        self._sensor_type = sensor_type
 
         self.stype, self._formatter, self._parser = \
             self.SENSOR_TYPES[sensor_type]
@@ -905,16 +906,43 @@ class Sensor(object):
         params = [self._formatter(self, p) for p in params]
         return strategy, params
 
-    def set_sampling(self, strategy, params):
+    def set_sampling(self, strategy, *params):
         """Set the current sampling strategy and parameters."""
         if strategy not in self.SAMPLING_LOOKUP:
             raise ValueError("Unknown sampling strategy: %s." % (strategy,))
+
+        if strategy == self.NONE:
+            if params:
+                raise ValueError("The 'none' strategy takes no parameters.")
+        elif strategy == self.EVENT:
+            if params:
+                raise ValueError("The 'event' strategy takes no parameters.")
+        elif strategy == self.PERIOD:
+            if len(params) != 1:
+                raise ValueError("The 'period' strategy takes one parameter.")
+            if not isinstance(params[0], int) or params[0] <= 0:
+                raise ValueError("The period must be a positive integer in ms.")
+        elif strategy == self.DIFFERENTIAL:
+            if len(params) != 1:
+                raise ValueError("The 'differential' strategy"
+                                    " takes one parameter.")
+            if self._sensor_type not in (self.INTEGER, self.FLOAT):
+                raise ValueError("The 'differential' strategy is only valid for"
+                                    " float and integer sensors.")
+            if self._sensor_type == self.INTEGER:
+                if not isinstance(params[0], int) or params[0] <= 0:
+                    raise ValueError("The diff amount must be a positive"
+                                        " integer.")
+            else:
+                if not isinstance(params[0], float) or params[0] <= 0:
+                    raise ValueError("The diff amount must be a positive"
+                                        " float.")
 
         self._apply_sampling_change(strategy, params)
         self._sampling_strategy = strategy
         self._sampling_params = params
 
-    def set_sampling_formatted(self, strategy, params):
+    def set_sampling_formatted(self, strategy, *params):
         """Set the current sampling strategy and parameters.
 
            The strategy and parameters should be strings as
@@ -926,8 +954,22 @@ class Sensor(object):
                                 % (strategy, self.SAMPLING_LOOKUP.values()))
 
         strategy = self.SAMPLING_LOOKUP_REV[strategy]
-        params = [self._parser(self, p) for p in params]
-        self.set_sampling(strategy, params)
+
+        # parse paramters as appropriate to strategy
+        if strategy == self.PERIOD:
+            try:
+                params = [int(p) for p in params]
+            except Exception:
+                raise ValueError("The 'period' strategy takes"
+                                    " integer parameters.")
+        elif strategy == self.DIFFERENTIAL:
+            try:
+                params = [self._parser(self, p) for p in params]
+            except Exception:
+                raise ValueError("The 'differential' strategy takes"
+                        " parameters of the same type as the sensor value")
+
+        self.set_sampling(strategy, *params)
 
 
 class DeviceLogger(object):
