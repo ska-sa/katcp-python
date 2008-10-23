@@ -770,18 +770,6 @@ class Sensor(object):
     # is an abstract class used only outside this module
     # pylint: disable-msg = R0902
 
-    # Formatters and parsers
-
-    @staticmethod
-    def lru_formatter(sensor, value):
-        """Format an LRU sensor value."""
-        return sensor.LRU_VALUES[value]
-
-    @staticmethod
-    def lru_parser(sensor, value):
-        """Parse and LRU sensor value."""
-        return sensor.LRU_CONSTANTS[value]
-
     # Type names and formatters
     #
     # Formatters take the sensor object and the value to
@@ -800,7 +788,8 @@ class Sensor(object):
                          lambda sensor, value: float(value)),
         BOOLEAN: ("boolean", lambda sensor, value: value and "1" or "0",
                              lambda sensor, value: value == "1"),
-        LRU: ("lru", lru_formatter, lru_parser),
+        LRU: ("lru", lambda sensor, value: sensor.LRU_VALUES[value],
+                     lambda sensor, value: sensor.LRU_CONSTANTS[value]),
         DISCRETE: ("discrete", lambda sensor, value: value,
                                lambda sensor, value: value),
     }

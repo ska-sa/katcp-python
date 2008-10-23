@@ -77,52 +77,106 @@ class TestMessageParser(unittest.TestCase):
         self.assertEqual(m.arguments, [" ", " ", ""])
 
 
+class DeviceTestSensor(katcp.Sensor):
+    def __init__(self, sensor_type, description, units, params,
+                 timestamp, status, value):
+        super(DeviceTestSensor, self).__init__(
+            sensor_type, description, units, params)
+        self.__timestamp = timestamp
+        self.__status = status
+        self.__value = value
+        self.__sampling_changes = []
+
+    def read(self):
+        return self.__timestamp, self.__status, self.__value
+
+    def _apply_sampling_change(self, strategy, params):
+        self.__sampling_changes.append((strategy, params))
+
+    def get_changes(self):
+        return self.__sampling_changes
+
+
+class TestSensor(unittest.TestCase):
+    def test_int_sensor(self):
+        """Test integer sensor."""
+        s = DeviceTestSensor(
+                katcp.Sensor.INTEGER, "An integer.", "count",
+                [-4, 3],
+                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
+        )
+        self.assertEqual(s.read_formatted(), ("12345", "nominal", "3"))
+
+    def test_float_sensor(self):
+        """Test float sensor."""
+        s = DeviceTestSensor(
+                katcp.Sensor.FLOAT, "A float.", "power",
+                [0.0, 5.0],
+                timestamp=12345, status=katcp.Sensor.WARN, value=3.0
+        )
+        self.assertEqual(s.read_formatted(), ("12345", "warn", "3.000000e+00"))
+
+    def test_boolean_sensor(self):
+        """Test boolean sensor."""
+        s = DeviceTestSensor(
+                katcp.Sensor.BOOLEAN, "A boolean.", "on/off",
+                None,
+                timestamp=12345, status=katcp.Sensor.UNKNOWN, value=True
+        )
+        self.assertEqual(s.read_formatted(), ("12345", "unknown", "1"))
+
+    def test_discrete_sensor(self):
+        """Test discrete sensor."""
+        s = DeviceTestSensor(
+                katcp.Sensor.DISCRETE, "A discrete sensor.", "state",
+                ["on", "off"],
+                timestamp=12345, status=katcp.Sensor.ERROR, value="on"
+        )
+        self.assertEqual(s.read_formatted(), ("12345", "error", "on"))
+
+    def test_lru_sensor(self):
+        """Test LRU sensor."""
+        s = DeviceTestSensor(
+                katcp.Sensor.LRU, "An LRU sensor.", "state",
+                None,
+                timestamp=12345, status=katcp.Sensor.FAILURE,
+                value=katcp.Sensor.LRU_ERROR
+        )
+        self.assertEqual(s.read_formatted(), ("12345", "failure", "error"))
+
 class DeviceTestClient(katcp.DeviceClient):
     def __init__(self, *args, **kwargs):
         super(DeviceTestClient, self).__init__(*args, **kwargs)
-        self._msgs = []
+        self.__msgs = []
 
     def raw_send(self, chunk):
         """Send a raw chunk of data to the server."""
         self._sock.send(chunk)
 
     def inform(self, msg):
-        self._msgs.append(msg)
+        self.__msgs.append(msg)
 
     def reply(self, msg):
-        self._msgs.append(msg)
+        self.__msgs.append(msg)
 
     def messages(self):
-        return self._msgs
+        return self.__msgs
 
-class TestSensor(katcp.Sensor):
-    def __init__(self, sensor_type, description, units, params,
-                 timestamp, status, value):
-        super(TestSensor, self).__init__(sensor_type, description, units, params)
-        self.__timestamp = timestamp
-        self.__status = status
-        self.__value = value
-
-    def read(self):
-        return self.__timestamp, self.__status, self.__value
-
-    def _apply_sampling_change(self, strategy, params):
-        pass
 
 class DeviceTestServer(katcp.DeviceServer):
     def setup_sensors(self):
         self.restarted = False
-        self.add_sensor("an.int", TestSensor(
+        self.add_sensor("an.int", DeviceTestSensor(
             katcp.Sensor.INTEGER, "An Integer.", "count",
             [-5, 5],
-            timestamp=12345, status=TestSensor.NOMINAL, value=3
+            timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
         ))
 
     def schedule_restart(self):
         self.restarted = True
 
-class TestDeviceServer(unittest.TestCase):
 
+class TestDeviceServer(unittest.TestCase):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
         self.server.start(timeout=0.1)
