@@ -44,12 +44,13 @@ class Message(object):
 
     ESCAPE_LOOKUP = {
         "\\" : "\\",
-        " ": " ",
+        "_": " ",
         "0": "\0",
         "n": "\n",
         "r": "\r",
         "e": "\x1b",
         "t": "\t",
+        "@": "",
     }
 
     # pylint fails to realise ESCAPE_LOOKUP is defined
@@ -60,6 +61,7 @@ class Message(object):
     ESCAPE_RE = re.compile(r"[\\ \0\n\r\x1b\t]")
 
     def __init__(self, mtype, name, arguments=None):
+        # TODO: check type and name
         self.mtype = mtype
         self.name = name
         if arguments is None:
@@ -69,8 +71,10 @@ class Message(object):
 
     def __str__(self):
         if self.arguments:
-            arg_str = " " + " ".join([self.ESCAPE_RE.sub(self._escape_match, x)
-                                        for x in self.arguments])
+            escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
+                            for x in self.arguments]
+            escaped_args = [x or "\\@" for x in escaped_args]
+            arg_str = " " + " ".join(escaped_args)
         else:
             arg_str = ""
 
@@ -85,19 +89,19 @@ class Message(object):
     # pylint: disable-msg = W0142
 
     @classmethod
-    def request(cls, *args, **kwargs):
+    def request(cls, name, *args):
         """Helper method for creating request messages."""
-        return cls(cls.REQUEST, *args, **kwargs)
+        return cls(cls.REQUEST, name, args)
 
     @classmethod
-    def reply(cls, *args, **kwargs):
+    def reply(cls, name, *args):
         """Helper method for creating reply messages."""
-        return cls(cls.REPLY, *args, **kwargs)
+        return cls(cls.REPLY, name, args)
 
     @classmethod
-    def inform(cls, *args, **kwargs):
+    def inform(cls, name, *args):
         """Helper method for creating inform messages."""
-        return cls(cls.INFORM, *args, **kwargs)
+        return cls(cls.INFORM, name, args)
 
     # pylint: enable-msg = W0142
 
@@ -112,45 +116,34 @@ class MessageParser(object):
     # We only want one public method
     # pylint: disable-msg = R0903
 
-    SPECIAL = set([" ", "\t", "\x1b", "\n", "\r", "\\", "\0"])
     TYPE_SYMBOL_LOOKUP = Message.TYPE_SYMBOL_LOOKUP
     ESCAPE_LOOKUP = Message.ESCAPE_LOOKUP
+    SPECIAL_RE = re.compile(r"[\0\n\r\x1b\t]")
+    UNESCAPE_RE = re.compile(r"\\(.?)")
 
     def __init__(self):
         pass
 
-    def _parse_arguments(self, sep, tail):
+    def _unescape_match(self, match):
+        """Given an re.Match, unescape the escape code it represents."""
+        char = match.group(1)
+        if char in self.ESCAPE_LOOKUP:
+            return self.ESCAPE_LOOKUP[char]
+        elif not char:
+            raise KatcpSyntaxError("Escape slash at end of argument.")
+        else:
+            raise KatcpSyntaxError("Invalid escape character %r." % (char,))
+
+    def _parse_arg(self, arg):
+        """Parse an argument."""
+        match = self.SPECIAL_RE.search(arg)
+        if match:
+            raise KatcpSyntaxError("Unescaped special %r." % (match.group(),))
+        return self.UNESCAPE_RE.sub(self._unescape_match, arg)
+
+    def _parse_arguments(self, tail):
         """Parse arguments out of tail of command."""
-        if not sep:
-            # no sep means no space after the command
-            # name and hence no arguments
-            return []
-
-        arguments = []
-        arg = []
-        tail_iter = iter(tail)
-
-        for char in tail_iter:
-            if char == "\\":
-                try:
-                    char = tail_iter.next()
-                except StopIteration:
-                    raise KatcpSyntaxError("Escape slash at end of line.")
-                if char in self.ESCAPE_LOOKUP:
-                    arg.append(self.ESCAPE_LOOKUP[char])
-                else:
-                    raise KatcpSyntaxError("Invalid escape character '%r'."
-                                            % (char,))
-            elif char == " ":
-                arguments.append("".join(arg))
-                arg = []
-            elif char not in self.SPECIAL:
-                arg.append(char)
-            else:
-                raise KatcpSyntaxError("Unescaped special '%r'." % (char,))
-
-        arguments.append("".join(arg))
-        return arguments
+        return [self._parse_arg(x) for x in tail.split()]
 
     def parse(self, line):
         """Parse a line, return a Message."""
@@ -185,7 +178,7 @@ class MessageParser(object):
 
         # parse arguments
 
-        arguments = self._parse_arguments(sep, tail)
+        arguments = self._parse_arguments(tail)
 
         return Message(mtype, name, arguments)
 
@@ -346,12 +339,12 @@ class DeviceServerBase(object):
            but it is also used by the methods in this class when errors
            need to be reported to the client.
            """
-        return Message.inform("log", [
+        return Message.inform("log",
                 level_name,
                 str(int(time.time() * 1000.0)), # time since epoch in ms
                 name,
                 msg,
-        ])
+        )
 
     def bind(self, bindaddr):
         """Create a listening server socket."""
@@ -428,10 +421,10 @@ class DeviceServerBase(object):
                     e_type, e_value, trace, self._tb_limit
                 ))
                 log.error("%s FAIL: %s" % (msg.name, reason))
-                reply = Message.reply(msg.name, ["fail", reason])
+                reply = Message.reply(msg.name, "fail", reason)
         else:
             log.error("%s INVALID: Unknown request." % (msg.name,))
-            reply = Message.reply(msg.name, ["invalid", "Unknown request."])
+            reply = Message.reply(msg.name, "invalid", "Unknown request.")
         sock.send(str(reply) + "\n")
 
     def inform(self, sock, msg):
@@ -570,14 +563,14 @@ class DeviceServer(DeviceServerBase):
 
     def on_client_connect(self, sock):
         """Inform client of build state and version on connect."""
-        self.inform(sock, Message.inform("version", [self.version()]))
-        self.inform(sock, Message.inform("build-state", [
+        self.inform(sock, Message.inform("version", self.version()))
+        self.inform(sock, Message.inform("build-state",
             self.version(full=True)
-        ]))
+        ))
 
     def on_client_disconnect(self, sock, msg):
         """Inform client it is about to be disconnected."""
-        self.inform(sock, Message.inform("disconnect", [msg]))
+        self.inform(sock, Message.inform("disconnect", msg))
 
     def version(self, full=False):
         """Return a version string of the form type-major.minor.
@@ -633,73 +626,73 @@ class DeviceServer(DeviceServerBase):
         # this message makes it through because stop
         # only registers in .run(...) after the reply
         # has been sent.
-        return Message.reply("halt", ["ok"])
+        return Message.reply("halt", "ok")
 
     def request_help(self, sock, msg):
         """Return help on the available request methods."""
         if not msg.arguments:
             for name, method in sorted(self._request_handlers.items()):
                 doc = method.__doc__
-                self.inform(sock, Message.inform("help", [name, doc]))
+                self.inform(sock, Message.inform("help", name, doc))
             num_methods = len(self._request_handlers)
-            return Message.reply("help", ["ok", str(num_methods)])
+            return Message.reply("help", "ok", str(num_methods))
         else:
             name = msg.arguments[0]
             if name in self._request_handlers:
                 method = self._request_handlers[name]
                 doc = method.__doc__
-                self.inform(sock, Message.inform("help", [name, doc]))
-                return Message.reply("help", ["ok", "1"])
-            return Message.reply("help", ["fail", "Unknown request method."])
+                self.inform(sock, Message.inform("help", name, doc))
+                return Message.reply("help", "ok", "1")
+            return Message.reply("help", "fail", "Unknown request method.")
 
     def request_log_level(self, sock, msg):
         """Query or set the current logging level."""
         if msg.arguments:
             self.log.set_log_level_by_name(msg.arguments[0])
-        return Message.reply("log-level", ["ok", self.log.level_name()])
+        return Message.reply("log-level", "ok", self.log.level_name())
 
     def request_restart(self, sock, msg):
         """Restart the device server."""
         self.schedule_restart()
-        return Message.reply("restart", ["ok"])
+        return Message.reply("restart", "ok")
 
     def request_sensor_list(self, sock, msg):
         """Request the list of sensors."""
         if not msg.arguments:
             for name, sensor in self._sensors.iteritems():
                 self.inform(sock, Message.inform("sensor-type",
-                    [name, sensor.stype, sensor.description, sensor.units]
-                    + sensor.params))
+                    name, sensor.stype, sensor.description, sensor.units,
+                    *sensor.params))
                 timestamp_ms, status, value = sensor.read_formatted()
                 self.inform(sock, Message.inform("sensor-status",
-                    [timestamp_ms, "1", name, status, value]))
+                    timestamp_ms, "1", name, status, value))
             return Message.reply("sensor-list",
-                    ["ok", str(len(self._sensors))])
+                    "ok", str(len(self._sensors)))
         else:
             name = msg.arguments[0]
             if name in self._sensors:
                 sensor = self._sensors[name]
                 self.inform(sock, Message.inform("sensor-type",
-                    [name, sensor.stype, sensor.description, sensor.units]
-                    + sensor.params))
+                    name, sensor.stype, sensor.description, sensor.units,
+                    *sensor.params))
                 timestamp_ms, status, value = sensor.read_formatted()
                 self.inform(sock, Message.inform("sensor-status",
-                    [timestamp_ms, "1", name, status, value]))
-                return Message.reply("sensor-list", ["ok", "1"])
+                    timestamp_ms, "1", name, status, value))
+                return Message.reply("sensor-list", "ok", "1")
             else:
-                return Message.reply("sensor-list", ["fail",
-                                                     "Unknown sensor name."])
+                return Message.reply("sensor-list", "fail",
+                                                    "Unknown sensor name.")
 
     def request_sensor_sampling(self, sock, msg):
         """Configure or query the way a sensor is sampled."""
         if not msg.arguments:
-            return Message.reply("sensor-sampling", ["fail",
-                                                     "No sensor name given."])
+            return Message.reply("sensor-sampling", "fail",
+                                                    "No sensor name given.")
         name = msg.arguments[0]
 
         if name not in self._sensors:
-            return Message.reply("sensor-sampling", ["fail",
-                                                     "Unknown sensor name."])
+            return Message.reply("sensor-sampling", "fail",
+                                                    "Unknown sensor name.")
         sensor = self._sensors[name]
 
         if len(msg.arguments) > 1:
@@ -709,14 +702,14 @@ class DeviceServer(DeviceServerBase):
             sensor.set_sampling_formatted(strategy, params)
 
         strategy, params = sensor.get_sampling_formatted()
-        return Message.reply("sensor-sampling", ["ok", name, strategy] + params)
+        return Message.reply("sensor-sampling", "ok", name, strategy, *params)
 
 
     def request_watchdog(self, sock, msg):
         """Check that the server is still alive."""
         # not a function, just doesn't use self
         # pylint: disable-msg = R0201
-        return Message.reply("watchdog", ["ok"])
+        return Message.reply("watchdog", "ok")
 
     # pylint: enable-msg = W0613
 

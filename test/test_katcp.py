@@ -28,13 +28,13 @@ class TestMessageParser(unittest.TestCase):
 
     def test_escape_sequences(self):
         """Test escape sequences."""
-        m = self.p.parse(r"?foo \\\ \0\n\r\e\t")
+        m = self.p.parse(r"?foo \\\_\0\n\r\e\t\@")
         self.assertEqual(m.arguments, ["\\ \0\n\r\x1b\t"])
 
         self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"?foo \z")
 
-        # test unescaped tab
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "?foo \t")
+        # test unescaped null
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "?foo \0")
 
     def test_syntax_errors(self):
         """Test generation of syntax errors."""
@@ -48,7 +48,7 @@ class TestMessageParser(unittest.TestCase):
         """Test message to string round trip with escapes."""
         for m_str in [
             "?bar",
-            r"?foo \\\ \0\n\r\e\t",
+            r"?foo \\\_\0\n\r\e\t",
         ]:
             self.assertEqual(m_str, str(self.p.parse(m_str)))
 
@@ -60,13 +60,11 @@ class TestMessageParser(unittest.TestCase):
 
     def test_empty_params(self):
         """Test parsing messages with empty parameters."""
-        m = self.p.parse("!foo ") # 1 empty parameter
+        m = self.p.parse("!foo \@") # 1 empty parameter
         self.assertEqual(m.arguments, [""])
-        m = self.p.parse("!foo  ") # 2 empty parameter
+        m = self.p.parse("!foo \@ \@") # 2 empty parameter
         self.assertEqual(m.arguments, ["", ""])
-        #import pdb
-        #pdb.set_trace()
-        m = self.p.parse("!foo \  \  ") # space, space, empty
+        m = self.p.parse("!foo \_ \_ \@") # space, space, empty
         self.assertEqual(m.arguments, [" ", " ", ""])
 
 
@@ -120,14 +118,14 @@ class TestDeviceServer(unittest.TestCase):
         self.server = DeviceTestServer('', 0)
         self.server_thread = threading.Thread(target=self.server.run)
         self.server_thread.start()
-        time.sleep(0.2)
+        time.sleep(0.1)
 
         host, port = self.server._sock.getsockname()
 
         self.client = DeviceTestClient(host, port)
         self.client_thread = threading.Thread(target=self.client.run)
         self.client_thread.start()
-        time.sleep(0.2)
+        time.sleep(0.1)
 
     def tearDown(self):
         self.client.stop()
@@ -197,10 +195,10 @@ class TestDeviceServer(unittest.TestCase):
         self._assert_msgs_equal(msgs, [
             r"#version device_stub-0.1",
             r"#build-state device_stub-0.1",
-            r"!foo invalid Unknown\ request.",
-            r"!bar-boom invalid Unknown\ request.",
-            r"!baz invalid Unknown\ request.",
-            r"!boom invalid Unknown\ request.",
+            r"!foo invalid Unknown\_request.",
+            r"!bar-boom invalid Unknown\_request.",
+            r"!baz invalid Unknown\_request.",
+            r"!boom invalid Unknown\_request.",
         ])
 
     def test_bad_requests(self):
@@ -208,11 +206,12 @@ class TestDeviceServer(unittest.TestCase):
         self.client.raw_send("bad msg\n")
 
         time.sleep(0.1)
+
         msgs = self.client.messages()
         self._assert_msgs_like(msgs, [
             (r"#version device_stub-0.1", ""),
             (r"#build-state device_stub-0.1", ""),
-            (r"#log error", "KatcpSyntaxError:\\ Bad\\ type\\ character\\ 'b'.\\n"),
+            (r"#log error", "KatcpSyntaxError:\_Bad\_type\_character\_'b'.\\n"),
         ])
 
     def test_server_ignores_informs_and_replies(self):
@@ -221,11 +220,12 @@ class TestDeviceServer(unittest.TestCase):
         self.client.raw_send("!some reply\n")
 
         time.sleep(0.1)
+
         msgs = self.client.messages()
         self._assert_msgs_like(msgs, [
             (r"#version device_stub-0.1", ""),
             (r"#build-state device_stub-0.1", ""),
-            (r"#log error", "Unexpected\\ reply\\ message\\ !some\\ received\\ by\\ server."),
+            (r"#log error", "Unexpected\_reply\_message\_!some\_received\_by\_server."),
         ])
 
     def test_standard_requests(self):
@@ -235,13 +235,13 @@ class TestDeviceServer(unittest.TestCase):
         self.client.request(katcp.Message.request("log-level"))
         self.client.request(katcp.Message.request("log-level trace"))
         self.client.request(katcp.Message.request("help"))
-        self.client.request(katcp.Message.request("help watchdog"))
-        self.client.request(katcp.Message.request("help unknown-request"))
+        self.client.request(katcp.Message.request("help", "watchdog"))
+        self.client.request(katcp.Message.request("help", "unknown-request"))
         self.client.request(katcp.Message.request("sensor-list"))
-        self.client.request(katcp.Message.request("sensor-list an.int"))
-        self.client.request(katcp.Message.request("sensor-list an.unknown"))
-        self.client.request(katcp.Message.request("sensor-sampling an.int"))
-        self.client.request(katcp.Message.request("sensor-sampling an.int diff 2"))
+        self.client.request(katcp.Message.request("sensor-list", "an.int"))
+        self.client.request(katcp.Message.request("sensor-list", "an.unknown"))
+        self.client.request(katcp.Message.request("sensor-sampling", "an.int"))
+        self.client.request(katcp.Message.request("sensor-sampling", "an.int", "diff", "2"))
 
         time.sleep(0.1)
 
@@ -255,7 +255,6 @@ class TestDeviceServer(unittest.TestCase):
         time.sleep(0.1)
 
         msgs = self.client.messages()
-
         self.assertEqual(self.server.restarted, True)
         self._assert_msgs_like(msgs, [
             (r"#version device_stub-0.1", ""),
@@ -275,10 +274,10 @@ class TestDeviceServer(unittest.TestCase):
             (r"#help watchdog", ""),
             (r"!help ok 1", ""),
             (r"!help fail", ""),
-            (r"#sensor-type an.int integer An\ Integer. count -5 5", ""),
+            (r"#sensor-type an.int integer An\_Integer. count -5 5", ""),
             (r"#sensor-status 12345 1 an.int nominal 3", ""),
             (r"!sensor-list ok 1", ""),
-            (r"#sensor-type an.int integer An\ Integer. count -5 5", ""),
+            (r"#sensor-type an.int integer An\_Integer. count -5 5", ""),
             (r"#sensor-status 12345 1 an.int nominal 3", ""),
             (r"!sensor-list ok 1", ""),
             (r"!sensor-list fail", ""),
@@ -294,3 +293,4 @@ class TestDeviceServer(unittest.TestCase):
 
 class TestDeviceClient(unittest.TestCase):
     pass
+    #TODO: add some client tests
