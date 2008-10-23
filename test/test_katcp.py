@@ -130,13 +130,12 @@ class TestDeviceServer(unittest.TestCase):
         host, port = self.server._sock.getsockname()
 
         self.client = DeviceTestClient(host, port)
-        self.client_thread = threading.Thread(target=self.client.run)
-        self.client_thread.start()
-        time.sleep(0.1)
+        self.client.start(timeout=0.1)
 
     def tearDown(self):
-        self.client.stop()
-        self.client_thread.join()
+        if self.client.running():
+            self.client.stop()
+            self.client.join()
         if self.server.running():
             self.server.stop()
             self.server.join()

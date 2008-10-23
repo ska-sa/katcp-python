@@ -195,6 +195,7 @@ class DeviceClient(object):
         self._sock = None
         self._waiting_chunk = ""
         self._running = threading.Event()
+        self._thread = None
 
     def reply(self, msg):
         """Called when a reply message arrives."""
@@ -266,12 +267,37 @@ class DeviceClient(object):
         self._sock.close()
         self._sock = None
 
+    def start(self, timeout=None):
+        """Start the client in a new thread."""
+        if self._thread:
+            raise RuntimeError("Device client already started.")
+
+        self._thread = threading.Thread(target=self.run)
+        self._thread.start()
+        if timeout:
+            self._running.wait(timeout)
+            if not self._running.isSet():
+                raise RuntimeError("Device client failed to start.")
+
+    def join(self, timeout=None):
+        """Rejoin the client thread."""
+        if not self._thread:
+            raise RuntimeError("Device client thread not started.")
+
+        self._thread.join(timeout)
+        if not self._thread.isAlive():
+            self._thread = None
+
     def stop(self):
-        """Stop a running server (from another thread)."""
+        """Stop a running client (from another thread)."""
         self._running.wait(1.0)
         if not self._running.isSet():
             raise RuntimeError("Attempt to stop client that wasn't running.")
         self._running.clear()
+
+    def running(self):
+        """Whether the client is running."""
+        return self._running.isSet()
 
 
 class DeviceServerMetaclass(type):
