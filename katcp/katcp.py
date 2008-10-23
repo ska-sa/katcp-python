@@ -61,13 +61,30 @@ class Message(object):
     ESCAPE_RE = re.compile(r"[\\ \0\n\r\x1b\t]")
 
     def __init__(self, mtype, name, arguments=None):
-        # TODO: check type and name
         self.mtype = mtype
         self.name = name
         if arguments is None:
             self.arguments = []
         else:
             self.arguments = list(arguments)
+
+        # check message type
+
+        if mtype not in self.TYPE_SYMBOLS:
+            raise KatcpSyntaxError("Invalid command type %r." % (mtype,))
+
+        # check command name validity
+
+        if not name:
+            raise KatcpSyntaxError("Command missing command name.")
+        if not name.replace("-","").isalnum():
+            raise KatcpSyntaxError("Command name should consist only of"
+                                " alphanumeric characters and dashes (got %r)."
+                                % (name,))
+        if not name[0].isalpha():
+            raise KatcpSyntaxError("Command name should start with an"
+                                " alphabetic character (got %r)."
+                                % (name,))
 
     def __str__(self):
         if self.arguments:
@@ -104,6 +121,7 @@ class Message(object):
         return cls(cls.INFORM, name, args)
 
     # pylint: enable-msg = W0142
+
 
 class KatcpSyntaxError(ValueError):
     """Exception raised by parsers on encountering syntax errors."""
@@ -158,19 +176,6 @@ class MessageParser(object):
 
         name = parts[0][1:]
         arguments = [self._parse_arg(x) for x in parts[1:]]
-
-        # check command name validity
-
-        if not name:
-            raise KatcpSyntaxError("Command missing command name.")
-        if not name.replace("-","").isalnum():
-            raise KatcpSyntaxError("Command name should consist only of"
-                                " alphanumeric characters and dashes (got %r)."
-                                % (name,))
-        if not name[0].isalpha():
-            raise KatcpSyntaxError("Command name should start with an"
-                                " alphabetic character (got %r)."
-                                % (name,))
 
         return Message(mtype, name, arguments)
 

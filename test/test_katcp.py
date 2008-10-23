@@ -242,7 +242,7 @@ class TestDeviceServer(unittest.TestCase):
         self.client.request(katcp.Message.request("watchdog"))
         self.client.request(katcp.Message.request("restart"))
         self.client.request(katcp.Message.request("log-level"))
-        self.client.request(katcp.Message.request("log-level trace"))
+        self.client.request(katcp.Message.request("log-level", "trace"))
         self.client.request(katcp.Message.request("help"))
         self.client.request(katcp.Message.request("help", "watchdog"))
         self.client.request(katcp.Message.request("help", "unknown-request"))
