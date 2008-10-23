@@ -324,6 +324,7 @@ class DeviceServerBase(object):
         self._tb_limit = tb_limit
         self._sock = self.bind(self._bindaddr)
         self._running = threading.Event()
+        self._thread = None
 
         # sockets and data
         self._socks = [] # list of client sockets
@@ -481,12 +482,37 @@ class DeviceServerBase(object):
             self.on_client_disconnect(sock, "Device server shutting down.")
             self.remove_socket(sock)
 
+    def start(self, timeout=None):
+        """Start the server in a new thread."""
+        if self._thread:
+            raise RuntimeError("Device server already started.")
+
+        self._thread = threading.Thread(target=self.run)
+        self._thread.start()
+        if timeout:
+            self._running.wait(timeout)
+            if not self._running.isSet():
+                raise RuntimeError("Device server failed to start.")
+
+    def join(self, timeout=None):
+        """Rejoin the server thread."""
+        if not self._thread:
+            raise RuntimeError("Device server thread not started.")
+
+        self._thread.join(timeout)
+        if not self._thread.isAlive():
+            self._thread = None
+
     def stop(self):
         """Stop a running server (from another thread)."""
         self._running.wait(1.0)
         if not self._running.isSet():
             raise RuntimeError("Attempt to stop server that wasn't running.")
         self._running.clear()
+
+    def running(self):
+        """Whether the server is running."""
+        return self._running.isSet()
 
     def on_client_connect(self, sock):
         """Called after client connection is established.

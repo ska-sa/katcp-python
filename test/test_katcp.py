@@ -125,9 +125,7 @@ class TestDeviceServer(unittest.TestCase):
 
     def setUp(self):
         self.server = DeviceTestServer('', 0)
-        self.server_thread = threading.Thread(target=self.server.run)
-        self.server_thread.start()
-        time.sleep(0.1)
+        self.server.start(timeout=0.1)
 
         host, port = self.server._sock.getsockname()
 
@@ -139,8 +137,9 @@ class TestDeviceServer(unittest.TestCase):
     def tearDown(self):
         self.client.stop()
         self.client_thread.join()
-        self.server.stop()
-        self.server_thread.join()
+        if self.server.running():
+            self.server.stop()
+            self.server.join()
 
     def _assert_msgs_length(self, actual_msgs, expected_number):
         """Assert that the number of messages is that expected."""
@@ -298,6 +297,20 @@ class TestDeviceServer(unittest.TestCase):
             (r"#log warn", r"root warn-msg"),
             (r"#log error", r"root error-msg"),
             (r"#log critical", r"root critical-msg"),
+        ])
+
+    def test_halt_request(self):
+        """Test halt request."""
+        self.client.request(katcp.Message.request("halt"))
+        self.server.join()
+        time.sleep(0.1)
+
+        msgs = self.client.messages()
+        self._assert_msgs_equal(msgs, [
+            r"#version device_stub-0.1",
+            r"#build-state device_stub-0.1",
+            r"!halt ok",
+            r"#disconnect Device\_server\_shutting\_down.",
         ])
 
 class TestDeviceClient(unittest.TestCase):
