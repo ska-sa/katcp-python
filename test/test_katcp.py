@@ -285,7 +285,7 @@ class TestDeviceServer(unittest.TestCase):
         msgs = self.client.messages()
         self._assert_msgs_equal(msgs, [
             r"#version device_stub-0.1",
-            r"#build-state device_stub-0.1",
+            r"#build-state name-0.1",
             r"!foo invalid Unknown\_request.",
             r"!bar-boom invalid Unknown\_request.",
             r"!baz invalid Unknown\_request.",
@@ -301,7 +301,7 @@ class TestDeviceServer(unittest.TestCase):
         msgs = self.client.messages()
         self._assert_msgs_like(msgs, [
             (r"#version device_stub-0.1", ""),
-            (r"#build-state device_stub-0.1", ""),
+            (r"#build-state name-0.1", ""),
             (r"#log error", "KatcpSyntaxError:\_Bad\_type\_character\_'b'.\\n"),
         ])
 
@@ -315,7 +315,7 @@ class TestDeviceServer(unittest.TestCase):
         msgs = self.client.messages()
         self._assert_msgs_like(msgs, [
             (r"#version device_stub-0.1", ""),
-            (r"#build-state device_stub-0.1", ""),
+            (r"#build-state name-0.1", ""),
             (r"#log error", "Unexpected\_reply\_message\_!some\_received\_by\_server."),
         ])
 
@@ -350,7 +350,7 @@ class TestDeviceServer(unittest.TestCase):
         self.assertEqual(self.server.restarted, True)
         self._assert_msgs_like(msgs, [
             (r"#version device_stub-0.1", ""),
-            (r"#build-state device_stub-0.1", ""),
+            (r"#build-state name-0.1", ""),
             (r"!watchdog ok", ""),
             (r"!restart ok", ""),
             (r"!log-level ok off", ""),
@@ -392,7 +392,7 @@ class TestDeviceServer(unittest.TestCase):
         msgs = self.client.messages()
         self._assert_msgs_equal(msgs, [
             r"#version device_stub-0.1",
-            r"#build-state device_stub-0.1",
+            r"#build-state name-0.1",
             r"!halt ok",
             r"#disconnect Device\_server\_shutting\_down.",
         ])
