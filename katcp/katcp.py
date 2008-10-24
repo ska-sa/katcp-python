@@ -311,12 +311,19 @@ class DeviceServerMetaclass(type):
     def __init__(mcs, name, bases, dct):
         super(DeviceServerMetaclass, mcs).__init__(name, bases, dct)
         mcs._request_handlers = {}
+        mcs._inform_handlers = {}
+        def convert(prefix, name):
+            """Convert a method name to the corresponding command name."""
+            return name[len(prefix):].replace("_","-")
         for name in dir(mcs):
             if name.startswith("request_"):
-                request_name = name[len("request_"):]
-                request_name = request_name.replace("_", "-")
+                request_name = convert("request_", name)
                 mcs._request_handlers[request_name] = getattr(mcs, name)
                 assert(hasattr(mcs._request_handlers[request_name], "__doc__"))
+            elif name.startswith("inform_"):
+                inform_name = convert("inform_", name)
+                mcs._inform_handlers[inform_name] = getattr(msc, name)
+                assert(hasattr(mcs._inform_handlers[inform_name], "__doc__"))
 
 
 class DeviceServerBase(object):
@@ -329,7 +336,7 @@ class DeviceServerBase(object):
        socket should only be used as an argument to .inform(). 
        
        Should a subclass need to generate inform messages it should
-       do so using either the .inform() or .inform_all() methods.
+       do so using either the .inform() or .mass_inform() methods.
 
        Finally, this class should probably not be subclassed directly
        but rather via subclassing DeviceServer itself which implements
@@ -423,7 +430,7 @@ class DeviceServerBase(object):
         if msg.mtype == msg.REQUEST:
             self.handle_request(sock, msg)
         elif msg.mtype == msg.INFORM:
-            pass
+            self.handle_inform(sock, msg)
         else:
             reason = "Unexpected reply message !%s received by server." \
                      % (msg.name,)
@@ -444,12 +451,26 @@ class DeviceServerBase(object):
                 reason = "\n".join(traceback.format_exception(
                     e_type, e_value, trace, self._tb_limit
                 ))
-                log.error("%s FAIL: %s" % (msg.name, reason))
+                log.error("Request %s FAIL: %s" % (msg.name, reason))
                 reply = Message.reply(msg.name, "fail", reason)
         else:
             log.error("%s INVALID: Unknown request." % (msg.name,))
             reply = Message.reply(msg.name, "invalid", "Unknown request.")
         sock.send(str(reply) + "\n")
+
+    def handle_inform(self, sock, msg):
+        """Dispatch an inform message to the appropriate method."""
+        if msg.name in self._inform_handlers:
+            try:
+                self._inform_handlers[msg.name](self, sock, msg)
+            except Exception:
+                e_type, e_value, trace = sys.exc_info()
+                reason = "\n".join(traceback.format_exception(
+                    e_type, e_value, trace, self._tb_limit
+                ))
+                log.error("Inform %s FAIL: %s" % (msg.name, reason))
+        else:
+            log.warn("%s INVALID: Unknown inform." % (msg.name,))
 
     def inform(self, sock, msg):
         """Send an inform messages to a particular client."""
@@ -458,7 +479,7 @@ class DeviceServerBase(object):
         assert (msg.mtype == Message.INFORM)
         sock.send(str(msg) + "\n")
 
-    def inform_all(self, msg):
+    def mass_inform(self, msg):
         """Send an inform message to all clients."""
         assert (msg.mtype == Message.INFORM)
         for sock in self._socks:
@@ -598,7 +619,7 @@ class DeviceServer(DeviceServerBase):
 
     VERSION_INFO = ("device_stub", 0, 1)
     BUILD_INFO = ("name", 0, 1, "")
-    
+
     # * and ** magic fine here
     # pylint: disable-msg = W0142
 
@@ -618,7 +639,7 @@ class DeviceServer(DeviceServerBase):
     def on_client_disconnect(self, sock, msg):
         """Inform client it is about to be disconnected."""
         self.inform(sock, Message.inform("disconnect", msg))
-        
+
     def build_state(self):
         """Return a build state string in the form name-major.minor[(a|b|rc)n]"""
         return "%s-%s.%s%s" % self.BUILD_INFO
@@ -1010,7 +1031,7 @@ class DeviceLogger(object):
         if level >= self._log_level:
             if name is None:
                 name = self._root_logger_name
-            self._device_server.inform_all(
+            self._device_server.mass_inform(
                 self._device_server._log_msg(self.level_name(level), msg, name)
             )
 
