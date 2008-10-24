@@ -205,6 +205,9 @@ class DeviceTestServer(katcp.DeviceServer):
     def schedule_restart(self):
         self.restarted = True
 
+    def request_new_command(self, sock, msg):
+        """A new command."""
+        return Message.reply(msg.name, "ok", "param1", "param2")
 
 class TestDeviceServer(unittest.TestCase):
     def setUp(self):
@@ -358,11 +361,12 @@ class TestDeviceServer(unittest.TestCase):
             (r"#help halt", ""),
             (r"#help help", ""),
             (r"#help log-level", ""),
+            (r"#help new-command", ""),
             (r"#help restart", ""),
             (r"#help sensor-list", ""),
             (r"#help sensor-sampling", ""),
             (r"#help watchdog", ""),
-            (r"!help ok 7", ""),
+            (r"!help ok 8", ""),
             (r"#help watchdog", ""),
             (r"!help ok 1", ""),
             (r"!help fail", ""),
@@ -396,6 +400,9 @@ class TestDeviceServer(unittest.TestCase):
             r"!halt ok",
             r"#disconnect Device\_server\_shutting\_down.",
         ])
+
+    # TODO: add test for inform handlers
+    # TODO: update inform pass test
 
 class TestDeviceClient(unittest.TestCase):
     pass
