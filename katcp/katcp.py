@@ -324,7 +324,7 @@ class DeviceServerMetaclass(type):
                 assert(mcs._request_handlers[request_name].__doc__ is not None)
             elif name.startswith("inform_"):
                 inform_name = convert("inform_", name)
-                mcs._inform_handlers[inform_name] = getattr(msc, name)
+                mcs._inform_handlers[inform_name] = getattr(mcs, name)
                 assert(mcs._inform_handlers[inform_name].__doc__ is not None)
 
 
