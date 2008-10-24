@@ -414,7 +414,7 @@ class TestDeviceServer(unittest.TestCase):
 
         try:
             class BadServer(katcp.DeviceServer):
-                def request_baz(self, sock, msg):
+                def inform_baz(self, sock, msg):
                     pass
         except AssertionError:
             pass
