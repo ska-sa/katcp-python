@@ -401,8 +401,35 @@ class TestDeviceServer(unittest.TestCase):
             r"#disconnect Device\_server\_shutting\_down.",
         ])
 
+    def test_bad_handlers(self):
+        """Test that bad request and inform handlers are picked up."""
+        try:
+            class BadServer(katcp.DeviceServer):
+                def request_baz(self, sock, msg):
+                    pass
+        except AssertionError:
+            pass
+        else:
+            self.fail("Server metaclass accepted missing request_ docstring.")
+
+        try:
+            class BadServer(katcp.DeviceServer):
+                def request_baz(self, sock, msg):
+                    pass
+        except AssertionError:
+            pass
+        else:
+            self.fail("Server metaclass accepted missing inform_ docstring.")
+
+        class SortOfOkayServer(katcp.DeviceServer):
+            request_bar = 1
+            inform_baz = 2
+        assert("bar" not in SortOfOkayServer._request_handlers)
+        assert("baz" not in SortOfOkayServer._inform_handlers)
+
     # TODO: add test for inform handlers
     # TODO: update inform pass test
+
 
 class TestDeviceClient(unittest.TestCase):
     pass

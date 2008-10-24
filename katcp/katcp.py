@@ -316,14 +316,16 @@ class DeviceServerMetaclass(type):
             """Convert a method name to the corresponding command name."""
             return name[len(prefix):].replace("_","-")
         for name in dir(mcs):
+            if not callable(getattr(mcs, name)):
+                continue
             if name.startswith("request_"):
                 request_name = convert("request_", name)
                 mcs._request_handlers[request_name] = getattr(mcs, name)
-                assert(hasattr(mcs._request_handlers[request_name], "__doc__"))
+                assert(mcs._request_handlers[request_name].__doc__ is not None)
             elif name.startswith("inform_"):
                 inform_name = convert("inform_", name)
                 mcs._inform_handlers[inform_name] = getattr(msc, name)
-                assert(hasattr(mcs._inform_handlers[inform_name], "__doc__"))
+                assert(mcs._inform_handlers[inform_name].__doc__ is not None)
 
 
 class DeviceServerBase(object):
