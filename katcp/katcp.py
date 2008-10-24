@@ -597,8 +597,8 @@ class DeviceServer(DeviceServerBase):
     # pylint: disable-msg = R0904
 
     VERSION_INFO = ("device_stub", 0, 1)
-    EXTRA_VERSION_INFO = ""
-
+    BUILD_INFO = ("name", 0, 1, "")
+    
     # * and ** magic fine here
     # pylint: disable-msg = W0142
 
@@ -613,24 +613,19 @@ class DeviceServer(DeviceServerBase):
     def on_client_connect(self, sock):
         """Inform client of build state and version on connect."""
         self.inform(sock, Message.inform("version", self.version()))
-        self.inform(sock, Message.inform("build-state",
-            self.version(full=True)
-        ))
+        self.inform(sock, Message.inform("build-state", self.build_state()))
 
     def on_client_disconnect(self, sock, msg):
         """Inform client it is about to be disconnected."""
         self.inform(sock, Message.inform("disconnect", msg))
+        
+    def build_state(self):
+        """Return a build state string in the form name-major.minor[(a|b|rc)n]"""
+        return "%s-%s.%s%s" % self.BUILD_INFO
 
-    def version(self, full=False):
-        """Return a version string of the form type-major.minor.
-
-           If full is True, optionally add further version information
-           as a suffix.
-           """
-        ver = "%s-%s.%s" % self.VERSION_INFO
-        if full:
-            ver += self.EXTRA_VERSION_INFO
-        return ver
+    def version(self):
+        """Return a version string of the form type-major.minor."""
+        return "%s-%s.%s" % self.VERSION_INFO
 
     def add_sensor(self, name, sensor):
         """Add a sensor to the device.
