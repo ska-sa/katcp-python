@@ -850,6 +850,8 @@ class Sensor(object):
     # pylint: disable-msg = E0602
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
     # pylint: enable-msg = E0602
+    
+    MILLISECOND = 1000
 
     def __init__(self, sensor_type, description, units, params=None):
         """Instantiate a new sensor object.
@@ -905,8 +907,8 @@ class Sensor(object):
            All values are strings formatted as specified in the Sensor Type
            Formats in the katcp specification.
            """
-        timestamp_ms, status, value = self.read()
-        return ("%d" % (timestamp_ms,),
+        timestamp, status, value = self.read()
+        return ("%d" % (int(timestamp * Sensor.MILLISECOND),),
                 self.STATUSES[status],
                 self._formatter(self, value))
 

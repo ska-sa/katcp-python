@@ -100,7 +100,7 @@ class TestSensor(unittest.TestCase):
                 [-4, 3],
                 timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
         )
-        self.assertEqual(s.read_formatted(), ("12345", "nominal", "3"))
+        self.assertEqual(s.read_formatted(), ("12345000", "nominal", "3"))
 
     def test_float_sensor(self):
         """Test float sensor."""
@@ -109,7 +109,7 @@ class TestSensor(unittest.TestCase):
                 [0.0, 5.0],
                 timestamp=12345, status=katcp.Sensor.WARN, value=3.0
         )
-        self.assertEqual(s.read_formatted(), ("12345", "warn", "3.000000e+00"))
+        self.assertEqual(s.read_formatted(), ("12345000", "warn", "3.000000e+00"))
 
     def test_boolean_sensor(self):
         """Test boolean sensor."""
@@ -118,7 +118,7 @@ class TestSensor(unittest.TestCase):
                 None,
                 timestamp=12345, status=katcp.Sensor.UNKNOWN, value=True
         )
-        self.assertEqual(s.read_formatted(), ("12345", "unknown", "1"))
+        self.assertEqual(s.read_formatted(), ("12345000", "unknown", "1"))
 
     def test_discrete_sensor(self):
         """Test discrete sensor."""
@@ -127,7 +127,7 @@ class TestSensor(unittest.TestCase):
                 ["on", "off"],
                 timestamp=12345, status=katcp.Sensor.ERROR, value="on"
         )
-        self.assertEqual(s.read_formatted(), ("12345", "error", "on"))
+        self.assertEqual(s.read_formatted(), ("12345000", "error", "on"))
 
     def test_lru_sensor(self):
         """Test LRU sensor."""
@@ -137,7 +137,7 @@ class TestSensor(unittest.TestCase):
                 timestamp=12345, status=katcp.Sensor.FAILURE,
                 value=katcp.Sensor.LRU_ERROR
         )
-        self.assertEqual(s.read_formatted(), ("12345", "failure", "error"))
+        self.assertEqual(s.read_formatted(), ("12345000", "failure", "error"))
 
     def test_sampling(self):
         """Test getting and setting the sampling."""
@@ -366,10 +366,10 @@ class TestDeviceServer(unittest.TestCase):
             (r"!help ok 1", ""),
             (r"!help fail", ""),
             (r"#sensor-type an.int integer An\_Integer. count -5 5", ""),
-            (r"#sensor-status 12345 1 an.int nominal 3", ""),
+            (r"#sensor-status 12345000 1 an.int nominal 3", ""),
             (r"!sensor-list ok 1", ""),
             (r"#sensor-type an.int integer An\_Integer. count -5 5", ""),
-            (r"#sensor-status 12345 1 an.int nominal 3", ""),
+            (r"#sensor-status 12345000 1 an.int nominal 3", ""),
             (r"!sensor-list ok 1", ""),
             (r"!sensor-list fail", ""),
             (r"!sensor-sampling ok an.int none", ""),
