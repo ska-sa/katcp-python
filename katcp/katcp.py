@@ -865,7 +865,7 @@ class Sensor(object):
         self._sampling_strategy = self.NONE
         self._sampling_params = []
         self._sensor_type = sensor_type
-        self._observers = set([])
+        self._observers = set()
         self._timestamp = time.time()
         self._status = Sensor.UNKNOWN
         
@@ -876,7 +876,7 @@ class Sensor(object):
         self.params = [self._formatter(self, p) for p in params]
         
     def attach(self, observer):
-        """Attach an observer to this sensor. The sensor must support a call
+        """Attach an observer to this sensor. The observer must support a call
            to update(sensor, timestamp, status, value)
            """
         self._observers.add(observer)
@@ -891,7 +891,12 @@ class Sensor(object):
             o.update(self, self._timestamp, self._status, self._value)
 
     def set(self, timestamp, status, value):
-        self._timestamp, self.status, self.value = timestamp, status, value
+        """Set the current value of the sensor. 
+           @param timestamp standard python time double
+           @param status the status of the sensor
+           @param value the value of the sensor
+           """
+        self._timestamp, self._status, self._value = timestamp, status, value
         self.notify()
 
     def read_formatted(self):
