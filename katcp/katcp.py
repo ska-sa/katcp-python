@@ -136,7 +136,7 @@ class MessageParser(object):
 
     TYPE_SYMBOL_LOOKUP = Message.TYPE_SYMBOL_LOOKUP
     ESCAPE_LOOKUP = Message.ESCAPE_LOOKUP
-    SPECIAL_RE = re.compile(r"[\0\n\r\x1b\t]")
+    SPECIAL_RE = re.compile(r"[\0\n\r\x1b\t ]")
     UNESCAPE_RE = re.compile(r"\\(.?)")
 
     def __init__(self):
