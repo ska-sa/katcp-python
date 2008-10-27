@@ -801,15 +801,16 @@ class Sensor(object):
     INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE = range(5)
     SENSOR_TYPES = {
         INTEGER: ("integer", lambda sensor, value: "%d" % (value,),
-                             lambda sensor, value: int(value)),
+                             lambda sensor, value: int(value), 0),
         FLOAT: ("float", lambda sensor, value: "%e" % (value,),
-                         lambda sensor, value: float(value)),
+                         lambda sensor, value: float(value), 0.0),
         BOOLEAN: ("boolean", lambda sensor, value: value and "1" or "0",
-                             lambda sensor, value: value == "1"),
+                             lambda sensor, value: value == "1", "0"),
         LRU: ("lru", lambda sensor, value: sensor.LRU_VALUES[value],
-                     lambda sensor, value: sensor.LRU_CONSTANTS[value]),
+                     lambda sensor, value: sensor.LRU_CONSTANTS[value], 
+                     lambda sensor: sensor.LRU_NOMINAL),
         DISCRETE: ("discrete", lambda sensor, value: value,
-                               lambda sensor, value: value),
+                               lambda sensor, value: value, "unknown"),
     }
 
     # Sensor status constants
@@ -864,12 +865,34 @@ class Sensor(object):
         self._sampling_strategy = self.NONE
         self._sampling_params = []
         self._sensor_type = sensor_type
-
-        self.stype, self._formatter, self._parser = \
+        self._observers = set([])
+        self._timestamp = time.time()
+        self._status = Sensor.UNKNOWN
+        
+        self.stype, self._formatter, self._parser, self._value = \
             self.SENSOR_TYPES[sensor_type]
         self.description = description
         self.units = units
         self.params = [self._formatter(self, p) for p in params]
+        
+    def attach(self, observer):
+        """Attach an observer to this sensor. The sensor must support a call
+           to update(sensor, timestamp, status, value)
+           """
+        self._observers.add(observer)
+    
+    def detach(self, observer):
+        """Detach an observer from this sensor."""
+        self._observers.discard(observer)
+    
+    def notify(self):
+        """Notify all observers of changes to this sensor."""
+        for o in self._observers:
+            o.update(self, self._timestamp, self._status, self._value)
+
+    def set(self, timestamp, status, value):
+        self._timestamp, self.status, self.value = timestamp, status, value
+        self.notify()
 
     def read_formatted(self):
         """Read the sensor and return a timestamp_ms, status, value tuple.
@@ -893,7 +916,7 @@ class Sensor(object):
 
            Subclasses should implement this method.
            """
-        raise NotImplementedError
+        return (self._timestamp, self._status, self._value)
 
     def _apply_sampling_change(self, strategy, params):
         """Apply a change to the sensor sampling strategy.

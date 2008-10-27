@@ -82,13 +82,10 @@ class DeviceTestSensor(katcp.Sensor):
                  timestamp, status, value):
         super(DeviceTestSensor, self).__init__(
             sensor_type, description, units, params)
-        self.__timestamp = timestamp
-        self.__status = status
-        self.__value = value
+        self._timestamp = timestamp
+        self._status = status
+        self._value = value
         self.__sampling_changes = []
-
-    def read(self):
-        return self.__timestamp, self.__status, self.__value
 
     def _apply_sampling_change(self, strategy, params):
         self.__sampling_changes.append((strategy, params))
