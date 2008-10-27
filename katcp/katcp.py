@@ -879,7 +879,7 @@ class Sensor(object):
         
     def attach(self, observer):
         """Attach an observer to this sensor. The observer must support a call
-           to update(sensor, timestamp, status, value)
+           to update(sensor, timestamp_ms, status, value)
            """
         self._observers.add(observer)
     
@@ -890,7 +890,7 @@ class Sensor(object):
     def notify(self):
         """Notify all observers of changes to this sensor."""
         for o in self._observers:
-            o.update(self, self._timestamp, self._status, self._value)
+            o.update(self, int(self._timestamp * Sensor.MILLISECOND), self._status, self._value)
 
     def set(self, timestamp, status, value):
         """Set the current value of the sensor. 
