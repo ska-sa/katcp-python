@@ -994,35 +994,6 @@ class Sensor(object):
         self._sampling_strategy = strategy
         self._sampling_params = params
 
-    def set_sampling_formatted(self, strategy, *params):
-        """Set the current sampling strategy and parameters.
-
-           The strategy and parameters should be strings as
-           returned by get_sampling_formatted(...).
-           """
-        if strategy not in self.SAMPLING_LOOKUP_REV:
-            raise ValueError("Unknown sampling strategy '%s'."
-                                " Known strategies are %s."
-                                % (strategy, self.SAMPLING_LOOKUP.values()))
-
-        strategy = self.SAMPLING_LOOKUP_REV[strategy]
-
-        # parse paramters as appropriate to strategy
-        if strategy == self.PERIOD:
-            try:
-                params = [int(p) for p in params]
-            except Exception:
-                raise ValueError("The 'period' strategy takes"
-                                    " integer parameters.")
-        elif strategy == self.DIFFERENTIAL:
-            try:
-                params = [self._parser(self, p) for p in params]
-            except Exception:
-                raise ValueError("The 'differential' strategy takes"
-                        " parameters of the same type as the sensor value")
-
-        self.set_sampling(strategy, *params)
-
 
 class DeviceLogger(object):
     """Object for logging messages from a DeviceServer.

@@ -38,6 +38,11 @@ class SampleStrategy:
                   can register with. You can probably register lambda 
                   functions to create the objects.
            """
+        if strategyName not in SampleStrategy.SAMPLING_LOOKUP_REV:
+            raise ValueError("Unknown sampling strategy '%s'."
+                                " Known strategies are %s."
+                                % (strategyName, SampleStrategy.SAMPLING_LOOKUP.values()))
+
         strategyType = SampleStrategy.SAMPLING_LOOKUP_REV[strategyName]
         if strategyType == SampleStrategy.NONE:
             return SampleNone(server, name, sensor, *params)

@@ -4,6 +4,7 @@ import unittest
 import katcp
 import threading
 import time
+import katcp.sampling
 
 class TestMessageParser(unittest.TestCase):
     def setUp(self):
@@ -160,13 +161,13 @@ class TestSensor(unittest.TestCase):
         self.assertRaises(ValueError, s.set_sampling, katcp.Sensor.DIFFERENTIAL, -1)
         self.assertRaises(ValueError, s.set_sampling, katcp.Sensor.DIFFERENTIAL, 1.5)
 
-        s.set_sampling_formatted("none")
-        s.set_sampling_formatted("period", "15")
-        s.set_sampling_formatted("event")
-        s.set_sampling_formatted("differential", "2")
-        self.assertRaises(ValueError, s.set_sampling_formatted, "random")
-        self.assertRaises(ValueError, s.set_sampling_formatted, "period", "foo")
-        self.assertRaises(ValueError, s.set_sampling_formatted, "differential", "bar")
+        katcp.sampling.SampleStrategy.get_strategy("none", None, "name", s)
+        katcp.sampling.SampleStrategy.get_strategy("period", None, "name", s, "15")
+        katcp.sampling.SampleStrategy.get_strategy("event", None, "name", s)
+        katcp.sampling.SampleStrategy.get_strategy("differential", None, "name", s, "2")
+        self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "random", None, "name", s)
+        self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "period", None, "name", s, "foo")
+        self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "differential", None, "name", s, "bar")
 
 
 class DeviceTestClient(katcp.DeviceClient):
