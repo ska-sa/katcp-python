@@ -10,6 +10,7 @@ import logging
 import sys
 import re
 import time
+from sampling import SampleReactor, SampleStrategy
 
 # logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp")
@@ -629,6 +630,8 @@ class DeviceServer(DeviceServerBase):
         super(DeviceServer, self).__init__(*args, **kwargs)
         self.log = DeviceLogger(self)
         self._sensors = {} # map names to sensor objects
+        self._reactor = SampleReactor()
+        #self._reactor.start()
         self.setup_sensors()
 
     # pylint: enable-msg = W0142
@@ -656,6 +659,7 @@ class DeviceServer(DeviceServerBase):
            Should only be called inside .setup_sensors().
            """
         self._sensors[name] = sensor
+        self._reactor.add_sensor(name, SampleStrategy.get_strategy("none", self, name, sensor))
 
     def schedule_restart(self):
         """Schedule a restart.
@@ -766,9 +770,10 @@ class DeviceServer(DeviceServerBase):
             # attempt to set sampling strategy
             strategy = msg.arguments[1]
             params = msg.arguments[2:]
-            sensor.set_sampling_formatted(strategy, *params)
+            self._reactor.add_sensor(name, SampleStrategy.get_strategy(strategy,
+                                        self, name, sensor, *params))
 
-        strategy, params = sensor.get_sampling_formatted()
+        strategy, params = self._reactor.get_sampling_formatted(name)
         return Message.reply("sensor-sampling", "ok", name, strategy, *params)
 
 
@@ -879,7 +884,7 @@ class Sensor(object):
         
     def attach(self, observer):
         """Attach an observer to this sensor. The observer must support a call
-           to update(sensor, timestamp_ms, status, value)
+           to update(sensor)
            """
         self._observers.add(observer)
     
@@ -890,8 +895,8 @@ class Sensor(object):
     def notify(self):
         """Notify all observers of changes to this sensor."""
         for o in self._observers:
-            o.update(self, int(self._timestamp * Sensor.MILLISECOND), self._status, self._value)
-
+            o.update(self)
+            
     def set(self, timestamp, status, value):
         """Set the current value of the sensor. 
            @param timestamp standard python time double
@@ -913,10 +918,9 @@ class Sensor(object):
                 self._formatter(self, value))
 
     def read(self):
-        """Read the sensor and return a timestamp_ms, status, value tuple.
+        """Read the sensor and return a timestamp, status, value tuple.
 
-           - timestamp_ms: the timestamp in milliseconds since the
-               Unix epoch as a int.
+           - timestamp: the timestamp in since the Unix epoch as a float.
            - status: Sensor status constant.
            - value: int, float, bool, Sensor value constant (for lru values)
                or str (for discrete values)
