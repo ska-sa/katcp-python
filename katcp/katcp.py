@@ -958,42 +958,6 @@ class Sensor(object):
         params = [self._formatter(self, p) for p in params]
         return strategy, params
 
-    def set_sampling(self, strategy, *params):
-        """Set the current sampling strategy and parameters."""
-        if strategy not in self.SAMPLING_LOOKUP:
-            raise ValueError("Unknown sampling strategy: %s." % (strategy,))
-
-        if strategy == self.NONE:
-            if params:
-                raise ValueError("The 'none' strategy takes no parameters.")
-        elif strategy == self.EVENT:
-            if params:
-                raise ValueError("The 'event' strategy takes no parameters.")
-        elif strategy == self.PERIOD:
-            if len(params) != 1:
-                raise ValueError("The 'period' strategy takes one parameter.")
-            if not isinstance(params[0], int) or params[0] <= 0:
-                raise ValueError("The period must be a positive integer in ms.")
-        elif strategy == self.DIFFERENTIAL:
-            if len(params) != 1:
-                raise ValueError("The 'differential' strategy"
-                                    " takes one parameter.")
-            if self._sensor_type not in (self.INTEGER, self.FLOAT):
-                raise ValueError("The 'differential' strategy is only valid for"
-                                    " float and integer sensors.")
-            if self._sensor_type == self.INTEGER:
-                if not isinstance(params[0], int) or params[0] <= 0:
-                    raise ValueError("The diff amount must be a positive"
-                                        " integer.")
-            else:
-                if not isinstance(params[0], float) or params[0] <= 0:
-                    raise ValueError("The diff amount must be a positive"
-                                        " float.")
-
-        self._apply_sampling_change(strategy, params)
-        self._sampling_strategy = strategy
-        self._sampling_params = params
-
 
 class DeviceLogger(object):
     """Object for logging messages from a DeviceServer.
