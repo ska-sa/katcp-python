@@ -828,21 +828,6 @@ class Sensor(object):
         FAILURE: 'failure',
     }
 
-    # Sampling strategy constants
-    NONE, PERIOD, EVENT, DIFFERENTIAL = range(4)
-    SAMPLING_LOOKUP = {
-        NONE: "none",
-        PERIOD: "period",
-        EVENT: "event",
-        DIFFERENTIAL: "differential",
-    }
-
-    # SAMPLING_LOOKUP not found by pylint
-    # 
-    # pylint: disable-msg = E0602
-    SAMPLING_LOOKUP_REV = dict((v, k) for k, v in SAMPLING_LOOKUP.items())
-    # pylint: enable-msg = E0602
-
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = range(2)
     LRU_VALUES = {
@@ -869,8 +854,6 @@ class Sensor(object):
         if params is None:
             params = []
 
-        self._sampling_strategy = self.NONE
-        self._sampling_params = []
         self._sensor_type = sensor_type
         self._observers = set()
         self._timestamp = time.time()
@@ -928,35 +911,6 @@ class Sensor(object):
            Subclasses should implement this method.
            """
         return (self._timestamp, self._status, self._value)
-
-    def _apply_sampling_change(self, strategy, params):
-        """Apply a change to the sensor sampling strategy.
-    
-           - strategy: Sensor sampling strategy constant.
-           - params: list of parameter values (of the same type
-               as the sensor value)
-
-           Subclasses should implement this method so that they
-           are notified when a request has been made to change
-           the sampling strategy for this sensor.
-           """
-        raise NotImplementedError
-
-    def get_sampling(self):
-        """Return the current sampling strategy and parameters."""
-        return self._sampling_strategy, self._sampling_params
-
-    def get_sampling_formatted(self):
-        """Return the current sampling strategy and parameters.
-
-           The strategy is returned as a string and the values
-           in the parameter list are formatted as strings using
-           the formatter for this sensor type.
-           """
-        strategy, params = self.get_sampling()
-        strategy = self.SAMPLING_LOOKUP[strategy]
-        params = [self._formatter(self, p) for p in params]
-        return strategy, params
 
 
 class DeviceLogger(object):
