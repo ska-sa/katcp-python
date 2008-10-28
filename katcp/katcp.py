@@ -653,11 +653,12 @@ class DeviceServer(DeviceServerBase):
         """Return a version string of the form type-major.minor."""
         return "%s-%s.%s" % self.VERSION_INFO
 
-    def add_sensor(self, name, sensor):
+    def add_sensor(self, sensor):
         """Add a sensor to the device.
 
            Should only be called inside .setup_sensors().
            """
+        name = sensor.name
         self._sensors[name] = sensor
         self._reactor.add_sensor(name, SampleStrategy.get_strategy("none", self, name, sensor))
 
@@ -843,7 +844,7 @@ class Sensor(object):
     
     MILLISECOND = 1000
 
-    def __init__(self, sensor_type, description, units, params=None):
+    def __init__(self, sensor_type, name, description, units, params=None):
         """Instantiate a new sensor object.
 
            Subclasses will usually pass in a fixed sensor_type which should
@@ -861,6 +862,7 @@ class Sensor(object):
         
         self.stype, self._formatter, self._parser, self._value = \
             self.SENSOR_TYPES[sensor_type]
+        self.name = name
         self.description = description
         self.units = units
         self.params = [self._formatter(self, p) for p in params]

@@ -79,10 +79,10 @@ class TestMessageParser(unittest.TestCase):
 
 
 class DeviceTestSensor(katcp.Sensor):
-    def __init__(self, sensor_type, description, units, params,
+    def __init__(self, sensor_type, name, description, units, params,
                  timestamp, status, value):
         super(DeviceTestSensor, self).__init__(
-            sensor_type, description, units, params)
+            sensor_type, name, description, units, params)
         self.set(timestamp, status, value)
         self.__sampling_changes = []
 
@@ -97,7 +97,7 @@ class TestSensor(unittest.TestCase):
     def test_int_sensor(self):
         """Test integer sensor."""
         s = DeviceTestSensor(
-                katcp.Sensor.INTEGER, "An integer.", "count",
+                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
                 timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
         )
@@ -106,7 +106,7 @@ class TestSensor(unittest.TestCase):
     def test_float_sensor(self):
         """Test float sensor."""
         s = DeviceTestSensor(
-                katcp.Sensor.FLOAT, "A float.", "power",
+                katcp.Sensor.FLOAT, "a.float", "A float.", "power",
                 [0.0, 5.0],
                 timestamp=12345, status=katcp.Sensor.WARN, value=3.0
         )
@@ -115,7 +115,7 @@ class TestSensor(unittest.TestCase):
     def test_boolean_sensor(self):
         """Test boolean sensor."""
         s = DeviceTestSensor(
-                katcp.Sensor.BOOLEAN, "A boolean.", "on/off",
+                katcp.Sensor.BOOLEAN, "a.boolean", "A boolean.", "on/off",
                 None,
                 timestamp=12345, status=katcp.Sensor.UNKNOWN, value=True
         )
@@ -124,7 +124,7 @@ class TestSensor(unittest.TestCase):
     def test_discrete_sensor(self):
         """Test discrete sensor."""
         s = DeviceTestSensor(
-                katcp.Sensor.DISCRETE, "A discrete sensor.", "state",
+                katcp.Sensor.DISCRETE, "a.discrete", "A discrete sensor.", "state",
                 ["on", "off"],
                 timestamp=12345, status=katcp.Sensor.ERROR, value="on"
         )
@@ -133,7 +133,7 @@ class TestSensor(unittest.TestCase):
     def test_lru_sensor(self):
         """Test LRU sensor."""
         s = DeviceTestSensor(
-                katcp.Sensor.LRU, "An LRU sensor.", "state",
+                katcp.Sensor.LRU, "an.lru", "An LRU sensor.", "state",
                 None,
                 timestamp=12345, status=katcp.Sensor.FAILURE,
                 value=katcp.Sensor.LRU_ERROR
@@ -143,7 +143,7 @@ class TestSensor(unittest.TestCase):
     def test_sampling(self):
         """Test getting and setting the sampling."""
         s = DeviceTestSensor(
-                katcp.Sensor.INTEGER, "An integer.", "count",
+                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
                 timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
         )
@@ -191,8 +191,8 @@ class DeviceTestClient(katcp.DeviceClient):
 class DeviceTestServer(katcp.DeviceServer):
     def setup_sensors(self):
         self.restarted = False
-        self.add_sensor("an.int", DeviceTestSensor(
-            katcp.Sensor.INTEGER, "An Integer.", "count",
+        self.add_sensor(DeviceTestSensor(
+            katcp.Sensor.INTEGER, "an.int", "An Integer.", "count",
             [-5, 5],
             timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
         ))
