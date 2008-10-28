@@ -54,9 +54,20 @@ class SampleStrategy:
             return SamplePeriod(server, name, sensor, *params)
         
     def update(self, sensor):
+        """This update method is called whenever the sensor value is set
+           so sensor will contain the right info. Note that the strategy
+           does not really need to be passed sensor because it already has
+           a handle to it but receives it due to the generic observer
+           mechanism.
+           """
         pass
     
     def periodic(self, timestamp):
+        """This method is called when a period strategy is being configured
+           or periodically after that.
+           @param timestamp is the time at which the next sample was requested
+           @return the desired timestamp for the next sample
+           """
         pass
     
     def mass_inform(self):
@@ -68,6 +79,11 @@ class SampleStrategy:
                     timestamp_ms, "1", self._name, status, value))
         
     def get_sampling(self):
+        """FIXME: deprecate this method and rather return the sampling name from
+           each strategy. Then we can live without the SAMPLING_LOOKUP. This goes
+           hand in hand with the changes to the factory method, ie removing the
+           switch and introducing a dynamic mechanism.
+           """
         raise NotImplementedError
     
     def get_sampling_formatted(self):
@@ -83,6 +99,9 @@ class SampleStrategy:
         return strategy, params    
 
 class SampleEvent(SampleStrategy):
+    """Sampling strategy implementation which sends updates on any event of
+       the sensor.
+       """
     
     def __init__(self, server, name, sensor, *params):
         SampleStrategy.__init__(self, server, name, sensor, *params)
@@ -90,13 +109,14 @@ class SampleEvent(SampleStrategy):
             raise ValueError("The 'event' strategy takes no parameters.")
         
     def update(self, sensor):
-        self.mass_inform()#timestamp, status, value)
+        self.mass_inform()
         
     def get_sampling(self):
         return SampleStrategy.EVENT
         
         
 class SampleNone(SampleStrategy):
+    """Sampling strategy which never sends any updates."""
     
     def __init__(self, server, name, sensor, *params):
         SampleStrategy.__init__(self, server, name, sensor, *params)
@@ -107,6 +127,10 @@ class SampleNone(SampleStrategy):
         return SampleStrategy.NONE
 
 class SampleDifferential(SampleStrategy):
+    """Sampling strategy for integer and float sensors which sends updates only
+       when the value has changed by more than some specified threshold, or the
+       status changes.
+       """
     
     def __init__(self, server, name, sensor, *params):
         from katcp import Sensor
@@ -131,13 +155,16 @@ class SampleDifferential(SampleStrategy):
         if sensor._status != self._lastStatus or abs(sensor._value - self._lastValue) > self._threshold:
             self._status = sensor._status
             self._value = sensor._value
-            self.mass_inform()#timestamp, status, value)
+            self.mass_inform()
             
     def get_sampling(self):
         return SampleStrategy.DIFFERENTIAL
 
         
 class SamplePeriod(SampleStrategy):
+    """Sampling strategy for periodic sampling of any sensor. Note that the
+       requested period can be decoupled from the rate at which the sensor changes.
+       """ 
     
     MILLISECOND = 1e3
     
@@ -156,7 +183,7 @@ class SamplePeriod(SampleStrategy):
     def periodic(self, timestamp):
         if timestamp > self._nextTime:
             self._sensor._timestamp = timestamp
-            self.mass_inform()#timestamp, self._status, self._value)
+            self.mass_inform()
             self._nextTime += self._period
             if self._nextTime < timestamp:
                 self._nextTime = timestamp + self._period
@@ -167,6 +194,9 @@ class SamplePeriod(SampleStrategy):
 
     
 class SampleReactor(threading.Thread):
+    """This class keeps track of all the sensors and what strategy is currently
+       used to sample each one.
+       """
     
     def __init__(self):
         super(SampleReactor, self).__init__()
