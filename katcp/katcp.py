@@ -211,6 +211,10 @@ class DeviceClient(object):
         assert(msg.mtype == Message.REQUEST)
         self._sock.send(str(msg) + "\n")
 
+    def send_message(self, msg):
+        """Send any kind of message."""
+        self._sock.send(str(msg) + "\n")
+
     def connect(self):
         """Connect or reconnect to the server."""
         if self._sock is not None:

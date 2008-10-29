@@ -159,7 +159,7 @@ class TestSensor(unittest.TestCase):
         self.assertRaises(ValueError, katcp.sampling.SampleDifferential, None, s)
         self.assertRaises(ValueError, katcp.sampling.SampleDifferential, None, s, "-1")
         self.assertRaises(ValueError, katcp.sampling.SampleDifferential, None, s, "1.5")
-        
+
         katcp.sampling.SampleStrategy.get_strategy("none", None, s)
         katcp.sampling.SampleStrategy.get_strategy("period", None, s, "15")
         katcp.sampling.SampleStrategy.get_strategy("event", None, s)
@@ -189,6 +189,10 @@ class DeviceTestClient(katcp.DeviceClient):
 
 
 class DeviceTestServer(katcp.DeviceServer):
+    def __init__(self, *args, **kwargs):
+        super(DeviceTestServer, self).__init__(*args, **kwargs)
+        self.__msgs = []
+
     def setup_sensors(self):
         self.restarted = False
         self.add_sensor(DeviceTestSensor(
@@ -204,23 +208,18 @@ class DeviceTestServer(katcp.DeviceServer):
         """A new command."""
         return Message.reply(msg.name, "ok", "param1", "param2")
 
-class TestDeviceServer(unittest.TestCase):
-    def setUp(self):
-        self.server = DeviceTestServer('', 0)
-        self.server.start(timeout=0.1)
+    def handle_message(self, sock, msg):
+        self.__msgs.append(msg)
+        super(DeviceTestServer, self).handle_message(sock, msg)
 
-        host, port = self.server._sock.getsockname()
+    def messages(self):
+        return self.__msgs
 
-        self.client = DeviceTestClient(host, port)
-        self.client.start(timeout=0.1)
 
-    def tearDown(self):
-        if self.client.running():
-            self.client.stop()
-            self.client.join()
-        if self.server.running():
-            self.server.stop()
-            self.server.join()
+class TestUtilMixin(object):
+    """Mixin class implementing test helper methods for making
+       assertions about lists of KATCP messages.
+       """
 
     def _assert_msgs_length(self, actual_msgs, expected_number):
         """Assert that the number of messages is that expected."""
@@ -264,6 +263,25 @@ class TestDeviceServer(unittest.TestCase):
                     % (str_msg, suffix)
                 )
         self._assert_msgs_length(actual_msgs, len(expected))
+
+
+class TestDeviceServer(unittest.TestCase, TestUtilMixin):
+    def setUp(self):
+        self.server = DeviceTestServer('', 0)
+        self.server.start(timeout=0.1)
+
+        host, port = self.server._sock.getsockname()
+
+        self.client = DeviceTestClient(host, port)
+        self.client.start(timeout=0.1)
+
+    def tearDown(self):
+        if self.client.running():
+            self.client.stop()
+            self.client.join()
+        if self.server.running():
+            self.server.stop()
+            self.server.join()
 
     def test_simple_connect(self):
         """Test a simple server setup and teardown with client connect."""
@@ -426,6 +444,42 @@ class TestDeviceServer(unittest.TestCase):
     # TODO: update inform pass test
 
 
-class TestDeviceClient(unittest.TestCase):
-    pass
-    #TODO: add some client tests
+class TestDeviceClient(unittest.TestCase, TestUtilMixin):
+    def setUp(self):
+        self.server = DeviceTestServer('', 0)
+        self.server.start(timeout=0.1)
+
+        host, port = self.server._sock.getsockname()
+
+        self.client = DeviceTestClient(host, port)
+        self.client.start(timeout=0.1)
+
+    def tearDown(self):
+        if self.client.running():
+            self.client.stop()
+            self.client.join()
+        if self.server.running():
+            self.server.stop()
+            self.server.join()
+
+    def test_request(self):
+        """Test request method."""
+        self.client.request(katcp.Message.request("watchdog"))
+
+        time.sleep(0.1)
+
+        msgs = self.server.messages()
+        self._assert_msgs_equal(msgs, [
+            r"?watchdog",
+        ])
+
+    def test_send_message(self):
+        """Test send_message method."""
+        self.client.send_message(katcp.Message.inform("random-inform"))
+
+        time.sleep(0.1)
+
+        msgs = self.server.messages()
+        self._assert_msgs_equal(msgs, [
+            r"#random-inform",
+        ])
