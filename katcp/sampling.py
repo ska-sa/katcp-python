@@ -2,10 +2,14 @@
    sampling of multiple sensors each with different strategies.
    """
    
-import sched
 import threading
 import time
+import logging
    
+logger = logging.getLogger("katcp.sampling")
+
+# pylint: disable-msg=W0142
+
 class SampleStrategy:
     """Base class for strategies for sampling sensors."""
     
@@ -107,7 +111,7 @@ class SampleEvent(SampleStrategy):
         if params:
             raise ValueError("The 'event' strategy takes no parameters.")
         
-    def update(self, sensor):
+    def update(self, _sensor):
         self.mass_inform()
         
     def get_sampling(self):
@@ -152,8 +156,8 @@ class SampleDifferential(SampleStrategy):
 
     def update(self, sensor):
         if sensor._status != self._lastStatus or abs(sensor._value - self._lastValue) > self._threshold:
-            self._status = sensor._status
-            self._value = sensor._value
+            self._lastStatus = sensor._status
+            self._lastValue = sensor._value
             self.mass_inform()
             
     def get_sampling(self):
@@ -196,14 +200,13 @@ class SampleReactor(threading.Thread):
     """This class keeps track of all the sensors and what strategy is currently
        used to sample each one.
        """
+       
+    PERIOD_DELAY = 0.01     # 10ms is finest granularity of calls to periodic
     
     def __init__(self):
         super(SampleReactor, self).__init__()
         self._nameStrategy = {}
-        self._strategyEvent = {}
-        self._scheduler = sched.scheduler(time.time, time.sleep)
-        # FIXME: The next line is a hack to prevent the scheduler terminating 
-        self._termEvent = self._scheduler.enterabs(time.time() + 1e9, 0, None, None)
+        self._stopEvent = threading.Event()
         # set daemon True so that the app can stop even if the thread is running
         self.setDaemon(True)
         
@@ -219,12 +222,6 @@ class SampleReactor(threading.Thread):
         if self._nameStrategy.has_key(name):
             currentStrategy = self._nameStrategy[name]
             currentStrategy._sensor.detach(currentStrategy)
-            if self._strategyEvent.has_key(currentStrategy):
-                try:
-                    self._scheduler.cancel(self._strategyEvent[currentStrategy])
-                except RuntimeError:
-                    pass
-                del self._strategyEvent[currentStrategy]
         strategy._sensor.attach(strategy)
         self._nameStrategy[name] = strategy
         self.periodic(strategy, time.time())
@@ -234,40 +231,26 @@ class SampleReactor(threading.Thread):
            specified sensor.
            """
         return self._nameStrategy[name].get_sampling_formatted()
-            
-    def periodic(self, strategy, timestamp):
+    
+    @staticmethod
+    def periodic(strategy, timestamp):
         """Callback method which is called by the scheduler for the next periodic
            sample. It will schedule the next sample if indicated by the strategy.
            """
-        nextTime = strategy.periodic(timestamp)
-        if nextTime:
-            event = self._scheduler.enterabs(timestamp, 0, self.periodic, strategy)
-            self._strategyEvent[strategy] = event
+        _nextTime = strategy.periodic(timestamp)
+        # If required later we could use nextTime to schedule the next call to
+        # periodic for this strategy
             
     def stop(self):
-        """Clears all events from the scheduler to allow it to stop gracefully.
-        
-           Then clears all strategies to so that all sampling stops.
-           """
-        for strategy, event in self._strategyEvent.items():
-            try:
-                self._scheduler.cancel(event)
-            except RuntimeError:
-                pass
-            del self._strategyEvent[strategy]
-        try:
-            self._scheduler.cancel(self._termEvent)
-        except RuntimeError:
-            pass
-        for name, strategy in self._nameStrategy.items():
-            strategy._sensor.detach(strategy)
-            del self._nameStrategy[name]
-        self.join()
+        """Send event to processing thread and wait for it to stop."""
+        self._stopEvent.set()
             
-    def run(self, *args, **kwargs):
-        """Defer to scheduler run method which exits when there are no events
-           left to process. Note that an artificial event has been added in the
-           constructor which should never occur and prevents the scheduler exiting
-           prematurely.
-           """
-        self._scheduler.run()
+    def run(self):
+        logger.debug("Starting thread %s" % (threading.currentThread().getName()))
+        while not self._stopEvent.isSet():
+            timestamp = time.time()
+            for strategy in self._nameStrategy.values():
+                SampleReactor.periodic(strategy, timestamp)
+            self._stopEvent.wait(SampleReactor.PERIOD_DELAY)
+        self._stopEvent.clear()
+        logger.debug("Stopping thread %s" % (threading.currentThread().getName()))
