@@ -1,5 +1,5 @@
-## @file scripts/exampleserver.py
-# Demonstrator of remote observer for position streaming.
+## @file scripts/katcp-exampleserver.py
+# KATCP server example.
 #
 # copyright (c) 2008 SKA/KAT. All Rights Reserved.
 # @author Robert Crida <robert.crida@ska.ac.za>
