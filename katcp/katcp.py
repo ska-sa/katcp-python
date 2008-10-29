@@ -771,8 +771,8 @@ class DeviceServer(DeviceServerBase):
             # attempt to set sampling strategy
             strategy = msg.arguments[1]
             params = msg.arguments[2:]
-            self._reactor.add_sensor(name, SampleStrategy.get_strategy(strategy,
-                                        self, name, sensor, *params))
+            self._reactor.add_sensor(SampleStrategy.get_strategy(strategy,
+                                        self, sensor, *params))
 
         strategy, params = self._reactor.get_sampling_formatted(name)
         return Message.reply("sensor-sampling", "ok", name, strategy, *params)

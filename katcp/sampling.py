@@ -75,7 +75,7 @@ class SampleStrategy:
         
         timestamp_ms, status, value = self._sensor.read_formatted()
         self._server.mass_inform(Message.inform("sensor-status",
-                    timestamp_ms, "1", self._sensor._name, status, value))
+                    timestamp_ms, "1", self._sensor.name, status, value))
         
     def get_sampling(self):
         """FIXME: deprecate this method and rather return the sampling name from
@@ -135,7 +135,6 @@ class SampleDifferential(SampleStrategy):
         from katcp import Sensor
         
         SampleStrategy.__init__(self, server, sensor, *params)
-        print params
         if len(params) != 1:
             raise ValueError("The 'differential' strategy takes one parameter.")
         if sensor._sensor_type not in (Sensor.INTEGER, Sensor.FLOAT):
