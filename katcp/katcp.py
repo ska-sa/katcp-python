@@ -660,7 +660,7 @@ class DeviceServer(DeviceServerBase):
            """
         name = sensor.name
         self._sensors[name] = sensor
-        self._reactor.add_sensor(name, SampleStrategy.get_strategy("none", self, name, sensor))
+        self._reactor.add_sensor(SampleStrategy.get_strategy("none", self, sensor))
 
     def schedule_restart(self):
         """Schedule a restart.
