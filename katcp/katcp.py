@@ -635,7 +635,6 @@ class DeviceServer(DeviceServerBase):
         self.log = DeviceLogger(self)
         self._sensors = {} # map names to sensor objects
         self._reactor = SampleReactor()
-        #self._reactor.start()
         self.setup_sensors()
 
     # pylint: enable-msg = W0142
@@ -789,6 +788,17 @@ class DeviceServer(DeviceServerBase):
         return Message.reply("watchdog", "ok")
 
     # pylint: enable-msg = W0613
+    
+    def run(self):
+        """Override DeviceServerBase.run() to ensure that the reactor thread is
+           running at the same time.
+           """
+        self._reactor.start()
+        try:
+            super(DeviceServer, self).run()
+        finally:
+            self._reactor.stop()
+            self._reactor.join()
 
 
 class Sensor(object):
