@@ -880,6 +880,8 @@ class Sensor(object):
         self.description = description
         self.units = units
         self.params = [self._formatter(self, p) for p in params]
+        if self._sensor_type == Sensor.DISCRETE:
+            self._value = self.params[0]
         
     def attach(self, observer):
         """Attach an observer to this sensor. The observer must support a call
