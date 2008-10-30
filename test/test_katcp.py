@@ -403,6 +403,8 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
     def test_halt_request(self):
         """Test halt request."""
         self.client.request(katcp.Message.request("halt"))
+        # hack to hide re-connect exception
+        self.client.connect = lambda: None
         self.server.join()
         time.sleep(0.1)
 

@@ -536,6 +536,8 @@ class DeviceServerBase(object):
             self.on_client_disconnect(sock, "Device server shutting down.")
             self.remove_socket(sock)
 
+        self._sock.close()
+
     def start(self, timeout=None):
         """Start the server in a new thread."""
         if self._thread:
