@@ -1,5 +1,7 @@
 """Utilities for dealing with KAT device control
    language messages.
+
+   @namespace za.ac.ska.katcp
    """
 
 import socket
@@ -161,7 +163,11 @@ class MessageParser(object):
         return self.UNESCAPE_RE.sub(self._unescape_match, arg)
 
     def parse(self, line):
-        """Parse a line, return a Message."""
+        """Parse a line, return a Message.
+
+           @param line a string to parse.
+           @return the resulting Message.
+           """
         # find command type and check validity
         if not line:
             raise KatcpSyntaxError("Empty message received.")
