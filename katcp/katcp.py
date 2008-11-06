@@ -2,6 +2,7 @@
    language messages.
 
    @namespace za.ac.ska.katcp
+   @author Simon Cross <simon.cross@ska.ac.za>
    """
 
 import socket
@@ -28,12 +29,14 @@ class Message(object):
     # TODO: make use of reply codes in device client and server
     OK, FAIL, INVALID = "ok", "fail", "invalid"
 
+    ## @brief Mapping from message type to string name for the type.
     TYPE_NAMES = {
         REQUEST: "REQUEST",
         REPLY: "REPLY",
         INFORM: "INFORM",
     }
 
+    ## @brief Mapping from message type to type code character.
     TYPE_SYMBOLS = {
         REQUEST: "?",
         REPLY: "!",
@@ -42,9 +45,13 @@ class Message(object):
 
     # pylint fails to realise TYPE_SYMBOLS is defined
     # pylint: disable-msg = E0602
+
+    ## @brief Mapping from type code character to message type.
     TYPE_SYMBOL_LOOKUP = dict((v, k) for k, v in TYPE_SYMBOLS.items())
+
     # pylint: enable-msg = E0602
 
+    ## @brief Mapping from escape character to corresponding unescaped string.
     ESCAPE_LOOKUP = {
         "\\" : "\\",
         "_": " ",
@@ -58,12 +65,32 @@ class Message(object):
 
     # pylint fails to realise ESCAPE_LOOKUP is defined
     # pylint: disable-msg = E0602
+
+    ## @brief Mapping from unescaped string to corresponding escape character.
     REVERSE_ESCAPE_LOOKUP = dict((v, k) for k, v in ESCAPE_LOOKUP.items())
+
     # pylint: enable-msg = E0602
 
+    ## @brief Regular expression matching all unescaped character.
     ESCAPE_RE = re.compile(r"[\\ \0\n\r\x1b\t]")
 
+    ## @var mtype
+    # @brief Message type.
+
+    ## @var name
+    # @brief Message name. 
+
+    ## @var arguments
+    # @brief List of string message arguments.
+
     def __init__(self, mtype, name, arguments=None):
+        """Create a KATCP Message.
+
+           @param self This object.
+           @param mtype Message::Type constant.
+           @param name String: message name.
+           @param arguments List of strings: message arguments.
+           """
         self.mtype = mtype
         self.name = name
         if arguments is None:
@@ -90,6 +117,11 @@ class Message(object):
                                 % (name,))
 
     def __str__(self):
+        """Return Message serialized for transmission.
+
+           @param self This object.
+           @return Message encoded as a ASCII string.
+           """
         if self.arguments:
             escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
                             for x in self.arguments]
@@ -137,13 +169,17 @@ class MessageParser(object):
     # We only want one public method
     # pylint: disable-msg = R0903
 
+    ## @brief Copy of TYPE_SYMBOL_LOOKUP from Message.
     TYPE_SYMBOL_LOOKUP = Message.TYPE_SYMBOL_LOOKUP
-    ESCAPE_LOOKUP = Message.ESCAPE_LOOKUP
-    SPECIAL_RE = re.compile(r"[\0\n\r\x1b\t ]")
-    UNESCAPE_RE = re.compile(r"\\(.?)")
 
-    def __init__(self):
-        pass
+    ## @brief Copy of ESCAPE_LOOKUP from Message.
+    ESCAPE_LOOKUP = Message.ESCAPE_LOOKUP
+
+    ## @brief Regular expression matching all special characters.
+    SPECIAL_RE = re.compile(r"[\0\n\r\x1b\t ]")
+
+    ## @brief Regular expression matching all escapes.
+    UNESCAPE_RE = re.compile(r"\\(.?)")
 
     def _unescape_match(self, match):
         """Given an re.Match, unescape the escape code it represents."""
@@ -165,6 +201,7 @@ class MessageParser(object):
     def parse(self, line):
         """Parse a line, return a Message.
 
+           @param self This object.
            @param line a string to parse.
            @return the resulting Message.
            """
@@ -197,6 +234,12 @@ class DeviceClient(object):
        """
 
     def __init__(self, host, port):
+        """Create a basic DeviceClient.
+
+           @param self This object.
+           @param host String: host to connect to.
+           @param port Integer: port to connect to.
+           """
         self._parser = MessageParser()
         self._bindaddr = (host, port)
         self._sock = None
@@ -205,24 +248,48 @@ class DeviceClient(object):
         self._thread = None
 
     def reply(self, msg):
-        """Called when a reply message arrives."""
+        """Called when a reply message arrives.
+
+           @param self This object.
+           @param msg The reply Message received.
+           @return None
+           """
         pass
 
     def inform(self, msg):
-        """Called when an inform message arrives."""
+        """Called when an inform message arrives.
+
+           @param self This object.
+           @param msg The inform Message recevied.
+           @return None
+           """
         pass
 
     def request(self, msg):
-        """Send a request messsage."""
+        """Send a request messsage.
+
+           @param self This object.
+           @param msg The request Message to send.
+           @return None
+           """
         assert(msg.mtype == Message.REQUEST)
         self._sock.send(str(msg) + "\n")
 
     def send_message(self, msg):
-        """Send any kind of message."""
+        """Send any kind of message.
+
+           @param self This object.
+           @param msg The Message to send.
+           @return None
+           """
         self._sock.send(str(msg) + "\n")
 
     def connect(self):
-        """Connect or reconnect to the server."""
+        """Connect or reconnect to the server.
+
+           @param self This object.
+           @return None
+           """
         if self._sock is not None:
             self._sock.close()
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -230,7 +297,12 @@ class DeviceClient(object):
         self._waiting_chunk = ""
 
     def handle_chunk(self, chunk):
-        """Handle a chunk of data from the server."""
+        """Handle a chunk of data from the server.
+
+           @param self This object.
+           @param chunk The data string to process.
+           @return None
+           """
         chunk = chunk.replace("\r", "\n")
         lines = chunk.split("\n")
 
@@ -244,7 +316,12 @@ class DeviceClient(object):
         self._waiting_chunk += lines[-1]
 
     def handle_message(self, msg):
-        """Handle a message from the server."""
+        """Handle a message from the server.
+
+           @param self This object.
+           @param msg The Message to process.
+           @return None
+           """
         if msg.mtype == Message.INFORM:
             self.inform(msg)
         elif msg.mtype == Message.REPLY:
@@ -253,7 +330,11 @@ class DeviceClient(object):
             log.error("Unexpect message type from server ['%s']." % (msg,))
 
     def run(self):
-        """Process reply and inform messages from the server."""
+        """Process reply and inform messages from the server.
+
+           @param self This object.
+           @return None
+           """
         timeout = 1.0 # s
         self.connect()
 
@@ -279,7 +360,12 @@ class DeviceClient(object):
         self._sock = None
 
     def start(self, timeout=None):
-        """Start the client in a new thread."""
+        """Start the client in a new thread.
+
+           @param self This object.
+           @param timeout Seconds to wait for server thread to start (as a float). 
+           @return None
+           """
         if self._thread:
             raise RuntimeError("Device client already started.")
 
@@ -291,7 +377,12 @@ class DeviceClient(object):
                 raise RuntimeError("Device client failed to start.")
 
     def join(self, timeout=None):
-        """Rejoin the client thread."""
+        """Rejoin the client thread.
+
+           @param self This object.
+           @param timeout Seconds to wait for server thread to complete (as a float).
+           @return None
+           """
         if not self._thread:
             raise RuntimeError("Device client thread not started.")
 
@@ -300,14 +391,22 @@ class DeviceClient(object):
             self._thread = None
 
     def stop(self):
-        """Stop a running client (from another thread)."""
+        """Stop a running client (from another thread).
+
+           @param self This object.
+           @return None
+           """
         self._running.wait(1.0)
         if not self._running.isSet():
             raise RuntimeError("Attempt to stop client that wasn't running.")
         self._running.clear()
 
     def running(self):
-        """Whether the client is running."""
+        """Whether the client is running.
+
+           @param self This object.
+           @return Whether the server is running (True or False).
+           """
         return self._running.isSet()
 
 
@@ -319,7 +418,9 @@ class DeviceServerMetaclass(type):
        All request_* methods must have a doc string so that help
        can be generated.
        """
+
     def __init__(mcs, name, bases, dct):
+        """Initialise a DeviceServer class."""
         super(DeviceServerMetaclass, mcs).__init__(name, bases, dct)
         mcs._request_handlers = {}
         mcs._inform_handlers = {}
@@ -361,9 +462,11 @@ class DeviceServerBase(object):
     def __init__(self, host, port, tb_limit=20):
         """Create DeviceServer object.
 
-           host, port: where to listen.
-           tb_limit: maximum number of stack frames to send in error
-                     traceback.
+           @param self This object.
+           @param host String: host to listen on.
+           @param port Integer: port to listen on.
+           @param tb_limit Integer: maximum number of stack frames to
+                           send in error traceback.
         """
         self._parser = MessageParser()
         self._bindaddr = (host, port)
@@ -618,10 +721,11 @@ class DeviceServer(DeviceServerBase):
          ?configure
          ?mode
 
-       Subclasses can define the tuple VERSION_INFO to set the server
-       name, major and minor version numbers. EXTRA_VERSION_INFO can
-       be defined to give a string describing releases within a
-       version, for example "rc1".
+       Subclasses can define the tuple VERSION_INFO to set the interface
+       name, major and minor version numbers. The BUILD_INFO tuple can
+       be defined to give a string describing a particular interface
+       instance and may have a fourth element containing additional
+       version information (e.g. rc1).
 
        Subclasses must override the .setup_sensors() method. If they
        have no sensors to register, the method should just be a pass.
@@ -632,13 +736,20 @@ class DeviceServer(DeviceServerBase):
     # used outside this module
     # pylint: disable-msg = R0904
 
+    ## @brief Interface version information.
     VERSION_INFO = ("device_stub", 0, 1)
+
+    ## @brief Devicer server build / instance information.
     BUILD_INFO = ("name", 0, 1, "")
+
+    ## @var log
+    # @brief DeviceLogger instance for sending log messages to the client.
 
     # * and ** magic fine here
     # pylint: disable-msg = W0142
 
     def __init__(self, *args, **kwargs):
+        """Create a DeviceServer."""
         super(DeviceServer, self).__init__(*args, **kwargs)
         self.log = DeviceLogger(self)
         self._sensors = {} # map names to sensor objects
@@ -796,7 +907,7 @@ class DeviceServer(DeviceServerBase):
         return Message.reply("watchdog", "ok")
 
     # pylint: enable-msg = W0613
-    
+
     def run(self):
         """Override DeviceServerBase.run() to ensure that the reactor thread is
            running at the same time.
@@ -827,6 +938,10 @@ class Sensor(object):
     #
     # type -> (name, formatter, parser)
     INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE = range(5)
+
+    ## @brief Mapping from sensor type to tuple containing the type name,
+    #  a function to format a value, a function to parse a value and a
+    #  default value for sensors of that type.
     SENSOR_TYPES = {
         INTEGER: ("integer", lambda sensor, value: "%d" % (value,),
                              lambda sensor, value: int(value), 0),
@@ -835,7 +950,7 @@ class Sensor(object):
         BOOLEAN: ("boolean", lambda sensor, value: value and "1" or "0",
                              lambda sensor, value: value == "1", "0"),
         LRU: ("lru", lambda sensor, value: sensor.LRU_VALUES[value],
-                     lambda sensor, value: sensor.LRU_CONSTANTS[value], 
+                     lambda sensor, value: sensor.LRU_CONSTANTS[value],
                      lambda sensor: sensor.LRU_NOMINAL),
         DISCRETE: ("discrete", lambda sensor, value: value,
                                lambda sensor, value: value, "unknown"),
@@ -843,6 +958,8 @@ class Sensor(object):
 
     # Sensor status constants
     UNKNOWN, NOMINAL, WARN, ERROR, FAILURE = range(5)
+
+    ## @brief Mapping from sensor status to status name.
     STATUSES = {
         UNKNOWN: 'unknown',
         NOMINAL: 'nominal',
@@ -853,18 +970,39 @@ class Sensor(object):
 
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = range(2)
+
+    ## @brief Mapping from LRU value constant to LRU value name.
     LRU_VALUES = {
         LRU_NOMINAL: "nominal",
         LRU_ERROR: "error",
     }
 
     # LRU_VALUES not found by pylint
-    #
     # pylint: disable-msg = E0602
+
+    ## @brief Mapping from LRU value name to LRU value constant.
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
+
     # pylint: enable-msg = E0602
-    
+
+    ## @brief Number of milliseconds in a second.
     MILLISECOND = 1000
+
+    ## @var stype
+    # @brief Sensor type constant.
+
+    ## @var name
+    # @brief Sensor name.
+
+    ## @var description
+    # @brief String describing the sensor.
+
+    ## @var units
+    # @brief String contain the units for the sensor value.
+
+    ## @var params
+    # @brief List of strings containing the additional parameters (length and interpretation
+    # are specific to the sensor type)
 
     def __init__(self, sensor_type, name, description, units, params=None):
         """Instantiate a new sensor object.
@@ -881,7 +1019,7 @@ class Sensor(object):
         self._observers = set()
         self._timestamp = time.time()
         self._status = Sensor.UNKNOWN
-        
+
         self.stype, self._formatter, self._parser, self._value = \
             self.SENSOR_TYPES[sensor_type]
         self.name = name
@@ -890,27 +1028,30 @@ class Sensor(object):
         self.params = [self._formatter(self, p) for p in params]
         if self._sensor_type == Sensor.DISCRETE:
             self._value = self.params[0]
-        
+
     def attach(self, observer):
         """Attach an observer to this sensor. The observer must support a call
            to update(sensor)
            """
         self._observers.add(observer)
-    
+
     def detach(self, observer):
         """Detach an observer from this sensor."""
         self._observers.discard(observer)
-    
+
     def notify(self):
         """Notify all observers of changes to this sensor."""
         for o in self._observers:
             o.update(self)
-            
+
     def set(self, timestamp, status, value):
         """Set the current value of the sensor. 
+
+           @param self This object.
            @param timestamp standard python time double
            @param status the status of the sensor
            @param value the value of the sensor
+           @return None
            """
         self._timestamp, self._status, self._value = timestamp, status, value
         self.notify()
@@ -949,10 +1090,18 @@ class DeviceLogger(object):
     # level values are used as indexes into the LEVELS list
     # so these to lists should be in the same order 
     ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF = range(8)
+
+    ## @brief List of logging level names.
     LEVELS = [ "all", "trace", "debug", "info", "warn",
                "error", "fatal", "off" ]
 
     def __init__(self, device_server, root_logger="root"):
+        """Create a DeviceLogger.
+
+           @param self This object.
+           @param device_server DeviceServer this logger logs for.
+           @param root_logger String containing root logger name.
+           """
         self._device_server = device_server
         self._log_level = self.OFF
         self._root_logger_name = root_logger
