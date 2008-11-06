@@ -15,6 +15,8 @@ class SampleStrategy:
 
     # Sampling strategy constants
     NONE, PERIOD, EVENT, DIFFERENTIAL = range(4)
+
+    ## @brief Mapping from strategy constant to strategy name.
     SAMPLING_LOOKUP = {
         NONE: "none",
         PERIOD: "period",
@@ -25,10 +27,14 @@ class SampleStrategy:
     # SAMPLING_LOOKUP not found by pylint
     # 
     # pylint: disable-msg = E0602
+
+    ## @brief Mapping from strategy name to strategy constant.
     SAMPLING_LOOKUP_REV = dict((v, k) for k, v in SAMPLING_LOOKUP.items())
+
     # pylint: enable-msg = E0602
 
     def __init__(self, server, sensor, *params):
+        """Create a SampleStrategy instance."""
         self._server = server
         self._sensor = sensor
         self._params = params
@@ -68,6 +74,8 @@ class SampleStrategy:
     def periodic(self, timestamp):
         """This method is called when a period strategy is being configured
            or periodically after that.
+
+           @param self This object.
            @param timestamp is the time at which the next sample was requested
            @return the desired timestamp for the next sample
            """
@@ -169,6 +177,7 @@ class SamplePeriod(SampleStrategy):
        requested period can be decoupled from the rate at which the sensor changes.
        """
 
+    ## @brief Number of milliseconds in a second (as a float).
     MILLISECOND = 1e3
 
     def __init__(self, server, sensor, *params):
@@ -201,9 +210,11 @@ class SampleReactor(threading.Thread):
        used to sample each one.
        """
 
-    PERIOD_DELAY = 0.01     # 10ms is finest granularity of calls to periodic
+    ## @brief Finest granularity of calls to periodic (10ms)
+    PERIOD_DELAY = 0.01
 
     def __init__(self):
+        """Create a SampleReactor."""
         super(SampleReactor, self).__init__()
         self._nameStrategy = {}
         self._stopEvent = threading.Event()
@@ -246,6 +257,7 @@ class SampleReactor(threading.Thread):
         self._stopEvent.set()
 
     def run(self):
+        """Run the sample reactor."""
         logger.debug("Starting thread %s" % (threading.currentThread().getName()))
         while not self._stopEvent.isSet():
             timestamp = time.time()
