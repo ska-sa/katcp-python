@@ -739,7 +739,7 @@ class DeviceServer(DeviceServerBase):
     ## @brief Interface version information.
     VERSION_INFO = ("device_stub", 0, 1)
 
-    ## @brief Devicer server build / instance information.
+    ## @brief Device server build / instance information.
     BUILD_INFO = ("name", 0, 1, "")
 
     ## @var log
