@@ -1,0 +1,9 @@
+Release Notes:
+==============
+
+katcp-python has yet to be released.
+
+Next release:
+-------------
+
+No release plan yet.
