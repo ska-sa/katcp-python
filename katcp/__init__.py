@@ -9,5 +9,5 @@
 import initenv
 
 from katcp import Message, KatcpSyntaxError, MessageParser, DeviceClient, \
-                  DeviceServerMetaclass, DeviceServerBase, DeviceServer, \
+                  DeviceMetaclass, DeviceServerBase, DeviceServer, \
                   Sensor 

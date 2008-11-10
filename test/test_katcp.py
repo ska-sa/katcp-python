@@ -178,10 +178,32 @@ class DeviceTestClient(katcp.DeviceClient):
         """Send a raw chunk of data to the server."""
         self._sock.send(chunk)
 
-    def inform(self, msg):
+    def inform_version(self, msg):
+        """handle version inform message"""
         self.__msgs.append(msg)
 
-    def reply(self, msg):
+    def inform_build_state(self, msg):
+        """handle build state inform message"""
+        self.__msgs.append(msg)
+
+    def inform_log(self, msg):
+        """handle log inform message"""
+        self.__msgs.append(msg)
+
+    def inform_disconnect(self, msg):
+        """handle disconnect inform message"""
+        self.__msgs.append(msg)
+
+    def reply_halt(self, msg):
+        """handle halt reply message"""
+        self.__msgs.append(msg)
+
+    def unhandled_reply(self, msg):
+        """Fallback method for reply messages without a registered handler"""
+        self.__msgs.append(msg)
+
+    def unhandled_inform(self, msg):
+        """Fallback method for inform messages without a registered handler"""
         self.__msgs.append(msg)
 
     def messages(self):
@@ -332,7 +354,6 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_like(msgs, [
             (r"#version device_stub-0.1", ""),
             (r"#build-state name-0.1", ""),
-            (r"#log error", "Unexpected\_reply\_message\_!some\_received\_by\_server."),
         ])
 
     def test_standard_requests(self):

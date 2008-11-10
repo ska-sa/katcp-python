@@ -224,16 +224,55 @@ class MessageParser(object):
         return Message(mtype, name, arguments)
 
 
+class DeviceMetaclass(type):
+    """Metaclass for DeviceServer and DeviceClient classes.
+
+       Collects up methods named request_* and adds
+       them to a dictionary of supported methods on the class.
+       All request_* methods must have a doc string so that help
+       can be generated.  The same is done for inform_* and
+       reply_* methods.
+       """
+    def __init__(mcs, name, bases, dct):
+        super(DeviceMetaclass, mcs).__init__(name, bases, dct)
+        mcs._request_handlers = {}
+        mcs._inform_handlers = {}
+        mcs._reply_handlers = {}
+        def convert(prefix, name):
+            """Convert a method name to the corresponding command name."""
+            return name[len(prefix):].replace("_","-")
+        for name in dir(mcs):
+            if not callable(getattr(mcs, name)):
+                continue
+            if name.startswith("request_"):
+                request_name = convert("request_", name)
+                mcs._request_handlers[request_name] = getattr(mcs, name)
+                assert(mcs._request_handlers[request_name].__doc__ is not None)
+            elif name.startswith("inform_"):
+                inform_name = convert("inform_", name)
+                mcs._inform_handlers[inform_name] = getattr(mcs, name)
+                assert(mcs._inform_handlers[inform_name].__doc__ is not None)
+            elif name.startswith("reply_"):
+                reply_name = convert("reply_", name)
+                mcs._reply_handlers[reply_name] = getattr(mcs, name)
+                assert(mcs._reply_handlers[reply_name].__doc__ is not None)
+
+
 class DeviceClient(object):
     """Device client proxy.
 
-       Subclasses should implement .reply() and .inform() to
-       take actions when reply and inform message arrive.
+       Subclasses should implement .reply_*, .inform_* and
+       request_* methods to take actions when messages arrive,
+       and implement unhandled_inform, unhandled_reply and
+       unhandled_request to provide fallbacks for messages for
+       which there is no handler.
 
        Request messages can be sent by calling .request().
        """
 
-    def __init__(self, host, port):
+    __metaclass__ = DeviceMetaclass
+
+    def __init__(self, host, port, tb_limit=20):
         """Create a basic DeviceClient.
 
            @param self This object.
@@ -242,28 +281,11 @@ class DeviceClient(object):
            """
         self._parser = MessageParser()
         self._bindaddr = (host, port)
+        self._tb_limit = tb_limit
         self._sock = None
         self._waiting_chunk = ""
         self._running = threading.Event()
         self._thread = None
-
-    def reply(self, msg):
-        """Called when a reply message arrives.
-
-           @param self This object.
-           @param msg The reply Message received.
-           @return None
-           """
-        pass
-
-    def inform(self, msg):
-        """Called when an inform message arrives.
-
-           @param self This object.
-           @param msg The inform Message recevied.
-           @return None
-           """
-        pass
 
     def request(self, msg):
         """Send a request messsage.
@@ -323,11 +345,76 @@ class DeviceClient(object):
            @return None
            """
         if msg.mtype == Message.INFORM:
-            self.inform(msg)
+            self.handle_inform(msg)
         elif msg.mtype == Message.REPLY:
-            self.reply(msg)
+            self.handle_reply(msg)
+        elif msg.mtype == Message.REQUEST:
+            self.handle_request(msg)
         else:
-            log.error("Unexpect message type from server ['%s']." % (msg,))
+            log.error("Unexpected message type from server ['%s']." % (msg,))
+
+    def handle_inform(self, msg):
+        """Dispatch an inform message to the appropriate method."""
+        method = self.__class__.unhandled_inform
+        if msg.name in self._inform_handlers:
+            method = self._inform_handlers[msg.name]
+
+        try:
+            method(self, msg)
+        except Exception:
+            e_type, e_value, trace = sys.exc_info()
+            reason = "\n".join(traceback.format_exception(
+                e_type, e_value, trace, self._tb_limit
+            ))
+            log.error("Inform %s FAIL: %s" % (msg.name, reason))
+
+    def handle_reply(self, msg):
+        """Dispatch a reply message to the appropriate method."""
+        method = self.__class__.unhandled_reply
+        if msg.name in self._reply_handlers:
+            method = self._reply_handlers[msg.name]
+
+        try:
+            method(self, msg)
+        except Exception:
+            e_type, e_value, trace = sys.exc_info()
+            reason = "\n".join(traceback.format_exception(
+                e_type, e_value, trace, self._tb_limit
+            ))
+            log.error("Reply %s FAIL: %s" % (msg.name, reason))
+
+    def handle_request(self, msg):
+        """Dispatch a request message to the appropriate method."""
+        method = self.__class__.unhandled_request
+        if msg.name in self._request_handlers:
+            method = self._request_handlers[msg.name]
+
+        try:
+            reply = method(self, msg)
+            assert (reply.mtype == Message.REPLY)
+            assert (reply.name == msg.name)
+            log.info("%s OK" % (msg.name,))
+            self._sock.send(str(reply) + "\n")
+        # We do want to catch everything that inherits from Exception
+        # pylint: disable-msg = W0703
+        except Exception:
+            e_type, e_value, trace = sys.exc_info()
+            reason = "\n".join(traceback.format_exception(
+                e_type, e_value, trace, self._tb_limit
+            ))
+            log.error("Request %s FAIL: %s" % (msg.name, reason))
+
+    def unhandled_inform(self, msg):
+        """Fallback method for inform messages without a registered handler"""
+        pass
+
+    def unhandled_reply(self, msg):
+        """Fallback method for reply messages without a registered handler"""
+        pass
+
+    def unhandled_request(self, msg):
+        """Fallback method for requests without a registered handler"""
+        pass
 
     def run(self):
         """Process reply and inform messages from the server.
@@ -410,45 +497,19 @@ class DeviceClient(object):
         return self._running.isSet()
 
 
-class DeviceServerMetaclass(type):
-    """Metaclass for DeviceServer classes.
-
-       Collects up methods named request_* and adds
-       them to a dictionary off supported methods on the class.
-       All request_* methods must have a doc string so that help
-       can be generated.
-       """
-
-    def __init__(mcs, name, bases, dct):
-        """Initialise a DeviceServer class."""
-        super(DeviceServerMetaclass, mcs).__init__(name, bases, dct)
-        mcs._request_handlers = {}
-        mcs._inform_handlers = {}
-        def convert(prefix, name):
-            """Convert a method name to the corresponding command name."""
-            return name[len(prefix):].replace("_","-")
-        for name in dir(mcs):
-            if not callable(getattr(mcs, name)):
-                continue
-            if name.startswith("request_"):
-                request_name = convert("request_", name)
-                mcs._request_handlers[request_name] = getattr(mcs, name)
-                assert(mcs._request_handlers[request_name].__doc__ is not None)
-            elif name.startswith("inform_"):
-                inform_name = convert("inform_", name)
-                mcs._inform_handlers[inform_name] = getattr(mcs, name)
-                assert(mcs._inform_handlers[inform_name].__doc__ is not None)
-
-
 class DeviceServerBase(object):
     """Base class for device servers.
 
        Subclasses should add .request_* methods for dealing
-       with requests messages. These methods each take the client
+       with request messages. These methods each take the client
        socket and msg objects as arguments and should return the
-       reply message or raise an exception as a result. The client
-       socket should only be used as an argument to .inform(). 
-       
+       reply message or raise an exception as a result. In these
+       methods, the client socket should only be used as an argument
+       to .inform().
+
+       Subclasses can also add .inform_* and reply_* methods to handle
+       those types of messages.
+
        Should a subclass need to generate inform messages it should
        do so using either the .inform() or .mass_inform() methods.
 
@@ -457,7 +518,7 @@ class DeviceServerBase(object):
        common .request_* methods.
        """
 
-    __metaclass__ = DeviceServerMetaclass
+    __metaclass__ = DeviceMetaclass
 
     def __init__(self, host, port, tb_limit=20):
         """Create DeviceServer object.
@@ -547,9 +608,11 @@ class DeviceServerBase(object):
             self.handle_request(sock, msg)
         elif msg.mtype == msg.INFORM:
             self.handle_inform(sock, msg)
+        elif msg.mtype == msg.REPLY:
+            self.handle_reply(sock, msg)
         else:
-            reason = "Unexpected reply message !%s received by server." \
-                     % (msg.name,)
+            reason = "Unexpected message type received by server ['%s']." \
+                     % (msg,)
             self.inform(sock, self._log_msg("error", reason, "root"))
 
     def handle_request(self, sock, msg):
@@ -587,6 +650,20 @@ class DeviceServerBase(object):
                 log.error("Inform %s FAIL: %s" % (msg.name, reason))
         else:
             log.warn("%s INVALID: Unknown inform." % (msg.name,))
+
+    def handle_reply(self, sock, msg):
+        """Dispatch a reply message to the appropriate method."""
+        if msg.name in self._reply_handlers:
+            try:
+                self._reply_handlers[msg.name](self, sock, msg)
+            except Exception:
+                e_type, e_value, trace = sys.exc_info()
+                reason = "\n".join(traceback.format_exception(
+                    e_type, e_value, trace, self._tb_limit
+                ))
+                log.error("Reply %s FAIL: %s" % (msg.name, reason))
+        else:
+            log.warn("%s INVALID: Unknown reply." % (msg.name,))
 
     def inform(self, sock, msg):
         """Send an inform messages to a particular client."""
