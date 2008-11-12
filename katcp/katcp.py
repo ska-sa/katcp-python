@@ -234,6 +234,13 @@ class DeviceMetaclass(type):
        reply_* methods.
        """
     def __init__(mcs, name, bases, dct):
+        """Constructor for DeviceMetaclass.  Should not be used directly.
+
+           @param mcs The metaclass instance
+           @param name The metaclass name
+           @param bases List of base classes
+           @param dct Class dict
+        """
         super(DeviceMetaclass, mcs).__init__(name, bases, dct)
         mcs._request_handlers = {}
         mcs._inform_handlers = {}
@@ -278,6 +285,8 @@ class DeviceClient(object):
            @param self This object.
            @param host String: host to connect to.
            @param port Integer: port to connect to.
+           @param tb_limit Integer: maximum number of stack frames to
+                           send in error traceback.
            """
         self._parser = MessageParser()
         self._bindaddr = (host, port)
