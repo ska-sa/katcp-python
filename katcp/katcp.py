@@ -506,6 +506,106 @@ class DeviceClient(object):
         return self._running.isSet()
 
 
+class BlockingClient(DeviceClient):
+    """Implement blocking requests on top of DeviceClient."""
+
+    def __init__(self, host, port, tb_limit=20, timeout=5.0):
+        """Create a basic BlockingClient.
+
+           @param self This object.
+           @param host String: host to connect to.
+           @param port Integer: port to connect to.
+           @param tb_limit Integer: maximum number of stack frames to
+                           send in error traceback.
+           @param timeout Float: seconds to wait before a blocking request
+                          times out.
+           """
+        super(BlockingClient, self).__init__(host, port, tb_limit=tb_limit)
+        self._request_timeout = timeout
+
+        self._request_end = threading.Event()
+        self._request_lock = threading.Lock()
+        self._current_name = None
+        self._current_informs = None
+        self._current_reply = None
+
+    def blocking_request(self, msg):
+        """Send a request messsage.
+
+           @param self This object.
+           @param msg The request Message to send.
+           @return The a tuple containing the reply Message and a list of
+                   inform messages.
+           """
+        try:
+            self._request_lock.acquire()
+            self._request_end.clear()
+            self._current_name = msg.name
+            self._current_informs = []
+            self._current_reply = None
+        finally:
+            self._request_lock.release()
+
+        try:
+            self.request(msg)
+            self._request_end.wait(self._request_timeout)
+        finally:
+            try:
+                self._request_lock.acquire()
+
+                success = self._request_end.isSet()
+                informs = self._current_informs
+                reply = self._current_reply
+
+                self._request_end.clear()
+                self._current_informs = None
+                self._current_reply = None
+                self._current_name = None
+            finally:
+                self._request_lock.release()
+
+        if success:
+            return reply, informs
+        else:
+            raise RuntimeError("Request %s timeout out after %s seconds." %
+                                (msg.name, self._request_timeout))
+
+    def handle_inform(self, msg):
+        """Handle inform messages related to any current requests.
+
+           Inform messages not related to the current request go up
+           to the base class method.
+           """
+        try:
+            self._request_lock.acquire()
+            if msg.name == self._current_name:
+                self._current_informs.append(msg)
+                return
+        finally:
+            self._request_lock.release()
+
+        super(BlockingClient, self).handle_inform(msg)
+
+    def handle_reply(self, msg):
+        """Handle a reply message related to the current request.
+
+           Reply messages not related to the current request go up
+           to the base class method.
+           """
+        try:
+            self._request_lock.acquire()
+            if msg.name == self._current_name:
+                # unset _current_name so that no more replies or informs
+                # match this request
+                self._current_name = None
+                self._current_reply = msg
+                self._request_end.set()
+        finally:
+            self._request_lock.release()
+
+        super(BlockingClient, self).handle_inform(msg)
+
+
 class DeviceServerBase(object):
     """Base class for device servers.
 
