@@ -6,7 +6,11 @@
 # @author Robert Crida <robert.crida@ska.ac.za>
 #
 
-import initenv
+try:
+    import initenv
+except ImportError:
+    # We don't actually need initenv, so ignore it not being there
+    pass
 
 from katcp import Message, KatcpSyntaxError, MessageParser, DeviceClient, \
                   DeviceMetaclass, DeviceServerBase, DeviceServer, \
