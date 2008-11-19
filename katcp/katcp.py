@@ -486,13 +486,14 @@ class DeviceClient(object):
         if not self._thread.isAlive():
             self._thread = None
 
-    def stop(self):
+    def stop(self, timeout=1.0):
         """Stop a running client (from another thread).
 
            @param self This object.
+           @param timeout Seconds to wait for client to have *started* (as a float).
            @return None
            """
-        self._running.wait(1.0)
+        self._running.wait(timeout)
         if not self._running.isSet():
             raise RuntimeError("Attempt to stop client that wasn't running.")
         self._running.clear()
@@ -854,9 +855,14 @@ class DeviceServerBase(object):
         if not self._thread.isAlive():
             self._thread = None
 
-    def stop(self):
-        """Stop a running server (from another thread)."""
-        self._running.wait(1.0)
+    def stop(self, timeout=1.0):
+        """Stop a running server (from another thread).
+
+           @param self This object.
+           @param timeout Seconds to wait for server to have *started* (as a float).
+           @return None
+           """
+        self._running.wait(timeout)
         if not self._running.isSet():
             raise RuntimeError("Attempt to stop server that wasn't running.")
         self._running.clear()
