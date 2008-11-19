@@ -13,5 +13,5 @@ except ImportError:
     pass
 
 from katcp import Message, KatcpSyntaxError, MessageParser, DeviceClient, \
-                  DeviceMetaclass, DeviceServerBase, DeviceServer, \
-                  Sensor 
+                  BlockingClient, DeviceMetaclass, DeviceServerBase, \
+                  DeviceServer, Sensor 
