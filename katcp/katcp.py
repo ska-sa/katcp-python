@@ -78,7 +78,7 @@ class Message(object):
     # @brief Message type.
 
     ## @var name
-    # @brief Message name. 
+    # @brief Message name.
 
     ## @var arguments
     # @brief List of string message arguments.
@@ -459,7 +459,7 @@ class DeviceClient(object):
         """Start the client in a new thread.
 
            @param self This object.
-           @param timeout Seconds to wait for server thread to start (as a float). 
+           @param timeout Seconds to wait for server thread to start (as a float).
            @return None
            """
         if self._thread:
@@ -1148,6 +1148,9 @@ class Sensor(object):
                                lambda sensor, value: value, "unknown"),
     }
 
+    # map type strings to types
+    SENSOR_TYPE_LOOKUP = dict((v[0], k) for k, v in SENSOR_TYPES.items())
+
     # Sensor status constants
     UNKNOWN, NOMINAL, WARN, ERROR, FAILURE = range(5)
 
@@ -1237,7 +1240,7 @@ class Sensor(object):
             o.update(self)
 
     def set(self, timestamp, status, value):
-        """Set the current value of the sensor. 
+        """Set the current value of the sensor.
 
            @param self This object.
            @param timestamp standard python time double
@@ -1271,6 +1274,13 @@ class Sensor(object):
            """
         return (self._timestamp, self._status, self._value)
 
+    @classmethod
+    def parse_type(type_string):
+        if type_string in Sensor.SENSOR_TYPE_LOOKUP:
+            return Sensor.SENSOR_TYPE_LOOKUP[type_string]
+        else:
+            raise KatcpSyntaxError("Invalid sensor type string %s" % type_string)
+
 
 class DeviceLogger(object):
     """Object for logging messages from a DeviceServer.
@@ -1280,7 +1290,7 @@ class DeviceLogger(object):
        a virtual hierarchy of loggers with the device."""
 
     # level values are used as indexes into the LEVELS list
-    # so these to lists should be in the same order 
+    # so these to lists should be in the same order
     ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF = range(8)
 
     ## @brief List of logging level names.
