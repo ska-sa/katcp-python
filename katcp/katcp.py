@@ -808,6 +808,7 @@ class DeviceServerBase(object):
                 else:
                     # client socket died, remove it
                     self.remove_socket(sock)
+                    self.on_client_disconnect(None, "Client socket died")
 
             for sock in readers:
                 if sock is self._sock:
@@ -827,6 +828,7 @@ class DeviceServerBase(object):
                     else:
                         # no data, assume socket EOF
                         self.remove_socket(sock)
+                        self.on_client_disconnect(None, "Socket EOF")
 
         for sock in list(self._socks):
             self.on_client_disconnect(sock, "Device server shutting down.")
@@ -957,7 +959,8 @@ class DeviceServer(DeviceServerBase):
 
     def on_client_disconnect(self, sock, msg):
         """Inform client it is about to be disconnected."""
-        self.inform(sock, Message.inform("disconnect", msg))
+        if sock:
+            self.inform(sock, Message.inform("disconnect", msg))
 
     def build_state(self):
         """Return a build state string in the form name-major.minor[(a|b|rc)n]"""
