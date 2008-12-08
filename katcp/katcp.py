@@ -1308,7 +1308,7 @@ class DeviceLogger(object):
            @param root_logger String containing root logger name.
            """
         self._device_server = device_server
-        self._log_level = self.OFF
+        self._log_level = self.WARN
         self._root_logger_name = root_logger
 
     def level_name(self, level=None):
@@ -1363,3 +1363,17 @@ class DeviceLogger(object):
     def fatal(self, msg, name=None):
         """Log a fatal error message."""
         self.log(self.FATAL, msg, name)
+
+    @staticmethod
+    def log_to_python(logger, msg):
+        (level, timestamp, name, message) = tuple(msg.arguments)
+        #created = float(timestamp) * 1e-6
+        #msecs = int(timestamp) % 1000
+        log_string = "%s %s: %s" % (timestamp, name, message)
+        logger.log({"trace": 0,
+                    "debug": logging.DEBUG, 
+                    "info": logging.INFO, 
+                    "warn": logging.WARN,
+                    "error": logging.ERROR, 
+                    "fatal": logging.FATAL}[level], log_string)#, extra={"created": created})
+        
