@@ -96,7 +96,7 @@ class Message(object):
         if arguments is None:
             self.arguments = []
         else:
-            self.arguments = list(arguments)
+            self.arguments = [str(arg) for arg in arguments]
 
         # check message type
 
