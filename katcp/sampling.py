@@ -118,9 +118,14 @@ class SampleEvent(SampleStrategy):
         SampleStrategy.__init__(self, server, sensor, *params)
         if params:
             raise ValueError("The 'event' strategy takes no parameters.")
+        self._lastStatus = None
+        self._lastValue = None
 
-    def update(self, _sensor):
-        self.mass_inform()
+    def update(self, sensor):
+        if sensor._status != self._lastStatus or sensor._value != self._lastValue:
+            self._lastStatus = sensor._status
+            self._lastValue = sensor._value
+            self.mass_inform()
 
     def get_sampling(self):
         return SampleStrategy.EVENT
