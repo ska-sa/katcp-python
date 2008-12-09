@@ -447,6 +447,7 @@ class DeviceClient(object):
            @param self This object.
            @return None
            """
+        log.debug("Starting thread %s" % (threading.currentThread().getName()))
         timeout = 1.0 # s
         
         self._running.set()
@@ -473,6 +474,7 @@ class DeviceClient(object):
                     time.sleep(timeout)
 
         self.disconnect()
+        log.debug("Stopping thread %s" % (threading.currentThread().getName()))
 
     def start(self, timeout=None):
         """Start the client in a new thread.
