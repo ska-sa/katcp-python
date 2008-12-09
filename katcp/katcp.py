@@ -294,6 +294,7 @@ class DeviceClient(object):
         self._sock = None
         self._waiting_chunk = ""
         self._running = threading.Event()
+        self._connected = threading.Event()
         self._thread = None
 
     def request(self, msg):
@@ -316,16 +317,31 @@ class DeviceClient(object):
         self._sock.send(str(msg) + "\n")
 
     def connect(self):
-        """Connect or reconnect to the server.
+        """Connect to the server.
 
            @param self This object.
            @return None
            """
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            self._sock.connect(self._bindaddr)
+            self._waiting_chunk = ""
+            self._connected.set()
+            self.notify_connected(True)
+        except:
+            self.disconnect()
+        
+    def disconnect(self):
+        """Disconnect and cleanup.
+        
+           @param self This object
+           @return None
+           """
         if self._sock is not None:
             self._sock.close()
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.connect(self._bindaddr)
-        self._waiting_chunk = ""
+            self._connected.clear()
+            self.notify_connected(False)
+        self._sock = None
 
     def handle_chunk(self, chunk):
         """Handle a chunk of data from the server.
@@ -432,28 +448,31 @@ class DeviceClient(object):
            @return None
            """
         timeout = 1.0 # s
-        self.connect()
-
+        
         self._running.set()
         while self._running.isSet():
-            readers, _writers, errors = select.select(
-                [self._sock], [], [self._sock], timeout
-            )
-
-            if errors:
-                # attempt to reconnect
+            if self.is_connected():
+                readers, _writers, errors = select.select(
+                    [self._sock], [], [self._sock], timeout
+                )
+                
+                if errors:
+                    self.disconnect()
+    
+                elif readers:
+                    chunk = self._sock.recv(4096)
+                    if chunk:
+                        self.handle_chunk(chunk)
+                    else:
+                        # EOF from server
+                        self.disconnect()
+            else:
+                # not currently connected so attempt to connect
                 self.connect()
+                if not self.is_connected():
+                    time.sleep(timeout)
 
-            if readers:
-                chunk = self._sock.recv(4096)
-                if chunk:
-                    self.handle_chunk(chunk)
-                else:
-                    # EOF from server - attempt reconnect
-                    self.connect()
-
-        self._sock.close()
-        self._sock = None
+        self.disconnect()
 
     def start(self, timeout=None):
         """Start the client in a new thread.
@@ -468,8 +487,8 @@ class DeviceClient(object):
         self._thread = threading.Thread(target=self.run)
         self._thread.start()
         if timeout:
-            self._running.wait(timeout)
-            if not self._running.isSet():
+            self._connected.wait(timeout)
+            if not self._connected.isSet():
                 raise RuntimeError("Device client failed to start.")
 
     def join(self, timeout=None):
@@ -505,6 +524,23 @@ class DeviceClient(object):
            @return Whether the server is running (True or False).
            """
         return self._running.isSet()
+    
+    def is_connected(self):
+        """Check if the socket is current connected.
+        
+           @param self This object
+           @return Whether the client is connected (True or False).
+           """
+        return self._sock is not None
+    
+    def notify_connected(self, connected):
+        """Event handler that is called wheneved the connection status changes.
+           Override in derived class for desired behaviour.
+        
+           @param self This object
+           @param connected The current connection state (True or False)
+           """
+        pass
 
 
 class BlockingClient(DeviceClient):
