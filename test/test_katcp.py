@@ -390,7 +390,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#build-state name-0.1", ""),
             (r"!watchdog ok", ""),
             (r"!restart ok", ""),
-            (r"!log-level ok off", ""),
+            (r"!log-level ok warn", ""),
             (r"!log-level ok trace", ""),
             (r"#help halt", ""),
             (r"#help help", ""),
