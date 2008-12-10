@@ -14,7 +14,10 @@ setup (
     author = "Simon Cross",
     author_email = "simon.cross@ska.ac.za",
     packages = [ "katcp" ],
-    scripts = [ "scripts/katcp-exampleserver.py" ],
+    scripts = [
+        "scripts/katcp-exampleserver.py",
+        "scripts/katcp-exampleclient.py",
+    ],
     dependency = dep,
     test_suite = "test.suite",
     url='http://ska.ac.za/',
@@ -27,6 +30,7 @@ setup (
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Topic :: Scientific/Engineering :: Astronomy",
     ],
+    platforms = [ "OS Independent" ],
     keywords="kat kat7 ska",
     zip_safe = True
 )
