@@ -220,3 +220,8 @@ class TestBnf(unittest.TestCase):
         self.assertEqual(m.arguments, ["", ""])
         m = self.p.parse("!foo \_  \t\t\_\t  \@\t") # space, space, empty
         self.assertEqual(m.arguments, [" ", " ", ""])
+
+    def test_formfeed(self):
+        """Test that form feeds are not treated as whitespace."""
+        m = self.p.parse("!baz \fa\fb\f")
+        self.assertEqual(m.arguments, ["\fa\fb\f"])

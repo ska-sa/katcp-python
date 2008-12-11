@@ -77,6 +77,10 @@ class TestMessageParser(unittest.TestCase):
         m = self.p.parse("!baz\t \t\_\t\t\t \_\t\@   \t") # space, space, empty
         self.assertEqual(m.arguments, [" ", " ", ""])
 
+    def test_formfeed(self):
+        """Test that form feeds are not treated as whitespace."""
+        m = self.p.parse("!baz \fa\fb\f")
+        self.assertEqual(m.arguments, ["\fa\fb\f"])
 
 class DeviceTestSensor(katcp.Sensor):
     def __init__(self, sensor_type, name, description, units, params,

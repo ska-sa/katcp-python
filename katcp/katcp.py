@@ -181,6 +181,9 @@ class MessageParser(object):
     ## @brief Regular expression matching all escapes.
     UNESCAPE_RE = re.compile(r"\\(.?)")
 
+    ## @brief Regular expresion matching KATCP whitespace (just space and tab)
+    WHITESPACE_RE = re.compile(r"[ \t]+")
+
     def _unescape_match(self, match):
         """Given an re.Match, unescape the escape code it represents."""
         char = match.group(1)
@@ -216,7 +219,10 @@ class MessageParser(object):
         mtype = self.TYPE_SYMBOL_LOOKUP[type_char]
 
         # find command and arguments name
-        parts = line.split()
+        # (removing possible empty argument resulting from whitespace at end of command)
+        parts = self.WHITESPACE_RE.split(line)
+        if not parts[-1]:
+            del parts[-1]
 
         name = parts[0][1:]
         arguments = [self._parse_arg(x) for x in parts[1:]]
