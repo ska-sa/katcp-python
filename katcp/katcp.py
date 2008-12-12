@@ -336,10 +336,10 @@ class DeviceClient(object):
             self.notify_connected(True)
         except:
             self.disconnect()
-        
+
     def disconnect(self):
         """Disconnect and cleanup.
-        
+
            @param self This object
            @return None
            """
@@ -455,17 +455,17 @@ class DeviceClient(object):
            """
         log.debug("Starting thread %s" % (threading.currentThread().getName()))
         timeout = 1.0 # s
-        
+
         self._running.set()
         while self._running.isSet():
             if self.is_connected():
                 readers, _writers, errors = select.select(
                     [self._sock], [], [self._sock], timeout
                 )
-                
+
                 if errors:
                     self.disconnect()
-    
+
                 elif readers:
                     chunk = self._sock.recv(4096)
                     if chunk:
@@ -532,19 +532,19 @@ class DeviceClient(object):
            @return Whether the server is running (True or False).
            """
         return self._running.isSet()
-    
+
     def is_connected(self):
         """Check if the socket is current connected.
-        
+
            @param self This object
            @return Whether the client is connected (True or False).
            """
         return self._sock is not None
-    
+
     def notify_connected(self, connected):
         """Event handler that is called wheneved the connection status changes.
            Override in derived class for desired behaviour.
-        
+
            @param self This object
            @param connected The current connection state (True or False)
            """
@@ -1415,9 +1415,9 @@ class DeviceLogger(object):
         #msecs = int(timestamp) % 1000
         log_string = "%s %s: %s" % (timestamp, name, message)
         logger.log({"trace": 0,
-                    "debug": logging.DEBUG, 
-                    "info": logging.INFO, 
+                    "debug": logging.DEBUG,
+                    "info": logging.INFO,
                     "warn": logging.WARN,
-                    "error": logging.ERROR, 
+                    "error": logging.ERROR,
                     "fatal": logging.FATAL}[level], log_string)#, extra={"created": created})
-        
+

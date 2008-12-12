@@ -25,7 +25,7 @@ class SampleStrategy:
     }
 
     # SAMPLING_LOOKUP not found by pylint
-    # 
+    #
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from strategy name to strategy constant.
@@ -44,7 +44,7 @@ class SampleStrategy:
         """Factory method to create a suitable strategy object given the
            necessary details.
            FIXME: Reimplement using singleton factory which new strategies
-                  can register with. You can probably register lambda 
+                  can register with. You can probably register lambda
                   functions to create the objects.
            """
         if strategyName not in SampleStrategy.SAMPLING_LOOKUP_REV:
@@ -230,7 +230,7 @@ class SampleReactor(threading.Thread):
         """Add a sensor strategy to the reactor. If a strategy already exists
            for the same sensor then it must be detached and any outstanding
            scheduled event cancelled.
-           
+
            The new strategy is then attached to the sensor for updates and a
            periodic sample is triggered to schedule the next one.
            """
@@ -243,7 +243,7 @@ class SampleReactor(threading.Thread):
         self.periodic(strategy, time.time())
 
     def get_sampling_formatted(self, name):
-        """Get the formatted representation of the sample strategy for the 
+        """Get the formatted representation of the sample strategy for the
            specified sensor.
            """
         return self._nameStrategy[name].get_sampling_formatted()
