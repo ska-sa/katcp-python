@@ -271,6 +271,13 @@ class DeviceMetaclass(type):
                 assert(mcs._reply_handlers[reply_name].__doc__ is not None)
 
 
+class KatcpDeviceError(Exception):
+    """Exception raised by KATCP clients and servers when errors occur will
+       communicating with a device.  Note that socket.error can also be raised
+       if low-level network exceptions occure."""
+    pass
+
+
 class DeviceClient(object):
     """Device client proxy.
 
@@ -313,7 +320,7 @@ class DeviceClient(object):
            @return None
            """
         assert(msg.mtype == Message.REQUEST)
-        self._sock.send(str(msg) + "\n")
+        self.send_message(msg)
 
     def send_message(self, msg):
         """Send any kind of message.
@@ -322,6 +329,8 @@ class DeviceClient(object):
            @param msg The Message to send.
            @return None
            """
+        if self._sock is None:
+            raise KatcpDeviceError("Client not connected")
         self._sock.send(str(msg) + "\n")
 
     def connect(self):
@@ -336,7 +345,7 @@ class DeviceClient(object):
             self._waiting_chunk = ""
             self._connected.set()
             self.notify_connected(True)
-        except:
+        except Exception:
             self._logger.exception("DeviceClient failed to connect.")
             self.disconnect()
 
