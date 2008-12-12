@@ -5,6 +5,27 @@ import katcp
 import threading
 import time
 import katcp.sampling
+import logging
+
+class TestLogHandler(logging.Handler):
+    """A logger for KATCP tests."""
+
+    def __init__(self):
+        """Create a TestLogHandler."""
+        logging.Handler.__init__(self)
+        self._records = []
+
+    def emit(self, record):
+        """Handle the arrival of a log message."""
+        self._records.append(record)
+
+    def clear(self):
+        """Clear the list of remembered logs."""
+        self._records = []
+
+log_handler = TestLogHandler()
+logging.getLogger("katcp").addHandler(log_handler)
+
 
 class TestMessageParser(unittest.TestCase):
     def setUp(self):

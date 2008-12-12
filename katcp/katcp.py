@@ -285,7 +285,7 @@ class DeviceClient(object):
 
     __metaclass__ = DeviceMetaclass
 
-    def __init__(self, host, port, tb_limit=20):
+    def __init__(self, host, port, tb_limit=20, logger=log):
         """Create a basic DeviceClient.
 
            @param self This object.
@@ -293,6 +293,7 @@ class DeviceClient(object):
            @param port Integer: port to connect to.
            @param tb_limit Integer: maximum number of stack frames to
                            send in error traceback.
+           @param logger Object: Logger to log to.
            """
         self._parser = MessageParser()
         self._bindaddr = (host, port)
@@ -302,6 +303,7 @@ class DeviceClient(object):
         self._running = threading.Event()
         self._connected = threading.Event()
         self._thread = None
+        self._logger = logger
 
     def request(self, msg):
         """Send a request messsage.
@@ -335,6 +337,7 @@ class DeviceClient(object):
             self._connected.set()
             self.notify_connected(True)
         except:
+            self._logger.exception("DeviceClient failed to connect.")
             self.disconnect()
 
     def disconnect(self):
@@ -382,7 +385,8 @@ class DeviceClient(object):
         elif msg.mtype == Message.REQUEST:
             self.handle_request(msg)
         else:
-            log.error("Unexpected message type from server ['%s']." % (msg,))
+            self._logger.error("Unexpected message type from server ['%s']."
+                % (msg,))
 
     def handle_inform(self, msg):
         """Dispatch an inform message to the appropriate method."""
@@ -397,7 +401,7 @@ class DeviceClient(object):
             reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, self._tb_limit
             ))
-            log.error("Inform %s FAIL: %s" % (msg.name, reason))
+            self._logger.error("Inform %s FAIL: %s" % (msg.name, reason))
 
     def handle_reply(self, msg):
         """Dispatch a reply message to the appropriate method."""
@@ -412,7 +416,7 @@ class DeviceClient(object):
             reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, self._tb_limit
             ))
-            log.error("Reply %s FAIL: %s" % (msg.name, reason))
+            self._logger.error("Reply %s FAIL: %s" % (msg.name, reason))
 
     def handle_request(self, msg):
         """Dispatch a request message to the appropriate method."""
@@ -424,7 +428,7 @@ class DeviceClient(object):
             reply = method(self, msg)
             assert (reply.mtype == Message.REPLY)
             assert (reply.name == msg.name)
-            log.info("%s OK" % (msg.name,))
+            self._logger.info("%s OK" % (msg.name,))
             self._sock.send(str(reply) + "\n")
         # We do want to catch everything that inherits from Exception
         # pylint: disable-msg = W0703
@@ -433,7 +437,7 @@ class DeviceClient(object):
             reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, self._tb_limit
             ))
-            log.error("Request %s FAIL: %s" % (msg.name, reason))
+            self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
 
     def unhandled_inform(self, msg):
         """Fallback method for inform messages without a registered handler"""
@@ -453,7 +457,7 @@ class DeviceClient(object):
            @param self This object.
            @return None
            """
-        log.debug("Starting thread %s" % (threading.currentThread().getName()))
+        self._logger.debug("Starting thread %s" % (threading.currentThread().getName()))
         timeout = 1.0 # s
 
         self._running.set()
@@ -480,7 +484,7 @@ class DeviceClient(object):
                     time.sleep(timeout)
 
         self.disconnect()
-        log.debug("Stopping thread %s" % (threading.currentThread().getName()))
+        self._logger.debug("Stopping thread %s" % (threading.currentThread().getName()))
 
     def start(self, timeout=None):
         """Start the client in a new thread.
@@ -554,7 +558,7 @@ class DeviceClient(object):
 class BlockingClient(DeviceClient):
     """Implement blocking requests on top of DeviceClient."""
 
-    def __init__(self, host, port, tb_limit=20, timeout=5.0):
+    def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log):
         """Create a basic BlockingClient.
 
            @param self This object.
@@ -564,8 +568,10 @@ class BlockingClient(DeviceClient):
                            send in error traceback.
            @param timeout Float: seconds to wait before a blocking request
                           times out.
+           @param logger Object: Logger to log to.
            """
-        super(BlockingClient, self).__init__(host, port, tb_limit=tb_limit)
+        super(BlockingClient, self).__init__(host, port, tb_limit=tb_limit,
+            logger=logger)
         self._request_timeout = timeout
 
         self._request_end = threading.Event()
@@ -674,7 +680,7 @@ class DeviceServerBase(object):
 
     __metaclass__ = DeviceMetaclass
 
-    def __init__(self, host, port, tb_limit=20):
+    def __init__(self, host, port, tb_limit=20, logger=log):
         """Create DeviceServer object.
 
            @param self This object.
@@ -682,6 +688,7 @@ class DeviceServerBase(object):
            @param port Integer: port to listen on.
            @param tb_limit Integer: maximum number of stack frames to
                            send in error traceback.
+           @param logger Object: Logger to log to.
         """
         self._parser = MessageParser()
         self._bindaddr = (host, port)
@@ -689,6 +696,7 @@ class DeviceServerBase(object):
         self._sock = self.bind(self._bindaddr)
         self._running = threading.Event()
         self._thread = None
+        self._logger = logger
 
         # sockets and data
         self._socks = [] # list of client sockets
@@ -749,7 +757,7 @@ class DeviceServerBase(object):
                     reason = "\n".join(traceback.format_exception(
                         e_type, e_value, trace, self._tb_limit
                     ))
-                    log.error("BAD COMMAND: %s" % (reason,))
+                    self._logger.error("BAD COMMAND: %s" % (reason,))
                     self.inform(sock, self._log_msg("error", reason, "root"))
                 else:
                     self.handle_message(sock, msg)
@@ -776,7 +784,7 @@ class DeviceServerBase(object):
                 reply = self._request_handlers[msg.name](self, sock, msg)
                 assert (reply.mtype == Message.REPLY)
                 assert (reply.name == msg.name)
-                log.info("%s OK" % (msg.name,))
+                self._logger.info("%s OK" % (msg.name,))
             # We do want to catch everything that inherits from Exception
             # pylint: disable-msg = W0703
             except Exception:
@@ -784,10 +792,10 @@ class DeviceServerBase(object):
                 reason = "\n".join(traceback.format_exception(
                     e_type, e_value, trace, self._tb_limit
                 ))
-                log.error("Request %s FAIL: %s" % (msg.name, reason))
+                self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
                 reply = Message.reply(msg.name, "fail", reason)
         else:
-            log.error("%s INVALID: Unknown request." % (msg.name,))
+            self._logger.error("%s INVALID: Unknown request." % (msg.name,))
             reply = Message.reply(msg.name, "invalid", "Unknown request.")
         sock.send(str(reply) + "\n")
 
@@ -801,9 +809,9 @@ class DeviceServerBase(object):
                 reason = "\n".join(traceback.format_exception(
                     e_type, e_value, trace, self._tb_limit
                 ))
-                log.error("Inform %s FAIL: %s" % (msg.name, reason))
+                self._logger.error("Inform %s FAIL: %s" % (msg.name, reason))
         else:
-            log.warn("%s INVALID: Unknown inform." % (msg.name,))
+            self._logger.warn("%s INVALID: Unknown inform." % (msg.name,))
 
     def handle_reply(self, sock, msg):
         """Dispatch a reply message to the appropriate method."""
@@ -815,9 +823,9 @@ class DeviceServerBase(object):
                 reason = "\n".join(traceback.format_exception(
                     e_type, e_value, trace, self._tb_limit
                 ))
-                log.error("Reply %s FAIL: %s" % (msg.name, reason))
+                self._logger.error("Reply %s FAIL: %s" % (msg.name, reason))
         else:
-            log.warn("%s INVALID: Unknown reply." % (msg.name,))
+            self._logger.warn("%s INVALID: Unknown reply." % (msg.name,))
 
     def inform(self, sock, msg):
         """Send an inform messages to a particular client."""
@@ -1410,6 +1418,7 @@ class DeviceLogger(object):
 
     @staticmethod
     def log_to_python(logger, msg):
+        """Log a KATCP logging message to a Python logger."""
         (level, timestamp, name, message) = tuple(msg.arguments)
         #created = float(timestamp) * 1e-6
         #msecs = int(timestamp) % 1000
