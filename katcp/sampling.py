@@ -109,6 +109,15 @@ class SampleStrategy:
         params = [str(p) for p in self._params]
         return strategy, params
 
+    def attach(self):
+        """Attach strategy to its sensor."""
+        self._sensor.attach(self)
+
+    def detach(self):
+        """Detach strategy from its sensor."""
+        self._sensor.detach(self)
+
+
 class SampleEvent(SampleStrategy):
     """Sampling strategy implementation which sends updates on any event of
        the sensor.
@@ -237,8 +246,8 @@ class SampleReactor(threading.Thread):
         name = strategy._sensor.name
         if self._nameStrategy.has_key(name):
             currentStrategy = self._nameStrategy[name]
-            currentStrategy._sensor.detach(currentStrategy)
-        strategy._sensor.attach(strategy)
+            currentStrategy.detach()
+        strategy.attach()
         self._nameStrategy[name] = strategy
         self.periodic(strategy, time.time())
 
