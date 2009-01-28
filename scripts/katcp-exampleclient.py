@@ -18,11 +18,11 @@ logging.basicConfig(level=logging.INFO,
 
 class DeviceExampleClient(katcp.DeviceClient):
 
-    def reply(self, msg):
+    def handle_reply(self, msg):
         """Called when a reply message arrives."""
         print msg
 
-    def inform(self, msg):
+    def handle_inform(self, msg):
         """Called when an inform message arrives."""
         print msg
 
