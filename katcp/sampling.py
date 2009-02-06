@@ -10,7 +10,7 @@ logger = logging.getLogger("katcp.sampling")
 
 # pylint: disable-msg=W0142
 
-class SampleStrategy:
+class SampleStrategy(object):
     """Base class for strategies for sampling sensors."""
 
     # Sampling strategy constants
