@@ -42,7 +42,38 @@ class TestInt(unittest.TestCase):
 class TestFloat(unittest.TestCase):
 
     def test_pack(self):
-        pass
+        """Test packing floats."""
+        f = kattypes.Float()
+        self.assertEqual(f.pack(5.0), "%e" % 5.0)
+        self.assertEqual(f.pack(-5.0), "%e" % -5.0)
+        self.assertRaises(TypeError, f.pack, "a")
+        self.assertRaises(ValueError, f.pack, None)
+
+        f = kattypes.Float(min=5.0, max=6.0)
+        self.assertEqual(f.pack(5.0), "%e" % 5.0)
+        self.assertEqual(f.pack(6.0), "%e" % 6.0)
+        self.assertRaises(ValueError, f.pack, 4.5)
+        self.assertRaises(ValueError, f.pack, 6.5)
+
+        f = kattypes.Float(default=11.0)
+        self.assertEqual(f.pack(None), "%e" % 11.0)
+
+    def test_unpack(self):
+        """Test unpacking floats."""
+        f = kattypes.Float()
+        self.assertAlmostEqual(f.unpack("5.0"), 5.0)
+        self.assertAlmostEqual(f.unpack("-5.0"), -5.0)
+        self.assertRaises(ValueError, f.unpack, "a")
+        self.assertRaises(ValueError, f.unpack, None)
+
+        f = kattypes.Float(min=5.0, max=6.0)
+        self.assertAlmostEqual(f.unpack("5.0"), 5.0)
+        self.assertAlmostEqual(f.unpack("6.0"), 6.0)
+        self.assertRaises(ValueError, f.unpack, "4.5")
+        self.assertRaises(ValueError, f.unpack, "6.5")
+
+        f = kattypes.Float(default=11.0)
+        self.assertAlmostEqual(f.unpack(None), 11.0)
 
 class TestBool(unittest.TestCase):
     def setUp(self):
