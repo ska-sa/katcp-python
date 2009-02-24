@@ -76,11 +76,29 @@ class TestFloat(unittest.TestCase):
         self.assertAlmostEqual(f.unpack(None), 11.0)
 
 class TestBool(unittest.TestCase):
-    def setUp(self):
-        pass
 
     def test_pack(self):
-        pass
+        """Test packing booleans."""
+        b = kattypes.Bool()
+        self.assertEqual(b.pack(True), "1")
+        self.assertEqual(b.pack(False), "0")
+        self.assertEqual(b.pack(1), "1")
+        self.assertEqual(b.pack(0), "0")
+        self.assertRaises(ValueError, b.pack, None)
+
+        b = kattypes.Bool(default=True)
+        self.assertEqual(b.pack(None), "1")
+
+    def test_unpack(self):
+        """Test unpacking booleans."""
+        b = kattypes.Bool()
+        self.assertEqual(b.unpack("1"), True)
+        self.assertEqual(b.unpack("0"), False)
+        self.assertRaises(ValueError, b.unpack, "2")
+        self.assertRaises(ValueError, b.unpack, None)
+
+        b = kattypes.Bool(default=True)
+        self.assertAlmostEqual(b.unpack(None), True)
 
 class TestDiscrete(unittest.TestCase):
     def setUp(self):
