@@ -1,3 +1,5 @@
+import katcp
+
 """Utilities for dealing with KATCP types.
    """
 
@@ -125,8 +127,17 @@ class Lru(KatcpType):
     name = "lru"
     initial_value = LRU_NOMINAL
 
-    encode = staticmethod(lambda value: LRU_VALUES[value])
-    decode = staticmethod(lambda value: LRU_CONSTANTS[value])
+    @staticmethod
+    def encode(value):
+        if value not in Lru.LRU_VALUES:
+            raise ValueError("Lru value must be LRU_NOMINAL or LRU_ERROR")
+        return Lru.LRU_VALUES[value]
+
+    @staticmethod
+    def decode(value):
+        if value not in Lru.LRU_CONSTANTS:
+            raise ValueError("Lru value must be 'nominal' or 'error'")
+        return Lru.LRU_CONSTANTS[value]
 
 
 class Timestamp(KatcpType):
@@ -136,8 +147,11 @@ class Timestamp(KatcpType):
 
     name = "timestamp"
     initial_value = 0.0
-    encode = lambda value: "%d" % (value,)
-    decode = lambda value: int(value)
+    encode = staticmethod(lambda value: "%i" % (int(float(value)*1000),))
+
+    @staticmethod
+    def decode(value):
+        return float(value)/1000
 
 
 ## Request and inform method decorators
@@ -173,7 +187,7 @@ def inform(*types):
     def decorator(handler):
 
         def raw_handler(self, sock, msg):
-            args = unpack_types(type_str, msg.arguments)
+            args = unpack_types(types, msg.arguments)
             return handler(sock, *args)
 
         return raw_handler

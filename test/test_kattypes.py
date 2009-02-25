@@ -1,7 +1,7 @@
 """Tests for the kattypes module."""
 
 import unittest
-from katcp import kattypes 
+from katcp import kattypes
 
 class TestInt(unittest.TestCase):
 
@@ -125,15 +125,48 @@ class TestDiscrete(unittest.TestCase):
         self.assertEqual(d.unpack(None), "VAL1")
 
 class TestLru(unittest.TestCase):
-    def setUp(self):
-        pass
 
     def test_pack(self):
-        pass
+        """Test packing lru types."""
+        l = kattypes.Lru()
+        self.assertEqual(l.pack(kattypes.Lru.LRU_NOMINAL), "nominal")
+        self.assertEqual(l.pack(kattypes.Lru.LRU_ERROR), "error")
+        self.assertRaises(ValueError, l.pack, None)
+        self.assertRaises(ValueError, l.pack, 5)
+        self.assertRaises(ValueError, l.pack, "aaa")
+
+        l = kattypes.Lru(default=kattypes.Lru.LRU_NOMINAL)
+        self.assertEqual(l.pack(None), "nominal")
+
+    def test_unpack(self):
+        """Test unpacking lru types."""
+        l = kattypes.Lru()
+        self.assertEqual(l.unpack("nominal"), kattypes.Lru.LRU_NOMINAL)
+        self.assertEqual(l.unpack("error"), kattypes.Lru.LRU_ERROR)
+        self.assertRaises(ValueError, l.unpack, "aaa")
+        self.assertRaises(ValueError, l.unpack, None)
+
+        l = kattypes.Lru(default=kattypes.Lru.LRU_NOMINAL)
+        self.assertEqual(l.unpack(None), kattypes.Lru.LRU_NOMINAL)
 
 class TestTimestamp(unittest.TestCase):
-    def setUp(self):
-        pass
 
     def test_pack(self):
-        pass
+        """Test packing timestamps."""
+        t = kattypes.Timestamp()
+        self.assertEqual(t.pack(1235475381.6966901), "1235475381696")
+        self.assertRaises(ValueError, t.pack, "a")
+        self.assertRaises(ValueError, t.pack, None)
+
+        t = kattypes.Timestamp(default=1235475793.0324881)
+        self.assertEqual(t.pack(None), "1235475793032")
+
+    def test_unpack(self):
+        """Test unpacking timestamps."""
+        t = kattypes.Timestamp()
+        self.assertEqual(t.unpack("1235475381696"), 1235475381.6960001)
+        self.assertRaises(ValueError, t.unpack, "a")
+        self.assertRaises(ValueError, t.unpack, None)
+
+        t = kattypes.Int(default=1235475793.0324881)
+        self.assertEqual(t.unpack(None), 1235475793.0324881)
