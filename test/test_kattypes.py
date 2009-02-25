@@ -172,9 +172,28 @@ class TestTimestamp(unittest.TestCase):
         self.assertEqual(t.unpack(None), 1235475793.0324881)
 
 class TestDevice(object):
-    @kattypes.request((kattypes.Discrete(("ok",)),),kattypes.Int(min=1,max=3),kattypes.Discrete(("on","off")),kattypes.Bool())
+
+    @kattypes.request(
+        (   kattypes.Discrete(("ok",)),
+            kattypes.Int(min=1,max=3),
+            kattypes.Discrete(("on","off")),
+            kattypes.Bool()),
+        kattypes.Int(min=1,max=3),
+        kattypes.Discrete(("on","off")),
+        kattypes.Bool())
     def request_one(self, i, d, b):
-        return ("ok",)
+        return ("ok", i, d, b)
+
+    @kattypes.request(
+        (   kattypes.Discrete(("ok",)),
+            kattypes.Int(min=1,max=3),
+            kattypes.Discrete(("on","off")),
+            kattypes.Bool()),
+        kattypes.Int(min=1,max=3,default=2),
+        kattypes.Discrete(("on","off"),default="off"),
+        kattypes.Bool(default=True))
+    def request_two(self, i, d, b):
+        return ("ok", i, d, b)
 
 
 class TestDecorator(unittest.TestCase):
@@ -184,9 +203,21 @@ class TestDecorator(unittest.TestCase):
     def test_request_one(self):
         """Test request with no defaults."""
         sock = ""
-        self.assertEqual(str(self.device.request_one(sock, Message.request("one", "2", "on", "0"))), "!one ok")
+        self.assertEqual(str(self.device.request_one(sock, Message.request("one", "2", "on", "0"))), "!one ok 2 on 0")
         self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "4", "on", "0"))
         self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "dsfg", "0"))
         self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "on", "3"))
 
         self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "on"))
+
+    def test_request_two(self):
+        """Test request with defaults."""
+        sock = ""
+        self.assertEqual(str(self.device.request_two(sock, Message.request("one", "2", "on", "0"))), "!one ok 2 on 0")
+        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("one", "4", "on", "0"))
+        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("one", "2", "dsfg", "0"))
+        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("one", "2", "on", "3"))
+
+        self.assertEqual(str(self.device.request_two(sock, Message.request("one", "2", "on"))), "!one ok 2 on 1")
+        self.assertEqual(str(self.device.request_two(sock, Message.request("one", "2"))), "!one ok 2 off 1")
+        self.assertEqual(str(self.device.request_two(sock, Message.request("one"))), "!one ok 2 off 1")
