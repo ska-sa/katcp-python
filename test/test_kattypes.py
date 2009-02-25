@@ -98,14 +98,31 @@ class TestBool(unittest.TestCase):
         self.assertRaises(ValueError, b.unpack, None)
 
         b = kattypes.Bool(default=True)
-        self.assertAlmostEqual(b.unpack(None), True)
+        self.assertEqual(b.unpack(None), True)
 
 class TestDiscrete(unittest.TestCase):
-    def setUp(self):
-        pass
 
     def test_pack(self):
-        pass
+        """Test packing discrete types."""
+        d = kattypes.Discrete(("VAL1", "VAL2"))
+        self.assertEqual(d.pack("VAL1"), "VAL1")
+        self.assertEqual(d.pack("VAL2"), "VAL2")
+        self.assertRaises(ValueError, d.pack, "VAL3")
+        self.assertRaises(ValueError, d.pack, None)
+
+        d = kattypes.Discrete(("VAL1", "VAL2"), default="VAL1")
+        self.assertEqual(d.pack(None), "VAL1")
+
+    def test_unpack(self):
+        """Test unpacking discrete types."""
+        d = kattypes.Discrete(("VAL1", "VAL2"))
+        self.assertEqual(d.unpack("VAL1"), "VAL1")
+        self.assertEqual(d.unpack("VAL2"), "VAL2")
+        self.assertRaises(ValueError, d.unpack, "VAL3")
+        self.assertRaises(ValueError, d.unpack, None)
+
+        d = kattypes.Discrete(("VAL1", "VAL2"), default="VAL1")
+        self.assertEqual(d.unpack(None), "VAL1")
 
 class TestLru(unittest.TestCase):
     def setUp(self):

@@ -95,14 +95,15 @@ class Discrete(KatcpType):
     encode = staticmethod(lambda value: value)
     decode = staticmethod(lambda value: value)
 
-    def __init__(self, default=None, *args):
+    def __init__(self, values, default=None):
         super(Discrete, self).__init__(default=default)
-        self._valid_values = set(args)
+        self._values = list(values) # just to preserve ordering
+        self._valid_values = set(values)
 
     def check(self, value):
         if not value in self._valid_values:
             raise ValueError("Discrete value '%s' is not one of %s"
-                % (value, list(self._valid_values)))
+                % (value, list(self._values)))
 
 
 class Lru(KatcpType):
