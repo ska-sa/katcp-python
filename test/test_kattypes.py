@@ -1,7 +1,7 @@
 """Tests for the kattypes module."""
 
 import unittest
-from katcp import kattypes
+from katcp import kattypes, Message
 
 class TestInt(unittest.TestCase):
 
@@ -170,3 +170,23 @@ class TestTimestamp(unittest.TestCase):
 
         t = kattypes.Int(default=1235475793.0324881)
         self.assertEqual(t.unpack(None), 1235475793.0324881)
+
+class TestDevice(object):
+    @kattypes.request((kattypes.Discrete(("ok",)),),kattypes.Int(min=1,max=3),kattypes.Discrete(("on","off")),kattypes.Bool())
+    def request_one(self, i, d, b):
+        return ("ok",)
+
+
+class TestDecorator(unittest.TestCase):
+    def setUp(self):
+        self.device = TestDevice()
+
+    def test_request_one(self):
+        """Test request with no defaults."""
+        sock = ""
+        self.assertEqual(str(self.device.request_one(sock, Message.request("one", "2", "on", "0"))), "!one ok")
+        self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "4", "on", "0"))
+        self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "dsfg", "0"))
+        self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "on", "3"))
+
+        self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "on"))
