@@ -253,3 +253,5 @@ class TestDecorator(unittest.TestCase):
 
     def test_request_four(self):
         """Test request with no defaults and no parameters / return parameters"""
+        sock = ""
+        self.assertEqual(str(self.device.request_four(sock, Message.request("four"))), "!four ok")

@@ -216,7 +216,7 @@ def inform(*types):
 
         def raw_handler(self, sock, msg):
             args = unpack_types(types, msg.arguments)
-            return handler(sock, *args)
+            return handler(self, sock, *args)
 
         return raw_handler
 

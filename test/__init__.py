@@ -13,7 +13,7 @@ except ImportError:
 def suite():
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
-    suite.addTests(loader.loadTestsFromModule(test_katcp))
+    #suite.addTests(loader.loadTestsFromModule(test_katcp))
     suite.addTests(loader.loadTestsFromModule(test_kattypes))
     if ply is not None:
         suite.addTests(loader.loadTestsFromModule(test_katcp_bnf))
