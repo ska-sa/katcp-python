@@ -41,7 +41,6 @@ class KatcpType(object):
 
 class Int(KatcpType):
     name = "integer"
-    initial_value = 0
     encode = staticmethod(lambda value: "%d" % (value,))
     decode = staticmethod(lambda value: int(value))
 
@@ -61,7 +60,6 @@ class Int(KatcpType):
 
 class Float(KatcpType):
     name = "float"
-    initial_value = 0.0
     encode = staticmethod(lambda value: "%e" % (value,))
     decode = staticmethod(lambda value: float(value))
 
@@ -81,7 +79,6 @@ class Float(KatcpType):
 
 class Bool(KatcpType):
     name = "boolean"
-    initial_value = False
     encode = staticmethod(lambda value: value and "1" or "0")
 
     @staticmethod
@@ -93,7 +90,6 @@ class Bool(KatcpType):
 
 class Discrete(KatcpType):
     name = "discrete"
-    initial_value = "unknown"
     encode = staticmethod(lambda value: value)
     decode = staticmethod(lambda value: value)
 
@@ -125,7 +121,6 @@ class Lru(KatcpType):
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
 
     name = "lru"
-    initial_value = LRU_NOMINAL
 
     @staticmethod
     def encode(value):
@@ -139,6 +134,11 @@ class Lru(KatcpType):
             raise ValueError("Lru value must be 'nominal' or 'error'")
         return Lru.LRU_CONSTANTS[value]
 
+class Str(KatcpType):
+    name = "string"
+    encode = staticmethod(lambda value: str(value))
+    decode = staticmethod(lambda value: str(value))
+
 
 class Timestamp(KatcpType):
 
@@ -146,7 +146,6 @@ class Timestamp(KatcpType):
     # to Python float timestamp (in s)
 
     name = "timestamp"
-    initial_value = 0.0
     encode = staticmethod(lambda value: "%i" % (int(float(value)*1000),))
 
     @staticmethod
@@ -154,25 +153,54 @@ class Timestamp(KatcpType):
         return float(value)/1000
 
 
-## Request and inform method decorators
+## Request, return_reply and inform method decorators
 #
 
-def request(ret=None, *types):
+def request(*types):
     """Decorator for request handler methods.
 
-       The method being decorated should take arguments matching
-       the list of types. The decorator will unpack the request
-       message into the arguments. The method should then return an
-       iterable of results values, which the decorator will pack into
-       a reply message using the list of types specified in ret.
+       The method being decorated should take a sock argument followed
+       by arguments matching the list of types. The decorator will
+       unpack the request message into the arguments.
        """
     def decorator(handler):
 
         def raw_handler(self, sock, msg):
             args = unpack_types(types, msg.arguments)
-            reply_args = handler(sock, *args)
-            return katcp.Message.reply(msg.name, *pack_types(ret, reply_args))
+            return handler(self, sock, *args)
 
+        raw_handler.__name__ = handler.__name__
+        raw_handler.__doc__ = handler.__doc__
+        return raw_handler
+
+    return decorator
+
+def return_reply(*types):
+    """Decorator for returning replies from request handler methods
+
+       The method being decorated should return an iterable of result
+       values. If the first value is 'ok', the decorator will check the
+       remaining values against the specified list of types. If the
+       first value is 'failed' or 'error', there must be only one
+       remaining parameter, and it must be a string describing the
+       failure or error  In both cases, the decorator will pack the
+       values into a reply message.
+    """
+
+    def decorator(handler):
+        def raw_handler(self, *args):
+            if not handler.__name__.startswith("request_"):
+                raise ValueError("This decorator can only be used on a katcp request.")
+            msgname = handler.__name__[8:].replace("_","-")
+            reply_args = handler(self, *args)
+            status = reply_args[0]
+            if status in ["failed", "error"]:
+                return katcp.Message.reply(msgname, *pack_types((Str(),Str())))
+            if status == "ok":
+                return katcp.Message.reply(msgname, *pack_types((Str(),) + types, reply_args))
+            raise ValueError("First returned value must be 'ok', 'failed' or 'error'.")
+        raw_handler.__name__ = handler.__name__
+        raw_handler.__doc__ = handler.__doc__
         return raw_handler
 
     return decorator

@@ -2,7 +2,7 @@
 
 import unittest
 from katcp import Message
-from katcp.kattypes import request, Bool, Discrete, Float, Int, Lru, Timestamp
+from katcp.kattypes import request, return_reply, Bool, Discrete, Float, Int, Lru, Timestamp, Str
 
 class TestInt(unittest.TestCase):
 
@@ -172,29 +172,47 @@ class TestTimestamp(unittest.TestCase):
         t = Int(default=1235475793.0324881)
         self.assertEqual(t.unpack(None), 1235475793.0324881)
 
+class TestStr(unittest.TestCase):
+
+    def test_pack(self):
+        """Test packing strings."""
+        s = Str()
+        self.assertEqual(s.pack("adsasdasd"), "adsasdasd")
+        self.assertRaises(ValueError, s.pack, None)
+
+        s = Str(default="something")
+        self.assertEqual(s.pack(None), "something")
+
+    def test_unpack(self):
+        """Test unpacking strings."""
+        s = Str()
+        self.assertEqual(s.unpack("adsasdasd"), "adsasdasd")
+        self.assertRaises(ValueError, s.unpack, None)
+
+        s = Str(default="something")
+        self.assertEqual(s.unpack(None), "something")
+
 class TestDevice(object):
 
-    @request(
-        (   Discrete(("ok",)),
-            Int(min=1,max=3),
-            Discrete(("on","off")),
-            Bool()),
-        Int(min=1,max=3),
-        Discrete(("on","off")),
-        Bool())
-    def request_one(self, i, d, b):
+    @request(Int(min=1,max=3), Discrete(("on","off")), Bool())
+    @return_reply(Int(min=1,max=3),Discrete(("on","off")),Bool())
+    def request_one(self, sock, i, d, b):
         return ("ok", i, d, b)
 
-    @request(
-        (   Discrete(("ok",)),
-            Int(min=1,max=3),
-            Discrete(("on","off")),
-            Bool()),
-        Int(min=1,max=3,default=2),
-        Discrete(("on","off"),default="off"),
-        Bool(default=True))
-    def request_two(self, i, d, b):
+    @request(Int(min=1,max=3,default=2), Discrete(("on","off"),default="off"), Bool(default=True))
+    @return_reply(Int(min=1,max=3),Discrete(("on","off")),Bool())
+    def request_two(self, sock, i, d, b):
         return ("ok", i, d, b)
+
+    @return_reply(Int(min=1,max=3),Discrete(("on","off")),Bool())
+    @request(Int(min=1,max=3), Discrete(("on","off")), Bool())
+    def request_three(self, sock, i, d, b):
+        return ("ok", i, d, b)
+
+    @return_reply()
+    @request()
+    def request_four(self, sock):
+        return ["ok"]
 
 
 class TestDecorator(unittest.TestCase):
@@ -214,11 +232,24 @@ class TestDecorator(unittest.TestCase):
     def test_request_two(self):
         """Test request with defaults."""
         sock = ""
-        self.assertEqual(str(self.device.request_two(sock, Message.request("one", "2", "on", "0"))), "!one ok 2 on 0")
-        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("one", "4", "on", "0"))
-        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("one", "2", "dsfg", "0"))
-        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("one", "2", "on", "3"))
+        self.assertEqual(str(self.device.request_two(sock, Message.request("two", "2", "on", "0"))), "!two ok 2 on 0")
+        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("two", "4", "on", "0"))
+        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("two", "2", "dsfg", "0"))
+        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("two", "2", "on", "3"))
 
-        self.assertEqual(str(self.device.request_two(sock, Message.request("one", "2", "on"))), "!one ok 2 on 1")
-        self.assertEqual(str(self.device.request_two(sock, Message.request("one", "2"))), "!one ok 2 off 1")
-        self.assertEqual(str(self.device.request_two(sock, Message.request("one"))), "!one ok 2 off 1")
+        self.assertEqual(str(self.device.request_two(sock, Message.request("two", "2", "on"))), "!two ok 2 on 1")
+        self.assertEqual(str(self.device.request_two(sock, Message.request("two", "2"))), "!two ok 2 off 1")
+        self.assertEqual(str(self.device.request_two(sock, Message.request("two"))), "!two ok 2 off 1")
+
+    def test_request_three(self):
+        """Test request with no defaults and decorators in reverse order."""
+        sock = ""
+        self.assertEqual(str(self.device.request_three(sock, Message.request("three", "2", "on", "0"))), "!three ok 2 on 0")
+        self.assertRaises(ValueError, self.device.request_three, sock, Message.request("three", "4", "on", "0"))
+        self.assertRaises(ValueError, self.device.request_three, sock, Message.request("three", "2", "dsfg", "0"))
+        self.assertRaises(ValueError, self.device.request_three, sock, Message.request("three", "2", "on", "3"))
+
+        self.assertRaises(ValueError, self.device.request_three, sock, Message.request("three", "2", "on"))
+
+    def test_request_four(self):
+        """Test request with no defaults and no parameters / return parameters"""
