@@ -44,7 +44,7 @@ class Int(KatcpType):
     encode = staticmethod(lambda value: "%d" % (value,))
     decode = staticmethod(lambda value: int(value))
 
-    def __init__(self, max=None, min=None, default=None):
+    def __init__(self, min=None, max=None, default=None):
         super(Int, self).__init__(default=default)
         self._min = min
         self._max = max
@@ -63,7 +63,7 @@ class Float(KatcpType):
     encode = staticmethod(lambda value: "%e" % (value,))
     decode = staticmethod(lambda value: float(value))
 
-    def __init__(self, max=None, min=None, default=None):
+    def __init__(self, min=None, max=None, default=None):
         super(Float, self).__init__(default=default)
         self._min = min
         self._max = max
@@ -201,11 +201,11 @@ def return_reply(*types):
             msgname = handler.__name__[8:].replace("_","-")
             reply_args = handler(self, *args)
             status = reply_args[0]
-            if status in ["fail", "error"]:
+            if status == "fail":
                 return katcp.Message.reply(msgname, *pack_types((Str(),Str()), reply_args))
             if status == "ok":
                 return katcp.Message.reply(msgname, *pack_types((Str(),) + types, reply_args))
-            raise ValueError("First returned value must be 'ok', 'fail' or 'error'.")
+            raise ValueError("First returned value must be 'ok' or 'fail'.")
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
         return raw_handler
