@@ -215,7 +215,7 @@ class TestDevice(object):
         return ["ok"]
 
     @inform(Int(min=1,max=3), Discrete(("on","off")), Bool())
-    def request_five(self, sock, i, d, b):
+    def inform_one(self, sock, i, d, b):
         pass
 
 
@@ -260,7 +260,7 @@ class TestDecorator(unittest.TestCase):
         sock = ""
         self.assertEqual(str(self.device.request_four(sock, Message.request("four"))), "!four ok")
 
-    def test_request_five(self):
+    def test_inform_one(self):
         """Test inform with no defaults."""
         sock = ""
-        self.assertEqual(self.device.request_five(sock, Message.request("five", "2", "on", "0")), None)
+        self.assertEqual(self.device.inform_one(sock, Message.inform("one", "2", "on", "0")), None)
