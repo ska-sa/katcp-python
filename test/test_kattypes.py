@@ -197,6 +197,8 @@ class TestDevice(object):
     @request(Int(min=1,max=3), Discrete(("on","off")), Bool())
     @return_reply(Int(min=1,max=3),Discrete(("on","off")),Bool())
     def request_one(self, sock, i, d, b):
+        if i == 3:
+            return ("fail", "I failed!")
         return ("ok", i, d, b)
 
     @request(Int(min=1,max=3,default=2), Discrete(("on","off"),default="off"), Bool(default=True))
@@ -232,6 +234,8 @@ class TestDecorator(unittest.TestCase):
         self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "on", "3"))
 
         self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "on"))
+
+        self.assertEqual(str(self.device.request_one(sock, Message.request("one", "3", "on", "0"))), "!one fail I\\_failed!")
 
     def test_request_two(self):
         """Test request with defaults."""

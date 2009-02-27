@@ -187,9 +187,9 @@ def return_reply(*types):
 
        The method being decorated should return an iterable of result
        values. If the first value is 'ok', the decorator will check the
-       remaining values against the specified list of types. If the
-       first value is 'failed' or 'error', there must be only one
-       remaining parameter, and it must be a string describing the
+       remaining values against the specified list of types (if any).
+       If the first value is 'fail' or 'error', there must be only
+       one remaining parameter, and it must be a string describing the
        failure or error  In both cases, the decorator will pack the
        values into a reply message.
     """
@@ -201,11 +201,11 @@ def return_reply(*types):
             msgname = handler.__name__[8:].replace("_","-")
             reply_args = handler(self, *args)
             status = reply_args[0]
-            if status in ["failed", "error"]:
-                return katcp.Message.reply(msgname, *pack_types((Str(),Str())))
+            if status in ["fail", "error"]:
+                return katcp.Message.reply(msgname, *pack_types((Str(),Str()), reply_args))
             if status == "ok":
                 return katcp.Message.reply(msgname, *pack_types((Str(),) + types, reply_args))
-            raise ValueError("First returned value must be 'ok', 'failed' or 'error'.")
+            raise ValueError("First returned value must be 'ok', 'fail' or 'error'.")
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
         return raw_handler
