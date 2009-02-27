@@ -2,7 +2,7 @@
 
 import unittest
 from katcp import Message
-from katcp.kattypes import request, return_reply, Bool, Discrete, Float, Int, Lru, Timestamp, Str
+from katcp.kattypes import request, inform, return_reply, Bool, Discrete, Float, Int, Lru, Timestamp, Str
 
 class TestInt(unittest.TestCase):
 
@@ -214,6 +214,10 @@ class TestDevice(object):
     def request_four(self, sock):
         return ["ok"]
 
+    @inform(Int(min=1,max=3), Discrete(("on","off")), Bool())
+    def request_five(self, sock, i, d, b):
+        pass
+
 
 class TestDecorator(unittest.TestCase):
     def setUp(self):
@@ -255,3 +259,8 @@ class TestDecorator(unittest.TestCase):
         """Test request with no defaults and no parameters / return parameters"""
         sock = ""
         self.assertEqual(str(self.device.request_four(sock, Message.request("four"))), "!four ok")
+
+    def test_request_five(self):
+        """Test inform with no defaults."""
+        sock = ""
+        self.assertEqual(self.device.request_five(sock, Message.request("five", "2", "on", "0")), None)

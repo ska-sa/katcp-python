@@ -175,6 +175,13 @@ def request(*types):
 
     return decorator
 
+inform = request
+inform.__doc__ = """Decorator for inform handler methods.
+
+       This is currently identical to the request decorator, and is
+       thus an alias.
+       """
+
 def return_reply(*types):
     """Decorator for returning replies from request handler methods
 
@@ -201,23 +208,6 @@ def return_reply(*types):
             raise ValueError("First returned value must be 'ok', 'failed' or 'error'.")
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
-        return raw_handler
-
-    return decorator
-
-def inform(*types):
-    """Decorator for inform handler methods.
-
-       The method being decorated should take arguments matching
-       the list of types. The decorator will unpack the request
-       message into the arguments.
-       """
-    def decorator(handler):
-
-        def raw_handler(self, sock, msg):
-            args = unpack_types(types, msg.arguments)
-            return handler(self, sock, *args)
-
         return raw_handler
 
     return decorator
