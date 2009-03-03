@@ -1,7 +1,7 @@
 """Tests for the kattypes module."""
 
 import unittest
-from katcp import Message
+from katcp import Message, FailReply
 from katcp.kattypes import request, inform, return_reply, Bool, Discrete, Float, Int, Lru, Timestamp, Str
 
 class TestInt(unittest.TestCase):
@@ -28,14 +28,14 @@ class TestInt(unittest.TestCase):
         i = Int()
         self.assertEqual(i.unpack("5"), 5)
         self.assertEqual(i.unpack("-5"), -5)
-        self.assertRaises(ValueError, i.unpack, "a")
-        self.assertRaises(ValueError, i.unpack, None)
+        self.assertRaises(FailReply, i.unpack, "a")
+        self.assertRaises(FailReply, i.unpack, None)
 
         i = Int(min=5, max=6)
         self.assertEqual(i.unpack("5"), 5)
         self.assertEqual(i.unpack("6"), 6)
-        self.assertRaises(ValueError, i.unpack, "4")
-        self.assertRaises(ValueError, i.unpack, "7")
+        self.assertRaises(FailReply, i.unpack, "4")
+        self.assertRaises(FailReply, i.unpack, "7")
 
         i = Int(default=11)
         self.assertEqual(i.unpack(None), 11)
@@ -64,14 +64,14 @@ class TestFloat(unittest.TestCase):
         f = Float()
         self.assertAlmostEqual(f.unpack("5.0"), 5.0)
         self.assertAlmostEqual(f.unpack("-5.0"), -5.0)
-        self.assertRaises(ValueError, f.unpack, "a")
-        self.assertRaises(ValueError, f.unpack, None)
+        self.assertRaises(FailReply, f.unpack, "a")
+        self.assertRaises(FailReply, f.unpack, None)
 
         f = Float(min=5.0, max=6.0)
         self.assertAlmostEqual(f.unpack("5.0"), 5.0)
         self.assertAlmostEqual(f.unpack("6.0"), 6.0)
-        self.assertRaises(ValueError, f.unpack, "4.5")
-        self.assertRaises(ValueError, f.unpack, "6.5")
+        self.assertRaises(FailReply, f.unpack, "4.5")
+        self.assertRaises(FailReply, f.unpack, "6.5")
 
         f = Float(default=11.0)
         self.assertAlmostEqual(f.unpack(None), 11.0)
@@ -95,8 +95,8 @@ class TestBool(unittest.TestCase):
         b = Bool()
         self.assertEqual(b.unpack("1"), True)
         self.assertEqual(b.unpack("0"), False)
-        self.assertRaises(ValueError, b.unpack, "2")
-        self.assertRaises(ValueError, b.unpack, None)
+        self.assertRaises(FailReply, b.unpack, "2")
+        self.assertRaises(FailReply, b.unpack, None)
 
         b = Bool(default=True)
         self.assertEqual(b.unpack(None), True)
@@ -119,8 +119,8 @@ class TestDiscrete(unittest.TestCase):
         d = Discrete(("VAL1", "VAL2"))
         self.assertEqual(d.unpack("VAL1"), "VAL1")
         self.assertEqual(d.unpack("VAL2"), "VAL2")
-        self.assertRaises(ValueError, d.unpack, "VAL3")
-        self.assertRaises(ValueError, d.unpack, None)
+        self.assertRaises(FailReply, d.unpack, "VAL3")
+        self.assertRaises(FailReply, d.unpack, None)
 
         d = Discrete(("VAL1", "VAL2"), default="VAL1")
         self.assertEqual(d.unpack(None), "VAL1")
@@ -144,8 +144,8 @@ class TestLru(unittest.TestCase):
         l = Lru()
         self.assertEqual(l.unpack("nominal"), Lru.LRU_NOMINAL)
         self.assertEqual(l.unpack("error"), Lru.LRU_ERROR)
-        self.assertRaises(ValueError, l.unpack, "aaa")
-        self.assertRaises(ValueError, l.unpack, None)
+        self.assertRaises(FailReply, l.unpack, "aaa")
+        self.assertRaises(FailReply, l.unpack, None)
 
         l = Lru(default=Lru.LRU_NOMINAL)
         self.assertEqual(l.unpack(None), Lru.LRU_NOMINAL)
@@ -166,8 +166,8 @@ class TestTimestamp(unittest.TestCase):
         """Test unpacking timestamps."""
         t = Timestamp()
         self.assertEqual(t.unpack("1235475381696"), 1235475381.6960001)
-        self.assertRaises(ValueError, t.unpack, "a")
-        self.assertRaises(ValueError, t.unpack, None)
+        self.assertRaises(FailReply, t.unpack, "a")
+        self.assertRaises(FailReply, t.unpack, None)
 
         t = Int(default=1235475793.0324881)
         self.assertEqual(t.unpack(None), 1235475793.0324881)
@@ -187,18 +187,22 @@ class TestStr(unittest.TestCase):
         """Test unpacking strings."""
         s = Str()
         self.assertEqual(s.unpack("adsasdasd"), "adsasdasd")
-        self.assertRaises(ValueError, s.unpack, None)
+        self.assertRaises(FailReply, s.unpack, None)
 
         s = Str(default="something")
         self.assertEqual(s.unpack(None), "something")
 
 class TestDevice(object):
 
-    @request(Int(min=1,max=3), Discrete(("on","off")), Bool())
-    @return_reply(Int(min=1,max=3),Discrete(("on","off")),Bool())
+    @request(Int(min=1,max=10), Discrete(("on","off")), Bool())
+    @return_reply(Int(min=1,max=10),Discrete(("on","off")),Bool())
     def request_one(self, sock, i, d, b):
         if i == 3:
             return ("fail", "I failed!")
+        if i == 5:
+            return ("bananas", "This should never be sent")
+        if i == 6:
+            return ("ok", i, d, b, "extra parameter")
         return ("ok", i, d, b)
 
     @request(Int(min=1,max=3,default=2), Discrete(("on","off"),default="off"), Bool(default=True))
@@ -229,21 +233,24 @@ class TestDecorator(unittest.TestCase):
         """Test request with no defaults."""
         sock = ""
         self.assertEqual(str(self.device.request_one(sock, Message.request("one", "2", "on", "0"))), "!one ok 2 on 0")
-        self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "4", "on", "0"))
-        self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "dsfg", "0"))
-        self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "on", "3"))
+        self.assertRaises(FailReply, self.device.request_one, sock, Message.request("one", "14", "on", "0"))
+        self.assertRaises(FailReply, self.device.request_one, sock, Message.request("one", "2", "dsfg", "0"))
+        self.assertRaises(FailReply, self.device.request_one, sock, Message.request("one", "2", "on", "3"))
+        self.assertRaises(FailReply, self.device.request_one, sock, Message.request("one", "2", "on", "0", "3"))
 
-        self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "2", "on"))
+        self.assertRaises(FailReply, self.device.request_one, sock, Message.request("one", "2", "on"))
 
         self.assertEqual(str(self.device.request_one(sock, Message.request("one", "3", "on", "0"))), "!one fail I\\_failed!")
+        self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "5", "on", "0"))
+        self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "6", "on", "0"))
 
     def test_request_two(self):
         """Test request with defaults."""
         sock = ""
         self.assertEqual(str(self.device.request_two(sock, Message.request("two", "2", "on", "0"))), "!two ok 2 on 0")
-        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("two", "4", "on", "0"))
-        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("two", "2", "dsfg", "0"))
-        self.assertRaises(ValueError, self.device.request_two, sock, Message.request("two", "2", "on", "3"))
+        self.assertRaises(FailReply, self.device.request_two, sock, Message.request("two", "4", "on", "0"))
+        self.assertRaises(FailReply, self.device.request_two, sock, Message.request("two", "2", "dsfg", "0"))
+        self.assertRaises(FailReply, self.device.request_two, sock, Message.request("two", "2", "on", "3"))
 
         self.assertEqual(str(self.device.request_two(sock, Message.request("two", "2", "on"))), "!two ok 2 on 1")
         self.assertEqual(str(self.device.request_two(sock, Message.request("two", "2"))), "!two ok 2 off 1")
@@ -253,11 +260,11 @@ class TestDecorator(unittest.TestCase):
         """Test request with no defaults and decorators in reverse order."""
         sock = ""
         self.assertEqual(str(self.device.request_three(sock, Message.request("three", "2", "on", "0"))), "!three ok 2 on 0")
-        self.assertRaises(ValueError, self.device.request_three, sock, Message.request("three", "4", "on", "0"))
-        self.assertRaises(ValueError, self.device.request_three, sock, Message.request("three", "2", "dsfg", "0"))
-        self.assertRaises(ValueError, self.device.request_three, sock, Message.request("three", "2", "on", "3"))
+        self.assertRaises(FailReply, self.device.request_three, sock, Message.request("three", "4", "on", "0"))
+        self.assertRaises(FailReply, self.device.request_three, sock, Message.request("three", "2", "dsfg", "0"))
+        self.assertRaises(FailReply, self.device.request_three, sock, Message.request("three", "2", "on", "3"))
 
-        self.assertRaises(ValueError, self.device.request_three, sock, Message.request("three", "2", "on"))
+        self.assertRaises(FailReply, self.device.request_three, sock, Message.request("three", "2", "on"))
 
     def test_request_four(self):
         """Test request with no defaults and no parameters / return parameters"""

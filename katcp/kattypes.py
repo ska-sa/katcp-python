@@ -1,4 +1,5 @@
 import katcp
+import inspect
 
 """Utilities for dealing with KATCP types.
    """
@@ -16,6 +17,8 @@ class KatcpType(object):
            @param default Default value.
            """
         self._default = default
+        self._name = None
+        self._position = None
 
     def get_default(self):
         if self._default is None:
@@ -32,15 +35,24 @@ class KatcpType(object):
         return self.encode(value)
 
     def unpack(self, packed_value):
-        if packed_value is None:
-            return self.get_default()
-        value = self.decode(packed_value)
-        self.check(value)
+        try:
+            if packed_value is None:
+                return self.get_default()
+            value = self.decode(packed_value)
+            self.check(value)
+        except (ValueError, TypeError), e:
+            # Convert these exceptions to a failure reply with information identifying the parameter
+            raise self.error(e)
         return value
+
+    def error(self, message):
+        # return the parameter position and name if they are known
+        if self._position and self._name:
+            return katcp.FailReply("Error in parameter %s (%s): %s" % (self._position, self._name, message))
+        return katcp.FailReply(message)
 
 
 class Int(KatcpType):
-    name = "integer"
     encode = staticmethod(lambda value: "%d" % (value,))
     decode = staticmethod(lambda value: int(value))
 
@@ -59,7 +71,6 @@ class Int(KatcpType):
 
 
 class Float(KatcpType):
-    name = "float"
     encode = staticmethod(lambda value: "%e" % (value,))
     decode = staticmethod(lambda value: float(value))
 
@@ -78,7 +89,6 @@ class Float(KatcpType):
 
 
 class Bool(KatcpType):
-    name = "boolean"
     encode = staticmethod(lambda value: value and "1" or "0")
 
     @staticmethod
@@ -89,7 +99,6 @@ class Bool(KatcpType):
 
 
 class Discrete(KatcpType):
-    name = "discrete"
     encode = staticmethod(lambda value: value)
     decode = staticmethod(lambda value: value)
 
@@ -120,8 +129,6 @@ class Lru(KatcpType):
     ## @brief Mapping from LRU value name to LRU value constant.
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
 
-    name = "lru"
-
     @staticmethod
     def encode(value):
         if value not in Lru.LRU_VALUES:
@@ -135,7 +142,6 @@ class Lru(KatcpType):
         return Lru.LRU_CONSTANTS[value]
 
 class Str(KatcpType):
-    name = "string"
     encode = staticmethod(lambda value: str(value))
     decode = staticmethod(lambda value: str(value))
 
@@ -145,7 +151,6 @@ class Timestamp(KatcpType):
     # TODO: Convert from KATCP integer timestamp (in ms)
     # to Python float timestamp (in s)
 
-    name = "timestamp"
     encode = staticmethod(lambda value: "%i" % (int(float(value)*1000),))
 
     @staticmethod
@@ -164,9 +169,17 @@ def request(*types):
        unpack the request message into the arguments.
        """
     def decorator(handler):
+        argnames = []
+        orig_argnames = getattr(handler, "_orig_argnames", None)
+        if orig_argnames:
+            # If this decorator is on the outside, get the parameter names which have been preserved by the other decorator
+            argnames = orig_argnames
+        else:
+            # Introspect the parameter names.  The first two are self and sock.
+            argnames = inspect.getargspec(handler)[0][2:]
 
         def raw_handler(self, sock, msg):
-            args = unpack_types(types, msg.arguments)
+            args = unpack_types(types, msg.arguments, argnames)
             return handler(self, sock, *args)
 
         raw_handler.__name__ = handler.__name__
@@ -195,10 +208,10 @@ def return_reply(*types):
     """
 
     def decorator(handler):
+        if not handler.__name__.startswith("request_"):
+            raise ValueError("This decorator can only be used on a katcp request.")
+        msgname = handler.__name__[8:].replace("_","-")
         def raw_handler(self, *args):
-            if not handler.__name__.startswith("request_"):
-                raise ValueError("This decorator can only be used on a katcp request.")
-            msgname = handler.__name__[8:].replace("_","-")
             reply_args = handler(self, *args)
             status = reply_args[0]
             if status == "fail":
@@ -208,17 +221,28 @@ def return_reply(*types):
             raise ValueError("First returned value must be 'ok' or 'fail'.")
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
+        # We must preserve the original function parameter names for the other decorator in case this decorator is on the inside
+        # Introspect the parameter names.  The first two are self and sock.
+        raw_handler._orig_argnames = inspect.getargspec(handler)[0][2:]
         return raw_handler
 
     return decorator
 
-def unpack_types(types, args):
+def unpack_types(types, args, argnames):
     """Parse arguments according to types list.
        """
+
     if len(types) < len(args):
-        raise ValueError("Too many arguments to unpack.")
+        raise katcp.FailReply("Too many parameters given.")
+
+    for i in range(len(types)):
+        types[i]._position = i+1
+        if i < len(argnames):
+            types[i]._name = argnames[i]
+
     # if len(args) < len(types) this passes in None for missing args
     return map(lambda ktype, arg: ktype.unpack(arg), types, args)
+
 
 def pack_types(types, args):
     """Pack arguments according the the types list.

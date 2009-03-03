@@ -665,6 +665,13 @@ class BlockingClient(DeviceClient):
 
         super(BlockingClient, self).handle_inform(msg)
 
+class FailReply(Exception):
+    """A custom exception which, when thrown in a request handler,
+       causes DeviceServerBase to send a fail reply with the specified
+       fail message, bypassing the generic exception handling, which
+       would send a fail reply with a full traceback.
+       """
+    pass
 
 class DeviceServerBase(object):
     """Base class for device servers.
@@ -794,6 +801,10 @@ class DeviceServerBase(object):
                 assert (reply.mtype == Message.REPLY)
                 assert (reply.name == msg.name)
                 self._logger.info("%s OK" % (msg.name,))
+            except FailReply, e:
+                reason = str(e)
+                self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
+                reply = Message.reply(msg.name, "fail", reason)
             # We do want to catch everything that inherits from Exception
             # pylint: disable-msg = W0703
             except Exception:

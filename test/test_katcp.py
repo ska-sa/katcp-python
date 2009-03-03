@@ -255,6 +255,14 @@ class DeviceTestServer(katcp.DeviceServer):
         """A new command."""
         return Message.reply(msg.name, "ok", "param1", "param2")
 
+    def request_raise_exception(self, sock, msg):
+        """A handler which raises an exception."""
+        raise Exception("An exception occurred!")
+
+    def request_raise_fail(self, sock, msg):
+        """A handler which raises a FailReply."""
+        raise katcp.FailReply("There was a problem with your request.")
+
     def handle_message(self, sock, msg):
         self.__msgs.append(msg)
         super(DeviceTestServer, self).handle_message(sock, msg)
@@ -421,11 +429,13 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#help help", ""),
             (r"#help log-level", ""),
             (r"#help new-command", ""),
+            (r"#help raise-exception", ""),
+            (r"#help raise-fail", ""),
             (r"#help restart", ""),
             (r"#help sensor-list", ""),
             (r"#help sensor-sampling", ""),
             (r"#help watchdog", ""),
-            (r"!help ok 8", ""),
+            (r"!help ok 10", ""),
             (r"#help watchdog", ""),
             (r"!help ok 1", ""),
             (r"!help fail", ""),
@@ -487,6 +497,22 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             inform_baz = 2
         assert("bar" not in SortOfOkayServer._request_handlers)
         assert("baz" not in SortOfOkayServer._inform_handlers)
+
+    def test_handler_exceptions(self):
+        """Test handling of failure replies and other exceptions."""
+
+        self.client.request(katcp.Message.request("raise-exception"))
+        self.client.request(katcp.Message.request("raise-fail"))
+
+        time.sleep(0.1)
+
+        msgs = self.client.messages()
+        self._assert_msgs_like(msgs, [
+            (r"#version device_stub-0.1", ""),
+            (r"#build-state name-0.1", ""),
+            (r"!raise-exception fail Traceback", ""),
+            (r"!raise-fail fail There\_was\_a\_problem\_with\_your\_request.", ""),
+        ])
 
     # TODO: add test for inform handlers
     # TODO: update inform pass test
@@ -562,5 +588,5 @@ class TestBlockingClient(unittest.TestCase):
         reply, informs = self.client.blocking_request(
             katcp.Message.request("help"))
         assert reply.name == "help"
-        assert reply.arguments == ["ok", "8"]
+        assert reply.arguments == ["ok", "10"]
         assert len(informs) == int(reply.arguments[1])
