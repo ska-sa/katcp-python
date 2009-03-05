@@ -208,10 +208,12 @@ class TestSensor(unittest.TestCase):
                 timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
         )
         katcp.sampling.SampleNone(None, s)
+        katcp.sampling.SampleAuto(None, s)
         katcp.sampling.SamplePeriod(None, s, 10)
         katcp.sampling.SampleEvent(None, s)
         katcp.sampling.SampleDifferential(None, s, 2)
         self.assertRaises(ValueError, katcp.sampling.SampleNone, None, s, "foo")
+        self.assertRaises(ValueError, katcp.sampling.SampleAuto, None, s, "bar")
         self.assertRaises(ValueError, katcp.sampling.SamplePeriod, None, s)
         self.assertRaises(ValueError, katcp.sampling.SamplePeriod, None, s, "1.5")
         self.assertRaises(ValueError, katcp.sampling.SamplePeriod, None, s, "-1")
@@ -221,6 +223,7 @@ class TestSensor(unittest.TestCase):
         self.assertRaises(ValueError, katcp.sampling.SampleDifferential, None, s, "1.5")
 
         katcp.sampling.SampleStrategy.get_strategy("none", None, s)
+        katcp.sampling.SampleStrategy.get_strategy("auto", None, s)
         katcp.sampling.SampleStrategy.get_strategy("period", None, s, "15")
         katcp.sampling.SampleStrategy.get_strategy("event", None, s)
         katcp.sampling.SampleStrategy.get_strategy("differential", None, s, "2")

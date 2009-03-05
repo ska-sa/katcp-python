@@ -14,11 +14,12 @@ class SampleStrategy(object):
     """Base class for strategies for sampling sensors."""
 
     # Sampling strategy constants
-    NONE, PERIOD, EVENT, DIFFERENTIAL = range(4)
+    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL = range(5)
 
     ## @brief Mapping from strategy constant to strategy name.
     SAMPLING_LOOKUP = {
         NONE: "none",
+        AUTO: "auto",
         PERIOD: "period",
         EVENT: "event",
         DIFFERENTIAL: "differential",
@@ -55,6 +56,8 @@ class SampleStrategy(object):
         strategyType = SampleStrategy.SAMPLING_LOOKUP_REV[strategyName]
         if strategyType == SampleStrategy.NONE:
             return SampleNone(server, sensor, *params)
+        elif strategyType == SampleStrategy.AUTO:
+            return SampleAuto(server, sensor, *params)
         elif strategyType == SampleStrategy.EVENT:
             return SampleEvent(server, sensor, *params)
         elif strategyType == SampleStrategy.DIFFERENTIAL:
@@ -138,6 +141,23 @@ class SampleEvent(SampleStrategy):
 
     def get_sampling(self):
         return SampleStrategy.EVENT
+
+
+class SampleAuto(SampleStrategy):
+    """Sampling strategy implementation which sends updates
+       whenever the sensor itself is updated.
+       """
+
+    def __init__(self, server, sensor, *params):
+        SampleStrategy.__init__(self, server, sensor, *params)
+        if params:
+            raise ValueError("The 'auto' strategy takes no parameters.")
+
+    def update(self, sensor):
+        self.mass_inform()
+
+    def get_sampling(self):
+        return SampleStrategy.AUTO
 
 
 class SampleNone(SampleStrategy):
