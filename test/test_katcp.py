@@ -465,6 +465,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"!restart ok", ""),
             (r"!log-level ok warn", ""),
             (r"!log-level ok trace", ""),
+            (r"#help client-list", ""),
             (r"#help halt", ""),
             (r"#help help", ""),
             (r"#help log-level", ""),
@@ -476,7 +477,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#help sensor-sampling", ""),
             (r"#help sensor-value", ""),
             (r"#help watchdog", ""),
-            (r"!help ok 11", ""),
+            (r"!help ok 12", ""),
             (r"#help watchdog", ""),
             (r"!help ok 1", ""),
             (r"!help fail", ""),
@@ -630,5 +631,5 @@ class TestBlockingClient(unittest.TestCase):
         reply, informs = self.client.blocking_request(
             katcp.Message.request("help"))
         assert reply.name == "help"
-        assert reply.arguments == ["ok", "11"]
+        assert reply.arguments == ["ok", "12"]
         assert len(informs) == int(reply.arguments[1])

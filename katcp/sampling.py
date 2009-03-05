@@ -34,9 +34,15 @@ class SampleStrategy(object):
 
     # pylint: enable-msg = E0602
 
-    def __init__(self, server, sensor, *params):
-        """Create a SampleStrategy instance."""
-        self._server = server
+    def __init__(self, inform_callback, sensor, *params):
+        """Create a SampleStrategy instance.
+
+           @param inform_callback  Callback to send inform messages with,
+                                   used as inform_callback(msg).
+           @param sensor  Sensor to sample.
+           @param params  Custom sampling parameters.
+           """
+        self._inform_callback = inform_callback
         self._sensor = sensor
         self._params = params
 
@@ -84,12 +90,12 @@ class SampleStrategy(object):
            """
         pass
 
-    def mass_inform(self):
-        """Inform all clients connected to the server of the sensor status."""
+    def inform(self):
+        """Inform strategy creator of the sensor status."""
         from katcp import Message
 
         timestamp_ms, status, value = self._sensor.read_formatted()
-        self._server.mass_inform(Message.inform("sensor-status",
+        self._inform_callback(Message.inform("sensor-status",
                     timestamp_ms, "1", self._sensor.name, status, value))
 
     def get_sampling(self):
@@ -137,7 +143,7 @@ class SampleEvent(SampleStrategy):
         if sensor._status != self._lastStatus or sensor._value != self._lastValue:
             self._lastStatus = sensor._status
             self._lastValue = sensor._value
-            self.mass_inform()
+            self.inform()
 
     def get_sampling(self):
         return SampleStrategy.EVENT
@@ -154,7 +160,7 @@ class SampleAuto(SampleStrategy):
             raise ValueError("The 'auto' strategy takes no parameters.")
 
     def update(self, sensor):
-        self.mass_inform()
+        self.inform()
 
     def get_sampling(self):
         return SampleStrategy.AUTO
@@ -205,7 +211,7 @@ class SampleDifferential(SampleStrategy):
         if sensor._status != self._lastStatus or abs(sensor._value - self._lastValue) > self._threshold:
             self._lastStatus = sensor._status
             self._lastValue = sensor._value
-            self.mass_inform()
+            self.inform()
 
     def get_sampling(self):
         return SampleStrategy.DIFFERENTIAL
@@ -234,7 +240,7 @@ class SamplePeriod(SampleStrategy):
     def periodic(self, timestamp):
         if timestamp > self._nextTime:
             self._sensor._timestamp = timestamp
-            self.mass_inform()
+            self.inform()
             self._nextTime += self._period
             if self._nextTime < timestamp:
                 self._nextTime = timestamp + self._period
@@ -255,32 +261,26 @@ class SampleReactor(threading.Thread):
     def __init__(self):
         """Create a SampleReactor."""
         super(SampleReactor, self).__init__()
-        self._nameStrategy = {}
+        self._strategies = set()
         self._stopEvent = threading.Event()
         # set daemon True so that the app can stop even if the thread is running
         self.setDaemon(True)
 
-    def add_sensor(self, strategy):
-        """Add a sensor strategy to the reactor. If a strategy already exists
-           for the same sensor then it must be detached and any outstanding
-           scheduled event cancelled.
+    def add_strategy(self, strategy):
+        """Add a sensor strategy to the reactor. Strategies should be removed
+           using remove_strategy.
 
            The new strategy is then attached to the sensor for updates and a
            periodic sample is triggered to schedule the next one.
            """
-        name = strategy._sensor.name
-        if self._nameStrategy.has_key(name):
-            currentStrategy = self._nameStrategy[name]
-            currentStrategy.detach()
+        self._strategies.add(strategy)
         strategy.attach()
-        self._nameStrategy[name] = strategy
         self.periodic(strategy, time.time())
 
-    def get_sampling_formatted(self, name):
-        """Get the formatted representation of the sample strategy for the
-           specified sensor.
-           """
-        return self._nameStrategy[name].get_sampling_formatted()
+    def remove_strategy(self, strategy):
+        """Remove a strategy from the reactor."""
+        strategy.detach()
+        self._strategies.remove(strategy)
 
     @staticmethod
     def periodic(strategy, timestamp):
@@ -300,7 +300,7 @@ class SampleReactor(threading.Thread):
         logger.debug("Starting thread %s" % (threading.currentThread().getName()))
         while not self._stopEvent.isSet():
             timestamp = time.time()
-            for strategy in self._nameStrategy.values():
+            for strategy in self._strategies:
                 SampleReactor.periodic(strategy, timestamp)
             self._stopEvent.wait(SampleReactor.PERIOD_DELAY)
         self._stopEvent.clear()

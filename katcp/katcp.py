@@ -755,6 +755,10 @@ class DeviceServerBase(object):
         if sock in self._waiting_chunks:
             del self._waiting_chunks[sock]
 
+    def get_sockets(self):
+        """Return the complete list of current client socket."""
+        return list(self._socks)
+
     def handle_chunk(self, sock, chunk):
         """Handle a chunk of data for socket sock."""
         chunk = chunk.replace("\r", "\n")
@@ -880,17 +884,14 @@ class DeviceServerBase(object):
                 else:
                     # client socket died, remove it
                     self.remove_socket(sock)
-                    self.on_client_disconnect(None, "Client socket died")
+                    self.on_client_disconnect(sock, "Client socket died", False)
 
             for sock in readers:
                 if sock is self._sock:
                     client, addr = sock.accept()
                     client.setblocking(0)
-                    if self._socks:
-                        old_client = self._socks[0]
-                        self.on_client_disconnect(old_client,
-                            "New client connected from %s" % (addr,))
-                        self.remove_socket(old_client)
+                    self.mass_inform(Message.inform("client-connected",
+                        "New client connected from %s" % (addr,)))
                     self.add_socket(client)
                     self.on_client_connect(client)
                 else:
@@ -900,10 +901,10 @@ class DeviceServerBase(object):
                     else:
                         # no data, assume socket EOF
                         self.remove_socket(sock)
-                        self.on_client_disconnect(None, "Socket EOF")
+                        self.on_client_disconnect(sock, "Socket EOF", False)
 
         for sock in list(self._socks):
-            self.on_client_disconnect(sock, "Device server shutting down.")
+            self.on_client_disconnect(sock, "Device server shutting down.", True)
             self.remove_socket(sock)
 
         self._sock.close()
@@ -953,7 +954,7 @@ class DeviceServerBase(object):
            """
         pass
 
-    def on_client_disconnect(self, sock, msg):
+    def on_client_disconnect(self, sock, msg, sock_valid):
         """Called before a client connection is closed.
 
            Subclasses should override if they wish to send clients
@@ -961,6 +962,11 @@ class DeviceServerBase(object):
            cannot guarantee this will be called (for example, the client
            might drop the connection). The message parameter contains
            the reason for the disconnection.
+
+           @param sock Client socket being disconnected.
+           @param msg Reason client is being disconnected.
+           @param sock_valid True if sock is still openf for sending,
+                             False otherwise.
            """
         pass
 
@@ -979,6 +985,7 @@ class DeviceServer(DeviceServerBase):
          - help
          - log-level
          - restart (if self.schedule_restart(...) implemented)
+         - client-list
          - sensor-list
          - sensor-sampling
          - watchdog
@@ -1020,18 +1027,25 @@ class DeviceServer(DeviceServerBase):
         self.log = DeviceLogger(self)
         self._sensors = {} # map names to sensor objects
         self._reactor = SampleReactor()
+        # map client sockets to map of sensors -> sampling strategies
+        self._strategies = {}
         self.setup_sensors()
 
     # pylint: enable-msg = W0142
 
     def on_client_connect(self, sock):
         """Inform client of build state and version on connect."""
+        self._strategies[sock] = {} # map of sensors -> sampling strategies
         self.inform(sock, Message.inform("version", self.version()))
         self.inform(sock, Message.inform("build-state", self.build_state()))
 
-    def on_client_disconnect(self, sock, msg):
+    def on_client_disconnect(self, sock, msg, sock_valid):
         """Inform client it is about to be disconnected."""
-        if sock:
+        if sock in self._strategies:
+            for sensor, strategy in self._strategies[sock]:
+                self._reactor.remove_strategy(strategy)
+
+        if sock_valid:
             self.inform(sock, Message.inform("disconnect", msg))
 
     def build_state(self):
@@ -1049,7 +1063,6 @@ class DeviceServer(DeviceServerBase):
            """
         name = sensor.name
         self._sensors[name] = sensor
-        self._reactor.add_sensor(SampleStrategy.get_strategy("none", self, sensor))
 
     def schedule_restart(self):
         """Schedule a restart.
@@ -1117,6 +1130,15 @@ class DeviceServer(DeviceServerBase):
         self.schedule_restart()
         return Message.reply("restart", "ok")
 
+    def request_client_list(self, sock, msg):
+        """Request the list of connected clients."""
+        clients = self.get_sockets()
+        num_clients = len(clients)
+        for client in self.get_clients():
+            addr = client.getsockname()
+            self.inform(sock, Message.inform("client-list", addr))
+        return Message.reply("client-list", "ok", str(num_clients))
+
     def request_sensor_list(self, sock, msg):
         """Request the list of sensors."""
         if not msg.arguments:
@@ -1170,10 +1192,26 @@ class DeviceServer(DeviceServerBase):
             # attempt to set sampling strategy
             strategy = msg.arguments[1]
             params = msg.arguments[2:]
-            self._reactor.add_sensor(SampleStrategy.get_strategy(strategy,
-                                        self, sensor, *params))
 
-        strategy, params = self._reactor.get_sampling_formatted(name)
+            def inform_callback(cb_msg):
+                """Inform callback for sensor strategy."""
+                self.inform(sock, cb_msg)
+
+            new_strategy = SampleStrategy.get_strategy(strategy,
+                                        inform_callback, sensor, *params)
+
+            old_strategy = self._strategies[sock].get(sensor, None)
+            if old_strategy is not None:
+                self._reactor.remove(old_strategy)
+
+            self._strategies[sock][sensor] = new_strategy
+            self._reactor.add_strategy(new_strategy)
+
+        current_strategy = self._strategies[sock].get(sensor, None)
+        if not current_strategy:
+            current_strategy = SampleStrategy.get_strategy("none", lambda msg: None, sensor)
+
+        strategy, params = current_strategy.get_sampling_formatted()
         return Message.reply("sensor-sampling", "ok", name, strategy, *params)
 
 
