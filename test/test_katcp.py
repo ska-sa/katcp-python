@@ -193,6 +193,16 @@ class TestSensor(unittest.TestCase):
         self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "period", None, s, "foo")
         self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "differential", None, s, "bar")
 
+    def test_parse_and_set(self):
+        """Test setting value from strings."""
+        s = DeviceTestSensor(
+                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
+                [-4, 3],
+                timestamp=12345, status=katcp.Sensor.UNKNOWN, value=3
+        )
+        s.parse_and_set("12346000", "nominal", "4")
+        self.assertEqual(s.read_formatted(), ("12346000", "nominal", "4"))
+
 
 class DeviceTestClient(katcp.DeviceClient):
     def __init__(self, *args, **kwargs):
@@ -401,6 +411,9 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("sensor-list"))
         self.client.request(katcp.Message.request("sensor-list", "an.int"))
         self.client.request(katcp.Message.request("sensor-list", "an.unknown"))
+        self.client.request(katcp.Message.request("sensor-value"))
+        self.client.request(katcp.Message.request("sensor-value", "an.int"))
+        self.client.request(katcp.Message.request("sensor-value", "an.unknown"))
         self.client.request(katcp.Message.request("sensor-sampling", "an.int"))
         self.client.request(katcp.Message.request("sensor-sampling", "an.int",
                                                   "differential", "2"))
@@ -434,18 +447,20 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#help restart", ""),
             (r"#help sensor-list", ""),
             (r"#help sensor-sampling", ""),
+            (r"#help sensor-value", ""),
             (r"#help watchdog", ""),
-            (r"!help ok 10", ""),
+            (r"!help ok 11", ""),
             (r"#help watchdog", ""),
             (r"!help ok 1", ""),
             (r"!help fail", ""),
-            (r"#sensor-type an.int integer An\_Integer. count -5 5", ""),
-            (r"#sensor-status 12345000 1 an.int nominal 3", ""),
+            (r"#sensor-list an.int integer An\_Integer. count -5 5", ""),
             (r"!sensor-list ok 1", ""),
-            (r"#sensor-type an.int integer An\_Integer. count -5 5", ""),
-            (r"#sensor-status 12345000 1 an.int nominal 3", ""),
+            (r"#sensor-list an.int integer An\_Integer. count -5 5", ""),
             (r"!sensor-list ok 1", ""),
             (r"!sensor-list fail", ""),
+            (r"!sensor-value fail", ""),
+            (r"!sensor-value ok 12345000 1 an.int nominal 3", ""),
+            (r"!sensor-value fail", ""),
             (r"!sensor-sampling ok an.int none", ""),
             (r"!sensor-sampling ok an.int differential 2", ""),
             (r"#log trace", r"root trace-msg"),
@@ -588,5 +603,5 @@ class TestBlockingClient(unittest.TestCase):
         reply, informs = self.client.blocking_request(
             katcp.Message.request("help"))
         assert reply.name == "help"
-        assert reply.arguments == ["ok", "10"]
+        assert reply.arguments == ["ok", "11"]
         assert len(informs) == int(reply.arguments[1])

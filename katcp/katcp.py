@@ -1121,27 +1121,37 @@ class DeviceServer(DeviceServerBase):
         """Request the list of sensors."""
         if not msg.arguments:
             for name, sensor in self._sensors.iteritems():
-                self.inform(sock, Message.inform("sensor-type",
+                self.inform(sock, Message.inform("sensor-list",
                     name, sensor.stype, sensor.description, sensor.units,
                     *sensor.params))
-                timestamp_ms, status, value = sensor.read_formatted()
-                self.inform(sock, Message.inform("sensor-status",
-                    timestamp_ms, "1", name, status, value))
             return Message.reply("sensor-list",
                     "ok", str(len(self._sensors)))
         else:
             name = msg.arguments[0]
             if name in self._sensors:
                 sensor = self._sensors[name]
-                self.inform(sock, Message.inform("sensor-type",
+                self.inform(sock, Message.inform("sensor-list",
                     name, sensor.stype, sensor.description, sensor.units,
                     *sensor.params))
-                timestamp_ms, status, value = sensor.read_formatted()
-                self.inform(sock, Message.inform("sensor-status",
-                    timestamp_ms, "1", name, status, value))
                 return Message.reply("sensor-list", "ok", "1")
             else:
                 return Message.reply("sensor-list", "fail",
+                                                    "Unknown sensor name.")
+
+    def request_sensor_value(self, sock, msg):
+        """Request the value of a sensor."""
+        if not msg.arguments:
+            return Message.reply("sensor-value", "fail",
+                                                    "No sensor name given.")
+        else:
+            name = msg.arguments[0]
+            if name in self._sensors:
+                sensor = self._sensors[name]
+                timestamp_ms, status, value = sensor.read_formatted()
+                return Message.reply("sensor-value", "ok",
+                                    timestamp_ms, "1", name, status, value)
+            else:
+                return Message.reply("sensor-value", "fail",
                                                     "Unknown sensor name.")
 
     def request_sensor_sampling(self, sock, msg):
@@ -1238,6 +1248,9 @@ class Sensor(object):
         FAILURE: 'failure',
     }
 
+    ## @brief Mapping from status name to sensor status.
+    STATUS_NAMES = dict((v, k) for k, v in STATUSES.items())
+
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = range(2)
 
@@ -1313,6 +1326,22 @@ class Sensor(object):
         """Notify all observers of changes to this sensor."""
         for o in self._observers:
             o.update(self)
+
+    def parse_and_set(self, s_timestamp, s_status, s_value):
+        """Set the current value of the sensor.
+
+           @param self This object.
+           @param s_timestamp number of milliseconds since epoch
+           @param s_status the status of the sensor (as status name)
+           @param s_value the value of the sensor
+           @return None
+           """
+
+        timestamp = float(s_timestamp)/1000
+        status = self.STATUS_NAMES[s_status]
+        value = self._parser(self,s_value)
+
+        self.set(timestamp, status, value)
 
     def set(self, timestamp, status, value):
         """Set the current value of the sensor.
