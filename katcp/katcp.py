@@ -1214,7 +1214,7 @@ class Sensor(object):
     # parse as arguments
     #
     # type -> (name, formatter, parser)
-    INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE = range(5)
+    INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE, STRING, TIMESTAMP = range(7)
 
     ## @brief Mapping from sensor type to tuple containing the type name,
     #  a function to format a value, a function to parse a value and a
@@ -1231,6 +1231,10 @@ class Sensor(object):
                      lambda sensor: sensor.LRU_NOMINAL),
         DISCRETE: ("discrete", lambda sensor, value: value,
                                lambda sensor, value: value, "unknown"),
+        STRING: ("string", lambda sensor, value: value,
+                           lambda sensor, value: value, ""),
+        TIMESTAMP: ("timestamp", lambda sensor, value: str(int(value*1000.0)),
+                                 lambda sensor, value: int(value)/1000.0, 0.0),
     }
 
     # map type strings to types

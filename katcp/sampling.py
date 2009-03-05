@@ -163,16 +163,21 @@ class SampleDifferential(SampleStrategy):
         SampleStrategy.__init__(self, server, sensor, *params)
         if len(params) != 1:
             raise ValueError("The 'differential' strategy takes one parameter.")
-        if sensor._sensor_type not in (Sensor.INTEGER, Sensor.FLOAT):
-            raise ValueError("The 'differential' strategy is only valid for float and integer sensors.")
+        if sensor._sensor_type not in (Sensor.INTEGER, Sensor.FLOAT, Sensor.TIMESTAMP):
+            raise ValueError("The 'differential' strategy is only valid for float, integer and timestamp sensors.")
         if sensor._sensor_type == Sensor.INTEGER:
             self._threshold = int(params[0])
             if self._threshold <= 0:
                 raise ValueError("The diff amount must be a positive integer.")
-        else:
+        elif sensor._sensor_type == Sensor.FLOAT:
             self._threshold = float(params[0])
             if self._threshold <= 0:
                 raise ValueError("The diff amount must be a positive float.")
+        else:
+            # _sensor_type must be Sensor.TIMESTAMP
+            self._threshold = int(params[0]) / 1000.0 # convert threshold in ms to s
+            if self._threshold <= 0:
+                raise ValueError("The diff amount must be a positive number of milliseconds.")
         self._lastStatus = None
         self._lastValue = None
 

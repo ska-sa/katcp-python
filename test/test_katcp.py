@@ -179,6 +179,27 @@ class TestSensor(unittest.TestCase):
         self.assertEquals(s.parse_value("nominal"), katcp.Sensor.LRU_NOMINAL)
         self.assertRaises(ValueError, s.parse_value, "fish")
 
+    def test_string_sensor(self):
+        """Test string sensor."""
+        s = DeviceTestSensor(
+            katcp.Sensor.STRING, "a.string", "A string sensor.", "filename",
+            None,
+            timestamp=12345, status=katcp.Sensor.NOMINAL, value="zwoop"
+        )
+        self.assertEqual(s.read_formatted(), ("12345000", "nominal", "zwoop"))
+        self.assertEquals(s.parse_value("bar foo"), "bar foo")
+
+    def test_timestamp_sensor(self):
+        """Test timestamp sensor."""
+        s = DeviceTestSensor(
+            katcp.Sensor.TIMESTAMP, "a.timestamp", "A timestamp sensor.", "ms",
+            None,
+            timestamp=12345, status=katcp.Sensor.NOMINAL, value=1001.9
+        )
+        self.assertEqual(s.read_formatted(), ("12345000", "nominal", "1001900"))
+        self.assertAlmostEqual(s.parse_value("1002100"), 1002.1)
+        self.assertRaises(ValueError, s.parse_value, "bicycle")
+
     def test_sampling(self):
         """Test getting and setting the sampling."""
         s = DeviceTestSensor(
