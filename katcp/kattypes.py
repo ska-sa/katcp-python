@@ -243,7 +243,6 @@ def unpack_types(types, args, argnames):
     # if len(args) < len(types) this passes in None for missing args
     return map(lambda ktype, arg: ktype.unpack(arg), types, args)
 
-
 def pack_types(types, args):
     """Pack arguments according the the types list.
        """

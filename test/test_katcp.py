@@ -127,6 +127,10 @@ class TestSensor(unittest.TestCase):
                 timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
         )
         self.assertEqual(s.read_formatted(), ("12345000", "nominal", "3"))
+        self.assertEquals(s.parse_value("3"), 3)
+        self.assertRaises(ValueError, s.parse_value, "4")
+        self.assertRaises(ValueError, s.parse_value, "-10")
+        self.assertRaises(ValueError, s.parse_value, "asd")
 
     def test_float_sensor(self):
         """Test float sensor."""
@@ -136,6 +140,10 @@ class TestSensor(unittest.TestCase):
                 timestamp=12345, status=katcp.Sensor.WARN, value=3.0
         )
         self.assertEqual(s.read_formatted(), ("12345000", "warn", "3.000000e+00"))
+        self.assertEquals(s.parse_value("3"), 3.0)
+        self.assertRaises(ValueError, s.parse_value, "10")
+        self.assertRaises(ValueError, s.parse_value, "-10")
+        self.assertRaises(ValueError, s.parse_value, "asd")
 
     def test_boolean_sensor(self):
         """Test boolean sensor."""
@@ -145,6 +153,8 @@ class TestSensor(unittest.TestCase):
                 timestamp=12345, status=katcp.Sensor.UNKNOWN, value=True
         )
         self.assertEqual(s.read_formatted(), ("12345000", "unknown", "1"))
+        self.assertEquals(s.parse_value("1"), True)
+        self.assertEquals(s.parse_value("0"), False)
 
     def test_discrete_sensor(self):
         """Test discrete sensor."""
@@ -154,6 +164,8 @@ class TestSensor(unittest.TestCase):
                 timestamp=12345, status=katcp.Sensor.ERROR, value="on"
         )
         self.assertEqual(s.read_formatted(), ("12345000", "error", "on"))
+        self.assertEquals(s.parse_value("on"), "on")
+        self.assertRaises(ValueError, s.parse_value, "fish")
 
     def test_lru_sensor(self):
         """Test LRU sensor."""
@@ -164,6 +176,8 @@ class TestSensor(unittest.TestCase):
                 value=katcp.Sensor.LRU_ERROR
         )
         self.assertEqual(s.read_formatted(), ("12345000", "failure", "error"))
+        self.assertEquals(s.parse_value("nominal"), katcp.Sensor.LRU_NOMINAL)
+        self.assertRaises(ValueError, s.parse_value, "fish")
 
     def test_sampling(self):
         """Test getting and setting the sampling."""
@@ -192,17 +206,6 @@ class TestSensor(unittest.TestCase):
         self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "random", None, s)
         self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "period", None, s, "foo")
         self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "differential", None, s, "bar")
-
-    def test_parse_and_set(self):
-        """Test setting value from strings."""
-        s = DeviceTestSensor(
-                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
-                [-4, 3],
-                timestamp=12345, status=katcp.Sensor.UNKNOWN, value=3
-        )
-        s.parse_and_set("12346000", "nominal", "4")
-        self.assertEqual(s.read_formatted(), ("12346000", "nominal", "4"))
-
 
 class DeviceTestClient(katcp.DeviceClient):
     def __init__(self, *args, **kwargs):

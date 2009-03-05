@@ -1308,6 +1308,7 @@ class Sensor(object):
         self.name = name
         self.description = description
         self.units = units
+        self.raw_params = params
         self.params = [self._formatter(self, p) for p in params]
         if self._sensor_type == Sensor.DISCRETE:
             self._value = self.params[0]
@@ -1327,21 +1328,28 @@ class Sensor(object):
         for o in self._observers:
             o.update(self)
 
-    def parse_and_set(self, s_timestamp, s_status, s_value):
-        """Set the current value of the sensor.
+    def parse_value(self, s_value):
+        """Parse a value from a string.
 
            @param self This object.
-           @param s_timestamp number of milliseconds since epoch
-           @param s_status the status of the sensor (as status name)
-           @param s_value the value of the sensor
+           @param s_value the value of the sensor (as a string)
            @return None
            """
 
-        timestamp = float(s_timestamp)/1000
-        status = self.STATUS_NAMES[s_status]
-        value = self._parser(self,s_value)
+        try:
+            value = self._parser(self,s_value)
+        except (ValueError, KeyError):
+            raise ValueError("Could not parse value '%s'." % s_value)
 
-        self.set(timestamp, status, value)
+        if self._sensor_type in [self.INTEGER, self.FLOAT]:
+            if value < self.raw_params[0] or value > self.raw_params[1]:
+                raise ValueError("Value must be between %s and %s." % (self.raw_params[0], self.raw_params[1]))
+
+        if self._sensor_type == self.DISCRETE:
+            if value not in self.params:
+                raise ValueError("Value must be one of %s" % self.params)
+
+        return value
 
     def set(self, timestamp, status, value):
         """Set the current value of the sensor.
