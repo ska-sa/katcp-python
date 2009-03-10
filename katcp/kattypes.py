@@ -54,8 +54,8 @@ class KatcpType(object):
 
 
 class Int(KatcpType):
-    encode = staticmethod(lambda value: "%d" % (value,))
-    decode = staticmethod(lambda value: int(value))
+    encode = lambda self, value: "%d" % (value,)
+    decode = lambda self, value: int(value)
 
     def __init__(self, min=None, max=None, default=None):
         super(Int, self).__init__(default=default)
@@ -72,8 +72,8 @@ class Int(KatcpType):
 
 
 class Float(KatcpType):
-    encode = staticmethod(lambda value: "%e" % (value,))
-    decode = staticmethod(lambda value: float(value))
+    encode = lambda self, value: "%e" % (value,)
+    decode = lambda self, value: float(value)
 
     def __init__(self, min=None, max=None, default=None):
         super(Float, self).__init__(default=default)
@@ -90,18 +90,17 @@ class Float(KatcpType):
 
 
 class Bool(KatcpType):
-    encode = staticmethod(lambda value: value and "1" or "0")
+    encode = lambda self, value: value and "1" or "0"
 
-    @staticmethod
-    def decode(value):
+    def decode(self, value):
         if value not in ("0", "1"):
             raise ValueError("Boolean value must be 0 or 1.")
         return value == "1"
 
 
 class Discrete(KatcpType):
-    encode = staticmethod(lambda value: value)
-    decode = staticmethod(lambda value: value)
+    encode = lambda self, value: value
+    decode = lambda self, value: value
 
     def __init__(self, values, default=None):
         super(Discrete, self).__init__(default=default)
@@ -130,14 +129,12 @@ class Lru(KatcpType):
     ## @brief Mapping from LRU value name to LRU value constant.
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
 
-    @staticmethod
-    def encode(value):
+    def encode(self, value):
         if value not in Lru.LRU_VALUES:
             raise ValueError("Lru value must be LRU_NOMINAL or LRU_ERROR")
         return Lru.LRU_VALUES[value]
 
-    @staticmethod
-    def decode(value):
+    def decode(self, value):
         if value not in Lru.LRU_CONSTANTS:
             raise ValueError("Lru value must be 'nominal' or 'error'")
         return Lru.LRU_CONSTANTS[value]
@@ -152,10 +149,9 @@ class Timestamp(KatcpType):
     # TODO: Convert from KATCP integer timestamp (in ms)
     # to Python float timestamp (in s)
 
-    encode = staticmethod(lambda value: "%i" % (int(float(value)*1000),))
+    encode = lambda self, value: "%i" % (int(float(value)*1000),)
 
-    @staticmethod
-    def decode(value):
+    def decode(self, value):
         return float(value)/1000
 
 class Struct(KatcpType):
