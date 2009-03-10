@@ -1,5 +1,6 @@
 import katcp
 import inspect
+import struct
 
 """Utilities for dealing with KATCP types.
    """
@@ -157,6 +158,22 @@ class Timestamp(KatcpType):
     def decode(value):
         return float(value)/1000
 
+class Struct(KatcpType):
+    def encode(self, value):
+        try:
+            return struct.pack(self._fmt, *value)
+        except struct.error, e:
+            raise ValueError("Could not pack %s into struct with format %s: %s" % (value, self._fmt, e))
+
+    def decode(self, value):
+        try:
+            return struct.unpack(self._fmt, value)
+        except struct.error, e:
+            raise ValueError("Could not unpack %s from struct with format %s: %s" % (value, self._fmt, e))
+
+    def __init__(self, fmt, default=None):
+        super(Struct, self).__init__(default=default)
+        self._fmt = fmt
 
 ## Request, return_reply and inform method decorators
 #

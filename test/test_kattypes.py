@@ -2,7 +2,7 @@
 
 import unittest
 from katcp import Message, FailReply
-from katcp.kattypes import request, inform, return_reply, Bool, Discrete, Float, Int, Lru, Timestamp, Str
+from katcp.kattypes import request, inform, return_reply, Bool, Discrete, Float, Int, Lru, Timestamp, Str, Struct
 
 class TestInt(unittest.TestCase):
 
@@ -191,6 +191,30 @@ class TestStr(unittest.TestCase):
 
         s = Str(default="something")
         self.assertEqual(s.unpack(None), "something")
+
+class TestStruct(unittest.TestCase):
+
+    def test_pack(self):
+        """Test packing structs."""
+        s = Struct(">isf")
+        self.assertEqual(s.pack((5, "s", 2.5)), "\x00\x00\x00\x05s@ \x00\x00")
+        self.assertRaises(ValueError, s.pack, ("s", 5, 2.5))
+        self.assertRaises(ValueError, s.pack, (5, "s"))
+        self.assertRaises(ValueError, s.pack, None)
+
+        s = Struct(">isf", default=(1, "f", 3.4))
+        self.assertEqual(s.pack(None), "\x00\x00\x00\x01f@Y\x99\x9a")
+
+    def test_unpack(self):
+        """Test unpacking structs."""
+        s = Struct(">isf")
+        self.assertEqual(s.unpack("\x00\x00\x00\x05s@ \x00\x00"), (5, "s", 2.5))
+        self.assertRaises(FailReply, s.unpack, "asdfgasdfas")
+        self.assertRaises(FailReply, s.unpack, "asd")
+        self.assertRaises(FailReply, s.unpack, None)
+
+        s = Struct(">isf", default=(1, "f", 3.4))
+        self.assertEqual(s.unpack(None), (1, "f", 3.4))
 
 class TestDevice(object):
 
