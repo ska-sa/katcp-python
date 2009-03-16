@@ -292,7 +292,8 @@ class DeviceClient(object):
 
     __metaclass__ = DeviceMetaclass
 
-    def __init__(self, host, port, tb_limit=20, logger=log):
+    def __init__(self, host, port, tb_limit=20, logger=log,
+                 auto_reconnect=True):
         """Create a basic DeviceClient.
 
            @param self This object.
@@ -301,6 +302,8 @@ class DeviceClient(object):
            @param tb_limit Integer: maximum number of stack frames to
                            send in error traceback.
            @param logger Object: Logger to log to.
+           @param auto_reconnect Boolean: Whether to automattically
+                                 reconnect if the connection dies.
            """
         self._parser = MessageParser()
         self._bindaddr = (host, port)
@@ -311,6 +314,7 @@ class DeviceClient(object):
         self._connected = threading.Event()
         self._thread = None
         self._logger = logger
+        self._auto_reconnect = auto_reconnect
 
     def request(self, msg):
         """Send a request messsage.
@@ -470,6 +474,7 @@ class DeviceClient(object):
         timeout = 1.0 # s
 
         self._running.set()
+        self.connect()
         while self._running.isSet():
             if self.is_connected():
                 readers, _writers, errors = select.select(
@@ -488,9 +493,14 @@ class DeviceClient(object):
                         self.disconnect()
             else:
                 # not currently connected so attempt to connect
-                self.connect()
-                if not self.is_connected():
-                    time.sleep(timeout)
+                # if auto_reconnect is set
+                if not self._auto_reconnect:
+                    self._running.clear()
+                    break
+                else:
+                    self.connect()
+                    if not self.is_connected():
+                        time.sleep(timeout)
 
         self.disconnect()
         self._logger.debug("Stopping thread %s" % (threading.currentThread().getName()))
