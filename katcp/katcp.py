@@ -1052,7 +1052,7 @@ class DeviceServer(DeviceServerBase):
     def on_client_disconnect(self, sock, msg, sock_valid):
         """Inform client it is about to be disconnected."""
         if sock in self._strategies:
-            for sensor, strategy in self._strategies[sock]:
+            for sensor, strategy in self._strategies[sock].items():
                 self._reactor.remove_strategy(strategy)
 
         if sock_valid:
