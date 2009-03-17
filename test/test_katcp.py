@@ -155,6 +155,7 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.read_formatted(), ("12345000", "unknown", "1"))
         self.assertEquals(s.parse_value("1"), True)
         self.assertEquals(s.parse_value("0"), False)
+        self.assertRaises(ValueError, s.parse_value, "asd")
 
     def test_discrete_sensor(self):
         """Test discrete sensor."""

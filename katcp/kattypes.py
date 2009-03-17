@@ -29,33 +29,31 @@ class KatcpType(object):
     def check(self, value):
         pass
 
-    def pack(self, value):
+    def pack(self, value, nocheck=False):
         if value is None:
-            return self.encode(self.get_default())
-        self.check(value)
+            value = self.get_default()
+        if not nocheck:
+            self.check(value)
         return self.encode(value)
 
     def unpack(self, packed_value):
-        try:
-            if packed_value is None:
-                return self.get_default()
+        if packed_value is None:
+            value = self.get_default()
+        else:
             value = self.decode(packed_value)
-            self.check(value)
-        except (ValueError, TypeError), e:
-            # Convert these exceptions to a failure reply with information identifying the parameter
-            raise self.error(e)
+        self.check(value)
         return value
 
-    def error(self, message):
-        # return the parameter position and name if they are known
-        if self._position and self._name:
-            return katcp.FailReply("Error in parameter %s (%s): %s" % (self._position, self._name, message))
-        return katcp.FailReply(message)
 
 
 class Int(KatcpType):
     encode = lambda self, value: "%d" % (value,)
-    decode = lambda self, value: int(value)
+
+    def decode(self, value):
+        try:
+            return int(value)
+        except:
+            raise ValueError("Could not parse value '%s' as integer." % value)
 
     def __init__(self, min=None, max=None, default=None):
         super(Int, self).__init__(default=default)
@@ -64,29 +62,37 @@ class Int(KatcpType):
 
     def check(self, value):
         if self._min is not None and value < self._min:
-            raise ValueError("Integer %d is lower than minimum %d"
+            raise ValueError("Integer %d is lower than minimum %d."
                 % (value, self._min))
         if self._max is not None and value > self._max:
-            raise ValueError("Integer %d is higher than maximum %d"
+            raise ValueError("Integer %d is higher than maximum %d."
                 % (value, self._max))
 
 
 class Float(KatcpType):
     encode = lambda self, value: "%e" % (value,)
-    decode = lambda self, value: float(value)
+
+    def decode(self, value):
+        try:
+            return float(value)
+        except:
+            raise ValueError("Could not parse value '%s' as float." % value)
 
     def __init__(self, min=None, max=None, default=None):
         super(Float, self).__init__(default=default)
         self._min = min
         self._max = max
 
+    def format(self, value):
+        return "%.1f" % value if abs(value) > 10**-1 or value == 0.0 else "%.1e" % value
+
     def check(self, value):
         if self._min is not None and value < self._min:
-            raise ValueError("Float %f is lower than minimum %f"
-                % (value, self._min))
+            raise ValueError("Float %s is lower than minimum %s."
+                % (self.format(value), self.format(self._min)))
         if self._max is not None and value > self._max:
-            raise ValueError("Float %f is higher than maximum %f"
-                % (value, self._max))
+            raise ValueError("Float %s is higher than maximum %s."
+                % (self.format(value), self.format(self._max)))
 
 
 class Bool(KatcpType):
@@ -109,7 +115,7 @@ class Discrete(KatcpType):
 
     def check(self, value):
         if not value in self._valid_values:
-            raise ValueError("Discrete value '%s' is not one of %s"
+            raise ValueError("Discrete value '%s' is not one of %s."
                 % (value, list(self._values)))
 
 
@@ -131,12 +137,12 @@ class Lru(KatcpType):
 
     def encode(self, value):
         if value not in Lru.LRU_VALUES:
-            raise ValueError("Lru value must be LRU_NOMINAL or LRU_ERROR")
+            raise ValueError("Lru value must be LRU_NOMINAL or LRU_ERROR.")
         return Lru.LRU_VALUES[value]
 
     def decode(self, value):
         if value not in Lru.LRU_CONSTANTS:
-            raise ValueError("Lru value must be 'nominal' or 'error'")
+            raise ValueError("Lru value must be 'nominal' or 'error'.")
         return Lru.LRU_CONSTANTS[value]
 
 class Str(KatcpType):
@@ -152,7 +158,10 @@ class Timestamp(KatcpType):
     encode = lambda self, value: "%i" % (int(float(value)*1000),)
 
     def decode(self, value):
-        return float(value)/1000
+        try:
+            return float(value)/1000
+        except:
+            raise ValueError("Could not parse value '%s' as timestamp." % value)
 
 class Struct(KatcpType):
     def encode(self, value):
@@ -170,6 +179,31 @@ class Struct(KatcpType):
     def __init__(self, fmt, default=None):
         super(Struct, self).__init__(default=default)
         self._fmt = fmt
+
+class Parameter(object):
+    """Wrapper for kattypes which holds parameter-specific information"""
+
+    def __init__(self, position, name, kattype):
+        """Construct a Parameter.
+
+           @param self This object.
+           @param position The parameter's position (starts at 1)
+           @param name The parameter's name (introspected)
+           @param kattype The parameter's kattype
+           """
+        self.position = position
+        self.name = name
+        self._kattype = kattype
+
+    def pack(self, value):
+        return self._kattype.pack(value)
+
+    def unpack(self, value):
+        # Wrap errors in FailReplies with information identifying the parameter
+        try:
+            return self._kattype.unpack(value)
+        except ValueError, message:
+            raise katcp.FailReply("Error in parameter %s (%s): %s" % (self.position, self.name, message))
 
 ## Request, return_reply and inform method decorators
 #
@@ -248,13 +282,16 @@ def unpack_types(types, args, argnames):
     if len(types) < len(args):
         raise katcp.FailReply("Too many parameters given.")
 
-    for i in range(len(types)):
-        types[i]._position = i+1
+    # Wrap the types in parameter objects
+    params = []
+    for i, kattype in enumerate(types):
+        name = ""
         if i < len(argnames):
-            types[i]._name = argnames[i]
+            name = argnames[i]
+        params.append(Parameter(i+1, name, kattype))
 
     # if len(args) < len(types) this passes in None for missing args
-    return map(lambda ktype, arg: ktype.unpack(arg), types, args)
+    return map(lambda param, arg: param.unpack(arg), params, args)
 
 def pack_types(types, args):
     """Pack arguments according the the types list.

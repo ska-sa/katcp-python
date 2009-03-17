@@ -14,6 +14,7 @@ import sys
 import re
 import time
 from sampling import SampleReactor, SampleStrategy
+from kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp
 
 # logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp")
@@ -1265,24 +1266,16 @@ class Sensor(object):
     INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE, STRING, TIMESTAMP = range(7)
 
     ## @brief Mapping from sensor type to tuple containing the type name,
-    #  a function to format a value, a function to parse a value and a
+    #  a kattype with functions to format and parse a value and a
     #  default value for sensors of that type.
     SENSOR_TYPES = {
-        INTEGER: ("integer", lambda sensor, value: "%d" % (value,),
-                             lambda sensor, value: int(value), 0),
-        FLOAT: ("float", lambda sensor, value: "%e" % (value,),
-                         lambda sensor, value: float(value), 0.0),
-        BOOLEAN: ("boolean", lambda sensor, value: value and "1" or "0",
-                             lambda sensor, value: value == "1", "0"),
-        LRU: ("lru", lambda sensor, value: sensor.LRU_VALUES[value],
-                     lambda sensor, value: sensor.LRU_CONSTANTS[value],
-                     lambda sensor: sensor.LRU_NOMINAL),
-        DISCRETE: ("discrete", lambda sensor, value: value,
-                               lambda sensor, value: value, "unknown"),
-        STRING: ("string", lambda sensor, value: value,
-                           lambda sensor, value: value, ""),
-        TIMESTAMP: ("timestamp", lambda sensor, value: str(int(value*1000.0)),
-                                 lambda sensor, value: int(value)/1000.0, 0.0),
+        INTEGER: ("integer", Int, 0),
+        FLOAT: ("float", Float, 0.0),
+        BOOLEAN: ("boolean", Bool, False),
+        LRU: ("lru", Lru, Lru.LRU_NOMINAL),
+        DISCRETE: ("discrete", Discrete, "unknown"),
+        STRING: ("string", Str, ""),
+        TIMESTAMP: ("timestamp", Timestamp, 0.0),
     }
 
     # map type strings to types
@@ -1304,13 +1297,10 @@ class Sensor(object):
     STATUS_NAMES = dict((v, k) for k, v in STATUSES.items())
 
     # LRU sensor values
-    LRU_NOMINAL, LRU_ERROR = range(2)
+    LRU_NOMINAL, LRU_ERROR = Lru.LRU_NOMINAL, Lru.LRU_ERROR
 
     ## @brief Mapping from LRU value constant to LRU value name.
-    LRU_VALUES = {
-        LRU_NOMINAL: "nominal",
-        LRU_ERROR: "error",
-    }
+    LRU_VALUES = Lru.LRU_VALUES
 
     # LRU_VALUES not found by pylint
     # pylint: disable-msg = E0602
@@ -1355,13 +1345,23 @@ class Sensor(object):
         self._timestamp = time.time()
         self._status = Sensor.UNKNOWN
 
-        self.stype, self._formatter, self._parser, self._value = \
-            self.SENSOR_TYPES[sensor_type]
+        self.stype, typeclass, self._value = self.SENSOR_TYPES[sensor_type]
+
+        if self._sensor_type in [Sensor.INTEGER, Sensor.FLOAT]:
+            self._kattype = typeclass(params[0], params[1])
+        elif self._sensor_type == Sensor.DISCRETE:
+            self._kattype = typeclass(params)
+        else:
+            self._kattype = typeclass()
+        self._formatter = self._kattype.pack
+        self._parser = self._kattype.unpack
+
         self.name = name
         self.description = description
         self.units = units
         self.raw_params = params
-        self.params = [self._formatter(self, p) for p in params]
+        self.params = [self._formatter(p, True) for p in params]
+
         if self._sensor_type == Sensor.DISCRETE:
             self._value = self.params[0]
 
@@ -1388,20 +1388,7 @@ class Sensor(object):
            @return None
            """
 
-        try:
-            value = self._parser(self,s_value)
-        except (ValueError, KeyError):
-            raise ValueError("Could not parse value '%s'." % s_value)
-
-        if self._sensor_type in [self.INTEGER, self.FLOAT]:
-            if value < self.raw_params[0] or value > self.raw_params[1]:
-                raise ValueError("Value must be between %s and %s." % (self.raw_params[0], self.raw_params[1]))
-
-        if self._sensor_type == self.DISCRETE:
-            if value not in self.params:
-                raise ValueError("Value must be one of %s" % self.params)
-
-        return value
+        return self._parser(s_value)
 
     def set(self, timestamp, status, value):
         """Set the current value of the sensor.
@@ -1424,7 +1411,7 @@ class Sensor(object):
         timestamp, status, value = self.read()
         return ("%d" % (int(timestamp * Sensor.MILLISECOND),),
                 self.STATUSES[status],
-                self._formatter(self, value))
+                self._formatter(value, True))
 
     def read(self):
         """Read the sensor and return a timestamp, status, value tuple.

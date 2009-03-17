@@ -28,14 +28,14 @@ class TestInt(unittest.TestCase):
         i = Int()
         self.assertEqual(i.unpack("5"), 5)
         self.assertEqual(i.unpack("-5"), -5)
-        self.assertRaises(FailReply, i.unpack, "a")
-        self.assertRaises(FailReply, i.unpack, None)
+        self.assertRaises(ValueError, i.unpack, "a")
+        self.assertRaises(ValueError, i.unpack, None)
 
         i = Int(min=5, max=6)
         self.assertEqual(i.unpack("5"), 5)
         self.assertEqual(i.unpack("6"), 6)
-        self.assertRaises(FailReply, i.unpack, "4")
-        self.assertRaises(FailReply, i.unpack, "7")
+        self.assertRaises(ValueError, i.unpack, "4")
+        self.assertRaises(ValueError, i.unpack, "7")
 
         i = Int(default=11)
         self.assertEqual(i.unpack(None), 11)
@@ -64,14 +64,14 @@ class TestFloat(unittest.TestCase):
         f = Float()
         self.assertAlmostEqual(f.unpack("5.0"), 5.0)
         self.assertAlmostEqual(f.unpack("-5.0"), -5.0)
-        self.assertRaises(FailReply, f.unpack, "a")
-        self.assertRaises(FailReply, f.unpack, None)
+        self.assertRaises(ValueError, f.unpack, "a")
+        self.assertRaises(ValueError, f.unpack, None)
 
         f = Float(min=5.0, max=6.0)
         self.assertAlmostEqual(f.unpack("5.0"), 5.0)
         self.assertAlmostEqual(f.unpack("6.0"), 6.0)
-        self.assertRaises(FailReply, f.unpack, "4.5")
-        self.assertRaises(FailReply, f.unpack, "6.5")
+        self.assertRaises(ValueError, f.unpack, "4.5")
+        self.assertRaises(ValueError, f.unpack, "6.5")
 
         f = Float(default=11.0)
         self.assertAlmostEqual(f.unpack(None), 11.0)
@@ -95,8 +95,8 @@ class TestBool(unittest.TestCase):
         b = Bool()
         self.assertEqual(b.unpack("1"), True)
         self.assertEqual(b.unpack("0"), False)
-        self.assertRaises(FailReply, b.unpack, "2")
-        self.assertRaises(FailReply, b.unpack, None)
+        self.assertRaises(ValueError, b.unpack, "2")
+        self.assertRaises(ValueError, b.unpack, None)
 
         b = Bool(default=True)
         self.assertEqual(b.unpack(None), True)
@@ -119,8 +119,8 @@ class TestDiscrete(unittest.TestCase):
         d = Discrete(("VAL1", "VAL2"))
         self.assertEqual(d.unpack("VAL1"), "VAL1")
         self.assertEqual(d.unpack("VAL2"), "VAL2")
-        self.assertRaises(FailReply, d.unpack, "VAL3")
-        self.assertRaises(FailReply, d.unpack, None)
+        self.assertRaises(ValueError, d.unpack, "VAL3")
+        self.assertRaises(ValueError, d.unpack, None)
 
         d = Discrete(("VAL1", "VAL2"), default="VAL1")
         self.assertEqual(d.unpack(None), "VAL1")
@@ -144,8 +144,8 @@ class TestLru(unittest.TestCase):
         l = Lru()
         self.assertEqual(l.unpack("nominal"), Lru.LRU_NOMINAL)
         self.assertEqual(l.unpack("error"), Lru.LRU_ERROR)
-        self.assertRaises(FailReply, l.unpack, "aaa")
-        self.assertRaises(FailReply, l.unpack, None)
+        self.assertRaises(ValueError, l.unpack, "aaa")
+        self.assertRaises(ValueError, l.unpack, None)
 
         l = Lru(default=Lru.LRU_NOMINAL)
         self.assertEqual(l.unpack(None), Lru.LRU_NOMINAL)
@@ -166,8 +166,8 @@ class TestTimestamp(unittest.TestCase):
         """Test unpacking timestamps."""
         t = Timestamp()
         self.assertEqual(t.unpack("1235475381696"), 1235475381.6960001)
-        self.assertRaises(FailReply, t.unpack, "a")
-        self.assertRaises(FailReply, t.unpack, None)
+        self.assertRaises(ValueError, t.unpack, "a")
+        self.assertRaises(ValueError, t.unpack, None)
 
         t = Int(default=1235475793.0324881)
         self.assertEqual(t.unpack(None), 1235475793.0324881)
@@ -187,7 +187,7 @@ class TestStr(unittest.TestCase):
         """Test unpacking strings."""
         s = Str()
         self.assertEqual(s.unpack("adsasdasd"), "adsasdasd")
-        self.assertRaises(FailReply, s.unpack, None)
+        self.assertRaises(ValueError, s.unpack, None)
 
         s = Str(default="something")
         self.assertEqual(s.unpack(None), "something")
@@ -209,9 +209,9 @@ class TestStruct(unittest.TestCase):
         """Test unpacking structs."""
         s = Struct(">isf")
         self.assertEqual(s.unpack("\x00\x00\x00\x05s@ \x00\x00"), (5, "s", 2.5))
-        self.assertRaises(FailReply, s.unpack, "asdfgasdfas")
-        self.assertRaises(FailReply, s.unpack, "asd")
-        self.assertRaises(FailReply, s.unpack, None)
+        self.assertRaises(ValueError, s.unpack, "asdfgasdfas")
+        self.assertRaises(ValueError, s.unpack, "asd")
+        self.assertRaises(ValueError, s.unpack, None)
 
         s = Struct(">isf", default=(1, "f", 3.4))
         self.assertEqual(s.unpack(None), (1, "f", 3.4))
