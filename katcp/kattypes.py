@@ -81,7 +81,8 @@ class Float(KatcpType):
         self._min = min
         self._max = max
 
-    def format(self, value):
+    @classmethod
+    def format(cls, value):
         return "%.1f" % value if abs(value) > 10**-1 or value == 0.0 else "%.1e" % value
 
     def check(self, value):
