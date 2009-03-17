@@ -18,8 +18,6 @@ class KatcpType(object):
            @param default Default value.
            """
         self._default = default
-        self._name = None
-        self._position = None
 
     def get_default(self):
         if self._default is None:
