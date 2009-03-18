@@ -578,7 +578,8 @@ class DeviceClient(object):
 class BlockingClient(DeviceClient):
     """Implement blocking requests on top of DeviceClient."""
 
-    def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log):
+    def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
+                 auto_reconnect=True):
         """Create a basic BlockingClient.
 
            @param self This object.
@@ -589,9 +590,11 @@ class BlockingClient(DeviceClient):
            @param timeout Float: seconds to wait before a blocking request
                           times out.
            @param logger Object: Logger to log to.
+           @param auto_reconnect Boolean: Whether to automattically
+                                 reconnect if the connection dies.
            """
         super(BlockingClient, self).__init__(host, port, tb_limit=tb_limit,
-            logger=logger)
+            logger=logger,auto_reconnect=auto_reconnect)
         self._request_timeout = timeout
 
         self._request_end = threading.Event()
