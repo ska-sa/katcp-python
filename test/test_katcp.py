@@ -2,7 +2,6 @@
 
 import unittest
 import katcp
-import threading
 import time
 import katcp.sampling
 import logging
@@ -291,7 +290,7 @@ class DeviceTestServer(katcp.DeviceServer):
 
     def request_new_command(self, sock, msg):
         """A new command."""
-        return Message.reply(msg.name, "ok", "param1", "param2")
+        return katcp.Message.reply(msg.name, "ok", "param1", "param2")
 
     def request_raise_exception(self, sock, msg):
         """A handler which raises an exception."""
