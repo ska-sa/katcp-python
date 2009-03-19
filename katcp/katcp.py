@@ -1392,7 +1392,6 @@ class Sensor(object):
            @param s_value the value of the sensor (as a string)
            @return None
            """
-
         return self._parser(s_value)
 
     def set(self, timestamp, status, value):
