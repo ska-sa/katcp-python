@@ -145,15 +145,10 @@ class Lru(KatcpType):
         return Lru.LRU_CONSTANTS[value]
 
 class Str(KatcpType):
-    encode = staticmethod(lambda value: str(value))
-    decode = staticmethod(lambda value: str(value))
-
+    encode = lambda self, value: str(value)
+    decode = lambda self, value: str(value)
 
 class Timestamp(KatcpType):
-
-    # TODO: Convert from KATCP integer timestamp (in ms)
-    # to Python float timestamp (in s)
-
     encode = lambda self, value: "%i" % (int(float(value)*1000),)
 
     def decode(self, value):
