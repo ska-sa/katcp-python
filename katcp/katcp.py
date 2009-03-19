@@ -993,6 +993,7 @@ class DeviceServer(DeviceServerBase):
          - build-state (sent on connect)
          - log (via self.log.warn(...), etc)
          - disconnect
+         - client-connected
 
        Requests handled are:
          - halt
@@ -1002,6 +1003,7 @@ class DeviceServer(DeviceServerBase):
          - client-list
          - sensor-list
          - sensor-sampling
+         - sensor-value
          - watchdog
 
        Unhandled standard messages are:
@@ -1095,8 +1097,8 @@ class DeviceServer(DeviceServerBase):
            here or pass if there are no sensors.
 
            e.g. def setup_sensors(self):
-                    self.add_sensor("a.b.sensor_c", Sensor(...))
-                    self.add_sensor("a.c.d", Sensor(...))
+                    self.add_sensor(Sensor(...))
+                    self.add_sensor(Sensor(...))
                     ...
            """
         raise NotImplementedError("Device server subclasses must implement"
