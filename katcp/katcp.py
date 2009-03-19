@@ -1318,6 +1318,9 @@ class Sensor(object):
     ## @brief Number of milliseconds in a second.
     MILLISECOND = 1000
 
+    ## @brief kattype Timestamp instance for encoding and decoding timestamps
+    TIMESTAMP_TYPE = Timestamp()
+
     ## @var stype
     # @brief Sensor type constant.
 
@@ -1406,6 +1409,20 @@ class Sensor(object):
         self._timestamp, self._status, self._value = timestamp, status, value
         self.notify()
 
+    def set_formatted(self, raw_timestamp, raw_status, raw_value):
+        """Set the current value of the sensor.
+
+           @param self This object
+           @param timestamp KATCP formatted timestamp string
+           @param status KATCP formatted sensor status string
+           @param value KATCP formatted sensor value
+           @return None
+           """
+        timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp)
+        status = self.STATUS_NAMES[raw_status]
+        value = self.parse_value(raw_value)
+        self.set(timestamp, status, value)
+
     def read_formatted(self):
         """Read the sensor and return a timestamp_ms, status, value tuple.
 
@@ -1413,7 +1430,7 @@ class Sensor(object):
            Formats in the katcp specification.
            """
         timestamp, status, value = self.read()
-        return ("%d" % (int(timestamp * Sensor.MILLISECOND),),
+        return (self.TIMESTAMP_TYPE.encode(timestamp),
                 self.STATUSES[status],
                 self._formatter(value, True))
 
