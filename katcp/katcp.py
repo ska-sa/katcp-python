@@ -117,6 +117,10 @@ class Message(object):
                                 " alphabetic character (got %r)."
                                 % (name,))
 
+    def copy(self):
+        """Return a shallow copy of the message object and its arguments."""
+        return Message(self.mtype, self.name, self.arguments)
+
     def __str__(self):
         """Return Message serialized for transmission.
 
@@ -687,6 +691,14 @@ class FailReply(Exception):
        """
     pass
 
+class AsyncReply(Exception):
+    """A custom exception which, when thrown in a request handler,
+       indicates to DeviceServerBase that no reply has been returned
+       by the handler but that the handler has arranged for a reply
+       message to be sent at a later time.
+       """
+    pass
+
 class DeviceServerBase(object):
     """Base class for device servers.
 
@@ -813,12 +825,16 @@ class DeviceServerBase(object):
 
     def handle_request(self, sock, msg):
         """Dispatch a request message to the appropriate method."""
+        send_reply = True
         if msg.name in self._request_handlers:
             try:
                 reply = self._request_handlers[msg.name](self, sock, msg)
                 assert (reply.mtype == Message.REPLY)
                 assert (reply.name == msg.name)
                 self._logger.info("%s OK" % (msg.name,))
+            except AsyncReply, e:
+                self._logger.info("%s ASYNC OK" % (msg.name,))
+                send_reply = False
             except FailReply, e:
                 reason = str(e)
                 self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
@@ -835,7 +851,8 @@ class DeviceServerBase(object):
         else:
             self._logger.error("%s INVALID: Unknown request." % (msg.name,))
             reply = Message.reply(msg.name, "invalid", "Unknown request.")
-        sock.send(str(reply) + "\n")
+        if send_reply:
+            sock.send(str(reply) + "\n")
 
     def handle_inform(self, sock, msg):
         """Dispatch an inform message to the appropriate method."""
