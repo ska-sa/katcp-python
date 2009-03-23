@@ -1,16 +1,8 @@
-## @file
-# Root of Antenna Control Software Module (ACSM). Ensures that all necessary
-# packages are required for import from eggs.
-#
-# copyright (c) 2006 CONRAD. All Rights Reserved.
-# @author Robert Crida <robert.crida@ska.ac.za>
-#
+"""Root of katcp package.
 
-try:
-    import initenv
-except ImportError:
-    # We don't actually need initenv, so ignore it not being there
-    pass
+   @namespace za.ac.ska.katcp
+   @author Simon Cross <simon.cross@ska.ac.za>
+   """
 
 from katcp import Message, KatcpSyntaxError, MessageParser, DeviceClient, \
                   BlockingClient, DeviceMetaclass, DeviceServerBase, \
