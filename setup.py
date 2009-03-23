@@ -1,15 +1,9 @@
 #!/usr/bin/env python
-from recursivebuild import setup
-from recursivebuild.dependencies import Dependency
-
-import os
-conradRootDir = os.environ["CONRAD_PROJECT_ROOT"]
-
-dep = Dependency()
-dep.add_package()
+from distutils.core import setup
 
 setup (
     name = "katcp",
+    version = "trunk",
     description = "Karoo Array Telescope Communication Protocol library'",
     author = "Simon Cross",
     author_email = "simon.cross@ska.ac.za",
@@ -18,8 +12,6 @@ setup (
         "scripts/katcp-exampleserver.py",
         "scripts/katcp-exampleclient.py",
     ],
-    dependency = dep,
-    test_suite = "test.suite",
     url='http://ska.ac.za/',
     classifiers=[
         "Development Status :: 3 - Alpha",
@@ -32,5 +24,4 @@ setup (
     ],
     platforms = [ "OS Independent" ],
     keywords="kat kat7 ska",
-    zip_safe = True
 )
