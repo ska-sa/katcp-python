@@ -1167,7 +1167,7 @@ class DeviceServer(DeviceServerBase):
         """Request the list of connected clients."""
         clients = self.get_sockets()
         num_clients = len(clients)
-        for client in self.get_clients():
+        for client in clients:
             addr = client.getsockname()
             self.inform(sock, Message.inform("client-list", addr))
         return Message.reply("client-list", "ok", str(num_clients))

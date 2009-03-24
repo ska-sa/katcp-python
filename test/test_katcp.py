@@ -435,6 +435,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("help"))
         self.client.request(katcp.Message.request("help", "watchdog"))
         self.client.request(katcp.Message.request("help", "unknown-request"))
+        self.client.request(katcp.Message.request("client-list"))
         self.client.request(katcp.Message.request("sensor-list"))
         self.client.request(katcp.Message.request("sensor-list", "an.int"))
         self.client.request(katcp.Message.request("sensor-list", "an.unknown"))
@@ -481,6 +482,8 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#help watchdog", ""),
             (r"!help ok 1", ""),
             (r"!help fail", ""),
+            (r"#client-list", ""),
+            (r"!client-list ok 1", ""),
             (r"#sensor-list an.int integer An\_Integer. count -5 5", ""),
             (r"!sensor-list ok 1", ""),
             (r"#sensor-list an.int integer An\_Integer. count -5 5", ""),
