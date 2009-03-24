@@ -1,10 +1,11 @@
-## @file scripts/katcp-exampleserver.py
-# KATCP server example.
-#
-# copyright (c) 2008 SKA/KAT. All Rights Reserved.
-# @author Robert Crida <robert.crida@ska.ac.za>
-# @date 2008-10-10
-#
+#!/usr/bin/env python
+
+"""KATCP server example.
+
+   copyright (c) 2008 SKA/KAT. All Rights Reserved.
+   @author Robert Crida <robert.crida@ska.ac.za>
+   @date 2008-10-10
+   """
 
 import logging
 import sys
