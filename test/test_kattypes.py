@@ -2,7 +2,8 @@
 
 import unittest
 from katcp import Message, FailReply
-from katcp.kattypes import request, inform, return_reply, Bool, Discrete, Float, Int, Lru, Timestamp, Str, Struct
+from katcp.kattypes import request, inform, return_reply, Bool, \
+        Discrete, Float, Int, Lru, Timestamp, Str, Struct, Regex, Or
 
 class TestInt(unittest.TestCase):
 
@@ -215,6 +216,58 @@ class TestStruct(unittest.TestCase):
 
         s = Struct(">isf", default=(1, "f", 3.4))
         self.assertEqual(s.unpack(None), (1, "f", 3.4))
+
+class TestRegex(unittest.TestCase):
+
+    def test_pack(self):
+        """Test packing regexes."""
+        r = Regex("\d\d:\d\d:\d\d")
+        self.assertEqual(r.pack("12:34:56"), "12:34:56")
+        self.assertRaises(ValueError, r.pack, None)
+        self.assertRaises(ValueError, r.pack, "sdfasdfsadf")
+
+        r = Regex("\d\d:\d\d:\d\d", default="00:00:00")
+        self.assertEqual(r.pack(None), "00:00:00")
+
+    def test_unpack(self):
+        """Test unpacking regexes."""
+        r = Regex("\d\d:\d\d:\d\d")
+        self.assertEqual(r.unpack("12:34:56"), "12:34:56")
+        self.assertRaises(ValueError, r.unpack, None)
+        self.assertRaises(ValueError, r.unpack, "sdfasdfsadf")
+
+        r = Regex("\d\d:\d\d:\d\d", default="00:00:00")
+        self.assertEqual(r.unpack(None), "00:00:00")
+
+class TestOr(unittest.TestCase):
+
+    def test_pack(self):
+        """Test packing OR."""
+        o = Or((Float(),Regex("\d\d:\d\d")))
+        self.assertEqual(o.pack("12:34"), "12:34")
+        self.assertEqual(o.pack(56.7), "%e" % 56.7)
+        self.assertRaises(ValueError, o.pack, None)
+        self.assertRaises(ValueError, o.pack, "sdfsdf")
+
+        o = Or((Float(default=0.0),Regex("\d\d:\d\d")))
+        self.assertEqual(o.pack(None), "%e" % 0.0)
+
+        o = Or((Float(),Regex("\d\d:\d\d", default="00:00")))
+        self.assertEqual(o.pack(None), "00:00")
+
+    def test_unpack(self):
+        """Test unpacking OR."""
+        o = Or((Float(),Regex("\d\d:\d\d")))
+        self.assertEqual(o.unpack("12:34"), "12:34")
+        self.assertEqual(o.unpack("56.7"), 56.7)
+        self.assertRaises(ValueError, o.unpack, None)
+        self.assertRaises(ValueError, o.unpack, "sdfsdf")
+
+        o = Or((Float(default=0.0),Regex("\d\d:\d\d")))
+        self.assertEqual(o.unpack(None), 0.0)
+
+        o = Or((Float(),Regex("\d\d:\d\d", default="00:00")))
+        self.assertEqual(o.unpack(None), "00:00")
 
 class TestDevice(object):
 

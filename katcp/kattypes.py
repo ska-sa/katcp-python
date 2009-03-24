@@ -1,6 +1,7 @@
 import katcp
 import inspect
 import struct
+import re
 
 """Utilities for dealing with KATCP types.
    """
@@ -10,6 +11,8 @@ import struct
 
 class KatcpType(object):
     """Class representing a KATCP type."""
+
+    name = "unknown"
 
     def __init__(self, default=None):
         """Construct a KATCP type.
@@ -45,6 +48,9 @@ class KatcpType(object):
 
 
 class Int(KatcpType):
+
+    name = "integer"
+
     encode = lambda self, value: "%d" % (value,)
 
     def decode(self, value):
@@ -68,6 +74,9 @@ class Int(KatcpType):
 
 
 class Float(KatcpType):
+
+    name = "float"
+
     encode = lambda self, value: "%e" % (value,)
 
     def decode(self, value):
@@ -95,6 +104,9 @@ class Float(KatcpType):
 
 
 class Bool(KatcpType):
+
+    name = "boolean"
+
     encode = lambda self, value: value and "1" or "0"
 
     def decode(self, value):
@@ -103,9 +115,17 @@ class Bool(KatcpType):
         return value == "1"
 
 
-class Discrete(KatcpType):
+class Str(KatcpType):
+
+    name = "string"
+
     encode = lambda self, value: value
     decode = lambda self, value: value
+
+
+class Discrete(Str):
+
+    name = "discrete"
 
     def __init__(self, values, default=None):
         super(Discrete, self).__init__(default=default)
@@ -119,6 +139,9 @@ class Discrete(KatcpType):
 
 
 class Lru(KatcpType):
+
+    name = "LRU"
+
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = range(2)
 
@@ -144,11 +167,11 @@ class Lru(KatcpType):
             raise ValueError("Lru value must be 'nominal' or 'error'.")
         return Lru.LRU_CONSTANTS[value]
 
-class Str(KatcpType):
-    encode = lambda self, value: str(value)
-    decode = lambda self, value: str(value)
 
 class Timestamp(KatcpType):
+
+    name = "timestamp"
+
     encode = lambda self, value: "%i" % (int(float(value)*1000),)
 
     def decode(self, value):
@@ -157,7 +180,15 @@ class Timestamp(KatcpType):
         except:
             raise ValueError("Could not parse value '%s' as timestamp." % value)
 
+
 class Struct(KatcpType):
+
+    name = "struct"
+
+    def __init__(self, fmt, default=None):
+        super(Struct, self).__init__(default=default)
+        self._fmt = fmt
+
     def encode(self, value):
         try:
             return struct.pack(self._fmt, *value)
@@ -170,9 +201,67 @@ class Struct(KatcpType):
         except struct.error, e:
             raise ValueError("Could not unpack %s from struct with format %s: %s" % (value, self._fmt, e))
 
-    def __init__(self, fmt, default=None):
-        super(Struct, self).__init__(default=default)
-        self._fmt = fmt
+
+class Regex(Str):
+
+    name = "regex"
+
+    def __init__(self, regex, default=None):
+        self._regex = regex
+        self._compiled = re.compile(regex)
+        super(Regex, self).__init__(default=default)
+
+    def check(self, value):
+        if not self._compiled.match(value):
+            raise ValueError("Value '%s' does not match regex '%s'." % (value, self._regex))
+
+
+class Or(KatcpType):
+    """This is intended for use with individual parameters with multiple
+       allowed formats.
+
+       e.g. Or(Float(), Regex("\d\d:\d\d"))
+
+       Types are evaluated left-to-right, and the first type to pack /
+       unpack the parameter successfully will be used.  To specify a
+       default value, specify it in whichever individual type you would
+       like to be used by default: the first type with a default will
+       always pack / unpack None successfully.
+    """
+
+    name = "or"
+
+    def __init__(self, types, default=None):
+        self._types = types
+        # disable default
+        super(Or, self).__init__(default=None)
+
+    def try_type_methods(self, methodname, params):
+        returnvalue = None
+        errors = {}
+        for t in self._types:
+            try:
+                m = getattr(t, methodname)
+                returnvalue = m(*params)
+                break
+            except (ValueError, TypeError, KeyError), e:
+                errors[t.name] = str(e)
+        if returnvalue is None:
+            raise ValueError("; ".join(["%s: %s" % (name, e) for name, e in errors]))
+        return returnvalue
+
+    def pack(self, value, nocheck=False):
+        try:
+            return self.try_type_methods("pack", (value, nocheck))
+        except ValueError, e:
+            raise ValueError("Unable to pack value '%s' using any type in list. %s" % (value, e))
+
+    def unpack(self, packed_value):
+        try:
+            return self.try_type_methods("unpack", (packed_value,))
+        except ValueError, e:
+            raise ValueError("Unable to unpack value '%s' using any type in list. %s" % (packed_value, e))
+
 
 class Parameter(object):
     """Wrapper for kattypes which holds parameter-specific information"""
@@ -199,7 +288,8 @@ class Parameter(object):
         except ValueError, message:
             raise katcp.FailReply("Error in parameter %s (%s): %s" % (self.position, self.name, message))
 
-## Request, return_reply and inform method decorators
+
+## request, return_reply and inform method decorators
 #
 
 def request(*types):
