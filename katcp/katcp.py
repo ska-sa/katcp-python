@@ -13,7 +13,7 @@ import logging
 import sys
 import re
 import time
-from sampling import SampleReactor, SampleStrategy
+from sampling import SampleReactor, SampleStrategy, SampleNone
 from kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp
 
 # logging.basicConfig(level=logging.DEBUG)
@@ -1175,7 +1175,7 @@ class DeviceServer(DeviceServerBase):
     def request_sensor_list(self, sock, msg):
         """Request the list of sensors."""
         if not msg.arguments:
-            for name, sensor in self._sensors.iteritems():
+            for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
                 self.inform(sock, Message.inform("sensor-list",
                     name, sensor.stype, sensor.description, sensor.units,
                     *sensor.params))
@@ -1235,10 +1235,14 @@ class DeviceServer(DeviceServerBase):
 
             old_strategy = self._strategies[sock].get(sensor, None)
             if old_strategy is not None:
-                self._reactor.remove(old_strategy)
+                self._reactor.remove_strategy(old_strategy)
 
-            self._strategies[sock][sensor] = new_strategy
-            self._reactor.add_strategy(new_strategy)
+            # todo: replace isinstance check with something better
+            if isinstance(new_strategy, SampleNone):
+                del self._strategies[sock][sensor]
+            else:
+                self._strategies[sock][sensor] = new_strategy
+                self._reactor.add_strategy(new_strategy)
 
         current_strategy = self._strategies[sock].get(sensor, None)
         if not current_strategy:
