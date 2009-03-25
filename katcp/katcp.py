@@ -1295,13 +1295,13 @@ class Sensor(object):
     #  a kattype with functions to format and parse a value and a
     #  default value for sensors of that type.
     SENSOR_TYPES = {
-        INTEGER: ("integer", Int, 0),
-        FLOAT: ("float", Float, 0.0),
-        BOOLEAN: ("boolean", Bool, False),
-        LRU: ("lru", Lru, Lru.LRU_NOMINAL),
-        DISCRETE: ("discrete", Discrete, "unknown"),
-        STRING: ("string", Str, ""),
-        TIMESTAMP: ("timestamp", Timestamp, 0.0),
+        INTEGER: (Int, 0),
+        FLOAT: (Float, 0.0),
+        BOOLEAN: (Bool, False),
+        LRU: (Lru, Lru.LRU_NOMINAL),
+        DISCRETE: (Discrete, "unknown"),
+        STRING: (Str, ""),
+        TIMESTAMP: (Timestamp, 0.0),
     }
 
     # map type strings to types
@@ -1374,7 +1374,7 @@ class Sensor(object):
         self._timestamp = time.time()
         self._status = Sensor.UNKNOWN
 
-        self.stype, typeclass, self._value = self.SENSOR_TYPES[sensor_type]
+        typeclass, self._value = self.SENSOR_TYPES[sensor_type]
 
         if self._sensor_type in [Sensor.INTEGER, Sensor.FLOAT]:
             self._kattype = typeclass(params[0], params[1])
@@ -1384,6 +1384,7 @@ class Sensor(object):
             self._kattype = typeclass()
         self._formatter = self._kattype.pack
         self._parser = self._kattype.unpack
+        self.stype = self._kattype.name
 
         self.name = name
         self.description = description

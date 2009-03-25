@@ -140,7 +140,7 @@ class Discrete(Str):
 
 class Lru(KatcpType):
 
-    name = "LRU"
+    name = "lru"
 
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = range(2)
