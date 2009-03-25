@@ -1,5 +1,4 @@
 import unittest
-import katcp # for module dependencies
 import test_katcp
 import test_kattypes
 
