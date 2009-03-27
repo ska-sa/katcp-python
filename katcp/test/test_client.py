@@ -120,7 +120,6 @@ class TestCallbackClient(unittest.TestCase):
         )
 
         time.sleep(0.1)
-        print watchdog_replies
         self.assertTrue(watchdog_replies)
 
         help_replies = []
