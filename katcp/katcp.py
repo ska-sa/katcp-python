@@ -1178,7 +1178,7 @@ class DeviceServer(DeviceServerBase):
             for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
                 self.inform(sock, Message.inform("sensor-list",
                     name, sensor.stype, sensor.description, sensor.units,
-                    *sensor.params))
+                    *sensor.formatted_params))
             return Message.reply("sensor-list",
                     "ok", str(len(self._sensors)))
         else:
@@ -1187,7 +1187,7 @@ class DeviceServer(DeviceServerBase):
                 sensor = self._sensors[name]
                 self.inform(sock, Message.inform("sensor-list",
                     name, sensor.stype, sensor.description, sensor.units,
-                    *sensor.params))
+                    *sensor.formatted_params))
                 return Message.reply("sensor-list", "ok", "1")
             else:
                 return Message.reply("sensor-list", "fail",
@@ -1305,7 +1305,7 @@ class Sensor(object):
     }
 
     # map type strings to types
-    SENSOR_TYPE_LOOKUP = dict((v[0], k) for k, v in SENSOR_TYPES.items())
+    SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
 
     # Sensor status constants
     UNKNOWN, NOMINAL, WARN, ERROR, FAILURE = range(5)
@@ -1389,8 +1389,8 @@ class Sensor(object):
         self.name = name
         self.description = description
         self.units = units
-        self.raw_params = params
-        self.params = [self._formatter(p, True) for p in params]
+        self.params = params
+        self.formatted_params = [self._formatter(p, True) for p in params]
 
         if self._sensor_type == Sensor.DISCRETE:
             self._value = self.params[0]
@@ -1469,12 +1469,22 @@ class Sensor(object):
         return (self._timestamp, self._status, self._value)
 
     @classmethod
-    def parse_type(type_string):
-        if type_string in Sensor.SENSOR_TYPE_LOOKUP:
-            return Sensor.SENSOR_TYPE_LOOKUP[type_string]
+    def parse_type(cls, type_string):
+        """Parse KATCP formatted type code into Sensor type constant."""
+        if type_string in cls.SENSOR_TYPE_LOOKUP:
+            return cls.SENSOR_TYPE_LOOKUP[type_string]
         else:
             raise KatcpSyntaxError("Invalid sensor type string %s" % type_string)
 
+    @classmethod
+    def parse_params(cls, sensor_type, formatted_params):
+        """Parse KATCP formatted parameters into Python values."""
+        typeclass, _value = cls.SENSOR_TYPES[sensor_type]
+        if sensor_type == cls.DISCRETE:
+            kattype = typeclass([])
+        else:
+            kattype = typeclass()
+        return [kattype.decode(x) for x in formatted_params]
 
 class DeviceLogger(object):
     """Object for logging messages from a DeviceServer.
