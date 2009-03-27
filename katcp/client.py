@@ -13,7 +13,7 @@ import time
 import logging
 from katcp import DeviceMetaclass, MessageParser, Message
 
-# logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp")
 
 
@@ -83,7 +83,7 @@ class DeviceClient(object):
             raise KatcpClientError("Client not connected")
         self._sock.send(str(msg) + "\n")
 
-    def connect(self):
+    def _connect(self):
         """Connect to the server.
 
            @param self This object.
@@ -97,9 +97,9 @@ class DeviceClient(object):
             self.notify_connected(True)
         except Exception:
             self._logger.exception("DeviceClient failed to connect.")
-            self.disconnect()
+            self._disconnect()
 
-    def disconnect(self):
+    def _disconnect(self):
         """Disconnect and cleanup.
 
            @param self This object
@@ -220,7 +220,7 @@ class DeviceClient(object):
         timeout = 1.0 # s
 
         self._running.set()
-        self.connect()
+        self._connect()
         while self._running.isSet():
             if self.is_connected():
                 readers, _writers, errors = select.select(
@@ -228,7 +228,7 @@ class DeviceClient(object):
                 )
 
                 if errors:
-                    self.disconnect()
+                    self._disconnect()
 
                 elif readers:
                     chunk = self._sock.recv(4096)
@@ -236,7 +236,7 @@ class DeviceClient(object):
                         self.handle_chunk(chunk)
                     else:
                         # EOF from server
-                        self.disconnect()
+                        self._disconnect()
             else:
                 # not currently connected so attempt to connect
                 # if auto_reconnect is set
@@ -244,11 +244,11 @@ class DeviceClient(object):
                     self._running.clear()
                     break
                 else:
-                    self.connect()
+                    self._connect()
                     if not self.is_connected():
                         time.sleep(timeout)
 
-        self.disconnect()
+        self._disconnect()
         self._logger.debug("Stopping thread %s" % (threading.currentThread().getName()))
 
     def start(self, timeout=None):
@@ -303,7 +303,7 @@ class DeviceClient(object):
         return self._running.isSet()
 
     def is_connected(self):
-        """Check if the socket is current connected.
+        """Check if the socket is currently connected.
 
            @param self This object
            @return Whether the client is connected (True or False).
@@ -419,11 +419,107 @@ class BlockingClient(DeviceClient):
                 self._current_name = None
                 self._current_reply = msg
                 self._request_end.set()
+                return
         finally:
             self._request_lock.release()
 
-        super(BlockingClient, self).handle_inform(msg)
+        super(BlockingClient, self).handle_reply(msg)
 
 
 class CallbackClient(DeviceClient):
-    pass
+    """Implement callback-based requests on top of DeviceClient."""
+
+    def __init__(self, host, port, tb_limit=20, logger=log,
+                 auto_reconnect=True):
+        """Create a basic CallbackClient.
+
+           @param self This object.
+           @param host String: host to connect to.
+           @param port Integer: port to connect to.
+           @param tb_limit Integer: maximum number of stack frames to
+                           send in error traceback.
+           @param logger Object: Logger to log to.
+           @param auto_reconnect Boolean: Whether to automattically
+                                 reconnect if the connection dies.
+           """
+        super(CallbackClient, self).__init__(host, port, tb_limit=tb_limit,
+            logger=logger,auto_reconnect=auto_reconnect)
+
+        # stack mapping pending requests to (reply_cb, inform_cb) callback pairs
+        self._async_stack = {}
+
+    def _push_async_request(self, request_name, reply_cb, inform_cb):
+        """Store the socket that we've sent a request from so we
+           can forward any replies and informs to the right scoket.
+           """
+        if request_name in self._async_stack:
+            self._async_stack[request_name].append((reply_cb, inform_cb))
+        else:
+            self._async_stack[request_name] = [(reply_cb, inform_cb)]
+
+    def _pop_async_request(self, request_name):
+        """Pop the last client socket to perform a request from
+           the stack so a reply can be sent.
+           """
+        return self._async_stack[request_name].pop()
+
+    def _peek_async_request(self, request_name):
+        """Peek at the last client socket to perform a request
+           so that associated informs can be sent.
+           """
+        return self._async_stack[request_name][-1]
+
+    def _has_async_request(self, request_name):
+        """Return true if there is an async request to be popped."""
+        return bool(request_name in self._async_stack and self._async_stack[request_name])
+
+    def request(self, msg, reply_cb=None, inform_cb=None):
+        """Send a request messsage.
+
+           @param self This object.
+           @param msg The request Message to send.
+           @return The a tuple containing the reply Message and a list of
+                   inform messages.
+           """
+        self._push_async_request(msg.name, reply_cb, inform_cb)
+        super(CallbackClient, self).request(msg)
+
+    def handle_inform(self, msg):
+        """Handle inform messages related to any current requests.
+
+           Inform messages not related to the current request go up
+           to the base class method.
+           """
+        if self._has_async_request(msg.name):
+            _reply_cb, inform_cb = self._peek_async_request(msg.name)
+        else:
+            inform_cb = super(CallbackClient, self).handle_inform
+
+        try:
+            inform_cb(msg)
+        except Exception:
+            e_type, e_value, trace = sys.exc_info()
+            reason = "\n".join(traceback.format_exception(
+                e_type, e_value, trace, self._tb_limit
+            ))
+            self._logger.error("Callback inform %s FAIL: %s" % (msg.name, reason))
+
+    def handle_reply(self, msg):
+        """Handle a reply message related to the current request.
+
+           Reply messages not related to the current request go up
+           to the base class method.
+           """
+        if self._has_async_request(msg.name):
+            reply_cb, _inform_cb = self._pop_async_request(msg.name)
+        else:
+            reply_cb = super(CallbackClient, self).handle_reply
+
+        try:
+            reply_cb(msg)
+        except Exception:
+            e_type, e_value, trace = sys.exc_info()
+            reason = "\n".join(traceback.format_exception(
+                e_type, e_value, trace, self._tb_limit
+            ))
+            self._logger.error("Callback reply %s FAIL: %s" % (msg.name, reason))
