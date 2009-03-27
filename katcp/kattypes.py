@@ -46,7 +46,6 @@ class KatcpType(object):
         return value
 
 
-
 class Int(KatcpType):
 
     name = "integer"
