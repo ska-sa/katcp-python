@@ -4,6 +4,8 @@
    @author Simon Cross <simon.cross@ska.ac.za>
    """
 
-from katcp import Message, KatcpSyntaxError, MessageParser, DeviceClient, \
-                  BlockingClient, DeviceMetaclass, DeviceServerBase, \
+from katcp import Message, KatcpSyntaxError, MessageParser, \
+                  DeviceMetaclass, DeviceServerBase, \
                   DeviceServer, Sensor, DeviceLogger, FailReply, AsyncReply
+
+from client import DeviceClient, BlockingClient, CallbackClient
