@@ -482,6 +482,12 @@ class DeviceServerBase(object):
         else:
             self._logger.warn("%s INVALID: Unknown reply." % (msg.name,))
 
+    def send_message(self, sock, msg):
+        """Send an arbitrary message to a particular client."""
+        # could be a function but we don't want it to be
+        # pylint: disable-msg = R0201
+        sock.send(str(msg) + "\n")
+
     def inform(self, sock, msg):
         """Send an inform messages to a particular client."""
         # could be a function but we don't want it to be
