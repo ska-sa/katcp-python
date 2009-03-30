@@ -6,7 +6,8 @@ import time
 import katcp.client
 import logging
 from katcp.test.utils import TestLogHandler, \
-    DeviceTestClient, DeviceTestServer, TestUtilMixin
+    DeviceTestClient, CallbackTestClient, DeviceTestServer, \
+    TestUtilMixin
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -86,14 +87,14 @@ class TestBlockingClient(unittest.TestCase):
         assert len(informs) == int(reply.arguments[1])
 
 
-class TestCallbackClient(unittest.TestCase):
+class TestCallbackClient(unittest.TestCase, TestUtilMixin):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
         self.server.start(timeout=0.1)
 
         host, port = self.server._sock.getsockname()
 
-        self.client = katcp.CallbackClient(host, port)
+        self.client = CallbackTestClient(host, port)
         self.client.start(timeout=0.1)
 
     def tearDown(self):
@@ -110,8 +111,8 @@ class TestCallbackClient(unittest.TestCase):
         watchdog_replies = []
 
         def watchdog_reply(reply):
-            assert reply.name == "watchdog"
-            assert reply.arguments == ["ok"]
+            self.assertEqual(reply.name, "watchdog")
+            self.assertEqual(reply.arguments, ["ok"])
             watchdog_replies.append(reply)
 
         self.client.request(
@@ -126,14 +127,14 @@ class TestCallbackClient(unittest.TestCase):
         help_informs = []
 
         def help_reply(reply):
-            assert reply.name == "help"
-            assert reply.arguments == ["ok", "12"]
-            assert len(help_informs) == int(reply.arguments[1])
+            self.assertEqual(reply.name, "help")
+            self.assertEqual(reply.arguments, ["ok", "12"])
+            self.assertEqual(len(help_informs), int(reply.arguments[1]))
             help_replies.append(reply)
 
         def help_inform(inform):
-            assert inform.name == "help"
-            assert len(inform.arguments) == 2
+            self.assertEqual(inform.name, "help")
+            self.assertEqual(len(inform.arguments), 2)
             help_informs.append(inform)
 
         self.client.request(
@@ -143,5 +144,50 @@ class TestCallbackClient(unittest.TestCase):
         )
 
         time.sleep(0.1)
-        self.assertTrue(help_replies)
-        self.assertTrue(help_informs)
+        self.assertEqual(len(help_replies), 1)
+        self.assertEqual(len(help_informs), 12)
+
+    def test_no_callback(self):
+        """Test request without callback."""
+
+        self.client.request(
+            katcp.Message.request("help")
+        )
+
+        time.sleep(0.1)
+        msgs = self.client.messages()
+
+        self._assert_msgs_like(msgs,
+            [("#version ", "")] +
+            [("#build-state ", "")] +
+            [("#help ", "")]*12 +
+            [("!help ok 12", "")]
+        )
+
+    def test_user_data(self):
+        """Test callbacks with user data."""
+        help_replies = []
+        help_informs = []
+
+        def help_reply(reply, x, y):
+            self.assertEqual(reply.name, "help")
+            self.assertEqual(x, 5)
+            self.assertEqual(y, "foo")
+            help_replies.append(reply)
+
+        def help_inform(inform, x, y):
+            self.assertEqual(inform.name, "help")
+            self.assertEqual(x, 5)
+            self.assertEqual(y, "foo")
+            help_informs.append(inform)
+
+        self.client.request(
+            katcp.Message.request("help"),
+            reply_cb=help_reply,
+            inform_cb=help_inform,
+            user_data=(5, "foo")
+        )
+
+        time.sleep(0.1)
+        self.assertEqual(len(help_replies), 1)
+        self.assertEqual(len(help_informs), 12)

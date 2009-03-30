@@ -448,24 +448,24 @@ class CallbackClient(DeviceClient):
         # stack mapping pending requests to (reply_cb, inform_cb) callback pairs
         self._async_stack = {}
 
-    def _push_async_request(self, request_name, reply_cb, inform_cb):
-        """Store the socket that we've sent a request from so we
-           can forward any replies and informs to the right scoket.
+    def _push_async_request(self, request_name, reply_cb, inform_cb, user_data):
+        """Store the callbacks for a request we've sent so we
+           can forward any replies and informs to them.
            """
         if request_name in self._async_stack:
-            self._async_stack[request_name].append((reply_cb, inform_cb))
+            self._async_stack[request_name].append((reply_cb, inform_cb, user_data))
         else:
-            self._async_stack[request_name] = [(reply_cb, inform_cb)]
+            self._async_stack[request_name] = [(reply_cb, inform_cb, user_data)]
 
     def _pop_async_request(self, request_name):
-        """Pop the last client socket to perform a request from
-           the stack so a reply can be sent.
+        """Pop the last set of callbacks to a request from
+           the stack so the reply callback can be notified.
            """
         return self._async_stack[request_name].pop()
 
     def _peek_async_request(self, request_name):
-        """Peek at the last client socket to perform a request
-           so that associated informs can be sent.
+        """Peek at the last set of callbacks to a request
+           so that the associated inform callback can be notified.
            """
         return self._async_stack[request_name][-1]
 
@@ -473,15 +473,21 @@ class CallbackClient(DeviceClient):
         """Return true if there is an async request to be popped."""
         return bool(request_name in self._async_stack and self._async_stack[request_name])
 
-    def request(self, msg, reply_cb=None, inform_cb=None):
+    def request(self, msg, reply_cb=None, inform_cb=None, user_data=None):
         """Send a request messsage.
 
            @param self This object.
            @param msg The request Message to send.
+           @param reply_cb The reply callback with signature reply_cb(msg)
+                           or reply_cb(msg, *user_data)
+           @param inform_cb The inform callback with signature inform_cb(msg)
+                             or inform_cb(msg, *user_data)
+           @param user_data Optional user data to send to the reply and inform
+                            callbacks.
            @return The a tuple containing the reply Message and a list of
                    inform messages.
            """
-        self._push_async_request(msg.name, reply_cb, inform_cb)
+        self._push_async_request(msg.name, reply_cb, inform_cb, user_data)
         super(CallbackClient, self).request(msg)
 
     def handle_inform(self, msg):
@@ -491,12 +497,22 @@ class CallbackClient(DeviceClient):
            to the base class method.
            """
         if self._has_async_request(msg.name):
-            _reply_cb, inform_cb = self._peek_async_request(msg.name)
+            # this may also result in inform_cb being None if no
+            # inform_cb was passed to the request method.
+            _reply_cb, inform_cb, user_data = self._peek_async_request(msg.name)
         else:
+            inform_cb, user_data = None, None
+
+        if inform_cb is None:
             inform_cb = super(CallbackClient, self).handle_inform
+            # override user_data since handle_inform takes no user_data
+            user_data = None
 
         try:
-            inform_cb(msg)
+            if user_data is None:
+                inform_cb(msg)
+            else:
+                inform_cb(msg, *user_data)
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
@@ -511,12 +527,21 @@ class CallbackClient(DeviceClient):
            to the base class method.
            """
         if self._has_async_request(msg.name):
-            reply_cb, _inform_cb = self._pop_async_request(msg.name)
+            # this may also result in reply_cb being None if no
+            # reply_cb was passed to the request method
+            reply_cb, _inform_cb, user_data = self._pop_async_request(msg.name)
         else:
+            reply_cb, user_data = None, None
+
+        if reply_cb is None:
             reply_cb = super(CallbackClient, self).handle_reply
+            # override user_data since handle_reply takes no user_data
 
         try:
-            reply_cb(msg)
+            if user_data is None:
+                reply_cb(msg)
+            else:
+                reply_cb(msg, *user_data)
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(

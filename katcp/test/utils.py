@@ -49,25 +49,28 @@ class DeviceTestClient(katcp.DeviceClient):
         """Send a raw chunk of data to the server."""
         self._sock.send(chunk)
 
-    def inform_version(self, msg):
-        """handle version inform message"""
+    def unhandled_reply(self, msg):
+        """Fallback method for reply messages without a registered handler"""
         self.__msgs.append(msg)
 
-    def inform_build_state(self, msg):
-        """handle build state inform message"""
+    def unhandled_inform(self, msg):
+        """Fallback method for inform messages without a registered handler"""
         self.__msgs.append(msg)
 
-    def inform_log(self, msg):
-        """handle log inform message"""
-        self.__msgs.append(msg)
+    def messages(self):
+        return self.__msgs
 
-    def inform_disconnect(self, msg):
-        """handle disconnect inform message"""
-        self.__msgs.append(msg)
 
-    def reply_halt(self, msg):
-        """handle halt reply message"""
-        self.__msgs.append(msg)
+class CallbackTestClient(katcp.CallbackClient):
+    """Test callback client."""
+
+    def __init__(self, *args, **kwargs):
+        super(CallbackTestClient, self).__init__(*args, **kwargs)
+        self.__msgs = []
+
+    def raw_send(self, chunk):
+        """Send a raw chunk of data to the server."""
+        self._sock.send(chunk)
 
     def unhandled_reply(self, msg):
         """Fallback method for reply messages without a registered handler"""
