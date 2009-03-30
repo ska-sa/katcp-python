@@ -301,6 +301,16 @@ class TestDevice(object):
     def inform_one(self, sock, i, d, b):
         pass
 
+    @request(Int(min=1,max=3), Discrete(("on","off")), Bool())
+    @return_reply(Int(min=1,max=3),Discrete(("on","off")),Bool())
+    def request_five(self, i, d, b):
+        return ("ok", i, d, b)
+
+    @return_reply(Int(min=1,max=3),Discrete(("on","off")),Bool())
+    @request(Int(min=1,max=3), Discrete(("on","off")), Bool())
+    def request_six(self, i, d, b):
+        return ("ok", i, d, b)
+
 
 class TestDecorator(unittest.TestCase):
     def setUp(self):
@@ -352,3 +362,22 @@ class TestDecorator(unittest.TestCase):
         """Test inform with no defaults."""
         sock = ""
         self.assertEqual(self.device.inform_one(sock, Message.inform("one", "2", "on", "0")), None)
+
+    def test_request_five(self):
+        """Test client request with no sock."""
+        self.assertEqual(str(self.device.request_five(Message.request("five", "2", "on", "0"))), "!five ok 2 on 0")
+        self.assertRaises(FailReply, self.device.request_five, Message.request("five", "14", "on", "0"))
+        self.assertRaises(FailReply, self.device.request_five, Message.request("five", "2", "dsfg", "0"))
+        self.assertRaises(FailReply, self.device.request_five, Message.request("five", "2", "on", "3"))
+        self.assertRaises(FailReply, self.device.request_five, Message.request("five", "2", "on", "0", "3"))
+
+        self.assertRaises(FailReply, self.device.request_five, Message.request("five", "2", "on"))
+
+    def test_request_six(self):
+        """Test client request with no sock and decorators in reverse order."""
+        self.assertEqual(str(self.device.request_six(Message.request("six", "2", "on", "0"))), "!six ok 2 on 0")
+        self.assertRaises(FailReply, self.device.request_six, Message.request("six", "4", "on", "0"))
+        self.assertRaises(FailReply, self.device.request_six, Message.request("six", "2", "dsfg", "0"))
+        self.assertRaises(FailReply, self.device.request_six, Message.request("six", "2", "on", "3"))
+
+        self.assertRaises(FailReply, self.device.request_six, Message.request("six", "2", "on"))

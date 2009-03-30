@@ -301,16 +301,29 @@ def request(*types):
     def decorator(handler):
         argnames = []
         orig_argnames = getattr(handler, "_orig_argnames", None)
-        if orig_argnames:
+
+        if orig_argnames is not None:
             # If this decorator is on the outside, get the parameter names which have been preserved by the other decorator
             argnames = orig_argnames
+            # and the sock flag
+            has_sock = getattr(handler, "_has_sock")
         else:
-            # Introspect the parameter names.  The first two are self and sock.
-            argnames = inspect.getargspec(handler)[0][2:]
+            # Introspect the parameter names.
+            # Slightly hacky way of determining whether there is a sock
+            has_sock = inspect.getargspec(handler)[0][1] == "sock"
+            params_start = 2 if has_sock else 1
+            # Get other parameter names
+            argnames = inspect.getargspec(handler)[0][params_start:]
 
-        def raw_handler(self, sock, msg):
-            args = unpack_types(types, msg.arguments, argnames)
-            return handler(self, sock, *args)
+        def raw_handler(self, *args):
+            if has_sock:
+                (sock, msg) = args
+                new_args = unpack_types(types, msg.arguments, argnames)
+                return handler(self, sock, *new_args)
+            else:
+                (msg,) = args
+                new_args = unpack_types(types, msg.arguments, argnames)
+                return handler(self, *new_args)
 
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
@@ -339,7 +352,7 @@ def return_reply(*types):
 
     def decorator(handler):
         if not handler.__name__.startswith("request_"):
-            raise ValueError("This decorator can only be used on a katcp request.")
+            raise ValueError("This decorator can only be used on a katcp request handler.")
         msgname = handler.__name__[8:].replace("_","-")
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
@@ -351,9 +364,18 @@ def return_reply(*types):
             raise ValueError("First returned value must be 'ok' or 'fail'.")
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
-        # We must preserve the original function parameter names for the other decorator in case this decorator is on the inside
-        # Introspect the parameter names.  The first two are self and sock.
-        raw_handler._orig_argnames = inspect.getargspec(handler)[0][2:]
+        try:
+            # We must preserve the original function parameter names for the other decorator in case this decorator is on the inside
+            # Slightly hacky way of determining whether there is a sock
+            has_sock = inspect.getargspec(handler)[0][1] == "sock"
+            params_start = 2 if has_sock else 1
+            # Get other parameter names
+            raw_handler._orig_argnames = inspect.getargspec(handler)[0][params_start:]
+            # we must also note whether there is a sock
+            raw_handler._has_sock = has_sock
+        except IndexError:
+            # This probably means that this decorator is on the outside.
+            pass
         return raw_handler
 
     return decorator
