@@ -703,6 +703,13 @@ class DeviceServer(DeviceServerBase):
         name = sensor.name
         self._sensors[name] = sensor
 
+    def get_sensor(self, sensor_name):
+        """Fetch the sensor with the given name."""
+        sensor = self._sensors.get(sensor_name, None)
+        if not sensor:
+            raise ValueError("Unknown sensor '%s'." % (sensor_name,))
+        return sensor
+
     def schedule_restart(self):
         """Schedule a restart.
 
