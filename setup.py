@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup (
     name = "katcp",
@@ -7,7 +7,7 @@ setup (
     description = "Karoo Array Telescope Communication Protocol library'",
     author = "Simon Cross",
     author_email = "simon.cross@ska.ac.za",
-    packages = [ "katcp" ],
+    packages = find_packages(),
     scripts = [
         "scripts/katcp-exampleserver.py",
         "scripts/katcp-exampleclient.py",
