@@ -1081,6 +1081,17 @@ class Sensor(object):
            """
         return (self._timestamp, self._status, self._value)
 
+    def set_value(self, value, status=NOMINAL, timestamp=None):
+        """Check and then set the value of the sensor."""
+        self._kattype.check(value)
+        if timestamp is None:
+            timestamp = time.time()
+        self.set(timestamp, status, value)
+
+    def value(self):
+        """Read the current sensor value."""
+        return self.read()[2]
+
     @classmethod
     def parse_type(cls, type_string):
         """Parse KATCP formatted type code into Sensor type constant."""
