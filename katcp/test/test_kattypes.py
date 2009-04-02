@@ -1,9 +1,10 @@
 """Tests for the kattypes module."""
 
 import unittest
-from katcp import Message, FailReply
-from katcp.kattypes import request, inform, return_reply, Bool, \
-        Discrete, Float, Int, Lru, Timestamp, Str, Struct, Regex, Or
+from katcp import Message, FailReply, AsyncReply
+from katcp.kattypes import request, inform, return_reply, send_reply,  \
+                           Bool, Discrete, Float, Int, Lru, Timestamp, \
+                           Str, Struct, Regex, Or
 
 class TestInt(unittest.TestCase):
 
@@ -270,6 +271,8 @@ class TestOr(unittest.TestCase):
         self.assertEqual(o.unpack(None), "00:00")
 
 class TestDevice(object):
+    def __init__(self):
+        self.sent_messages = []
 
     @request(Int(min=1,max=10), Discrete(("on","off")), Bool())
     @return_reply(Int(min=1,max=10),Discrete(("on","off")),Bool())
@@ -280,7 +283,17 @@ class TestDevice(object):
             return ("bananas", "This should never be sent")
         if i == 6:
             return ("ok", i, d, b, "extra parameter")
+        if i == 9:
+            self.finish_request_one(sock, i, d, b)
+            raise AsyncReply()
         return ("ok", i, d, b)
+
+    @send_reply("one", Int(min=1,max=10),Discrete(("on","off")),Bool())
+    def finish_request_one(self, sock, i, d, b):
+        return (sock, "ok", i, d, b)
+
+    def send_message(self, sock, msg):
+        self.sent_messages.append([sock, msg])
 
     @request(Int(min=1,max=3,default=2), Discrete(("on","off"),default="off"), Bool(default=True))
     @return_reply(Int(min=1,max=3),Discrete(("on","off")),Bool())
@@ -330,6 +343,11 @@ class TestDecorator(unittest.TestCase):
         self.assertEqual(str(self.device.request_one(sock, Message.request("one", "3", "on", "0"))), "!one fail I\\_failed!")
         self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "5", "on", "0"))
         self.assertRaises(ValueError, self.device.request_one, sock, Message.request("one", "6", "on", "0"))
+
+        self.assertRaises(AsyncReply, self.device.request_one, "mysock", Message.request("one", "9", "on", "0"))
+        self.assertEqual(len(self.device.sent_messages), 1)
+        self.assertEqual(self.device.sent_messages[0][0], "mysock")
+        self.assertEqual(str(self.device.sent_messages[0][1]), "!one ok 9 on 0")
 
     def test_request_two(self):
         """Test request with defaults."""

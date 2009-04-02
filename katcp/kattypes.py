@@ -356,12 +356,7 @@ def return_reply(*types):
         msgname = handler.__name__[8:].replace("_","-")
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
-            status = reply_args[0]
-            if status == "fail":
-                return katcp.Message.reply(msgname, *pack_types((Str(),Str()), reply_args))
-            if status == "ok":
-                return katcp.Message.reply(msgname, *pack_types((Str(),) + types, reply_args))
-            raise ValueError("First returned value must be 'ok' or 'fail'.")
+            return make_reply(msgname, types, reply_args)
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
         try:
@@ -379,6 +374,41 @@ def return_reply(*types):
         return raw_handler
 
     return decorator
+
+def send_reply(msgname, *types):
+    """Decorator for sending replies from request callback methods
+
+       This decorator constructs a reply from a list or tuple returned
+       from a callback method, but unlike the return_reply decorator it
+       also sends the reply rather than returning it.  The message name
+       must be passed in explicitly, since the callback method is not
+       expected to have a predictable name or input parameters.
+
+       The list/tuple returned from the callback method must have a sock
+       as its first parameter.
+
+       The device with the callback method must have a send_message
+       method.
+    """
+
+    def decorator(handler):
+        def raw_handler(self, *args):
+            reply_args = handler(self, *args)
+            sock = reply_args[0]
+            reply = make_reply(msgname, types, reply_args[1:])
+            self.send_message(sock, reply)
+        return raw_handler
+
+    return decorator
+
+def make_reply(msgname, types, arguments):
+    """Helper method for constructing a reply message from a list or tuple"""
+    status = arguments[0]
+    if status == "fail":
+        return katcp.Message.reply(msgname, *pack_types((Str(),Str()), arguments))
+    if status == "ok":
+        return katcp.Message.reply(msgname, *pack_types((Str(),) + types, arguments))
+    raise ValueError("First returned value must be 'ok' or 'fail'.")
 
 def unpack_types(types, args, argnames):
     """Parse arguments according to types list.
