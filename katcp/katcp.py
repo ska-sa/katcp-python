@@ -710,6 +710,10 @@ class DeviceServer(DeviceServerBase):
             raise ValueError("Unknown sensor '%s'." % (sensor_name,))
         return sensor
 
+    def get_sensors(self):
+        """Fetch a list of all sensors"""
+        return self._sensors.values()
+
     def schedule_restart(self):
         """Schedule a restart.
 
