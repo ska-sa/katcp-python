@@ -24,6 +24,7 @@ setup (
     ],
     platforms = [ "OS Independent" ],
     keywords="kat kat7 ska",
+    zip_safe = False,
     # Bitten Test Suite
     test_suite = "katcp.test.suite",
 )
