@@ -246,7 +246,7 @@ class Or(KatcpType):
             except (ValueError, TypeError, KeyError), e:
                 errors[t.name] = str(e)
         if returnvalue is None:
-            raise ValueError("; ".join(["%s: %s" % (name, e) for name, e in errors]))
+            raise ValueError("; ".join(["%s: %s" % (name, errors[name]) for name in errors]))
         return returnvalue
 
     def pack(self, value, nocheck=False):
