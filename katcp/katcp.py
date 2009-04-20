@@ -813,15 +813,20 @@ class DeviceServer(DeviceServerBase):
     def request_sensor_value(self, sock, msg):
         """Request the value of a sensor."""
         if not msg.arguments:
-            return Message.reply("sensor-value", "fail",
-                                                    "No sensor name given.")
+            for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
+                timestamp_ms, status, value = sensor.read_formatted()
+                self.inform(sock, Message.inform("sensor-value",
+                    timestamp_ms, "1", name, status, value))
+            return Message.reply("sensor-value",
+                    "ok", str(len(self._sensors)))
         else:
             name = msg.arguments[0]
             if name in self._sensors:
                 sensor = self._sensors[name]
                 timestamp_ms, status, value = sensor.read_formatted()
-                return Message.reply("sensor-value", "ok",
-                                    timestamp_ms, "1", name, status, value)
+                self.inform(sock, Message.inform("sensor-value",
+                    timestamp_ms, "1", name, status, value))
+                return Message.reply("sensor-value", "ok", "1")
             else:
                 return Message.reply("sensor-value", "fail",
                                                     "Unknown sensor name.")
