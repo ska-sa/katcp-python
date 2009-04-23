@@ -47,31 +47,31 @@ class TestFloat(unittest.TestCase):
     def test_pack(self):
         """Test packing floats."""
         f = Float()
-        self.assertEqual(f.pack(5.0), "%e" % 5.0)
-        self.assertEqual(f.pack(-5.0), "%e" % -5.0)
+        self.assertEqual(f.pack(5.0), "5")
+        self.assertEqual(f.pack(-5.0), "-5")
         self.assertRaises(TypeError, f.pack, "a")
         self.assertRaises(ValueError, f.pack, None)
 
         f = Float(min=5.0, max=6.0)
-        self.assertEqual(f.pack(5.0), "%e" % 5.0)
-        self.assertEqual(f.pack(6.0), "%e" % 6.0)
+        self.assertEqual(f.pack(5.0), "5")
+        self.assertEqual(f.pack(6.0), "6")
         self.assertRaises(ValueError, f.pack, 4.5)
         self.assertRaises(ValueError, f.pack, 6.5)
 
         f = Float(default=11.0)
-        self.assertEqual(f.pack(None), "%e" % 11.0)
+        self.assertEqual(f.pack(None), "11")
 
     def test_unpack(self):
         """Test unpacking floats."""
         f = Float()
-        self.assertAlmostEqual(f.unpack("5.0"), 5.0)
-        self.assertAlmostEqual(f.unpack("-5.0"), -5.0)
+        self.assertAlmostEqual(f.unpack("5"), 5.0)
+        self.assertAlmostEqual(f.unpack("-5"), -5.0)
         self.assertRaises(ValueError, f.unpack, "a")
         self.assertRaises(ValueError, f.unpack, None)
 
         f = Float(min=5.0, max=6.0)
-        self.assertAlmostEqual(f.unpack("5.0"), 5.0)
-        self.assertAlmostEqual(f.unpack("6.0"), 6.0)
+        self.assertAlmostEqual(f.unpack("5"), 5.0)
+        self.assertAlmostEqual(f.unpack("6"), 6.0)
         self.assertRaises(ValueError, f.unpack, "4.5")
         self.assertRaises(ValueError, f.unpack, "6.5")
 
@@ -246,12 +246,12 @@ class TestOr(unittest.TestCase):
         """Test packing OR."""
         o = Or((Float(),Regex("\d\d:\d\d")))
         self.assertEqual(o.pack("12:34"), "12:34")
-        self.assertEqual(o.pack(56.7), "%e" % 56.7)
+        self.assertEqual(o.pack(56.7), "56.7")
         self.assertRaises(ValueError, o.pack, None)
         self.assertRaises(ValueError, o.pack, "sdfsdf")
 
         o = Or((Float(default=0.0),Regex("\d\d:\d\d")))
-        self.assertEqual(o.pack(None), "%e" % 0.0)
+        self.assertEqual(o.pack(None), "0")
 
         o = Or((Float(),Regex("\d\d:\d\d", default="00:00")))
         self.assertEqual(o.pack(None), "00:00")

@@ -76,7 +76,7 @@ class Float(KatcpType):
 
     name = "float"
 
-    encode = lambda self, value: "%e" % (value,)
+    encode = lambda self, value: "%g" % (value,)
 
     def decode(self, value):
         try:
@@ -89,17 +89,13 @@ class Float(KatcpType):
         self._min = min
         self._max = max
 
-    @classmethod
-    def format(cls, value):
-        return "%.1f" % value if abs(value) > 10**-1 or value == 0.0 else "%.1e" % value
-
     def check(self, value):
         if self._min is not None and value < self._min:
-            raise ValueError("Float %s is lower than minimum %s."
-                % (self.format(value), self.format(self._min)))
+            raise ValueError("Float %g is lower than minimum %g."
+                % (value, self._min))
         if self._max is not None and value > self._max:
-            raise ValueError("Float %s is higher than maximum %s."
-                % (self.format(value), self.format(self._max)))
+            raise ValueError("Float %g is higher than maximum %g."
+                % (value, self._max))
 
 
 class Bool(KatcpType):

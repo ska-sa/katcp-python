@@ -110,7 +110,7 @@ class TestSensor(unittest.TestCase):
                 [0.0, 5.0],
                 timestamp=12345, status=katcp.Sensor.WARN, value=3.0
         )
-        self.assertEqual(s.read_formatted(), ("12345000", "warn", "3.000000e+00"))
+        self.assertEqual(s.read_formatted(), ("12345000", "warn", "3"))
         self.assertEquals(s.parse_value("3"), 3.0)
         self.assertRaises(ValueError, s.parse_value, "10")
         self.assertRaises(ValueError, s.parse_value, "-10")
