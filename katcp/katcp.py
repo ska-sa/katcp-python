@@ -1,3 +1,4 @@
+
 """Utilities for dealing with KAT device control
    language messages.
 
@@ -794,7 +795,7 @@ class DeviceServer(DeviceServerBase):
         if not msg.arguments:
             for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
                 self.inform(sock, Message.inform("sensor-list",
-                    name, sensor.stype, sensor.description, sensor.units,
+                    name, sensor.description, sensor.units, sensor.stype,
                     *sensor.formatted_params))
             return Message.reply("sensor-list",
                     "ok", str(len(self._sensors)))
@@ -803,7 +804,7 @@ class DeviceServer(DeviceServerBase):
             if name in self._sensors:
                 sensor = self._sensors[name]
                 self.inform(sock, Message.inform("sensor-list",
-                    name, sensor.stype, sensor.description, sensor.units,
+                    name, sensor.description, sensor.units, sensor.stype,
                     *sensor.formatted_params))
                 return Message.reply("sensor-list", "ok", "1")
             else:
