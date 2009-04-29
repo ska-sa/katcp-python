@@ -111,10 +111,17 @@ class TestDiscrete(unittest.TestCase):
         self.assertEqual(d.pack("VAL1"), "VAL1")
         self.assertEqual(d.pack("VAL2"), "VAL2")
         self.assertRaises(ValueError, d.pack, "VAL3")
+        self.assertRaises(ValueError, d.pack, "val1")
         self.assertRaises(ValueError, d.pack, None)
 
         d = Discrete(("VAL1", "VAL2"), default="VAL1")
         self.assertEqual(d.pack(None), "VAL1")
+
+        d = Discrete(("val1", "VAL2"), case_insensitive=True)
+        self.assertEqual(d.pack("VAL1"), "VAL1")
+        self.assertEqual(d.pack("vAl2"), "vAl2")
+        self.assertRaises(ValueError, d.pack, "Val3")
+        self.assertRaises(ValueError, d.pack, None)
 
     def test_unpack(self):
         """Test unpacking discrete types."""

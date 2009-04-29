@@ -122,15 +122,25 @@ class Discrete(Str):
 
     name = "discrete"
 
-    def __init__(self, values, default=None):
+    def __init__(self, values, default=None, case_insensitive=False):
         super(Discrete, self).__init__(default=default)
         self._values = list(values) # just to preserve ordering
         self._valid_values = set(values)
+        self._case_insensitive = case_insensitive
+        if self._case_insensitive:
+            self._valid_values_lower = set([val.lower() for val in self._values])
 
     def check(self, value):
-        if not value in self._valid_values:
-            raise ValueError("Discrete value '%s' is not one of %s."
-                % (value, list(self._values)))
+        if self._case_insensitive:
+            value = value.lower()
+            values = self._valid_values_lower
+            caseflag = " (case-insensitive)"
+        else:
+            values = self._valid_values
+            caseflag = ""
+        if not value in values:
+            raise ValueError("Discrete value '%s' is not one of %s%s."
+                % (value, list(self._values), caseflag))
 
 
 class Lru(KatcpType):
