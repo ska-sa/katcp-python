@@ -862,7 +862,8 @@ class DeviceServer(DeviceServerBase):
 
             # todo: replace isinstance check with something better
             if isinstance(new_strategy, SampleNone):
-                del self._strategies[sock][sensor]
+                if sensor in self._strategies[sock]:
+                    del self._strategies[sock][sensor]
             else:
                 self._strategies[sock][sensor] = new_strategy
                 self._reactor.add_strategy(new_strategy)
