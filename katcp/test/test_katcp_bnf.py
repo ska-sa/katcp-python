@@ -11,16 +11,17 @@
 
     Grammar:
 
-        <message>   ::=   <type> <name> (<whitespace> <argument>)* <eol>?
-           <type>   ::=   "?" | "!" | "#"
-           <name>   ::=   alpha (alpha | digit | "-")*
-     <whitespace>   ::=   " " [<whitespace>]
-            <eol>   ::=   newline | carriage-return
-       <argument>   ::=   (<plain> | <escape>)+
-         <escape>   ::=   "\" <cescape>
-        <cespace>   ::=   "\" | " " | zero | "n" | "r" | "e" | "t"
-        <special>   ::=   space | tab | escape | newline | carriage-return | backslash | null
-          <plain>   ::=   character / <special>
+          <message> ::= <type> <name> <arguments> <eol>
+             <type> ::= "?" | "!" | "#"
+             <name> ::= alpha (alpha | digit | "-")*
+       <whitespace> ::= (space | tab) [<whitespace>]
+              <eol> ::= newline | carriage-return
+        <arguments> ::= (<whitespace> <argument> <arguments>) | <whitespace> | ""
+         <argument> ::= (<plain> | <escape>)+
+           <escape> ::= "\" <escapecode>
+       <escapecode> ::= "\" | "_" | zero | "n" | "r" | "e" | "t" | "@"
+          <special> ::= backslash | space | null | newline | carriage-return | escape | tab
+            <plain> ::= character / <special>
 
     Uses the ply library from http://www.dabeaz.com/ply/.
     """
