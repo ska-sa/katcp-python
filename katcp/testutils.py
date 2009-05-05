@@ -45,7 +45,7 @@ class DeviceTestClient(client.DeviceClient):
 
     def __init__(self, *args, **kwargs):
         super(DeviceTestClient, self).__init__(*args, **kwargs)
-        self.__msgs = []
+        self.clear_messages()
 
     def raw_send(self, chunk):
         """Send a raw chunk of data to the server."""
@@ -53,25 +53,31 @@ class DeviceTestClient(client.DeviceClient):
 
     def unhandled_reply(self, msg):
         """Fallback method for reply messages without a registered handler"""
+        self.__replies.append(msg)
         self.__msgs.append(msg)
 
     def unhandled_inform(self, msg):
         """Fallback method for inform messages without a registered handler"""
+        self.__informs.append(msg)
         self.__msgs.append(msg)
+
+    def replies_and_informs(self):
+        return self.__replies, self.__informs
 
     def messages(self):
         return self.__msgs
 
     def clear_messages(self):
+        self.__replies = []
+        self.__informs = []
         self.__msgs = []
-
 
 class CallbackTestClient(client.CallbackClient):
     """Test callback client."""
 
     def __init__(self, *args, **kwargs):
         super(CallbackTestClient, self).__init__(*args, **kwargs)
-        self.__msgs = []
+        self.clear_messages()
 
     def raw_send(self, chunk):
         """Send a raw chunk of data to the server."""
@@ -79,14 +85,64 @@ class CallbackTestClient(client.CallbackClient):
 
     def unhandled_reply(self, msg):
         """Fallback method for reply messages without a registered handler"""
+        self.__replies.append(msg)
         self.__msgs.append(msg)
 
     def unhandled_inform(self, msg):
         """Fallback method for inform messages without a registered handler"""
+        self.__informs.append(msg)
         self.__msgs.append(msg)
+
+    def replies_and_informs(self):
+        return self.__replies, self.__informs
 
     def messages(self):
         return self.__msgs
+
+    def clear_messages(self):
+        self.__replies = []
+        self.__informs = []
+        self.__msgs = []
+
+
+class BlockingTestClient(client.BlockingClient):
+    """Test blocking client."""
+
+    def __init__(self, *args, **kwargs):
+        super(BlockingTestClient, self).__init__(*args, **kwargs)
+        self.clear_messages()
+
+    def raw_send(self, chunk):
+        """Send a raw chunk of data to the server."""
+        self._sock.send(chunk)
+
+    def blocking_request(self, msg):
+        reply, informs = super(BlockingTestClient, self).blocking_request(msg)
+        self.__replies.append(reply)
+        self.__informs.extend(informs)
+        self.__msgs.extend(informs+[reply])
+        return reply, informs
+
+    def unhandled_reply(self, msg):
+        """Fallback method for reply messages without a registered handler"""
+        self.__replies.append(msg)
+        self.__msgs.append(msg)
+
+    def unhandled_inform(self, msg):
+        """Fallback method for inform messages without a registered handler"""
+        self.__informs.append(msg)
+        self.__msgs.append(msg)
+
+    def replies_and_informs(self):
+        return self.__replies, self.__informs
+
+    def messages(self):
+        return self.__msgs
+
+    def clear_messages(self):
+        self.__replies = []
+        self.__informs = []
+        self.__msgs = []
 
 
 class DeviceTestServer(katcp.DeviceServer):
