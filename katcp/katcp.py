@@ -7,6 +7,7 @@
    """
 
 import socket
+import errno
 import select
 import threading
 import traceback
@@ -280,7 +281,7 @@ class DeviceMetaclass(type):
 class KatcpDeviceError(Exception):
     """Exception raised by KATCP servers when errors occur will
        communicating with a device.  Note that socket.error can also be raised
-       if low-level network exceptions occure."""
+       if low-level network exceptions occurs."""
     pass
 
 
@@ -453,7 +454,7 @@ class DeviceServerBase(object):
             self._logger.error("%s INVALID: Unknown request." % (msg.name,))
             reply = Message.reply(msg.name, "invalid", "Unknown request.")
         if send_reply:
-            sock.send(str(reply) + "\n")
+            self.send_message(sock, reply)
 
     def handle_inform(self, sock, msg):
         """Dispatch an inform message to the appropriate method."""
@@ -487,14 +488,37 @@ class DeviceServerBase(object):
         """Send an arbitrary message to a particular client."""
         # could be a function but we don't want it to be
         # pylint: disable-msg = R0201
-        sock.send(str(msg) + "\n")
+        # TODO: should probably implement this as a queue of sockets and messages to send.
+        #       and have the queue processed in the main loop
+        data = str(msg) + "\n"
+        datalen = len(data)
+        totalsent = 0
+        while totalsent < datalen:
+            try:
+                sent = sock.send(data[totalsent:])
+            except socket.error, e:
+                if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
+                    continue
+                else:
+                    msg = "Failed to send message to client %s (%s)" % (sock.getpeername(), e)
+                    self._logger.error(msg)
+                    self.remove_socket(sock)
+                    raise KatcpDeviceError(msg)
+
+            if sent == 0:
+                msg = "Could not send data to client %s, closing socket." % (sock.getpeername(),)
+                self._logger.error(msg)
+                self.remove_socket(sock)
+                raise KatcpDeviceError(msg)
+
+            totalsent += sent
 
     def inform(self, sock, msg):
         """Send an inform messages to a particular client."""
         # could be a function but we don't want it to be
         # pylint: disable-msg = R0201
         assert (msg.mtype == Message.INFORM)
-        sock.send(str(msg) + "\n")
+        self.send_message(sock, msg)
 
     def mass_inform(self, msg):
         """Send an inform message to all clients."""
@@ -1031,7 +1055,8 @@ class Sensor(object):
 
     def notify(self):
         """Notify all observers of changes to this sensor."""
-        for o in self._observers:
+        # copy list before iterating in case new observers arrive
+        for o in list(self._observers):
             o.update(self)
 
     def parse_value(self, s_value):

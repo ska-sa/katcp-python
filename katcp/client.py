@@ -188,7 +188,7 @@ class DeviceClient(object):
             assert (reply.mtype == Message.REPLY)
             assert (reply.name == msg.name)
             self._logger.info("%s OK" % (msg.name,))
-            self._sock.send(str(reply) + "\n")
+            self.send_message(reply)
         # We do want to catch everything that inherits from Exception
         # pylint: disable-msg = W0703
         except Exception:
