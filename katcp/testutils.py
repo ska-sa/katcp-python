@@ -1,7 +1,9 @@
 """Test utils for katcp package tests."""
 
 import katcp
+import client
 import logging
+import unittest
 
 
 class TestLogHandler(logging.Handler):
@@ -38,7 +40,7 @@ class DeviceTestSensor(katcp.Sensor):
         return self.__sampling_changes
 
 
-class DeviceTestClient(katcp.DeviceClient):
+class DeviceTestClient(client.DeviceClient):
     """Test client."""
 
     def __init__(self, *args, **kwargs):
@@ -60,8 +62,11 @@ class DeviceTestClient(katcp.DeviceClient):
     def messages(self):
         return self.__msgs
 
+    def clear_messages(self):
+        self.__msgs = []
 
-class CallbackTestClient(katcp.CallbackClient):
+
+class CallbackTestClient(client.CallbackClient):
     """Test callback client."""
 
     def __init__(self, *args, **kwargs):
@@ -169,3 +174,42 @@ class TestUtilMixin(object):
                     % (str_msg, suffix)
                 )
         self._assert_msgs_length(actual_msgs, len(expected))
+
+
+def device_wrapper(device):
+    outgoing_informs = []
+
+    def inform(sock, msg):
+        outgoing_informs.append(msg)
+
+    def mass_inform(msg):
+        outgoing_informs.append(msg)
+
+    def informs():
+        return outgoing_informs
+
+    def clear_informs():
+        del outgoing_informs[:]
+
+    device.inform = inform
+    device.mass_inform =mass_inform
+    device.informs = informs
+    device.clear_informs = clear_informs
+
+    return device
+
+
+class TestServerRequestMethods(unittest.TestCase):
+    def check_request_params(self, request, returns=None, raises=None):
+        sock = ""
+        requestname = request.__name__[8:].replace("_", "-")
+        if returns is None:
+            returns = []
+        if raises is None:
+            raises = []
+
+        for params, returnstring in returns:
+            self.assertEqual(str(request(sock, katcp.Message.request(requestname, *tuple(params)))), returnstring)
+        for params in raises:
+            self.assertRaises(katcp.FailReply, request, sock, katcp.Message.request(requestname, *tuple(params)))
+
