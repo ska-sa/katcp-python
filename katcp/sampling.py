@@ -300,7 +300,9 @@ class SampleReactor(threading.Thread):
         logger.debug("Starting thread %s" % (threading.currentThread().getName()))
         while not self._stopEvent.isSet():
             timestamp = time.time()
-            for strategy in self._strategies:
+            # copy list before iterating over it in case new strategies get added
+            # during loop
+            for strategy in list(self._strategies):
                 SampleReactor.periodic(strategy, timestamp)
             self._stopEvent.wait(SampleReactor.PERIOD_DELAY)
         self._stopEvent.clear()
