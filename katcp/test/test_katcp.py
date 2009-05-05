@@ -5,7 +5,7 @@ import katcp
 import time
 import katcp.sampling
 import logging
-from katcp.test.utils import TestLogHandler, DeviceTestSensor, \
+from katcp.testutils import TestLogHandler, DeviceTestSensor, \
     DeviceTestClient, DeviceTestServer, TestUtilMixin
 
 log_handler = TestLogHandler()

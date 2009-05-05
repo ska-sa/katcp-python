@@ -5,7 +5,7 @@ import katcp
 import time
 import katcp.client
 import logging
-from katcp.test.utils import TestLogHandler, \
+from katcp.testutils import TestLogHandler, \
     DeviceTestClient, CallbackTestClient, DeviceTestServer, \
     TestUtilMixin
 
