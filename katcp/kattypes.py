@@ -273,16 +273,17 @@ class DiscreteMulti(Discrete):
     name = "discretemulti"
 
     def encode(self, value):
-        return ",".join(sorted(value, key=str.lower))
+        return self.separator.join(sorted(value, key=str.lower))
 
     def decode(self, value):
         if self.all_keyword and value == self.all_keyword:
             return sorted(list(self._valid_values), key=str.lower)
-        return sorted([v.strip() for v in value.split(",")], key=str.lower)
+        return sorted([v.strip() for v in value.split(self.separator)], key=str.lower)
 
-    def __init__(self, values, default=None, case_insensitive=False, all_keyword="all"):
+    def __init__(self, values, default=None, case_insensitive=False, separator=",", all_keyword="all"):
         super(DiscreteMulti, self).__init__(values, default, case_insensitive)
         self.all_keyword = all_keyword
+        self.separator = separator
 
     def check(self, value):
         for v in value:

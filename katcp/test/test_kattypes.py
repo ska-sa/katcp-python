@@ -311,6 +311,7 @@ class TestDiscreteMulti(unittest.TestCase):
         self.assertEqual(d.pack(["VaL1"]), "VaL1")
         self.assertRaises(ValueError, d.pack, ("VAL1","vaL3"))
 
+
     def test_unpack(self):
         """Test unpacking discrete multiselect types."""
         d = DiscreteMulti(("VAL1", "VAL2"))
@@ -334,6 +335,13 @@ class TestDiscreteMulti(unittest.TestCase):
 
         self.assertEqual(d.unpack("val1,val2"), ["val1","val2"])
         self.assertEqual(d.unpack("all"), ["val1","VAL2"])
+
+        d = DiscreteMulti(("VAL1", "VAL2"), all_keyword="XXXX")
+        self.assertEqual(d.unpack("XXXX"), ["VAL1","VAL2"])
+        self.assertRaises(ValueError, d.unpack, "all")
+
+        d = DiscreteMulti(("1,2,3", "4,5,6"), separator="|")
+        self.assertEqual(d.unpack("1,2,3|4,5,6"), ["1,2,3","4,5,6"])
 
 
 class TestDevice(object):
