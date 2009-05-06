@@ -38,109 +38,78 @@ class DeviceTestSensor(katcp.Sensor):
         return self.__sampling_changes
 
 
+class TestClientMetaclass(katcp.DeviceMetaclass):
+    """Metaclass for test client classes.
+
+       Adds a raw send method and methods for collecting all inform and
+       reply messages received by the client.
+       """
+    def __init__(mcs, name, bases, dct):
+        """Constructor for TestClientMetaclass.  Should not be used
+           directly.
+
+           @param mcs The metaclass instance
+           @param name The metaclass name
+           @param bases List of base classes
+           @param dct Class dict
+        """
+        super(TestClientMetaclass, mcs).__init__(name, bases, dct)
+
+        orig_init = mcs.__init__
+        orig_handle_reply = mcs.handle_reply
+        orig_handle_inform = mcs.handle_inform
+
+        def __init__(self, *args, **kwargs):
+            orig_init(self, *args, **kwargs)
+            self.clear_messages()
+
+        def handle_reply(self, msg):
+            self._replies.append(msg)
+            self._msgs.append(msg)
+            return orig_handle_reply(self, msg)
+
+        def handle_inform(self, msg):
+            self._informs.append(msg)
+            self._msgs.append(msg)
+            return orig_handle_inform(self, msg)
+
+        def raw_send(self, chunk):
+            """Send a raw chunk of data to the server."""
+            self._sock.send(chunk)
+
+        def replies_and_informs(self):
+            return self._replies, self._informs
+
+        def messages(self):
+            return self._msgs
+
+        def clear_messages(self):
+            self._replies = []
+            self._informs = []
+            self._msgs = []
+
+        mcs.__init__ = __init__
+        mcs.handle_reply = handle_reply
+        mcs.handle_inform = handle_inform
+        mcs.raw_send = raw_send
+        mcs.replies_and_informs = replies_and_informs
+        mcs.messages = messages
+        mcs.clear_messages = clear_messages
+
+
 class DeviceTestClient(client.DeviceClient):
     """Test client."""
+    __metaclass__ = TestClientMetaclass
 
-    def __init__(self, *args, **kwargs):
-        super(DeviceTestClient, self).__init__(*args, **kwargs)
-        self.clear_messages()
-
-    def raw_send(self, chunk):
-        """Send a raw chunk of data to the server."""
-        self._sock.send(chunk)
-
-    def unhandled_reply(self, msg):
-        """Fallback method for reply messages without a registered handler"""
-        self.__replies.append(msg)
-        self.__msgs.append(msg)
-
-    def unhandled_inform(self, msg):
-        """Fallback method for inform messages without a registered handler"""
-        self.__informs.append(msg)
-        self.__msgs.append(msg)
-
-    def replies_and_informs(self):
-        return self.__replies, self.__informs
-
-    def messages(self):
-        return self.__msgs
-
-    def clear_messages(self):
-        self.__replies = []
-        self.__informs = []
-        self.__msgs = []
 
 class CallbackTestClient(client.CallbackClient):
     """Test callback client."""
-
-    def __init__(self, *args, **kwargs):
-        super(CallbackTestClient, self).__init__(*args, **kwargs)
-        self.clear_messages()
-
-    def raw_send(self, chunk):
-        """Send a raw chunk of data to the server."""
-        self._sock.send(chunk)
-
-    def unhandled_reply(self, msg):
-        """Fallback method for reply messages without a registered handler"""
-        self.__replies.append(msg)
-        self.__msgs.append(msg)
-
-    def unhandled_inform(self, msg):
-        """Fallback method for inform messages without a registered handler"""
-        self.__informs.append(msg)
-        self.__msgs.append(msg)
-
-    def replies_and_informs(self):
-        return self.__replies, self.__informs
-
-    def messages(self):
-        return self.__msgs
-
-    def clear_messages(self):
-        self.__replies = []
-        self.__informs = []
-        self.__msgs = []
+    __metaclass__ = TestClientMetaclass
 
 
 class BlockingTestClient(client.BlockingClient):
     """Test blocking client."""
-
-    def __init__(self, *args, **kwargs):
-        super(BlockingTestClient, self).__init__(*args, **kwargs)
-        self.clear_messages()
-
-    def raw_send(self, chunk):
-        """Send a raw chunk of data to the server."""
-        self._sock.send(chunk)
-
-    def blocking_request(self, msg):
-        reply, informs = super(BlockingTestClient, self).blocking_request(msg)
-        self.__replies.append(reply)
-        self.__informs.extend(informs)
-        self.__msgs.extend(informs+[reply])
-        return reply, informs
-
-    def unhandled_reply(self, msg):
-        """Fallback method for reply messages without a registered handler"""
-        self.__replies.append(msg)
-        self.__msgs.append(msg)
-
-    def unhandled_inform(self, msg):
-        """Fallback method for inform messages without a registered handler"""
-        self.__informs.append(msg)
-        self.__msgs.append(msg)
-
-    def replies_and_informs(self):
-        return self.__replies, self.__informs
-
-    def messages(self):
-        return self.__msgs
-
-    def clear_messages(self):
-        self.__replies = []
-        self.__informs = []
-        self.__msgs = []
+    __metaclass__ = TestClientMetaclass
 
 
 class DeviceTestServer(katcp.DeviceServer):
