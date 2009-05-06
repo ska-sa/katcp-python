@@ -3,8 +3,6 @@
 import katcp
 import client
 import logging
-import unittest
-
 
 class TestLogHandler(logging.Handler):
     """A logger for KATCP tests."""
@@ -231,6 +229,27 @@ class TestUtilMixin(object):
                 )
         self._assert_msgs_length(actual_msgs, len(expected))
 
+    def _check_request_params(self, request, returns=None, raises=None):
+        sock = ""
+        requestname = request.__name__[8:].replace("_", "-")
+        if returns is None:
+            returns = []
+        if raises is None:
+            raises = []
+
+        returned_msgs = [(request(sock, katcp.Message.request(requestname, *tuple(params))), expected) for (params, expected) in returns]
+
+        msgs_equal = [(msg, expected) for (msg, expected) in returned_msgs if not hasattr(expected, "__iter__")]
+        msgs_like = [(msg, expected) for (msg, expected) in returned_msgs if hasattr(expected, "__iter__")]
+
+        if msgs_equal:
+            self._assert_msgs_equal(*zip(*msgs_equal))
+        if msgs_like:
+            self._assert_msgs_like(*zip(*msgs_like))
+
+        for params in raises:
+            self.assertRaises(katcp.FailReply, request, sock, katcp.Message.request(requestname, *tuple(params)))
+
 
 def device_wrapper(device):
     outgoing_informs = []
@@ -253,19 +272,3 @@ def device_wrapper(device):
     device.clear_informs = clear_informs
 
     return device
-
-
-class TestServerRequestMethods(unittest.TestCase):
-    def check_request_params(self, request, returns=None, raises=None):
-        sock = ""
-        requestname = request.__name__[8:].replace("_", "-")
-        if returns is None:
-            returns = []
-        if raises is None:
-            raises = []
-
-        for params, returnstring in returns:
-            self.assertEqual(str(request(sock, katcp.Message.request(requestname, *tuple(params)))), returnstring)
-        for params in raises:
-            self.assertRaises(katcp.FailReply, request, sock, katcp.Message.request(requestname, *tuple(params)))
-
