@@ -345,6 +345,7 @@ class DeviceServerBase(object):
         # sockets and data
         self._socks = [] # list of client sockets
         self._waiting_chunks = {} # map from client sockets to partial messages
+        self._sock_locks = {} # map from client sockets to socket sending locks
 
     def _log_msg(self, level_name, msg, name):
         """Create a katcp logging inform message.
@@ -375,6 +376,7 @@ class DeviceServerBase(object):
         """Add a client socket to the socket and chunk lists."""
         self._socks.append(sock)
         self._waiting_chunks[sock] = ""
+        self._sock_locks[sock] = threading.Lock()
 
     def remove_socket(self, sock):
         """Remove a client socket from the socket and chunk lists."""
@@ -382,6 +384,8 @@ class DeviceServerBase(object):
         self._socks.remove(sock)
         if sock in self._waiting_chunks:
             del self._waiting_chunks[sock]
+        if sock in self._sock_locks:
+            del self._sock_locks[sock]
 
     def get_sockets(self):
         """Return the complete list of current client socket."""
@@ -493,25 +497,35 @@ class DeviceServerBase(object):
         data = str(msg) + "\n"
         datalen = len(data)
         totalsent = 0
-        while totalsent < datalen:
-            try:
-                sent = sock.send(data[totalsent:])
-            except socket.error, e:
-                if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
-                    continue
-                else:
-                    msg = "Failed to send message to client %s (%s)" % (sock.getpeername(), e)
+
+        # sends a locked per-socket -- i.e. only one send per socket at a time
+        lock = self._sock_locks.get(sock)
+        if lock is None:
+            raise KatcpDeviceError("Attempt to sent to a socket which is no longer a client.")
+
+        lock.acquire()
+        try:
+            while totalsent < datalen:
+                try:
+                    sent = sock.send(data[totalsent:])
+                except socket.error, e:
+                    if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
+                        continue
+                    else:
+                        msg = "Failed to send message to client %s (%s)" % (sock.getpeername(), e)
+                        self._logger.error(msg)
+                        self.remove_socket(sock)
+                        raise KatcpDeviceError(msg)
+
+                if sent == 0:
+                    msg = "Could not send data to client %s, closing socket." % (sock.getpeername(),)
                     self._logger.error(msg)
                     self.remove_socket(sock)
                     raise KatcpDeviceError(msg)
 
-            if sent == 0:
-                msg = "Could not send data to client %s, closing socket." % (sock.getpeername(),)
-                self._logger.error(msg)
-                self.remove_socket(sock)
-                raise KatcpDeviceError(msg)
-
-            totalsent += sent
+                totalsent += sent
+        finally:
+            lock.release()
 
     def inform(self, sock, msg):
         """Send an inform messages to a particular client."""
