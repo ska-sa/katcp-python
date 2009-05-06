@@ -4,7 +4,7 @@ import unittest
 from katcp import Message, FailReply, AsyncReply
 from katcp.kattypes import request, inform, return_reply, send_reply,  \
                            Bool, Discrete, Float, Int, Lru, Timestamp, \
-                           Str, Struct, Regex, Or
+                           Str, Struct, Regex, Or, DiscreteMulti
 
 class TestInt(unittest.TestCase):
 
@@ -129,10 +129,15 @@ class TestDiscrete(unittest.TestCase):
         self.assertEqual(d.unpack("VAL1"), "VAL1")
         self.assertEqual(d.unpack("VAL2"), "VAL2")
         self.assertRaises(ValueError, d.unpack, "VAL3")
+        self.assertRaises(ValueError, d.unpack, "val1")
         self.assertRaises(ValueError, d.unpack, None)
 
         d = Discrete(("VAL1", "VAL2"), default="VAL1")
         self.assertEqual(d.unpack(None), "VAL1")
+
+        d = Discrete(("val1", "VAL2"), case_insensitive=True)
+        self.assertEqual(d.unpack("val1"), "val1")
+        self.assertRaises(ValueError, d.unpack, "val3")
 
 class TestLru(unittest.TestCase):
 
@@ -276,6 +281,60 @@ class TestOr(unittest.TestCase):
 
         o = Or((Float(),Regex("\d\d:\d\d", default="00:00")))
         self.assertEqual(o.unpack(None), "00:00")
+
+class TestDiscreteMulti(unittest.TestCase):
+
+    def test_pack(self):
+        """Test packing discrete multiselect types."""
+        d = DiscreteMulti(("VAL1", "VAL2"))
+        self.assertEqual(d.pack(["VAL1"]), "VAL1")
+        self.assertEqual(d.pack(["VAL2"]), "VAL2")
+        self.assertRaises(ValueError, d.pack, "VAL2")
+        self.assertRaises(ValueError, d.pack, ["VAL3"])
+        self.assertRaises(ValueError, d.pack, ["val1"])
+        self.assertRaises(ValueError, d.pack, None)
+
+        self.assertEqual(d.pack(("VAL1","VAL2")), "VAL1,VAL2")
+        self.assertRaises(ValueError, d.pack, ("VAL1","VAL3"))
+        self.assertRaises(ValueError, d.pack, ("VAL1","val2"))
+
+        d = DiscreteMulti(("VAL1", "VAL2"), default=["VAL1"])
+        self.assertEqual(d.pack(None), "VAL1")
+
+        d = DiscreteMulti(("val1", "VAL2"), case_insensitive=True)
+        self.assertEqual(d.pack(["VAL1"]), "VAL1")
+        self.assertEqual(d.pack(["vAl2"]), "vAl2")
+        self.assertRaises(ValueError, d.pack, ["Val3"])
+        self.assertRaises(ValueError, d.pack, None)
+
+        self.assertEqual(d.pack(("Val1","vaL2")), "Val1,vaL2")
+        self.assertEqual(d.pack(["VaL1"]), "VaL1")
+        self.assertRaises(ValueError, d.pack, ("VAL1","vaL3"))
+
+    def test_unpack(self):
+        """Test unpacking discrete multiselect types."""
+        d = DiscreteMulti(("VAL1", "VAL2"))
+        self.assertEqual(d.unpack("VAL1"), ["VAL1"])
+        self.assertEqual(d.unpack("VAL2"), ["VAL2"])
+        self.assertRaises(ValueError, d.unpack, "VAL3")
+        self.assertRaises(ValueError, d.unpack, "val1")
+        self.assertRaises(ValueError, d.unpack, None)
+
+        self.assertEqual(d.unpack("VAL1,VAL2"), ["VAL1","VAL2"])
+        self.assertEqual(d.unpack("all"), ["VAL1","VAL2"])
+        self.assertRaises(ValueError, d.unpack, "VAL1,VAL3")
+        self.assertRaises(ValueError, d.unpack, "VAL1,Val2")
+
+        d = DiscreteMulti(("VAL1", "VAL2"), default=["VAL1"])
+        self.assertEqual(d.unpack(None), ["VAL1"])
+
+        d = DiscreteMulti(("val1", "VAL2"), case_insensitive=True)
+        self.assertEqual(d.unpack("val1"), ["val1"])
+        self.assertRaises(ValueError, d.unpack, "val3")
+
+        self.assertEqual(d.unpack("val1,val2"), ["val1","val2"])
+        self.assertEqual(d.unpack("all"), ["val1","VAL2"])
+
 
 class TestDevice(object):
     def __init__(self):

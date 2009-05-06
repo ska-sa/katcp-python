@@ -268,6 +268,27 @@ class Or(KatcpType):
             raise ValueError("Unable to unpack value '%s' using any type in list. %s" % (packed_value, e))
 
 
+class DiscreteMulti(Discrete):
+
+    name = "discretemulti"
+
+    def encode(self, value):
+        return ",".join(sorted(value, key=str.lower))
+
+    def decode(self, value):
+        if self.all_keyword and value == self.all_keyword:
+            return sorted(list(self._valid_values), key=str.lower)
+        return sorted([v.strip() for v in value.split(",")], key=str.lower)
+
+    def __init__(self, values, default=None, case_insensitive=False, all_keyword="all"):
+        super(DiscreteMulti, self).__init__(values, default, case_insensitive)
+        self.all_keyword = all_keyword
+
+    def check(self, value):
+        for v in value:
+            super(DiscreteMulti, self).check(v)
+
+
 class Parameter(object):
     """Wrapper for kattypes which holds parameter-specific information"""
 
