@@ -5,6 +5,7 @@ import katcp
 import time
 import katcp.client
 import logging
+import threading
 from katcp.testutils import TestLogHandler, \
     DeviceTestClient, CallbackTestClient, DeviceTestServer, \
     TestUtilMixin
@@ -191,3 +192,50 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         time.sleep(0.1)
         self.assertEqual(len(help_replies), 1)
         self.assertEqual(len(help_informs), 12)
+
+    def test_twenty_thread_mayhem(self):
+        """Test using callbacks from twenty threads simultaneously."""
+        num_threads = 50
+        # map from thread_id -> (replies, informs)
+        results = {}
+        # list of thread objects
+        threads = []
+
+        def reply_cb(reply, thread_id):
+            results[thread_id][0].append(reply)
+
+        def inform_cb(inform, thread_id):
+            results[thread_id][1].append(inform)
+
+        def worker(thread_id, request):
+            self.client.request(
+                request,
+                reply_cb=reply_cb,
+                inform_cb=inform_cb,
+                user_data=(thread_id,),
+            )
+
+        request = katcp.Message.request("help")
+
+        for thread_id in range(num_threads):
+            results[thread_id] = ([], [])
+
+        for thread_id in range(num_threads):
+            thread = threading.Thread(target=worker, args=(thread_id, request))
+            threads.append(thread)
+
+        for thread in threads:
+            thread.start()
+
+        for thread in threads:
+            thread.join()
+
+        time.sleep(0.1)
+
+        for thread_id in range(num_threads):
+            replies, informs = results[thread_id]
+            self.assertEqual(len(replies), 1)
+            if len(informs) != 12:
+                print thread_id, len(informs)
+                print [x.arguments[0] for x in informs]
+            self.assertEqual(len(informs), 12)

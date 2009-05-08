@@ -125,8 +125,18 @@ class DeviceClient(object):
             full_line = self._waiting_chunk + line
             self._waiting_chunk = ""
             if full_line:
-                msg = self._parser.parse(full_line)
-                self.handle_message(msg)
+                try:
+                    msg = self._parser.parse(full_line)
+                # We do want to catch everything that inherits from Exception
+                # pylint: disable-msg = W0703
+                except Exception:
+                    e_type, e_value, trace = sys.exc_info()
+                    reason = "\n".join(traceback.format_exception(
+                        e_type, e_value, trace, self._tb_limit
+                    ))
+                    self._logger.error("BAD COMMAND: %s" % (reason,))
+                else:
+                    self.handle_message(msg)
 
         self._waiting_chunk += lines[-1]
 
@@ -446,32 +456,32 @@ class CallbackClient(DeviceClient):
             logger=logger,auto_reconnect=auto_reconnect)
 
         # stack mapping pending requests to (reply_cb, inform_cb) callback pairs
-        self._async_stack = {}
+        self._async_queue = {}
 
     def _push_async_request(self, request_name, reply_cb, inform_cb, user_data):
         """Store the callbacks for a request we've sent so we
            can forward any replies and informs to them.
            """
-        if request_name in self._async_stack:
-            self._async_stack[request_name].append((reply_cb, inform_cb, user_data))
+        if request_name in self._async_queue:
+            self._async_queue[request_name].append((reply_cb, inform_cb, user_data))
         else:
-            self._async_stack[request_name] = [(reply_cb, inform_cb, user_data)]
+            self._async_queue[request_name] = [(reply_cb, inform_cb, user_data)]
 
     def _pop_async_request(self, request_name):
-        """Pop the last set of callbacks to a request from
+        """Pop the first set of callbacks to a request from
            the stack so the reply callback can be notified.
            """
-        return self._async_stack[request_name].pop()
+        return self._async_queue[request_name].pop(0)
 
     def _peek_async_request(self, request_name):
-        """Peek at the last set of callbacks to a request
+        """Peek at the first set of callbacks to a request
            so that the associated inform callback can be notified.
            """
-        return self._async_stack[request_name][-1]
+        return self._async_queue[request_name][0]
 
     def _has_async_request(self, request_name):
         """Return true if there is an async request to be popped."""
-        return bool(request_name in self._async_stack and self._async_stack[request_name])
+        return bool(request_name in self._async_queue and self._async_queue[request_name])
 
     def request(self, msg, reply_cb=None, inform_cb=None, user_data=None):
         """Send a request messsage.
