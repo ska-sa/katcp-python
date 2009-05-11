@@ -121,7 +121,6 @@ class BlockingTestClient(client.BlockingClient):
             value = str(informs[0]).split(" ")[5]
         else:
             raise ValueError(str(reply))
-        print "about to return %s" % value
         return value
 
 
