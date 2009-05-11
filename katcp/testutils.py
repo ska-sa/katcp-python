@@ -111,6 +111,19 @@ class BlockingTestClient(client.BlockingClient):
     """Test blocking client."""
     __metaclass__ = TestClientMetaclass
 
+    def get_sensor_value(self, sensorname):
+        reply, informs = self.blocking_request(katcp.Message.request("sensor-value", sensorname))
+        del(self._replies[-1:])
+        del(self._informs[-len(informs):])
+        del(self._msgs[-(len(informs)+1):])
+
+        if str(reply) == "!sensor-value ok 1":
+            value = str(informs[0]).split(" ")[5]
+        else:
+            raise ValueError(str(reply))
+        print "about to return %s" % value
+        return value
+
 
 class DeviceTestServer(katcp.DeviceServer):
     """Test server."""
@@ -218,6 +231,13 @@ class TestUtilMixin(object):
 
         for params in raises:
             self.assertRaises(katcp.FailReply, request, sock, katcp.Message.request(requestname, *tuple(params)))
+
+    def _assert_sensors_equal(self, get_sensor_method, sensor_tuples):
+        for sensorname, sensortype, expected in sensor_tuples:
+            if sensortype == float:
+                self.assertAlmostEqual(sensortype(get_sensor_method(sensorname)), expected)
+            else:
+                self.assertEqual(sensortype(get_sensor_method(sensorname)), expected)
 
 
 def device_wrapper(device):
