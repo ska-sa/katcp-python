@@ -512,13 +512,21 @@ class DeviceServerBase(object):
                     if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
                         continue
                     else:
-                        msg = "Failed to send message to client %s (%s)" % (sock.getpeername(), e)
+                        try:
+                            client_name = sock.getpeername()
+                        except socket.error:
+                            client_name = "<disconnected client>"
+                        msg = "Failed to send message to client %s (%s)" % (client_name, e)
                         self._logger.error(msg)
                         self.remove_socket(sock)
                         raise KatcpDeviceError(msg)
 
                 if sent == 0:
-                    msg = "Could not send data to client %s, closing socket." % (sock.getpeername(),)
+                    try:
+                        client_name = sock.getpeername()
+                    except socket.error:
+                        client_name = "<disconnected client>"
+                    msg = "Could not send data to client %s, closing socket." % (client_name,)
                     self._logger.error(msg)
                     self.remove_socket(sock)
                     raise KatcpDeviceError(msg)
@@ -571,7 +579,12 @@ class DeviceServerBase(object):
                     self.add_socket(client)
                     self.on_client_connect(client)
                 else:
-                    chunk = sock.recv(4096)
+                    try:
+                        chunk = sock.recv(4096)
+                    except socket.error:
+                        # an error when sock was within ready list presumably
+                        # means the client needs to be ditched.
+                        chunk = ""
                     if chunk:
                         self.handle_chunk(sock, chunk)
                     else:
