@@ -47,7 +47,7 @@ class SampleStrategy(object):
         self._params = params
 
     @staticmethod
-    def get_strategy(strategyName, server, sensor, *params):
+    def get_strategy(strategyName, inform_callback, sensor, *params):
         """Factory method to create a suitable strategy object given the
            necessary details.
            FIXME: Reimplement using singleton factory which new strategies
@@ -61,15 +61,15 @@ class SampleStrategy(object):
 
         strategyType = SampleStrategy.SAMPLING_LOOKUP_REV[strategyName]
         if strategyType == SampleStrategy.NONE:
-            return SampleNone(server, sensor, *params)
+            return SampleNone(inform_callback, sensor, *params)
         elif strategyType == SampleStrategy.AUTO:
-            return SampleAuto(server, sensor, *params)
+            return SampleAuto(inform_callback, sensor, *params)
         elif strategyType == SampleStrategy.EVENT:
-            return SampleEvent(server, sensor, *params)
+            return SampleEvent(inform_callback, sensor, *params)
         elif strategyType == SampleStrategy.DIFFERENTIAL:
-            return SampleDifferential(server, sensor, *params)
+            return SampleDifferential(inform_callback, sensor, *params)
         elif strategyType == SampleStrategy.PERIOD:
-            return SamplePeriod(server, sensor, *params)
+            return SamplePeriod(inform_callback, sensor, *params)
 
     def update(self, sensor):
         """This update method is called whenever the sensor value is set
@@ -132,8 +132,8 @@ class SampleEvent(SampleStrategy):
        the sensor.
        """
 
-    def __init__(self, server, sensor, *params):
-        SampleStrategy.__init__(self, server, sensor, *params)
+    def __init__(self, inform_callback, sensor, *params):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if params:
             raise ValueError("The 'event' strategy takes no parameters.")
         self._lastStatus = None
@@ -154,8 +154,8 @@ class SampleAuto(SampleStrategy):
        whenever the sensor itself is updated.
        """
 
-    def __init__(self, server, sensor, *params):
-        SampleStrategy.__init__(self, server, sensor, *params)
+    def __init__(self, inform_callback, sensor, *params):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if params:
             raise ValueError("The 'auto' strategy takes no parameters.")
 
@@ -169,8 +169,8 @@ class SampleAuto(SampleStrategy):
 class SampleNone(SampleStrategy):
     """Sampling strategy which never sends any updates."""
 
-    def __init__(self, server, sensor, *params):
-        SampleStrategy.__init__(self, server, sensor, *params)
+    def __init__(self, inform_callback, sensor, *params):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if params:
             raise ValueError("The 'none' strategy takes no parameters.")
 
@@ -183,10 +183,10 @@ class SampleDifferential(SampleStrategy):
        status changes.
        """
 
-    def __init__(self, server, sensor, *params):
+    def __init__(self, inform_callback, sensor, *params):
         from katcp import Sensor
 
-        SampleStrategy.__init__(self, server, sensor, *params)
+        SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
             raise ValueError("The 'differential' strategy takes one parameter.")
         if sensor._sensor_type not in (Sensor.INTEGER, Sensor.FLOAT, Sensor.TIMESTAMP):
@@ -225,8 +225,8 @@ class SamplePeriod(SampleStrategy):
     ## @brief Number of milliseconds in a second (as a float).
     MILLISECOND = 1e3
 
-    def __init__(self, server, sensor, *params):
-        SampleStrategy.__init__(self, server, sensor, *params)
+    def __init__(self, inform_callback, sensor, *params):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
             raise ValueError("The 'period' strategy takes one parameter.")
         period_ms = int(params[0])
