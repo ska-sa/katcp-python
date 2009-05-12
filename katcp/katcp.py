@@ -343,6 +343,7 @@ class DeviceServerBase(object):
         self._logger = logger
 
         # sockets and data
+        self._data_lock = threading.Lock()
         self._socks = [] # list of client sockets
         self._waiting_chunks = {} # map from client sockets to partial messages
         self._sock_locks = {} # map from client sockets to socket sending locks
@@ -374,18 +375,25 @@ class DeviceServerBase(object):
 
     def add_socket(self, sock):
         """Add a client socket to the socket and chunk lists."""
-        self._socks.append(sock)
-        self._waiting_chunks[sock] = ""
-        self._sock_locks[sock] = threading.Lock()
+        self._data_lock.acquire()
+        try:
+            self._socks.append(sock)
+            self._waiting_chunks[sock] = ""
+            self._sock_locks[sock] = threading.Lock()
+        finally:
+            self._data_lock.release()
 
     def remove_socket(self, sock):
         """Remove a client socket from the socket and chunk lists."""
         sock.close()
-        self._socks.remove(sock)
-        if sock in self._waiting_chunks:
-            del self._waiting_chunks[sock]
-        if sock in self._sock_locks:
-            del self._sock_locks[sock]
+        self._data_lock.acquire()
+        try:
+            if sock in self._socks:
+                self._socks.remove(sock)
+                del self._waiting_chunks[sock]
+                del self._sock_locks[sock]
+        finally:
+            self._data_lock.release()
 
     def get_sockets(self):
         """Return the complete list of current client socket."""
@@ -396,9 +404,12 @@ class DeviceServerBase(object):
         chunk = chunk.replace("\r", "\n")
         lines = chunk.split("\n")
 
+        waiting_chunk = self._waiting_chunks.get(sock, "")
+
         for line in lines[:-1]:
-            full_line = self._waiting_chunks[sock] + line
-            self._waiting_chunks[sock] = ""
+            full_line = waiting_chunk + line
+            waiting_chunk = ""
+
             if full_line:
                 try:
                     msg = self._parser.parse(full_line)
@@ -414,7 +425,12 @@ class DeviceServerBase(object):
                 else:
                     self.handle_message(sock, msg)
 
-        self._waiting_chunks[sock] += lines[-1]
+        self._data_lock.acquire()
+        try:
+            if sock in self._waiting_chunks:
+                self._waiting_chunks[sock] = waiting_chunk + lines[-1]
+        finally:
+            self._data_lock.release()
 
     def handle_message(self, sock, msg):
         """Handle messages of all types from clients."""
@@ -457,11 +473,12 @@ class DeviceServerBase(object):
         else:
             self._logger.error("%s INVALID: Unknown request." % (msg.name,))
             reply = Message.reply(msg.name, "invalid", "Unknown request.")
+
         if send_reply:
             try:
                 self.send_message(sock, reply)
-            except KatcpDeviceError, e:
-                # already logged and client removed.
+            except KatcpDeviceError:
+                # send message will already have done the right thing
                 pass
 
     def handle_inform(self, sock, msg):
@@ -493,9 +510,11 @@ class DeviceServerBase(object):
             self._logger.warn("%s INVALID: Unknown reply." % (msg.name,))
 
     def send_message(self, sock, msg):
-        """Send an arbitrary message to a particular client."""
-        # could be a function but we don't want it to be
-        # pylint: disable-msg = R0201
+        """Send an arbitrary message to a particular client.
+
+           Note that failed sends disconnect the client sock and call
+           on_client_disconnect. They do not raise exceptions.
+           """
         # TODO: should probably implement this as a queue of sockets and messages to send.
         #       and have the queue processed in the main loop
         data = str(msg) + "\n"
@@ -523,7 +542,9 @@ class DeviceServerBase(object):
                         msg = "Failed to send message to client %s (%s)" % (client_name, e)
                         self._logger.error(msg)
                         self.remove_socket(sock)
-                        raise KatcpDeviceError(msg)
+                        self.on_client_disconnect(sock, msg, False)
+                        # no raise here -- the server calls on_client_disconnect instead
+                        break
 
                 if sent == 0:
                     try:
@@ -533,7 +554,9 @@ class DeviceServerBase(object):
                     msg = "Could not send data to client %s, closing socket." % (client_name,)
                     self._logger.error(msg)
                     self.remove_socket(sock)
-                    raise KatcpDeviceError(msg)
+                    self.on_client_disconnect(sock, msg, False)
+                    # no raise here -- the server calls on_client_disconnect instead
+                    break
 
                 totalsent += sent
         finally:
@@ -549,7 +572,7 @@ class DeviceServerBase(object):
     def mass_inform(self, msg):
         """Send an inform message to all clients."""
         assert (msg.mtype == Message.INFORM)
-        for sock in self._socks:
+        for sock in list(self._socks):
             if sock is self._sock:
                 continue
             self.inform(sock, msg)
@@ -558,10 +581,16 @@ class DeviceServerBase(object):
         """Listen for clients and process their requests."""
         timeout = 0.5 # s
 
+        # save globals so that the thread can run cleanly
+        # even while Python is setting module globals to
+        # None.
+        _select = select.select
+        _socket_error = socket.error
+
         self._running.set()
         while self._running.isSet():
             all_socks = self._socks + [self._sock]
-            readers, _writers, errors = select.select(
+            readers, _writers, errors = _select(
                 all_socks, [], all_socks, timeout
             )
 
@@ -585,7 +614,7 @@ class DeviceServerBase(object):
                 else:
                     try:
                         chunk = sock.recv(4096)
-                    except socket.error:
+                    except _socket_error:
                         # an error when sock was within ready list presumably
                         # means the client needs to be ditched.
                         chunk = ""
@@ -731,8 +760,12 @@ class DeviceServer(DeviceServerBase):
     def on_client_connect(self, sock):
         """Inform client of build state and version on connect."""
         self._strategies[sock] = {} # map of sensors -> sampling strategies
-        self.inform(sock, Message.inform("version", self.version()))
-        self.inform(sock, Message.inform("build-state", self.build_state()))
+        try:
+            self.inform(sock, Message.inform("version", self.version()))
+            self.inform(sock, Message.inform("build-state", self.build_state()))
+        except KatcpDeviceError:
+            # base server will already have cleaned-up the socked and logged the error
+            pass
 
     def on_client_disconnect(self, sock, msg, sock_valid):
         """Inform client it is about to be disconnected."""

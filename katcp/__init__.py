@@ -6,6 +6,8 @@
 
 from katcp import Message, KatcpSyntaxError, MessageParser, \
                   DeviceMetaclass, DeviceServerBase, \
-                  DeviceServer, Sensor, DeviceLogger, FailReply, AsyncReply
+                  DeviceServer, Sensor, DeviceLogger, FailReply, AsyncReply, \
+                  KatcpDeviceError
 
-from client import DeviceClient, BlockingClient, CallbackClient
+from client import DeviceClient, BlockingClient, CallbackClient, \
+                   KatcpClientError

@@ -11,6 +11,7 @@ import traceback
 import select
 import time
 import logging
+import errno
 from katcp import DeviceMetaclass, MessageParser, Message
 
 #logging.basicConfig(level=logging.DEBUG)
@@ -58,6 +59,7 @@ class DeviceClient(object):
         self._waiting_chunk = ""
         self._running = threading.Event()
         self._connected = threading.Event()
+        self._send_lock = threading.Lock()
         self._thread = None
         self._logger = logger
         self._auto_reconnect = auto_reconnect
@@ -79,9 +81,49 @@ class DeviceClient(object):
            @param msg The Message to send.
            @return None
            """
-        if self._sock is None:
-            raise KatcpClientError("Client not connected")
-        self._sock.send(str(msg) + "\n")
+        # TODO: should probably implement this as a queue of sockets and messages to send.
+        #       and have the queue processed in the main loop
+        data = str(msg) + "\n"
+        datalen = len(data)
+        totalsent = 0
+        sock = self._sock
+
+        self._send_lock.acquire()
+        try:
+            if sock is None:
+                raise KatcpClientError("Client not connected")
+
+            while totalsent < datalen:
+                try:
+                    sent = sock.send(data[totalsent:])
+                except socket.error, e:
+                    if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
+                        continue
+                    else:
+                        try:
+                            server_name = sock.getpeername()
+                        except socket.error:
+                            server_name = "<disconnected server>"
+                        msg = "Failed to send message to server %s (%s)" % (server_name, e)
+                        self._logger.error(msg)
+                        self._disconnect()
+                        # no raise here -- the client calls _disconnect instead
+                        break
+
+                if sent == 0:
+                    try:
+                        server_name = sock.getpeername()
+                    except socket.error:
+                        server_name = "<disconnected server>"
+                    msg = "Could not send data to client %s, closing socket." % (server_name,)
+                    self._logger.error(msg)
+                    self._disconnect()
+                    # no raise here -- the client calls _disconnect instead
+                    break
+
+                totalsent += sent
+        finally:
+            self._send_lock.release()
 
     def _connect(self):
         """Connect to the server.
@@ -229,11 +271,18 @@ class DeviceClient(object):
         self._logger.debug("Starting thread %s" % (threading.currentThread().getName()))
         timeout = 1.0 # s
 
+        # save globals so that the thread can run cleanly
+        # even while Python is setting module globals to
+        # None.
+        _select = select.select
+        _socket_error = socket.error
+        _sleep = time.sleep
+
         self._running.set()
         self._connect()
         while self._running.isSet():
             if self.is_connected():
-                readers, _writers, errors = select.select(
+                readers, _writers, errors = _select(
                     [self._sock], [], [self._sock], timeout
                 )
 
@@ -241,7 +290,12 @@ class DeviceClient(object):
                     self._disconnect()
 
                 elif readers:
-                    chunk = self._sock.recv(4096)
+                    try:
+                        chunk = self._sock.recv(4096)
+                    except _socket_error:
+                        # an error when sock was within ready list presumably
+                        # means the client needs to be ditched.
+                        chunk = ""
                     if chunk:
                         self.handle_chunk(chunk)
                     else:
@@ -256,7 +310,7 @@ class DeviceClient(object):
                 else:
                     self._connect()
                     if not self.is_connected():
-                        time.sleep(timeout)
+                        _sleep(timeout)
 
         self._disconnect()
         self._logger.debug("Stopping thread %s" % (threading.currentThread().getName()))

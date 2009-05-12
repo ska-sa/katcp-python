@@ -298,12 +298,19 @@ class SampleReactor(threading.Thread):
     def run(self):
         """Run the sample reactor."""
         logger.debug("Starting thread %s" % (threading.currentThread().getName()))
+
+        # save globals so that the thread can run cleanly
+        # even while Python is setting module globals to
+        # None.
+        _time = time.time
+        _SampleReactor = SampleReactor
+
         while not self._stopEvent.isSet():
-            timestamp = time.time()
+            timestamp = _time()
             # copy list before iterating over it in case new strategies get added
             # during loop
             for strategy in list(self._strategies):
-                SampleReactor.periodic(strategy, timestamp)
-            self._stopEvent.wait(SampleReactor.PERIOD_DELAY)
+                _SampleReactor.periodic(strategy, timestamp)
+            self._stopEvent.wait(_SampleReactor.PERIOD_DELAY)
         self._stopEvent.clear()
         logger.debug("Stopping thread %s" % (threading.currentThread().getName()))
