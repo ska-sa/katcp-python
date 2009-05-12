@@ -458,7 +458,11 @@ class DeviceServerBase(object):
             self._logger.error("%s INVALID: Unknown request." % (msg.name,))
             reply = Message.reply(msg.name, "invalid", "Unknown request.")
         if send_reply:
-            self.send_message(sock, reply)
+            try:
+                self.send_message(sock, reply)
+            except KatcpDeviceError, e:
+                # already logged and client removed.
+                pass
 
     def handle_inform(self, sock, msg):
         """Dispatch an inform message to the appropriate method."""
@@ -501,7 +505,7 @@ class DeviceServerBase(object):
         # sends a locked per-socket -- i.e. only one send per socket at a time
         lock = self._sock_locks.get(sock)
         if lock is None:
-            raise KatcpDeviceError("Attempt to sent to a socket which is no longer a client.")
+            raise KatcpDeviceError("Attempt to send to a socket which is no longer a client.")
 
         lock.acquire()
         try:
