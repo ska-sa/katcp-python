@@ -229,13 +229,20 @@ class TestUtilMixin(object):
             self.assertRaises(katcp.FailReply, request, sock, katcp.Message.request(requestname, *tuple(params)))
 
     def _assert_sensors_equal(self, get_sensor_method, sensor_tuples):
-        for sensorname, sensortype, expected in sensor_tuples:
-            if sensortype == bool:
-                self.assertEqual(bool(int(get_sensor_method(sensorname))), expected)
-            elif sensortype == float:
-                self.assertAlmostEqual(float(get_sensor_method(sensorname)), expected)
-            else:
-                self.assertEqual(sensortype(get_sensor_method(sensorname)), expected)
+        sensor_tuples = [t + (None,)*(4-len(t)) for t in sensor_tuples]
+        for sensorname, sensortype, expected, places in sensor_tuples:
+            try:
+                if sensortype == bool:
+                    self.assertEqual(bool(int(get_sensor_method(sensorname))), expected)
+                elif sensortype == float:
+                    if places is not None:
+                        self.assertAlmostEqual(float(get_sensor_method(sensorname)), expected, places)
+                    else:
+                        self.assertAlmostEqual(float(get_sensor_method(sensorname)), expected)
+                else:
+                    self.assertEqual(sensortype(get_sensor_method(sensorname)), expected)
+            except AssertionError, e:
+                raise AssertionError("Sensor %s: %s" % (sensorname, e))
 
 
 def device_wrapper(device):
