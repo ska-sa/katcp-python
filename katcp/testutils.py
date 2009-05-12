@@ -113,9 +113,6 @@ class BlockingTestClient(client.BlockingClient):
 
     def get_sensor_value(self, sensorname):
         reply, informs = self.blocking_request(katcp.Message.request("sensor-value", sensorname))
-        del(self._replies[-1:])
-        del(self._informs[-len(informs):])
-        del(self._msgs[-(len(informs)+1):])
 
         if str(reply) == "!sensor-value ok 1":
             value = str(informs[0]).split(" ")[5]
@@ -233,8 +230,10 @@ class TestUtilMixin(object):
 
     def _assert_sensors_equal(self, get_sensor_method, sensor_tuples):
         for sensorname, sensortype, expected in sensor_tuples:
-            if sensortype == float:
-                self.assertAlmostEqual(sensortype(get_sensor_method(sensorname)), expected)
+            if sensortype == bool:
+                self.assertEqual(bool(int(get_sensor_method(sensorname))), expected)
+            elif sensortype == float:
+                self.assertAlmostEqual(float(get_sensor_method(sensorname)), expected)
             else:
                 self.assertEqual(sensortype(get_sensor_method(sensorname)), expected)
 
