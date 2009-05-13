@@ -229,6 +229,7 @@ class TestUtilMixin(object):
             self.assertRaises(katcp.FailReply, request, sock, katcp.Message.request(requestname, *tuple(params)))
 
     def _assert_sensors_equal(self, get_sensor_method, sensor_tuples):
+        print "STARTING _assert_sensors_equal"
         sensor_tuples = [t + (None,)*(4-len(t)) for t in sensor_tuples]
         for sensorname, sensortype, expected, places in sensor_tuples:
             try:
@@ -243,6 +244,7 @@ class TestUtilMixin(object):
                     self.assertEqual(sensortype(get_sensor_method(sensorname)), expected)
             except AssertionError, e:
                 raise AssertionError("Sensor %s: %s" % (sensorname, e))
+        print "ENDING _assert_sensors_equal"
 
 
 def device_wrapper(device):
