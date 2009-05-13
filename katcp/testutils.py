@@ -3,6 +3,7 @@
 import katcp
 import client
 import logging
+import re
 
 class TestLogHandler(logging.Handler):
     """A logger for KATCP tests."""
@@ -184,6 +185,17 @@ class TestUtilMixin(object):
             self.assertEqual(str(msg), msg_str)
         self._assert_msgs_length(actual_msgs, len(expected_msgs))
 
+    def _assert_msgs_match(self, actual_msgs, expected):
+        """Assert that the actual messages match the expected regular
+           expression patterns.
+
+           actual_msgs: list of message objects received
+           expected: expected patterns
+           """
+        for msg, pattern in zip(actual_msgs, expected):
+            self.assertTrue(re.match(pattern, str(msg)))
+        self._assert_msgs_length(actual_msgs, len(expected))
+
     def _assert_msgs_like(self, actual_msgs, expected):
         """Assert that the actual messages start and end with
            the expected strings.
@@ -241,6 +253,22 @@ class TestUtilMixin(object):
                         self.assertAlmostEqual(float(get_sensor_method(sensorname)), expected)
                 else:
                     self.assertEqual(sensortype(get_sensor_method(sensorname)), expected)
+            except AssertionError, e:
+                raise AssertionError("Sensor %s: %s" % (sensorname, e))
+
+    def _assert_sensors_not_equal(self, get_sensor_method, sensor_tuples):
+        sensor_tuples = [t + (None,)*(4-len(t)) for t in sensor_tuples]
+        for sensorname, sensortype, expected, places in sensor_tuples:
+            try:
+                if sensortype == bool:
+                    self.assertNotEqual(bool(int(get_sensor_method(sensorname))), expected)
+                elif sensortype == float:
+                    if places is not None:
+                        self.assertNotAlmostEqual(float(get_sensor_method(sensorname)), expected, places)
+                    else:
+                        self.assertNotAlmostEqual(float(get_sensor_method(sensorname)), expected)
+                else:
+                    self.assertNotEqual(sensortype(get_sensor_method(sensorname)), expected)
             except AssertionError, e:
                 raise AssertionError("Sensor %s: %s" % (sensorname, e))
 
