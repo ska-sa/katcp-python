@@ -148,6 +148,9 @@ class SampleEvent(SampleStrategy):
     def get_sampling(self):
         return SampleStrategy.EVENT
 
+    def attach(self):
+        self.update(self._sensor)
+        super(SampleEvent, self).attach()
 
 class SampleAuto(SampleStrategy):
     """Sampling strategy implementation which sends updates
@@ -215,6 +218,10 @@ class SampleDifferential(SampleStrategy):
 
     def get_sampling(self):
         return SampleStrategy.DIFFERENTIAL
+
+    def attach(self):
+        self.update(self._sensor)
+        super(SampleDifferential, self).attach()
 
 
 class SamplePeriod(SampleStrategy):

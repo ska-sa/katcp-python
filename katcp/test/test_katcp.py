@@ -3,7 +3,6 @@
 import unittest
 import katcp
 import time
-import katcp.sampling
 import logging
 from katcp.testutils import TestLogHandler, DeviceTestSensor, \
     DeviceTestClient, DeviceTestServer, TestUtilMixin
@@ -172,37 +171,6 @@ class TestSensor(unittest.TestCase):
         self.assertAlmostEqual(s.parse_value("1002100"), 1002.1)
         self.assertRaises(ValueError, s.parse_value, "bicycle")
 
-    def test_sampling(self):
-        """Test getting and setting the sampling."""
-        s = DeviceTestSensor(
-                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
-                [-4, 3],
-                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
-        )
-        katcp.sampling.SampleNone(None, s)
-        katcp.sampling.SampleAuto(None, s)
-        katcp.sampling.SamplePeriod(None, s, 10)
-        katcp.sampling.SampleEvent(None, s)
-        katcp.sampling.SampleDifferential(None, s, 2)
-        self.assertRaises(ValueError, katcp.sampling.SampleNone, None, s, "foo")
-        self.assertRaises(ValueError, katcp.sampling.SampleAuto, None, s, "bar")
-        self.assertRaises(ValueError, katcp.sampling.SamplePeriod, None, s)
-        self.assertRaises(ValueError, katcp.sampling.SamplePeriod, None, s, "1.5")
-        self.assertRaises(ValueError, katcp.sampling.SamplePeriod, None, s, "-1")
-        self.assertRaises(ValueError, katcp.sampling.SampleEvent, None, s, "foo")
-        self.assertRaises(ValueError, katcp.sampling.SampleDifferential, None, s)
-        self.assertRaises(ValueError, katcp.sampling.SampleDifferential, None, s, "-1")
-        self.assertRaises(ValueError, katcp.sampling.SampleDifferential, None, s, "1.5")
-
-        katcp.sampling.SampleStrategy.get_strategy("none", None, s)
-        katcp.sampling.SampleStrategy.get_strategy("auto", None, s)
-        katcp.sampling.SampleStrategy.get_strategy("period", None, s, "15")
-        katcp.sampling.SampleStrategy.get_strategy("event", None, s)
-        katcp.sampling.SampleStrategy.get_strategy("differential", None, s, "2")
-        self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "random", None, s)
-        self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "period", None, s, "foo")
-        self.assertRaises(ValueError, katcp.sampling.SampleStrategy.get_strategy, "differential", None, s, "bar")
-
     def test_set_and_get_value(self):
         """Test getting and setting a sensor value."""
         s = DeviceTestSensor(
@@ -360,6 +328,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"!sensor-value ok 1", ""),
             (r"!sensor-value fail", ""),
             (r"!sensor-sampling ok an.int none", ""),
+            (r"#sensor-status 12345000 1 an.int nominal 3", ""),
             (r"!sensor-sampling ok an.int differential 2", ""),
             (r"#log trace", r"root trace-msg"),
             (r"#log debug", r"root debug-msg"),
