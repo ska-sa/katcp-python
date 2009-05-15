@@ -4,6 +4,7 @@ import katcp
 import client
 import logging
 import re
+import time
 
 class TestLogHandler(logging.Handler):
     """A logger for KATCP tests."""
@@ -272,6 +273,25 @@ class TestUtilMixin(object):
             except AssertionError, e:
                 raise AssertionError("Sensor %s: %s" % (sensorname, e))
 
+    def _wait_until_sensor_equals(self, timeout, get_sensor_method, sensorname, sensortype, value, places=7):
+        stoptime = time.time() + timeout
+        success = False
+
+        if sensortype == bool:
+            cmpfun = lambda got, exp: bool(int(got)) == exp
+        elif sensortype == float:
+            cmpfun = lambda got, exp: abs(float(got)-exp) < 10**-places
+        else:
+            cmpfun = lambda got, exp: sensortype(got) == exp
+
+        while time.time() < stoptime:
+            if cmpfun(get_sensor_method(sensorname), value):
+                success = True
+                break
+            time.sleep(0.1)
+
+        if not success:
+            self.fail("Timed out while waiting %ss for %s sensor to become %s." % (timeout_s, sensorname, value))
 
 def device_wrapper(device):
     outgoing_informs = []
