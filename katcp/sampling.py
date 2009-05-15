@@ -303,14 +303,14 @@ class SampleReactor(threading.Thread):
         # even while Python is setting module globals to
         # None.
         _time = time.time
-        _SampleReactor = SampleReactor
+        _currentThread = threading.currentThread
 
         while not self._stopEvent.isSet():
             timestamp = _time()
             # copy list before iterating over it in case new strategies get added
             # during loop
             for strategy in list(self._strategies):
-                _SampleReactor.periodic(strategy, timestamp)
-            self._stopEvent.wait(_SampleReactor.PERIOD_DELAY)
+                self.periodic(strategy, timestamp)
+            self._stopEvent.wait(self.PERIOD_DELAY)
         self._stopEvent.clear()
-        logger.debug("Stopping thread %s" % (threading.currentThread().getName()))
+        logger.debug("Stopping thread %s" % (_currentThread().getName()))
