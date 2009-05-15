@@ -88,6 +88,8 @@ class DeviceClient(object):
         totalsent = 0
         sock = self._sock
 
+        # do not do anything inside here which could call send_message!
+        send_failed = False
         self._send_lock.acquire()
         try:
             if sock is None:
@@ -100,30 +102,25 @@ class DeviceClient(object):
                     if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
                         continue
                     else:
-                        try:
-                            server_name = sock.getpeername()
-                        except socket.error:
-                            server_name = "<disconnected server>"
-                        msg = "Failed to send message to server %s (%s)" % (server_name, e)
-                        self._logger.error(msg)
-                        self._disconnect()
-                        # no raise here -- the client calls _disconnect instead
+                        send_failed = True
                         break
 
                 if sent == 0:
-                    try:
-                        server_name = sock.getpeername()
-                    except socket.error:
-                        server_name = "<disconnected server>"
-                    msg = "Could not send data to client %s, closing socket." % (server_name,)
-                    self._logger.error(msg)
-                    self._disconnect()
-                    # no raise here -- the client calls _disconnect instead
+                    send_failed = True
                     break
 
                 totalsent += sent
         finally:
             self._send_lock.release()
+
+        if send_failed:
+            try:
+                server_name = sock.getpeername()
+            except socket.error:
+                server_name = "<disconnected server>"
+            msg = "Failed to send message to server %s (%s)" % (server_name, e)
+            self._logger.error(msg)
+            self._disconnect()
 
     def _connect(self):
         """Connect to the server.
@@ -134,6 +131,7 @@ class DeviceClient(object):
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self._sock.connect(self._bindaddr)
+            self._sock.setblocking(0)
             self._waiting_chunk = ""
             self._connected.set()
             self.notify_connected(True)
@@ -147,11 +145,15 @@ class DeviceClient(object):
            @param self This object
            @return None
            """
-        if self._sock is not None:
-            self._sock.close()
+        # avoid disconnecting multiple times by immediately setting
+        # self._sock to None
+        sock = self._sock
+        self._sock = None
+
+        if sock is not None:
+            sock.close()
             self._connected.clear()
             self.notify_connected(False)
-        self._sock = None
 
     def handle_chunk(self, chunk):
         """Handle a chunk of data from the server.

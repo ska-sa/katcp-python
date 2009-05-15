@@ -521,11 +521,13 @@ class DeviceServerBase(object):
         datalen = len(data)
         totalsent = 0
 
-        # sends a locked per-socket -- i.e. only one send per socket at a time
+        # sends are locked per-socket -- i.e. only one send per socket at a time
         lock = self._sock_locks.get(sock)
         if lock is None:
             raise KatcpDeviceError("Attempt to send to a socket which is no longer a client.")
 
+        # do not do anything inside here which could call send_message!
+        send_failed = False
         lock.acquire()
         try:
             while totalsent < datalen:
@@ -535,32 +537,26 @@ class DeviceServerBase(object):
                     if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
                         continue
                     else:
-                        try:
-                            client_name = sock.getpeername()
-                        except socket.error:
-                            client_name = "<disconnected client>"
-                        msg = "Failed to send message to client %s (%s)" % (client_name, e)
-                        self._logger.error(msg)
-                        self.remove_socket(sock)
-                        self.on_client_disconnect(sock, msg, False)
-                        # no raise here -- the server calls on_client_disconnect instead
+                        send_failed = True
                         break
 
                 if sent == 0:
-                    try:
-                        client_name = sock.getpeername()
-                    except socket.error:
-                        client_name = "<disconnected client>"
-                    msg = "Could not send data to client %s, closing socket." % (client_name,)
-                    self._logger.error(msg)
-                    self.remove_socket(sock)
-                    self.on_client_disconnect(sock, msg, False)
-                    # no raise here -- the server calls on_client_disconnect instead
+                    send_failed = True
                     break
 
                 totalsent += sent
         finally:
             lock.release()
+
+        if send_failed:
+            try:
+                client_name = sock.getpeername()
+            except socket.error:
+                client_name = "<disconnected client>"
+            msg = "Failed to send message to client %s (%s)" % (client_name, e)
+            self._logger.error(msg)
+            self.remove_socket(sock)
+            self.on_client_disconnect(sock, msg, False)
 
     def inform(self, sock, msg):
         """Send an inform messages to a particular client."""
@@ -770,7 +766,9 @@ class DeviceServer(DeviceServerBase):
     def on_client_disconnect(self, sock, msg, sock_valid):
         """Inform client it is about to be disconnected."""
         if sock in self._strategies:
-            for sensor, strategy in self._strategies[sock].items():
+            strategies = self._strategies[sock]
+            for sensor, strategy in list(strategies.items()):
+                del strategies[sensor]
                 self._reactor.remove_strategy(strategy)
 
         if sock_valid:
@@ -981,7 +979,7 @@ class DeviceServer(DeviceServerBase):
             super(DeviceServer, self).run()
         finally:
             self._reactor.stop()
-            self._reactor.join()
+            self._reactor.join(timeout=0.5)
 
 
 class Sensor(object):
