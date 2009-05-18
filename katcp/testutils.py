@@ -291,7 +291,7 @@ class TestUtilMixin(object):
             time.sleep(0.1)
 
         if not success:
-            self.fail("Timed out while waiting %ss for %s sensor to become %s." % (timeout_s, sensorname, value))
+            self.fail("Timed out while waiting %ss for %s sensor to become %s." % (timeout, sensorname, value))
 
 def device_wrapper(device):
     outgoing_informs = []
