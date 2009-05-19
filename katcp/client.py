@@ -132,11 +132,21 @@ class DeviceClient(object):
         try:
             self._sock.connect(self._bindaddr)
             self._sock.setblocking(0)
-            self._waiting_chunk = ""
-            self._connected.set()
-            self.notify_connected(True)
         except Exception:
             self._logger.exception("DeviceClient failed to connect.")
+            self._sock.close()
+            self._sock = None
+
+        if self._sock is None:
+            return
+
+        self._waiting_chunk = ""
+        self._connected.set()
+
+        try:
+            self.notify_connected(True)
+        except Exception:
+            self._logger.exception("Notify connect failed. Disconnecting.")
             self._disconnect()
 
     def _disconnect(self):
