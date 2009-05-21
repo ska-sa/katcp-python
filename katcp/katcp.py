@@ -767,6 +767,7 @@ class DeviceServer(DeviceServerBase):
         """Inform client it is about to be disconnected."""
         if sock in self._strategies:
             strategies = self._strategies[sock]
+            del self._strategies[sock]
             for sensor, strategy in list(strategies.items()):
                 del strategies[sensor]
                 self._reactor.remove_strategy(strategy)
