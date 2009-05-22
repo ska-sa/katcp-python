@@ -309,7 +309,7 @@ def device_wrapper(device):
         del outgoing_informs[:]
 
     device.inform = inform
-    device.mass_inform =mass_inform
+    device.mass_inform = mass_inform
     device.informs = informs
     device.clear_informs = clear_informs
 
