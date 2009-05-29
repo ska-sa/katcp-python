@@ -81,8 +81,45 @@ class TestSampling(unittest.TestCase):
         period.periodic(1)
         self.assertEqual(len(self.calls), 1)
 
-        print period.periodic(11)
+        period.periodic(11)
         self.assertEqual(len(self.calls), 2)
 
         period.periodic(12)
         self.assertEqual(len(self.calls), 2)
+
+
+class TestReactor(unittest.TestCase):
+
+    def setUp(self):
+        """Set up for test."""
+        # test sensor
+        self.sensor = DeviceTestSensor(
+                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
+                [-4, 3],
+                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
+        )
+
+        # test callback
+        def inform(msg):
+            self.calls.append(msg)
+
+        # test reactor
+        self.reactor = sampling.SampleReactor()
+        self.reactor.start()
+
+        self.calls = []
+        self.inform = inform
+
+    def tearDown(self):
+        """Clean up after test."""
+        self.reactor.stop()
+        self.reactor.join(1.0)
+
+    def test_periodic(self):
+        """Test reactor with periodic sampling."""
+        period = sampling.SamplePeriod(self.inform, self.sensor, 10)
+        self.reactor.add_strategy(period)
+        time.sleep(0.1)
+        self.reactor.remove_strategy(period)
+
+        self.assertTrue(10 <= len(self.calls) <= 11, "Expect 9 to 11 informs, got %s" % len(self.calls))

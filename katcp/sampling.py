@@ -5,6 +5,7 @@
 import threading
 import time
 import logging
+import heapq
 
 logger = logging.getLogger("katcp.sampling")
 
@@ -245,7 +246,7 @@ class SamplePeriod(SampleStrategy):
         self._nextTime = 0
 
     def periodic(self, timestamp):
-        if timestamp > self._nextTime:
+        if timestamp >= self._nextTime:
             self._sensor._timestamp = timestamp
             self.inform()
             self._nextTime += self._period
@@ -262,14 +263,13 @@ class SampleReactor(threading.Thread):
        used to sample each one.
        """
 
-    ## @brief Finest granularity of calls to periodic (10ms)
-    PERIOD_DELAY = 0.01
-
     def __init__(self):
         """Create a SampleReactor."""
         super(SampleReactor, self).__init__()
         self._strategies = set()
         self._stopEvent = threading.Event()
+        self._wakeEvent = threading.Event()
+        self._heap = []
         # set daemon True so that the app can stop even if the thread is running
         self.setDaemon(True)
 
@@ -282,29 +282,26 @@ class SampleReactor(threading.Thread):
            """
         self._strategies.add(strategy)
         strategy.attach()
-        self.periodic(strategy, time.time())
+
+        next_time = strategy.periodic(time.time())
+        if next_time is not None:
+            heapq.heappush(self._heap, (next_time, strategy))
+            self._wakeEvent.set()
 
     def remove_strategy(self, strategy):
         """Remove a strategy from the reactor."""
         strategy.detach()
         self._strategies.remove(strategy)
 
-    @staticmethod
-    def periodic(strategy, timestamp):
-        """Callback method which is called by the scheduler for the next periodic
-           sample. It will schedule the next sample if indicated by the strategy.
-           """
-        _nextTime = strategy.periodic(timestamp)
-        # If required later we could use nextTime to schedule the next call to
-        # periodic for this strategy
-
     def stop(self):
         """Send event to processing thread and wait for it to stop."""
         self._stopEvent.set()
+        self._wakeEvent.set()
 
     def run(self):
         """Run the sample reactor."""
         logger.debug("Starting thread %s" % (threading.currentThread().getName()))
+        heap = self._heap
 
         # save globals so that the thread can run cleanly
         # even while Python is setting module globals to
@@ -313,11 +310,18 @@ class SampleReactor(threading.Thread):
         _currentThread = threading.currentThread
 
         while not self._stopEvent.isSet():
-            timestamp = _time()
-            # copy list before iterating over it in case new strategies get added
-            # during loop
-            for strategy in list(self._strategies):
-                self.periodic(strategy, timestamp)
-            self._stopEvent.wait(self.PERIOD_DELAY)
+            self._wakeEvent.clear()
+            if heap:
+                next_time, strategy = heapq.heappop(heap)
+                if strategy not in self._strategies:
+                    continue
+
+                timestamp = _time()
+                self._wakeEvent.wait(next_time - timestamp)
+                next_time = strategy.periodic(next_time)
+                heapq.heappush(heap, (next_time, strategy))
+            else:
+                self._wakeEvent.wait()
+
         self._stopEvent.clear()
         logger.debug("Stopping thread %s" % (_currentThread().getName()))
