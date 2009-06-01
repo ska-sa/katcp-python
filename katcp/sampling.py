@@ -6,8 +6,9 @@ import threading
 import time
 import logging
 import heapq
+import katcp
 
-logger = logging.getLogger("katcp.sampling")
+log = logging.getLogger("katcp.sampling")
 
 # pylint: disable-msg=W0142
 
@@ -93,10 +94,8 @@ class SampleStrategy(object):
 
     def inform(self):
         """Inform strategy creator of the sensor status."""
-        from katcp import Message
-
         timestamp_ms, status, value = self._sensor.read_formatted()
-        self._inform_callback(Message.inform("sensor-status",
+        self._inform_callback(katcp.Message.inform("sensor-status",
                     timestamp_ms, "1", self._sensor.name, status, value))
 
     def get_sampling(self):
@@ -243,16 +242,11 @@ class SamplePeriod(SampleStrategy):
         self._period = period_ms / SamplePeriod.MILLISECOND
         self._status = sensor._status
         self._value = sensor._value
-        self._nextTime = 0
 
     def periodic(self, timestamp):
-        if timestamp >= self._nextTime:
-            self._sensor._timestamp = timestamp
-            self.inform()
-            self._nextTime += self._period
-            if self._nextTime < timestamp:
-                self._nextTime = timestamp + self._period
-        return self._nextTime
+        self._sensor._timestamp = timestamp
+        self.inform()
+        return timestamp + self._period
 
     def get_sampling(self):
         return SampleStrategy.PERIOD
@@ -263,13 +257,14 @@ class SampleReactor(threading.Thread):
        used to sample each one.
        """
 
-    def __init__(self):
+    def __init__(self, logger=log):
         """Create a SampleReactor."""
         super(SampleReactor, self).__init__()
         self._strategies = set()
         self._stopEvent = threading.Event()
         self._wakeEvent = threading.Event()
         self._heap = []
+        self._logger = logger
         # set daemon True so that the app can stop even if the thread is running
         self.setDaemon(True)
 
@@ -300,28 +295,40 @@ class SampleReactor(threading.Thread):
 
     def run(self):
         """Run the sample reactor."""
-        logger.debug("Starting thread %s" % (threading.currentThread().getName()))
+        self._logger.debug("Starting thread %s" % (threading.currentThread().getName()))
         heap = self._heap
+        wake = self._wakeEvent
 
         # save globals so that the thread can run cleanly
         # even while Python is setting module globals to
         # None.
         _time = time.time
         _currentThread = threading.currentThread
+        _push = heapq.heappush
+        _pop = heapq.heappop
 
         while not self._stopEvent.isSet():
-            self._wakeEvent.clear()
+            wake.clear()
             if heap:
-                next_time, strategy = heapq.heappop(heap)
+                next_time, strategy = _pop(heap)
                 if strategy not in self._strategies:
                     continue
 
-                timestamp = _time()
-                self._wakeEvent.wait(next_time - timestamp)
-                next_time = strategy.periodic(next_time)
-                heapq.heappush(heap, (next_time, strategy))
+                wake.wait(next_time - _time())
+                if wake.isSet():
+                    _push(heap, (next_time, strategy))
+                    continue
+
+                try:
+                    next_time = strategy.periodic(next_time)
+                    _push(heap, (next_time, strategy))
+                except Exception, e:
+                    self._logger.exception(e)
+                    # push ten seconds into the future and hope whatever was wrong
+                    # sorts itself out
+                    _push(heap, (next_time + 10.0, strategy))
             else:
-                self._wakeEvent.wait()
+                wake.wait()
 
         self._stopEvent.clear()
-        logger.debug("Stopping thread %s" % (_currentThread().getName()))
+        self._logger.debug("Stopping thread %s" % (_currentThread().getName()))

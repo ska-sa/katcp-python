@@ -85,7 +85,7 @@ class TestSampling(unittest.TestCase):
         self.assertEqual(len(self.calls), 2)
 
         period.periodic(12)
-        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(len(self.calls), 3)
 
 
 class TestReactor(unittest.TestCase):
@@ -118,8 +118,13 @@ class TestReactor(unittest.TestCase):
     def test_periodic(self):
         """Test reactor with periodic sampling."""
         period = sampling.SamplePeriod(self.inform, self.sensor, 10)
+        start = time.time()
         self.reactor.add_strategy(period)
         time.sleep(0.1)
         self.reactor.remove_strategy(period)
+        end = time.time()
 
-        self.assertTrue(10 <= len(self.calls) <= 11, "Expect 9 to 11 informs, got %s" % len(self.calls))
+        expected = int(round((end-start) / 0.01))
+        emax, emin = expected + 1, expected - 1
+
+        self.assertTrue(emin <= len(self.calls) <= emax, "Expect %d to %d informs, got:\n  %s" % (emin, emax, "\n  ".join(str(x) for x in self.calls)))
