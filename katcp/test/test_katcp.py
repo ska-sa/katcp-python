@@ -377,6 +377,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         class SortOfOkayServer(katcp.DeviceServer):
             request_bar = 1
             inform_baz = 2
+
         assert("bar" not in SortOfOkayServer._request_handlers)
         assert("baz" not in SortOfOkayServer._inform_handlers)
 
