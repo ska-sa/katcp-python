@@ -88,6 +88,9 @@ class DeviceClient(object):
         totalsent = 0
         sock = self._sock
 
+        # Log all sent messages here so no one else has to.
+        self._logger.debug(data)
+
         # do not do anything inside here which could call send_message!
         send_failed = False
         self._send_lock.acquire()
@@ -201,6 +204,9 @@ class DeviceClient(object):
            @param msg The Message to process.
            @return None
            """
+        # log messages received so that no one else has to
+        self._logger.debug(msg)
+
         if msg.mtype == Message.INFORM:
             self.handle_inform(msg)
         elif msg.mtype == Message.REPLY:

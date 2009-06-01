@@ -434,6 +434,9 @@ class DeviceServerBase(object):
 
     def handle_message(self, sock, msg):
         """Handle messages of all types from clients."""
+        # log messages received so that no one else has to
+        self._logger.debug(msg)
+
         if msg.mtype == msg.REQUEST:
             self.handle_request(sock, msg)
         elif msg.mtype == msg.INFORM:
@@ -520,6 +523,9 @@ class DeviceServerBase(object):
         data = str(msg) + "\n"
         datalen = len(data)
         totalsent = 0
+
+        # Log all sent messages here so no one else has to.
+        self._logger.debug(data)
 
         # sends are locked per-socket -- i.e. only one send per socket at a time
         lock = self._sock_locks.get(sock)
@@ -938,7 +944,12 @@ class DeviceServer(DeviceServerBase):
 
             def inform_callback(cb_msg):
                 """Inform callback for sensor strategy."""
-                self.inform(sock, cb_msg)
+                try:
+                    self.inform(sock, cb_msg)
+                except KatcpDeviceError:
+                    # client probably went away -- send_message will already
+                    # have logged and handle the error.
+                    pass
 
             new_strategy = SampleStrategy.get_strategy(strategy,
                                         inform_callback, sensor, *params)
