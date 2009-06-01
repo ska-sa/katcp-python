@@ -230,7 +230,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         for thread in threads:
             thread.join()
 
-        time.sleep(0.1)
+        time.sleep(0.2)
 
         for thread_id in range(num_threads):
             replies, informs = results[thread_id]
