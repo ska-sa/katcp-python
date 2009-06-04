@@ -102,6 +102,13 @@ class TestSensor(unittest.TestCase):
         self.assertRaises(ValueError, s.parse_value, "-10")
         self.assertRaises(ValueError, s.parse_value, "asd")
 
+        s = katcp.Sensor(katcp.Sensor.INTEGER, "an.int", "An integer.", "count", [-20, 20])
+        self.assertEquals(s.value(), 0)
+        s = katcp.Sensor(katcp.Sensor.INTEGER, "an.int", "An integer.", "count", [2, 20])
+        self.assertEquals(s.value(), 2)
+        s = katcp.Sensor(katcp.Sensor.INTEGER, "an.int", "An integer.", "count", [2, 20], default=5)
+        self.assertEquals(s.value(), 5)
+
     def test_float_sensor(self):
         """Test float sensor."""
         s = DeviceTestSensor(
@@ -114,6 +121,13 @@ class TestSensor(unittest.TestCase):
         self.assertRaises(ValueError, s.parse_value, "10")
         self.assertRaises(ValueError, s.parse_value, "-10")
         self.assertRaises(ValueError, s.parse_value, "asd")
+
+        s = katcp.Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "", [-20.0, 20.0])
+        self.assertEquals(s.value(), 0.0)
+        s = katcp.Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "", [2.0, 20.0])
+        self.assertEquals(s.value(), 2.0)
+        s = katcp.Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "", [2.0, 20.0], default=5.0)
+        self.assertEquals(s.value(), 5.0)
 
     def test_boolean_sensor(self):
         """Test boolean sensor."""

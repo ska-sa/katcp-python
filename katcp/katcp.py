@@ -1080,7 +1080,7 @@ class Sensor(object):
     # @brief List of strings containing the additional parameters (length and interpretation
     # are specific to the sensor type)
 
-    def __init__(self, sensor_type, name, description, units, params=None):
+    def __init__(self, sensor_type, name, description, units, params=None, default=None):
         """Instantiate a new sensor object.
 
            Subclasses will usually pass in a fixed sensor_type which should
@@ -1099,6 +1099,8 @@ class Sensor(object):
         typeclass, self._value = self.SENSOR_TYPES[sensor_type]
 
         if self._sensor_type in [Sensor.INTEGER, Sensor.FLOAT]:
+            if not params[0] <= self._value <= params[1]:
+                self._value = params[0]
             self._kattype = typeclass(params[0], params[1])
         elif self._sensor_type == Sensor.DISCRETE:
             self._kattype = typeclass(params)
@@ -1116,6 +1118,9 @@ class Sensor(object):
 
         if self._sensor_type == Sensor.DISCRETE:
             self._value = self.params[0]
+
+        if default is not None:
+            self._value = default
 
     def attach(self, observer):
         """Attach an observer to this sensor. The observer must support a call
