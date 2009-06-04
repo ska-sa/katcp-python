@@ -61,6 +61,9 @@ class TestSampling(unittest.TestCase):
         event.attach()
         self.assertEqual(len(self.calls), 1)
 
+        self.sensor.set_value(2)
+        self.assertEqual(len(self.calls), 2)
+
     def test_differential(self):
         """Test SampleDifferential strategy."""
         diff = sampling.SampleDifferential(self.inform, self.sensor, 5)

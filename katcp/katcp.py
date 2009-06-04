@@ -928,19 +928,22 @@ class DeviceServer(DeviceServerBase):
     def request_sensor_sampling(self, sock, msg):
         """Configure or query the way a sensor is sampled."""
         if not msg.arguments:
-            return Message.reply("sensor-sampling", "fail",
-                                                    "No sensor name given.")
+            raise FailReply("No sensor name given.")
+
         name = msg.arguments[0]
 
         if name not in self._sensors:
-            return Message.reply("sensor-sampling", "fail",
-                                                    "Unknown sensor name.")
+            raise FailReply("Unknown sensor name.")
+
         sensor = self._sensors[name]
 
         if len(msg.arguments) > 1:
             # attempt to set sampling strategy
             strategy = msg.arguments[1]
             params = msg.arguments[2:]
+
+            if strategy not in SampleStrategy.SAMPLING_LOOKUP_REV:
+                raise FailReply("Unknown strategy name.")
 
             def inform_callback(cb_msg):
                 """Inform callback for sensor strategy."""

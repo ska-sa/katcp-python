@@ -290,8 +290,10 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("sensor-value", "an.int"))
         self.client.request(katcp.Message.request("sensor-value", "an.unknown"))
         self.client.request(katcp.Message.request("sensor-sampling", "an.int"))
-        self.client.request(katcp.Message.request("sensor-sampling", "an.int",
-                                                  "differential", "2"))
+        self.client.request(katcp.Message.request("sensor-sampling", "an.int", "differential", "2"))
+        self.client.request(katcp.Message.request("sensor-sampling"))
+        self.client.request(katcp.Message.request("sensor-sampling", "an.unknown", "auto"))
+        self.client.request(katcp.Message.request("sensor-sampling", "an.int", "unknown"))
 
         time.sleep(0.1)
 
@@ -344,6 +346,9 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"!sensor-sampling ok an.int none", ""),
             (r"#sensor-status 12345000 1 an.int nominal 3", ""),
             (r"!sensor-sampling ok an.int differential 2", ""),
+            (r"!sensor-sampling fail No\_sensor\_name\_given.", ""),
+            (r"!sensor-sampling fail Unknown\_sensor\_name.", ""),
+            (r"!sensor-sampling fail Unknown\_strategy\_name.", ""),
             (r"#log trace", r"root trace-msg"),
             (r"#log debug", r"root debug-msg"),
             (r"#log info", r"root info-msg"),
