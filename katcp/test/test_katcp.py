@@ -416,5 +416,13 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"!raise-fail fail There\_was\_a\_problem\_with\_your\_request.", ""),
         ])
 
+    def test_stop_and_restart(self):
+        """Test stopping and restarting the device server."""
+        self.server.stop(timeout=0.1)
+        self.server.join(timeout=1.0)
+        self.assertEqual(self.server._thread, None)
+        self.assertFalse(self.server._running.isSet())
+        self.server.start(timeout=1.0)
+
     # TODO: add test for inform handlers
     # TODO: update inform pass test

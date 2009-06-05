@@ -337,8 +337,8 @@ class DeviceServerBase(object):
         self._parser = MessageParser()
         self._bindaddr = (host, port)
         self._tb_limit = tb_limit
-        self._sock = self.bind(self._bindaddr)
         self._running = threading.Event()
+        self._sock = None
         self._thread = None
         self._logger = logger
 
@@ -589,12 +589,19 @@ class DeviceServerBase(object):
         _select = select.select
         _socket_error = socket.error
 
+        self._sock = self.bind(self._bindaddr)
+
         self._running.set()
         while self._running.isSet():
             all_socks = self._socks + [self._sock]
-            readers, _writers, errors = _select(
-                all_socks, [], all_socks, timeout
-            )
+            try:
+                readers, _writers, errors = _select(
+                    all_socks, [], all_socks, timeout
+                )
+            except _socket_error, e:
+                self._logger.warn("Error %s raised by select, shutting down server." % (e,))
+                self._running.clear()
+                break
 
             for sock in errors:
                 if sock is self._sock:
@@ -752,7 +759,7 @@ class DeviceServer(DeviceServerBase):
         super(DeviceServer, self).__init__(*args, **kwargs)
         self.log = DeviceLogger(self)
         self._sensors = {} # map names to sensor objects
-        self._reactor = SampleReactor()
+        self._reactor = None # created in run
         # map client sockets to map of sensors -> sampling strategies
         self._strategies = {}
         self.setup_sensors()
@@ -989,12 +996,14 @@ class DeviceServer(DeviceServerBase):
         """Override DeviceServerBase.run() to ensure that the reactor thread is
            running at the same time.
            """
+        self._reactor = SampleReactor()
         self._reactor.start()
         try:
             super(DeviceServer, self).run()
         finally:
             self._reactor.stop()
             self._reactor.join(timeout=0.5)
+            self._reactor = None
 
 
 class Sensor(object):
