@@ -54,6 +54,13 @@ class TestDeviceClient(unittest.TestCase, TestUtilMixin):
             r"#random-inform",
         ])
 
+    def test_stop_and_restart(self):
+        """Test stopping and then restarting a client."""
+        self.client.stop(timeout=0.1)
+        self.client.join(timeout=0.1)
+        self.assertEqual(self.client._thread, None)
+        self.assertFalse(self.client._running.isSet())
+        self.client.start(timeout=0.1)
 
 class TestBlockingClient(unittest.TestCase):
     def setUp(self):
