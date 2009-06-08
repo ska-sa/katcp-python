@@ -57,7 +57,8 @@ class TestDeviceClient(unittest.TestCase, TestUtilMixin):
     def test_stop_and_restart(self):
         """Test stopping and then restarting a client."""
         self.client.stop(timeout=0.1)
-        self.client.join(timeout=0.1)
+        # timeout needs to be longer than select sleep.
+        self.client.join(timeout=1.5)
         self.assertEqual(self.client._thread, None)
         self.assertFalse(self.client._running.isSet())
         self.client.start(timeout=0.1)
