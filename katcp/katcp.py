@@ -873,7 +873,10 @@ class DeviceServer(DeviceServerBase):
     def request_log_level(self, sock, msg):
         """Query or set the current logging level."""
         if msg.arguments:
-            self.log.set_log_level_by_name(msg.arguments[0])
+            try:
+                self.log.set_log_level_by_name(msg.arguments[0])
+            except ValueError, e:
+                raise FailReply(str(e))
         return Message.reply("log-level", "ok", self.log.level_name())
 
     def request_restart(self, sock, msg):

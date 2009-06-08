@@ -279,6 +279,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("restart"))
         self.client.request(katcp.Message.request("log-level"))
         self.client.request(katcp.Message.request("log-level", "trace"))
+        self.client.request(katcp.Message.request("log-level", "unknown"))
         self.client.request(katcp.Message.request("help"))
         self.client.request(katcp.Message.request("help", "watchdog"))
         self.client.request(katcp.Message.request("help", "unknown-request"))
@@ -315,6 +316,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"!restart ok", ""),
             (r"!log-level ok warn", ""),
             (r"!log-level ok trace", ""),
+            (r"!log-level fail Unknown\_logging\_level\_name\_'unknown'", ""),
             (r"#help client-list", ""),
             (r"#help halt", ""),
             (r"#help help", ""),
