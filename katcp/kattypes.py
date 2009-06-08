@@ -433,7 +433,7 @@ def make_reply(msgname, types, arguments):
     """Helper method for constructing a reply message from a list or tuple"""
     status = arguments[0]
     if status == "fail":
-        return katcp.Message.reply(msgname, *pack_types((Str(),Str()), arguments))
+        return katcp.Message.reply(msgname, *pack_types((Str(), Str()), arguments))
     if status == "ok":
         return katcp.Message.reply(msgname, *pack_types((Str(),) + types, arguments))
     raise ValueError("First returned value must be 'ok' or 'fail'.")

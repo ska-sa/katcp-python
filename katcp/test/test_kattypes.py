@@ -256,30 +256,30 @@ class TestOr(unittest.TestCase):
 
     def test_pack(self):
         """Test packing OR."""
-        o = Or((Float(),Regex("\d\d:\d\d")))
+        o = Or((Float(), Regex("\d\d:\d\d")))
         self.assertEqual(o.pack("12:34"), "12:34")
         self.assertEqual(o.pack(56.7), "56.7")
         self.assertRaises(ValueError, o.pack, None)
         self.assertRaises(ValueError, o.pack, "sdfsdf")
 
-        o = Or((Float(default=0.0),Regex("\d\d:\d\d")))
+        o = Or((Float(default=0.0), Regex("\d\d:\d\d")))
         self.assertEqual(o.pack(None), "0")
 
-        o = Or((Float(),Regex("\d\d:\d\d", default="00:00")))
+        o = Or((Float(), Regex("\d\d:\d\d", default="00:00")))
         self.assertEqual(o.pack(None), "00:00")
 
     def test_unpack(self):
         """Test unpacking OR."""
-        o = Or((Float(),Regex("\d\d:\d\d")))
+        o = Or((Float(), Regex("\d\d:\d\d")))
         self.assertEqual(o.unpack("12:34"), "12:34")
         self.assertEqual(o.unpack("56.7"), 56.7)
         self.assertRaises(ValueError, o.unpack, None)
         self.assertRaises(ValueError, o.unpack, "sdfsdf")
 
-        o = Or((Float(default=0.0),Regex("\d\d:\d\d")))
+        o = Or((Float(default=0.0), Regex("\d\d:\d\d")))
         self.assertEqual(o.unpack(None), 0.0)
 
-        o = Or((Float(),Regex("\d\d:\d\d", default="00:00")))
+        o = Or((Float(), Regex("\d\d:\d\d", default="00:00")))
         self.assertEqual(o.unpack(None), "00:00")
 
 class TestDiscreteMulti(unittest.TestCase):
@@ -321,8 +321,8 @@ class TestDiscreteMulti(unittest.TestCase):
         self.assertRaises(ValueError, d.unpack, "val1")
         self.assertRaises(ValueError, d.unpack, None)
 
-        self.assertEqual(d.unpack("VAL1,VAL2"), ["VAL1","VAL2"])
-        self.assertEqual(d.unpack("all"), ["VAL1","VAL2"])
+        self.assertEqual(d.unpack("VAL1,VAL2"), ["VAL1", "VAL2"])
+        self.assertEqual(d.unpack("all"), ["VAL1", "VAL2"])
         self.assertRaises(ValueError, d.unpack, "VAL1,VAL3")
         self.assertRaises(ValueError, d.unpack, "VAL1,Val2")
 
@@ -333,15 +333,15 @@ class TestDiscreteMulti(unittest.TestCase):
         self.assertEqual(d.unpack("val1"), ["val1"])
         self.assertRaises(ValueError, d.unpack, "val3")
 
-        self.assertEqual(d.unpack("val1,val2"), ["val1","val2"])
+        self.assertEqual(d.unpack("val1,val2"), ["val1", "val2"])
         self.assertEqual(d.unpack("all"), ["val1","VAL2"])
 
         d = DiscreteMulti(("VAL1", "VAL2"), all_keyword="XXXX")
-        self.assertEqual(d.unpack("XXXX"), ["VAL1","VAL2"])
+        self.assertEqual(d.unpack("XXXX"), ["VAL1", "VAL2"])
         self.assertRaises(ValueError, d.unpack, "all")
 
         d = DiscreteMulti(("1,2,3", "4,5,6"), separator="|")
-        self.assertEqual(d.unpack("1,2,3|4,5,6"), ["1,2,3","4,5,6"])
+        self.assertEqual(d.unpack("1,2,3|4,5,6"), ["1,2,3", "4,5,6"])
 
 
 class TestDevice(object):
