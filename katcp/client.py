@@ -135,8 +135,8 @@ class DeviceClient(object):
         try:
             self._sock.connect(self._bindaddr)
             self._sock.setblocking(0)
-        except Exception:
-            self._logger.exception("DeviceClient failed to connect.")
+        except Exception, e:
+            self._logger.error("DeviceClient failed to connect: %s" % (e,))
             self._sock.close()
             self._sock = None
 
@@ -296,8 +296,9 @@ class DeviceClient(object):
         _socket_error = socket.error
         _sleep = time.sleep
 
+        if not self._auto_reconnect:
+            self._connect()
         self._running.set()
-        self._connect()
         while self._running.isSet():
             if self.is_connected():
                 readers, _writers, errors = _select(
