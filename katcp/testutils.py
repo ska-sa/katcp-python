@@ -5,6 +5,7 @@ import client
 import logging
 import re
 import time
+import Queue
 
 class TestLogHandler(logging.Handler):
     """A logger for KATCP tests."""
@@ -129,6 +130,8 @@ class DeviceTestServer(katcp.DeviceServer):
     def __init__(self, *args, **kwargs):
         super(DeviceTestServer, self).__init__(*args, **kwargs)
         self.__msgs = []
+        self.restart_queue = Queue.Queue()
+        self.set_restart_queue(self.restart_queue)
 
     def setup_sensors(self):
         self.restarted = False
@@ -137,9 +140,6 @@ class DeviceTestServer(katcp.DeviceServer):
             [-5, 5],
             timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
         ))
-
-    def schedule_restart(self):
-        self.restarted = True
 
     def request_new_command(self, sock, msg):
         """A new command."""

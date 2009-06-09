@@ -308,7 +308,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         time.sleep(0.1)
 
         msgs = self.client.messages()
-        self.assertEqual(self.server.restarted, True)
+        self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
         self._assert_msgs_like(msgs, [
             (r"#version device_stub-0.1", ""),
             (r"#build-state name-0.1", ""),

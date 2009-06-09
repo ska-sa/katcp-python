@@ -716,13 +716,18 @@ class DeviceServer(DeviceServerBase):
          - halt
          - help
          - log-level
-         - restart (if self.schedule_restart(...) implemented)
+         - restart [1]
          - client-list
          - sensor-list
          - sensor-sampling
          - sensor-value
          - watchdog
 
+       [1] Restart relies on .set_restart_queue() being used to register
+           a restart queue with the device. When the device needs to be
+           restarted, it will be add to the restart queue.  The queue should
+           be a Python Queue.Queue object without a maximum size.
+           
        Unhandled standard messages are:
          ?configure
          ?mode
@@ -758,6 +763,7 @@ class DeviceServer(DeviceServerBase):
         """Create a DeviceServer."""
         super(DeviceServer, self).__init__(*args, **kwargs)
         self.log = DeviceLogger(self)
+        self._restart_queue = None
         self._sensors = {} # map names to sensor objects
         self._reactor = None # created in run
         # map client sockets to map of sensors -> sampling strategies
@@ -815,15 +821,12 @@ class DeviceServer(DeviceServerBase):
         """Fetch a list of all sensors"""
         return self._sensors.values()
 
-    def schedule_restart(self):
-        """Schedule a restart.
-
-           Unimplemented by default since this depends on the details
-           of how subclasses choose to manage the .run() and .stop()
-           methods.
+    def set_restart_queue(self, restart_queue):
+        """The the restart queue.
+        
+           When the device server should be restarted, it will be added to the queue.
            """
-        raise NotImplementedError("Server restarts not implemented for this"
-                                    " device.")
+        self._restart_queue = restart_queue
 
     def setup_sensors(self):
         """Populate the dictionary of sensors.
@@ -881,7 +884,13 @@ class DeviceServer(DeviceServerBase):
 
     def request_restart(self, sock, msg):
         """Restart the device server."""
-        self.schedule_restart()
+        if self._restart_queue is None:
+            raise FailReply("No restart queue registered -- cannot restart.")
+        # .put should never block because the queue should have no size limit.
+        self._restart_queue.put(self)
+        # this message makes it through because stop
+        # only registers in .run(...) after the reply
+        # has been sent.
         return Message.reply("restart", "ok")
 
     def request_client_list(self, sock, msg):
