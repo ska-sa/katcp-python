@@ -898,7 +898,11 @@ class DeviceServer(DeviceServerBase):
         clients = self.get_sockets()
         num_clients = len(clients)
         for client in clients:
-            addr = client.getsockname()
+            try:
+                addr = ":".join(str(part) for part in client.getpeername())
+            except socket.error, e:
+                # client may be gone, in which case just send a description
+                addr = repr(client)
             self.inform(sock, Message.inform("client-list", addr))
         return Message.reply("client-list", "ok", str(num_clients))
 
