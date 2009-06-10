@@ -211,6 +211,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def reply_cb(reply, thread_id):
             results[thread_id][0].append(reply)
+            results[thread_id][2].set()
 
         def inform_cb(inform, thread_id):
             results[thread_id][1].append(inform)
@@ -226,7 +227,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         request = katcp.Message.request("help")
 
         for thread_id in range(num_threads):
-            results[thread_id] = ([], [])
+            results[thread_id] = ([], [], threading.Event())
 
         for thread_id in range(num_threads):
             thread = threading.Thread(target=worker, args=(thread_id, request))
@@ -238,10 +239,9 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         for thread in threads:
             thread.join()
 
-        time.sleep(0.2)
-
         for thread_id in range(num_threads):
-            replies, informs = results[thread_id]
+            replies, informs, done = results[thread_id]
+            done.wait(1.0)
             self.assertEqual(len(replies), 1)
             if len(informs) != 12:
                 print thread_id, len(informs)
