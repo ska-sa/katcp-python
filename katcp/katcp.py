@@ -849,7 +849,18 @@ class DeviceServer(DeviceServerBase):
     # pylint: disable-msg = W0613
 
     def request_halt(self, sock, msg):
-        """Halt the server."""
+        """Halt the device server.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether scheduling the halt succeeded.
+
+        Examples
+        --------
+        ?halt
+        !halt ok
+        """
         self.stop()
         # this message makes it through because stop
         # only registers in .run(...) after the reply
@@ -857,7 +868,41 @@ class DeviceServer(DeviceServerBase):
         return Message.reply("halt", "ok")
 
     def request_help(self, sock, msg):
-        """Return help on the available request methods."""
+        """Return help on the available requests.
+        
+        Return a description of the available requests using a seqeunce of #help informs.
+        
+        Parameters
+        ----------
+        request : str, optional
+            The name of the request to return help for (the default is to return help for all requests).
+
+        Inform Arguments
+        ----------------
+        request : str
+            The name of a request.
+        description : str
+            Documentation for the named request.
+        
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the help succeeded.
+        informs : int
+            Number of #help inform messages sent.
+        
+        Examples
+        --------
+        ?help
+        #help halt ...description...
+        #help help ...description...
+        ...
+        !help ok 5
+
+        ?help halt
+        #help halt ...description...
+        !help ok 1
+        """
         if not msg.arguments:
             for name, method in sorted(self._request_handlers.items()):
                 doc = method.__doc__
@@ -874,7 +919,28 @@ class DeviceServer(DeviceServerBase):
             return Message.reply("help", "fail", "Unknown request method.")
 
     def request_log_level(self, sock, msg):
-        """Query or set the current logging level."""
+        """Query or set the current logging level.
+        
+        Parameters
+        ----------
+        level : str, optional
+            Name of the logging level to set the device server to (the default is to leave the log level unchanged).
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether the request succeeded.
+        level : str
+            The log level after processing the request.
+
+        Examples
+        --------
+        ?log-level
+        !log-level ok warn
+
+        ?log-level info
+        !log-level ok info
+        """
         if msg.arguments:
             try:
                 self.log.set_log_level_by_name(msg.arguments[0])
@@ -883,7 +949,18 @@ class DeviceServer(DeviceServerBase):
         return Message.reply("log-level", "ok", self.log.level_name())
 
     def request_restart(self, sock, msg):
-        """Restart the device server."""
+        """Restart the device server.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether scheduling the restart succeeded.
+
+        Examples
+        --------
+        ?restart
+        !restart ok
+        """
         if self._restart_queue is None:
             raise FailReply("No restart queue registered -- cannot restart.")
         # .put should never block because the queue should have no size limit.
@@ -894,7 +971,31 @@ class DeviceServer(DeviceServerBase):
         return Message.reply("restart", "ok")
 
     def request_client_list(self, sock, msg):
-        """Request the list of connected clients."""
+        """Request the list of connected clients.
+
+        The list of clients is sent as a sequence of #client-list informs.
+
+        Inform Argumentss
+        ----------------
+        addr : str
+            The address of the client as host:port with host in dotted quad
+            notation. If the address of the client could not be determined
+            (because, for example, the client disconnected suddenly) then
+            a unique string representing the client is sent instead.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the client list succeeded.
+        informs : int
+            Number of #client-list inform messages sent.
+        
+        Examples
+        --------
+        ?client-list
+        #client-list 127.0.0.1:53600
+        !client-list ok 1
+        """
         clients = self.get_sockets()
         num_clients = len(clients)
         for client in clients:
@@ -907,7 +1008,45 @@ class DeviceServer(DeviceServerBase):
         return Message.reply("client-list", "ok", str(num_clients))
 
     def request_sensor_list(self, sock, msg):
-        """Request the list of sensors."""
+        """Request the list of sensors.
+        
+        The list of sensors is sent as a sequence of #sensor-list informs.
+        
+        Inform Arguments
+        ----------------
+        name : str
+            The name of the sensor being described.
+        description : str
+            Description of the named sensor.
+        units : str
+            Units for the value of the named sensor.
+        type : str
+            Type of the named sensor.
+        params : list of str, optional
+            Additional sensor parameters (type dependent). For integer and float
+            sensors the additional parameters are the minimum and maximum sensor
+            value. For discrete sensors the additional parameters are the allowed
+            values. For all other types no additional parameters are sent.
+            
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the sensor list succeeded.
+        informs : int
+            Number of #sensor-list inform messages sent.
+
+        Examples
+        --------
+        ?sensor-list
+        #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
+        #sensor-list cpu.status CPU\_status. \@ discrete on off error
+        ...
+        !sensor-list ok 5
+
+        ?sensor-list cpu.power.on
+        #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
+        !sensor-list ok 1
+        """
         if not msg.arguments:
             for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
                 self.inform(sock, Message.inform("sensor-list",
@@ -928,7 +1067,41 @@ class DeviceServer(DeviceServerBase):
                                                     "Unknown sensor name.")
 
     def request_sensor_value(self, sock, msg):
-        """Request the value of a sensor."""
+        """Request the value of a sensor or sensors.
+        
+        A list of sensor values as a sequence of #sensor-value informs.
+        
+        Inform Arguments
+        ----------------
+        timestamp : float
+            Timestamp of the sensor reading in milliseconds since the Unix epoch.
+        count : {1}
+            Number of sensors described in this #sensor-value inform. Will always
+            be one. It exists to keep this inform compatible with #sensor-status.
+        name : str
+            Name of the sensor whose value is being reported.
+        value : object
+            Value of the named sensor. Type depends on the type of the sensor.
+        
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the list of values succeeded.
+        informs : int
+            Number of #sensor-value inform messages sent.
+        
+        Examples
+        --------
+        ?sensor-value
+        #sensor-value 1244631611415.231 1 psu.voltage 4.5
+        #sensor-value 1244631611415.200 1 cpu.status off
+        ...
+        !sensor-value ok 5
+        
+        ?sensor-value cpu.power.on
+        #sensor-value 1244631611415.231 1 cpu.power.on 0
+        !sensor-value ok 1
+        """
         if not msg.arguments:
             for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
                 timestamp_ms, status, value = sensor.read_formatted()
@@ -949,7 +1122,44 @@ class DeviceServer(DeviceServerBase):
                                                     "Unknown sensor name.")
 
     def request_sensor_sampling(self, sock, msg):
-        """Configure or query the way a sensor is sampled."""
+        """Configure or query the way a sensor is sampled.
+
+        Sampled values are reported asynchronously using the #sensor-status
+        message.
+
+        Parameters
+        ----------
+        name : str
+            Name of the sensor whose sampling strategy to query or configure.
+        strategy : {'none', 'auto', 'event', 'differential', 'period'}, optional
+            Type of strategy to use to report the sensor value. The differential
+            strategy type may only be used with integer or float sensors.
+        params : list of str, optional
+            Additional strategy parameters (dependent on the strategy type).
+            For the differential strategy, the parameter is an integer or float
+            giving the amount by which the sensor value may change before an
+            updated value is sent. For the period strategy, the parameter is the
+            period to sample at in milliseconds. 
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether the sensor-sampling request succeeded.
+        name : str
+            Name of the sensor queried or configured.
+        strategy : {'none', 'auto', 'event', 'differential', 'period'}
+            Name of the new or current sampling strategy for the sensor.
+        params : list of str
+            Additional strategy parameters (see description under Parameters).
+        
+        Examples
+        --------
+        ?sensor-sampling cpu.power.on
+        !sensor-sampling ok cpu.power.on none
+        
+        ?sensor-sampling cpu.power.on period 500
+        !sensor-sampling ok cpu.power.on period 500
+        """
         if not msg.arguments:
             raise FailReply("No sensor name given.")
 
@@ -1001,7 +1211,17 @@ class DeviceServer(DeviceServerBase):
 
 
     def request_watchdog(self, sock, msg):
-        """Check that the server is still alive."""
+        """Check that the server is still alive.
+        
+        Returns
+        -------
+            success : {'ok'}
+
+        Examples
+        --------
+        ?watchdog
+        !watchdog ok
+        """
         # not a function, just doesn't use self
         # pylint: disable-msg = R0201
         return Message.reply("watchdog", "ok")
