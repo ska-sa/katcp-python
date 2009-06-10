@@ -923,14 +923,14 @@ class DeviceServer(DeviceServerBase):
         
         Parameters
         ----------
-        level : str, optional
+        level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', 'off'}, optional
             Name of the logging level to set the device server to (the default is to leave the log level unchanged).
 
         Returns
         -------
         success : {'ok', 'fail'}
             Whether the request succeeded.
-        level : str
+        level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', 'off'}
             The log level after processing the request.
 
         Examples
@@ -1011,6 +1011,11 @@ class DeviceServer(DeviceServerBase):
         """Request the list of sensors.
         
         The list of sensors is sent as a sequence of #sensor-list informs.
+
+        Parameters
+        ----------
+        name : str, optional
+            Name of the sensor to list (the default is to list all sensors).
         
         Inform Arguments
         ----------------
@@ -1070,6 +1075,11 @@ class DeviceServer(DeviceServerBase):
         """Request the value of a sensor or sensors.
         
         A list of sensor values as a sequence of #sensor-value informs.
+        
+        Parameters
+        ----------
+        name : str, optional
+            Name of the sensor to poll (the default is to send values for all sensors).
         
         Inform Arguments
         ----------------
