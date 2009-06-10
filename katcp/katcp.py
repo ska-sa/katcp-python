@@ -913,7 +913,7 @@ class DeviceServer(DeviceServerBase):
             name = msg.arguments[0]
             if name in self._request_handlers:
                 method = self._request_handlers[name]
-                doc = method.__doc__
+                doc = method.__doc__.strip()
                 self.inform(sock, Message.inform("help", name, doc))
                 return Message.reply("help", "ok", "1")
             return Message.reply("help", "fail", "Unknown request method.")
