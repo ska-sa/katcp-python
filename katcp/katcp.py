@@ -975,7 +975,7 @@ class DeviceServer(DeviceServerBase):
 
         The list of clients is sent as a sequence of #client-list informs.
 
-        Inform Argumentss
+        Inform Arguments
         ----------------
         addr : str
             The address of the client as host:port with host in dotted quad
