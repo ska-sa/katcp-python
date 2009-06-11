@@ -194,7 +194,7 @@ class TestUtilMixin(object):
            expected: expected patterns
            """
         for msg, pattern in zip(actual_msgs, expected):
-            self.assertTrue(re.match(pattern, str(msg)))
+            self.assertTrue(re.match(pattern, str(msg)), "Message did match pattern %r: %s" % (pattern, msg))
         self._assert_msgs_length(actual_msgs, len(expected))
 
     def _assert_msgs_like(self, actual_msgs, expected):
