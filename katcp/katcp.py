@@ -1361,9 +1361,11 @@ class Sensor(object):
                 self._value = params[0]
             self._kattype = typeclass(params[0], params[1])
         elif self._sensor_type == Sensor.DISCRETE:
+            self._value = params[0]
             self._kattype = typeclass(params)
         else:
             self._kattype = typeclass()
+
         self._formatter = self._kattype.pack
         self._parser = self._kattype.unpack
         self.stype = self._kattype.name
@@ -1373,9 +1375,6 @@ class Sensor(object):
         self.units = units
         self.params = params
         self.formatted_params = [self._formatter(p, True) for p in params]
-
-        if self._sensor_type == Sensor.DISCRETE:
-            self._value = self.params[0]
 
         if default is not None:
             self._value = default
