@@ -63,6 +63,7 @@ class TestDeviceClient(unittest.TestCase, TestUtilMixin):
         self.assertFalse(self.client._running.isSet())
         self.client.start(timeout=0.1)
 
+
 class TestBlockingClient(unittest.TestCase):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
@@ -94,6 +95,17 @@ class TestBlockingClient(unittest.TestCase):
         assert reply.name == "help"
         assert reply.arguments == ["ok", "12"]
         assert len(informs) == int(reply.arguments[1])
+
+    def test_timeout(self):
+        """Test calling blocking_request with a timeout."""
+        try:
+            self.client.blocking_request(
+                katcp.Message.request("help"),
+                timeout=0.001)
+        except RuntimeError, e:
+            self.assertEqual(str(e), "Request help timed out after 0.001 seconds.")
+        else:
+            self.assertFalse("Expected timeout on request")
 
 
 class TestCallbackClient(unittest.TestCase, TestUtilMixin):

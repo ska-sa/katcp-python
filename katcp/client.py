@@ -414,12 +414,12 @@ class BlockingClient(DeviceClient):
            @param host String: host to connect to.
            @param port Integer: port to connect to.
            @param tb_limit Integer: maximum number of stack frames to
-                           send in error traceback.
+                           send in error traceback (default: 20).
            @param timeout Float: seconds to wait before a blocking request
-                          times out.
+                          times out (default: 5.0).
            @param logger Object: Logger to log to.
            @param auto_reconnect Boolean: Whether to automattically
-                                 reconnect if the connection dies.
+                                 reconnect if the connection dies (default: True).
            """
         super(BlockingClient, self).__init__(host, port, tb_limit=tb_limit,
             logger=logger,auto_reconnect=auto_reconnect)
@@ -431,11 +431,13 @@ class BlockingClient(DeviceClient):
         self._current_informs = None
         self._current_reply = None
 
-    def blocking_request(self, msg):
+    def blocking_request(self, msg, timeout=None):
         """Send a request messsage.
 
            @param self This object.
            @param msg The request Message to send.
+           @param timeout  How long to wait for a reply. The default is the
+                           the timeout set when creating the BlockingClient.
            @return The a tuple containing the reply Message and a list of
                    inform messages.
            """
@@ -448,9 +450,12 @@ class BlockingClient(DeviceClient):
         finally:
             self._request_lock.release()
 
+        if timeout is None:
+            timeout = self._request_timeout
+
         try:
             self.request(msg)
-            self._request_end.wait(self._request_timeout)
+            self._request_end.wait(timeout)
         finally:
             try:
                 self._request_lock.acquire()
@@ -469,8 +474,8 @@ class BlockingClient(DeviceClient):
         if success:
             return reply, informs
         else:
-            raise RuntimeError("Request %s timeout out after %s seconds." %
-                                (msg.name, self._request_timeout))
+            raise RuntimeError("Request %s timed out after %s seconds." %
+                                (msg.name, timeout))
 
     def handle_inform(self, msg):
         """Handle inform messages related to any current requests.
