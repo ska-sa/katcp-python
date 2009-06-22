@@ -426,5 +426,32 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self.assertFalse(self.server._running.isSet())
         self.server.start(timeout=1.0)
 
-    # TODO: add test for inform handlers
-    # TODO: update inform pass test
+    def test_bad_client_socket(self):
+        """Test what happens when select is called on a dead client socket."""
+        # wait for client to arrive
+        time.sleep(0.1)
+
+        # close socket while the server isn't looking
+        # then wait for the server to notice
+        sock = self.server._socks[0]
+        sock.close()
+        time.sleep(0.75)
+
+        # check that client was removed
+        self.assertTrue(sock not in self.server._socks, "Expected %r to not be in %r" % (sock, self.server._socks))
+
+    def test_bad_server_socket(self):
+        """Test what happens when select is called on a dead server socket."""
+        # wait for client to arrive
+        time.sleep(0.1)
+
+        # close socket while the server isn't looking
+        # then wait for the server to notice
+        sock = self.server._sock
+        sockname = sock.getsockname()
+        sock.close()
+        time.sleep(0.75)
+
+        # check that server restarted
+        self.assertTrue(sock is not self.server._sock, "Expected %r to not be %r" % (sock, self.server._sock))
+        self.assertEqual(sockname, self.server._sock.getsockname())

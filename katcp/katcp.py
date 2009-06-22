@@ -590,6 +590,9 @@ class DeviceServerBase(object):
         _socket_error = socket.error
 
         self._sock = self.bind(self._bindaddr)
+        # replace bindaddr with real address so we can rebind
+        # to the same port.
+        self._bindaddr = self._sock.getsockname()
 
         self._running.set()
         while self._running.isSet():
@@ -599,9 +602,21 @@ class DeviceServerBase(object):
                     all_socks, [], all_socks, timeout
                 )
             except _socket_error, e:
-                self._logger.warn("Error %s raised by select, shutting down server." % (e,))
-                self._running.clear()
-                break
+                # search for broken socket
+                for sock in list(self._socks):
+                    try:
+                        _readers, _writers, _errors = _select([sock], [], [], 0)
+                    except _socket_error, e:
+                        self.remove_socket(sock)
+                        self.on_client_disconnect(sock, "Client socket died with error %s" % (e,), False)
+                # check server socket
+                try:
+                    _readers, _writers, _errors = _select([self._sock], [], [], 0)
+                except:
+                    self._logger.warn("Server socket died, attempting to restart it.")
+                    self._sock = self.bind(self._bindaddr)
+                # try select again
+                continue
 
             for sock in errors:
                 if sock is self._sock:
