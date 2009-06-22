@@ -63,6 +63,22 @@ class TestDeviceClient(unittest.TestCase, TestUtilMixin):
         self.assertFalse(self.client._running.isSet())
         self.client.start(timeout=0.1)
 
+    def test_bad_socket(self):
+        """Test what happens when select is called on a dead socket."""
+        # wait for client to connect
+        time.sleep(0.1)
+
+        # close socket while the client isn't looking
+        # then wait for the client to notice
+        sock = self.client._sock
+        sockname = sock.getpeername()
+        sock.close()
+        time.sleep(1.25)
+
+        # check that client reconnected
+        self.assertTrue(sock is not self.client._sock, "Expected %r to not be %r" % (sock, self.client._sock))
+        self.assertEqual(sockname, self.client._sock.getpeername())
+
 
 class TestBlockingClient(unittest.TestCase):
     def setUp(self):

@@ -301,9 +301,13 @@ class DeviceClient(object):
         self._running.set()
         while self._running.isSet():
             if self.is_connected():
-                readers, _writers, errors = _select(
-                    [self._sock], [], [self._sock], timeout
-                )
+                try:
+                    readers, _writers, errors = _select(
+                        [self._sock], [], [self._sock], timeout
+                    )
+                except _socket_error, e:
+                    # call to select got an error
+                    errors = [self._sock]
 
                 if errors:
                     self._disconnect()
