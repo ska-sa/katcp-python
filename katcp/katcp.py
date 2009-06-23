@@ -777,7 +777,7 @@ class DeviceServer(DeviceServerBase):
     def __init__(self, *args, **kwargs):
         """Create a DeviceServer."""
         super(DeviceServer, self).__init__(*args, **kwargs)
-        self.log = DeviceLogger(self)
+        self.log = DeviceLogger(self, python_logger=self._logger)
         self._restart_queue = None
         self._sensors = {} # map names to sensor objects
         self._reactor = None # created in run
@@ -1512,7 +1512,17 @@ class DeviceLogger(object):
     LEVELS = [ "all", "trace", "debug", "info", "warn",
                "error", "fatal", "off" ]
 
-    def __init__(self, device_server, root_logger="root"):
+    ## @brief Map of Python logging level to corresponding to KATCP levels
+    PYTHON_LEVEL = {
+        TRACE: 0,
+        DEBUG: logging.DEBUG,
+        INFO: logging.INFO,
+        WARN: logging.WARN,
+        ERROR: logging.ERROR,
+        FATAL: logging.FATAL,
+    }
+
+    def __init__(self, device_server, root_logger="root", python_logger=None):
         """Create a DeviceLogger.
 
            @param self This object.
@@ -1520,6 +1530,7 @@ class DeviceLogger(object):
            @param root_logger String containing root logger name.
            """
         self._device_server = device_server
+        self._python_logger = python_logger
         self._log_level = self.WARN
         self._root_logger_name = root_logger
 
@@ -1545,6 +1556,8 @@ class DeviceLogger(object):
 
     def log(self, level, msg, name=None):
         """Log a message and inform all clients."""
+        if self._python_logger is not None:
+            self._python_logger.log(self.PYTHON_LEVEL[level], msg)
         if level >= self._log_level:
             if name is None:
                 name = self._root_logger_name
