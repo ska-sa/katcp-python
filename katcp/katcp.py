@@ -281,7 +281,11 @@ class DeviceMetaclass(type):
 class KatcpDeviceError(Exception):
     """Exception raised by KATCP servers when errors occur will
        communicating with a device.  Note that socket.error can also be raised
-       if low-level network exceptions occurs."""
+       if low-level network exceptions occurs.
+
+       Deprecated. Servers should not raise errors if communication with a
+       client fails -- errors are simply logged instead.
+       """
     pass
 
 
@@ -480,11 +484,7 @@ class DeviceServerBase(object):
             reply = Message.reply(msg.name, "invalid", "Unknown request.")
 
         if send_reply:
-            try:
-                self.send_message(sock, reply)
-            except KatcpDeviceError:
-                # send message will already have done the right thing
-                pass
+            self.send_message(sock, reply)
 
     def handle_inform(self, sock, msg):
         """Dispatch an inform message to the appropriate method."""
@@ -532,7 +532,13 @@ class DeviceServerBase(object):
         # sends are locked per-socket -- i.e. only one send per socket at a time
         lock = self._sock_locks.get(sock)
         if lock is None:
-            raise KatcpDeviceError("Attempt to send to a socket which is no longer a client.")
+            try:
+                client_name = sock.getpeername()
+            except socket.error:
+                client_name = "<disconnected client>"
+            msg = "Attempt to send to a socket %s which is no longer a client." % (client_name,)
+            self._logger.warn(msg)
+            return
 
         # do not do anything inside here which could call send_message!
         send_failed = False
@@ -792,12 +798,8 @@ class DeviceServer(DeviceServerBase):
     def on_client_connect(self, sock):
         """Inform client of build state and version on connect."""
         self._strategies[sock] = {} # map of sensors -> sampling strategies
-        try:
-            self.inform(sock, Message.inform("version", self.version()))
-            self.inform(sock, Message.inform("build-state", self.build_state()))
-        except KatcpDeviceError:
-            # base server will already have cleaned-up the socked and logged the error
-            pass
+        self.inform(sock, Message.inform("version", self.version()))
+        self.inform(sock, Message.inform("build-state", self.build_state()))
 
     def on_client_disconnect(self, sock, msg, sock_valid):
         """Inform client it is about to be disconnected."""
@@ -1207,12 +1209,7 @@ class DeviceServer(DeviceServerBase):
 
             def inform_callback(cb_msg):
                 """Inform callback for sensor strategy."""
-                try:
-                    self.inform(sock, cb_msg)
-                except KatcpDeviceError:
-                    # client probably went away -- send_message will already
-                    # have logged and handle the error.
-                    pass
+                self.inform(sock, cb_msg)
 
             new_strategy = SampleStrategy.get_strategy(strategy,
                                         inform_callback, sensor, *params)
