@@ -348,16 +348,18 @@ class DeviceServerBase(object):
         self._waiting_chunks = {} # map from client sockets to partial messages
         self._sock_locks = {} # map from client sockets to socket sending locks
 
-    def _log_msg(self, level_name, msg, name):
+    def _log_msg(self, level_name, msg, name, timestamp=None):
         """Create a katcp logging inform message.
 
            Usually this will be called from inside a DeviceLogger object,
            but it is also used by the methods in this class when errors
            need to be reported to the client.
            """
+        if timestamp is None:
+            timestamp = time.time()
         return Message.inform("log",
                 level_name,
-                str(int(time.time() * 1000.0)), # time since epoch in ms
+                str(int(timestamp * 1000.0)), # time since epoch in ms
                 name,
                 msg,
         )
@@ -1542,19 +1544,24 @@ class DeviceLogger(object):
             level = self._log_level
         return self.LEVELS[level]
 
+    def level_from_name(self, level_name):
+        """Return the level constant for a given name.
+
+           If the level_name is not known, raise a ValueError."""
+        try:
+            return self.LEVELS.index(level_name)
+        except ValueError:
+            raise ValueError("Unknown logging level name '%s'" % (level_name,))
+
     def set_log_level(self, level):
         """Set the logging level."""
         self._log_level = level
 
     def set_log_level_by_name(self, level_name):
         """Set the logging level using a level name."""
-        try:
-            level = self.LEVELS.index(level_name)
-        except ValueError:
-            raise ValueError("Unknown logging level name '%s'" % (level_name,))
-        self._log_level = level
+        self._log_level = self.level_from_name(level_name)
 
-    def log(self, level, msg, name=None):
+    def log(self, level, msg, name=None, timestamp=None):
         """Log a message and inform all clients."""
         if self._python_logger is not None:
             self._python_logger.log(self.PYTHON_LEVEL[level], msg)
@@ -1562,32 +1569,32 @@ class DeviceLogger(object):
             if name is None:
                 name = self._root_logger_name
             self._device_server.mass_inform(
-                self._device_server._log_msg(self.level_name(level), msg, name)
+                self._device_server._log_msg(self.level_name(level), msg, name, timestamp=timestamp)
             )
 
-    def trace(self, msg, name=None):
+    def trace(self, msg, name=None, timestamp=None):
         """Log a trace message."""
-        self.log(self.TRACE, msg, name)
+        self.log(self.TRACE, msg, name, timestamp)
 
-    def debug(self, msg, name=None):
+    def debug(self, msg, name=None, timestamp=None):
         """Log a debug message."""
-        self.log(self.DEBUG, msg, name)
+        self.log(self.DEBUG, msg, name, timestamp)
 
-    def info(self, msg, name=None):
+    def info(self, msg, name=None, timestamp=None):
         """Log an info message."""
-        self.log(self.INFO, msg, name)
+        self.log(self.INFO, msg, name, timestamp)
 
-    def warn(self, msg, name=None):
+    def warn(self, msg, name=None, timestamp=None):
         """Log an warning message."""
-        self.log(self.WARN, msg, name)
+        self.log(self.WARN, msg, name, timestamp)
 
-    def error(self, msg, name=None):
+    def error(self, msg, name=None, timestamp=None):
         """Log an error message."""
-        self.log(self.ERROR, msg, name)
+        self.log(self.ERROR, msg, name, timestamp)
 
-    def fatal(self, msg, name=None):
+    def fatal(self, msg, name=None, timestamp=None):
         """Log a fatal error message."""
-        self.log(self.FATAL, msg, name)
+        self.log(self.FATAL, msg, name, timestamp)
 
     @staticmethod
     def log_to_python(logger, msg):
