@@ -338,17 +338,21 @@ class DeviceClient(object):
         self._disconnect()
         self._logger.debug("Stopping thread %s" % (threading.currentThread().getName()))
 
-    def start(self, timeout=None):
+    def start(self, timeout=None, daemon=None):
         """Start the client in a new thread.
 
            @param self This object.
-           @param timeout Seconds to wait for server thread to start (as a float).
+           @param timeout Seconds to wait for client thread to start (as a float).
+           @param daemon If not None, the thread's setDaemon method is called with this
+                         parameter before the thread is started. 
            @return None
            """
         if self._thread:
             raise RuntimeError("Device client already started.")
 
         self._thread = threading.Thread(target=self.run)
+        if daemon is not None:
+            self._thread.setDaemon(daemon)
         self._thread.start()
         if timeout:
             self._connected.wait(timeout)
