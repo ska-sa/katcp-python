@@ -12,17 +12,11 @@ import select
 import time
 import logging
 import errno
-from katcp import DeviceMetaclass, MessageParser, Message
+from .katcp import DeviceMetaclass, MessageParser, Message, ExcepthookThread, \
+                   KatcpClientError
 
 #logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp")
-
-
-class KatcpClientError(Exception):
-    """Exception raised by KATCP clients when errors occur while
-       communicating with a device.  Note that socket.error can also be raised
-       if low-level network exceptions occure."""
-    pass
 
 
 class DeviceClient(object):
@@ -364,16 +358,7 @@ class DeviceClient(object):
         if self._thread:
             raise RuntimeError("Device client already started.")
 
-        if excepthook is not None:
-            def target():
-                try:
-                    self.run()
-                except:
-                    excepthook(*sys.exc_info())
-        else:
-            target = self.run
-
-        self._thread = threading.Thread(target=target)
+        self._thread = ExcepthookThread(target=self.run, excepthook=excepthook)
         if daemon is not None:
             self._thread.setDaemon(daemon)
         self._thread.start()

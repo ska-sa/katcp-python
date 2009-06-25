@@ -7,6 +7,10 @@ import katcp
 from katcp.testutils import TestLogHandler, DeviceTestSensor
 from katcp import sampling
 
+log_handler = TestLogHandler()
+logging.getLogger("katcp").addHandler(log_handler)
+
+
 class TestSampling(unittest.TestCase):
 
     def setUp(self):

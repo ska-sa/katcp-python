@@ -1,11 +1,12 @@
 """Test utils for katcp package tests."""
 
-import katcp
 import client
 import logging
 import re
 import time
 import Queue
+from .katcp import Sensor, Message, DeviceMetaclass
+from .server import DeviceServer, FailReply
 
 class TestLogHandler(logging.Handler):
     """A logger for KATCP tests."""
@@ -24,7 +25,7 @@ class TestLogHandler(logging.Handler):
         self._records = []
 
 
-class DeviceTestSensor(katcp.Sensor):
+class DeviceTestSensor(Sensor):
     """Test sensor."""
 
     def __init__(self, sensor_type, name, description, units, params,
@@ -41,7 +42,7 @@ class DeviceTestSensor(katcp.Sensor):
         return self.__sampling_changes
 
 
-class TestClientMetaclass(katcp.DeviceMetaclass):
+class TestClientMetaclass(DeviceMetaclass):
     """Metaclass for test client classes.
 
        Adds a raw send method and methods for collecting all inform and
@@ -115,7 +116,7 @@ class BlockingTestClient(client.BlockingClient):
     __metaclass__ = TestClientMetaclass
 
     def get_sensor_value(self, sensorname):
-        reply, informs = self.blocking_request(katcp.Message.request("sensor-value", sensorname))
+        reply, informs = self.blocking_request(Message.request("sensor-value", sensorname))
 
         if str(reply) == "!sensor-value ok 1":
             value = str(informs[0]).split(" ")[5]
@@ -124,7 +125,7 @@ class BlockingTestClient(client.BlockingClient):
         return value
 
 
-class DeviceTestServer(katcp.DeviceServer):
+class DeviceTestServer(DeviceServer):
     """Test server."""
 
     def __init__(self, *args, **kwargs):
@@ -136,14 +137,14 @@ class DeviceTestServer(katcp.DeviceServer):
     def setup_sensors(self):
         self.restarted = False
         self.add_sensor(DeviceTestSensor(
-            katcp.Sensor.INTEGER, "an.int", "An Integer.", "count",
+            Sensor.INTEGER, "an.int", "An Integer.", "count",
             [-5, 5],
-            timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
+            timestamp=12345, status=Sensor.NOMINAL, value=3
         ))
 
     def request_new_command(self, sock, msg):
         """A new command."""
-        return katcp.Message.reply(msg.name, "ok", "param1", "param2")
+        return Message.reply(msg.name, "ok", "param1", "param2")
 
     def request_raise_exception(self, sock, msg):
         """A handler which raises an exception."""
@@ -151,7 +152,7 @@ class DeviceTestServer(katcp.DeviceServer):
 
     def request_raise_fail(self, sock, msg):
         """A handler which raises a FailReply."""
-        raise katcp.FailReply("There was a problem with your request.")
+        raise FailReply("There was a problem with your request.")
 
     def handle_message(self, sock, msg):
         self.__msgs.append(msg)
@@ -228,7 +229,7 @@ class TestUtilMixin(object):
         if raises is None:
             raises = []
 
-        returned_msgs = [(request(sock, katcp.Message.request(requestname, *tuple(params))), expected) for (params, expected) in returns]
+        returned_msgs = [(request(sock, Message.request(requestname, *tuple(params))), expected) for (params, expected) in returns]
 
         msgs_equal = [(msg, expected) for (msg, expected) in returned_msgs if not hasattr(expected, "__iter__")]
         msgs_like = [(msg, expected) for (msg, expected) in returned_msgs if hasattr(expected, "__iter__")]
@@ -239,7 +240,7 @@ class TestUtilMixin(object):
             self._assert_msgs_like(*zip(*msgs_like))
 
         for params in raises:
-            self.assertRaises(katcp.FailReply, request, sock, katcp.Message.request(requestname, *tuple(params)))
+            self.assertRaises(FailReply, request, sock, Message.request(requestname, *tuple(params)))
 
     def _assert_sensors_equal(self, get_sensor_method, sensor_tuples):
         sensor_tuples = [t + (None,)*(4-len(t)) for t in sensor_tuples]

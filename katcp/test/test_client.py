@@ -1,11 +1,10 @@
 """Tests for client module."""
 
 import unittest
-import katcp
 import time
-import katcp.client
 import logging
 import threading
+import katcp
 from katcp.testutils import TestLogHandler, \
     DeviceTestClient, CallbackTestClient, DeviceTestServer, \
     TestUtilMixin

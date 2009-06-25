@@ -4,10 +4,12 @@
    @author Simon Cross <simon.cross@ska.ac.za>
    """
 
-from katcp import Message, KatcpSyntaxError, MessageParser, \
-                  DeviceMetaclass, DeviceServerBase, \
-                  DeviceServer, Sensor, DeviceLogger, FailReply, AsyncReply, \
-                  KatcpDeviceError
+from .katcp import Message, KatcpSyntaxError, MessageParser, \
+                  DeviceMetaclass, ExcepthookThread, FailReply, \
+                  AsyncReply, KatcpDeviceError, KatcpClientError
 
-from client import DeviceClient, BlockingClient, CallbackClient, \
-                   KatcpClientError
+from .server import DeviceServerBase, DeviceServer, DeviceLogger
+
+from .client import DeviceClient, BlockingClient, CallbackClient
+
+from .kattypes import Sensor

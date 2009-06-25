@@ -6,7 +6,7 @@ import threading
 import time
 import logging
 import heapq
-import katcp
+from .katcp import Message, Sensor, ExcepthookThread
 
 log = logging.getLogger("katcp.sampling")
 
@@ -95,7 +95,7 @@ class SampleStrategy(object):
     def inform(self):
         """Inform strategy creator of the sensor status."""
         timestamp_ms, status, value = self._sensor.read_formatted()
-        self._inform_callback(katcp.Message.inform("sensor-status",
+        self._inform_callback(Message.inform("sensor-status",
                     timestamp_ms, "1", self._sensor.name, status, value))
 
     def get_sampling(self):
@@ -187,8 +187,6 @@ class SampleDifferential(SampleStrategy):
        """
 
     def __init__(self, inform_callback, sensor, *params):
-        from katcp import Sensor
-
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
             raise ValueError("The 'differential' strategy takes one parameter.")
@@ -252,7 +250,7 @@ class SamplePeriod(SampleStrategy):
         return SampleStrategy.PERIOD
 
 
-class SampleReactor(threading.Thread):
+class SampleReactor(ExcepthookThread):
     """This class keeps track of all the sensors and what strategy is currently
        used to sample each one.
        """
