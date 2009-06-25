@@ -177,7 +177,7 @@ class DeviceClient(object):
             self._connected.clear()
             self.notify_connected(False)
 
-    def handle_chunk(self, chunk):
+    def _handle_chunk(self, chunk):
         """Handle a chunk of data from the server.
 
            @param self This object.
@@ -332,7 +332,7 @@ class DeviceClient(object):
                         # means the client needs to be ditched.
                         chunk = ""
                     if chunk:
-                        self.handle_chunk(chunk)
+                        self._handle_chunk(chunk)
                     else:
                         # EOF from server
                         self._disconnect()

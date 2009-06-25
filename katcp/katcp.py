@@ -368,7 +368,7 @@ class DeviceServerBase(object):
                 msg,
         )
 
-    def bind(self, bindaddr):
+    def _bind(self, bindaddr):
         """Create a listening server socket."""
         # could be a function but we don't want it to be
         # pylint: disable-msg = R0201
@@ -379,7 +379,7 @@ class DeviceServerBase(object):
         sock.listen(5)
         return sock
 
-    def add_socket(self, sock):
+    def _add_socket(self, sock):
         """Add a client socket to the socket and chunk lists."""
         self._data_lock.acquire()
         try:
@@ -389,7 +389,7 @@ class DeviceServerBase(object):
         finally:
             self._data_lock.release()
 
-    def remove_socket(self, sock):
+    def _remove_socket(self, sock):
         """Remove a client socket from the socket and chunk lists."""
         sock.close()
         self._data_lock.acquire()
@@ -405,7 +405,7 @@ class DeviceServerBase(object):
         """Return the complete list of current client socket."""
         return list(self._socks)
 
-    def handle_chunk(self, sock, chunk):
+    def _handle_chunk(self, sock, chunk):
         """Handle a chunk of data for socket sock."""
         chunk = chunk.replace("\r", "\n")
         lines = chunk.split("\n")
@@ -569,7 +569,7 @@ class DeviceServerBase(object):
                 client_name = "<disconnected client>"
             msg = "Failed to send message to client %s (%s)" % (client_name, e)
             self._logger.error(msg)
-            self.remove_socket(sock)
+            self._remove_socket(sock)
             self.on_client_disconnect(sock, msg, False)
 
     def inform(self, sock, msg):
@@ -597,7 +597,7 @@ class DeviceServerBase(object):
         _select = select.select
         _socket_error = socket.error
 
-        self._sock = self.bind(self._bindaddr)
+        self._sock = self._bind(self._bindaddr)
         # replace bindaddr with real address so we can rebind
         # to the same port.
         self._bindaddr = self._sock.getsockname()
@@ -615,24 +615,24 @@ class DeviceServerBase(object):
                     try:
                         _readers, _writers, _errors = _select([sock], [], [], 0)
                     except _socket_error, e:
-                        self.remove_socket(sock)
+                        self._remove_socket(sock)
                         self.on_client_disconnect(sock, "Client socket died with error %s" % (e,), False)
                 # check server socket
                 try:
                     _readers, _writers, _errors = _select([self._sock], [], [], 0)
                 except:
                     self._logger.warn("Server socket died, attempting to restart it.")
-                    self._sock = self.bind(self._bindaddr)
+                    self._sock = self._bind(self._bindaddr)
                 # try select again
                 continue
 
             for sock in errors:
                 if sock is self._sock:
                     # server socket died, attempt restart
-                    self._sock = self.bind(self._bindaddr)
+                    self._sock = self._bind(self._bindaddr)
                 else:
                     # client socket died, remove it
-                    self.remove_socket(sock)
+                    self._remove_socket(sock)
                     self.on_client_disconnect(sock, "Client socket died", False)
 
             for sock in readers:
@@ -641,7 +641,7 @@ class DeviceServerBase(object):
                     client.setblocking(0)
                     self.mass_inform(Message.inform("client-connected",
                         "New client connected from %s" % (addr,)))
-                    self.add_socket(client)
+                    self._add_socket(client)
                     self.on_client_connect(client)
                 else:
                     try:
@@ -651,15 +651,15 @@ class DeviceServerBase(object):
                         # means the client needs to be ditched.
                         chunk = ""
                     if chunk:
-                        self.handle_chunk(sock, chunk)
+                        self._handle_chunk(sock, chunk)
                     else:
                         # no data, assume socket EOF
-                        self.remove_socket(sock)
+                        self._remove_socket(sock)
                         self.on_client_disconnect(sock, "Socket EOF", False)
 
         for sock in list(self._socks):
             self.on_client_disconnect(sock, "Device server shutting down.", True)
-            self.remove_socket(sock)
+            self._remove_socket(sock)
 
         self._sock.close()
 
@@ -757,7 +757,7 @@ class DeviceServer(DeviceServerBase):
 
        [1] Restart relies on .set_restart_queue() being used to register
            a restart queue with the device. When the device needs to be
-           restarted, it will be add to the restart queue.  The queue should
+           restarted, it will be added to the restart queue.  The queue should
            be a Python Queue.Queue object without a maximum size.
            
        Unhandled standard messages are:
