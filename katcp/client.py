@@ -63,6 +63,7 @@ class DeviceClient(object):
         self._thread = None
         self._logger = logger
         self._auto_reconnect = auto_reconnect
+        self._connect_failures = 0
 
     def request(self, msg):
         """Send a request messsage.
@@ -135,8 +136,16 @@ class DeviceClient(object):
         try:
             self._sock.connect(self._bindaddr)
             self._sock.setblocking(0)
+            if self._connect_failures >= 5:
+                self._logger.warn("Reconnected to %r" % (self._bindaddr,))
+            self._connect_failures = 0
         except Exception, e:
-            self._logger.error("DeviceClient failed to connect: %s" % (e,))
+            self._connect_failures += 1
+            if self._connect_failures % 5 == 0:
+                # warn on every fifth failure
+                self._logger.warn("Failed to connect to %r: %s" % (self._bindaddr, e))
+            else:
+                self._logger.debug("Failed to connect to %r: %s" % (self._bindaddr, e))
             self._sock.close()
             self._sock = None
 
@@ -298,6 +307,9 @@ class DeviceClient(object):
 
         if not self._auto_reconnect:
             self._connect()
+            if not self.is_connected():
+                raise KatcpClientError("Failed to connect to %r" % (self._bindaddr,))
+
         self._running.set()
         while self._running.isSet():
             if self.is_connected():
