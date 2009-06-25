@@ -455,3 +455,33 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         # check that server restarted
         self.assertTrue(sock is not self.server._sock, "Expected %r to not be %r" % (sock, self.server._sock))
         self.assertEqual(sockname, self.server._sock.getsockname())
+
+    def test_daemon_value(self):
+        """Test passing in a daemon value to server start method."""
+        self.server.stop(timeout=0.1)
+        self.server.join(timeout=1.0)
+
+        self.server.start(timeout=0.1, daemon=True)
+        self.assertTrue(self.client._thread.isDaemon())
+
+    def test_excepthook(self):
+        """Test passing in an excepthook to server start method."""
+        exceptions = []
+        except_event = threading.Event()
+        def excepthook(etype, value, traceback):
+            """Keep track of exceptions."""
+            exceptions.append(etype)
+            except_event.set()
+
+        self.server.stop(timeout=0.1)
+        self.server.join(timeout=1.5)
+
+        self.server.start(timeout=0.1, excepthook=excepthook)
+        # force exception by deleteing _running
+        old_running = self.server._running
+        try:
+            del self.server._running
+            except_event.wait(1.5)
+            self.assertEqual(exceptions, [AttributeError])
+        finally:
+            self.server._running = old_running
