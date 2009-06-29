@@ -6,9 +6,6 @@
 
 """Utilities for dealing with KAT device control
    language messages.
-
-   @namespace za.ac.ska.katcp
-   @author Simon Cross <simon.cross@ska.ac.za>
    """
 
 import threading

@@ -25,30 +25,47 @@ log = logging.getLogger("katcp")
 class DeviceClient(object):
     """Device client proxy.
 
-       Subclasses should implement .reply_*, .inform_* and
-       request_* methods to take actions when messages arrive,
-       and implement unhandled_inform, unhandled_reply and
-       unhandled_request to provide fallbacks for messages for
-       which there is no handler.
+    Subclasses should implement .reply_\*, .inform_\* and
+    request_\* methods to take actions when messages arrive,
+    and implement unhandled_inform, unhandled_reply and
+    unhandled_request to provide fallbacks for messages for
+    which there is no handler.
 
-       Request messages can be sent by calling .request().
-       """
+    Request messages can be sent by calling .request().
+
+    Parameters
+    ----------
+
+    host : string
+       Host to connect to.
+    port : int
+       Port to connect to.
+    tb_limit : int
+       Maximum number of stack frames to send in error traceback.
+    logger : object
+       Python Logger object to log to.
+    auto_reconnect : bool
+       Whether to automatically reconnect if the connection dies.
+
+    Examples
+    --------
+
+    >>> MyClient(DeviceClient):
+    ...     def reply_myreq(self, msg):
+    ...         print str(msg)
+    ...
+    >>> c = MyClient('localhost', 10000)
+    >>> c.start()
+    >>> c.request(katcp.Message.request('myreq'))
+    >>> # expect reply to be printed here
+    >>> # stop the client once we're finished with it
+    >>> c.stop()  
+    """
 
     __metaclass__ = DeviceMetaclass
 
     def __init__(self, host, port, tb_limit=20, logger=log,
                  auto_reconnect=True):
-        """Create a basic DeviceClient.
-
-           @param self This object.
-           @param host String: host to connect to.
-           @param port Integer: port to connect to.
-           @param tb_limit Integer: maximum number of stack frames to
-                           send in error traceback.
-           @param logger Object: Logger to log to.
-           @param auto_reconnect Boolean: Whether to automattically
-                                 reconnect if the connection dies.
-           """
         self._parser = MessageParser()
         self._bindaddr = (host, port)
         self._tb_limit = tb_limit
