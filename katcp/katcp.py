@@ -323,6 +323,8 @@ class ExcepthookThread(threading.Thread):
         except:
             if self._excepthook is not None:
                 self._excepthook(*sys.exc_info())
+            else:
+                raise
 
 
 from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp
