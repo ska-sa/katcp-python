@@ -1,7 +1,10 @@
-"""Root of katcp package.
+# __init__.py
+# -*- coding: utf8 -*-
+# vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
+# Copyright 2009 SKA South Africa (http://ska.ac.za/)
+# BSD license - see COPYING for details
 
-   @namespace za.ac.ska.katcp
-   @author Simon Cross <simon.cross@ska.ac.za>
+"""Root of katcp package.
    """
 
 from .katcp import Message, KatcpSyntaxError, MessageParser, \

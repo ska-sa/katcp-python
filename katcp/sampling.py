@@ -1,3 +1,9 @@
+# sampling.py
+# -*- coding: utf8 -*-
+# vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
+# Copyright 2009 SKA South Africa (http://ska.ac.za/)
+# BSD license - see COPYING for details
+
 """Different sampling strategies as well as reactor for coordinating
    sampling of multiple sensors each with different strategies.
    """

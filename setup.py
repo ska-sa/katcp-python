@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 from setuptools import setup, find_packages
+from katcp import version
 
 setup (
     name = "katcp",
-    version = "trunk",
-    description = "Karoo Array Telescope Communication Protocol library'",
+    version = version.VERSION_STR,
+    description = "Karoo Array Telescope Communication Protocol library",
     author = "Simon Cross",
     author_email = "simon.cross@ska.ac.za",
     packages = find_packages(),
