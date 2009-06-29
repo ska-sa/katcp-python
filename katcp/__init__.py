@@ -16,3 +16,5 @@ from .server import DeviceServerBase, DeviceServer, DeviceLogger
 from .client import DeviceClient, BlockingClient, CallbackClient
 
 from .kattypes import Sensor
+
+from .version import VERSION, VERSION_STR
