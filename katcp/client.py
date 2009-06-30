@@ -25,31 +25,29 @@ log = logging.getLogger("katcp")
 class DeviceClient(object):
     """Device client proxy.
 
-    Subclasses should implement .reply_\*, .inform_\* and
-    request_\* methods to take actions when messages arrive,
+    Subclasses should implement .reply\_*, .inform\_* and
+    request\_* methods to take actions when messages arrive,
     and implement unhandled_inform, unhandled_reply and
     unhandled_request to provide fallbacks for messages for
     which there is no handler.
-
+ 
     Request messages can be sent by calling .request().
 
     Parameters
     ----------
-
     host : string
-       Host to connect to.
+        Host to connect to.
     port : int
-       Port to connect to.
+        Port to connect to.
     tb_limit : int
-       Maximum number of stack frames to send in error traceback.
+        Maximum number of stack frames to send in error traceback.
     logger : object
-       Python Logger object to log to.
+        Python Logger object to log to.
     auto_reconnect : bool
-       Whether to automatically reconnect if the connection dies.
+        Whether to automatically reconnect if the connection dies.
 
     Examples
     --------
-
     >>> MyClient(DeviceClient):
     ...     def reply_myreq(self, msg):
     ...         print str(msg)
@@ -59,7 +57,8 @@ class DeviceClient(object):
     >>> c.request(katcp.Message.request('myreq'))
     >>> # expect reply to be printed here
     >>> # stop the client once we're finished with it
-    >>> c.stop()  
+    >>> c.stop()
+    >>> c.join()  
     """
 
     __metaclass__ = DeviceMetaclass
@@ -82,20 +81,22 @@ class DeviceClient(object):
     def request(self, msg):
         """Send a request messsage.
 
-           @param self This object.
-           @param msg The request Message to send.
-           @return None
-           """
+        Parameters
+        ----------
+        msg : Message object
+            The request Message to send.
+        """
         assert(msg.mtype == Message.REQUEST)
         self.send_message(msg)
 
     def send_message(self, msg):
         """Send any kind of message.
 
-           @param self This object.
-           @param msg The Message to send.
-           @return None
-           """
+        Parameters
+        ----------
+        msg : Message object
+            The message to send.
+        """
         # TODO: should probably implement this as a queue of sockets and messages to send.
         #       and have the queue processed in the main loop
         data = str(msg) + "\n"
@@ -141,11 +142,7 @@ class DeviceClient(object):
             self._disconnect()
 
     def _connect(self):
-        """Connect to the server.
-
-           @param self This object.
-           @return None
-           """
+        """Connect to the server."""
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self._sock.connect(self._bindaddr)
@@ -176,11 +173,7 @@ class DeviceClient(object):
             self._disconnect()
 
     def _disconnect(self):
-        """Disconnect and cleanup.
-
-           @param self This object
-           @return None
-           """
+        """Disconnect and cleanup."""
         # avoid disconnecting multiple times by immediately setting
         # self._sock to None
         sock = self._sock
@@ -194,10 +187,11 @@ class DeviceClient(object):
     def _handle_chunk(self, chunk):
         """Handle a chunk of data from the server.
 
-           @param self This object.
-           @param chunk The data string to process.
-           @return None
-           """
+        Parameters
+        ----------
+        chunk : data
+            The data string to process.
+        """
         chunk = chunk.replace("\r", "\n")
         lines = chunk.split("\n")
 
@@ -223,10 +217,11 @@ class DeviceClient(object):
     def handle_message(self, msg):
         """Handle a message from the server.
 
-           @param self This object.
-           @param msg The Message to process.
-           @return None
-           """
+        Parameters
+        ----------
+        msg : Message object
+            The Message to dispatch to the handler methods.
+        """
         # log messages received so that no one else has to
         self._logger.debug(msg)
 
@@ -241,7 +236,13 @@ class DeviceClient(object):
                 % (msg,))
 
     def handle_inform(self, msg):
-        """Dispatch an inform message to the appropriate method."""
+        """Dispatch an inform message to the appropriate method.
+
+        Parameters
+        ----------
+        msg : Message object
+            The inform message to dispatch.
+        """
         method = self.__class__.unhandled_inform
         if msg.name in self._inform_handlers:
             method = self._inform_handlers[msg.name]
@@ -256,7 +257,13 @@ class DeviceClient(object):
             self._logger.error("Inform %s FAIL: %s" % (msg.name, reason))
 
     def handle_reply(self, msg):
-        """Dispatch a reply message to the appropriate method."""
+        """Dispatch a reply message to the appropriate method.
+
+        Parameters
+        ----------
+        msg : Message object
+            The reply message to dispatch.
+        """
         method = self.__class__.unhandled_reply
         if msg.name in self._reply_handlers:
             method = self._reply_handlers[msg.name]
@@ -271,7 +278,13 @@ class DeviceClient(object):
             self._logger.error("Reply %s FAIL: %s" % (msg.name, reason))
 
     def handle_request(self, msg):
-        """Dispatch a request message to the appropriate method."""
+        """Dispatch a request message to the appropriate method.
+
+        Parameters
+        ----------
+        msg : Message object
+            The request message to dispatch.
+        """
         method = self.__class__.unhandled_request
         if msg.name in self._request_handlers:
             method = self._request_handlers[msg.name]
@@ -292,23 +305,37 @@ class DeviceClient(object):
             self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
 
     def unhandled_inform(self, msg):
-        """Fallback method for inform messages without a registered handler"""
+        """Fallback method for inform messages without a registered handler
+        
+        Parameters
+        ----------
+        msg : Message object
+            The inform message that wasn't processed by any handlers.
+        """
         pass
 
     def unhandled_reply(self, msg):
-        """Fallback method for reply messages without a registered handler"""
+        """Fallback method for reply messages without a registered handler
+        
+        Parameters
+        ----------
+        msg : Message object
+            The reply message that wasn't processed by any handlers.
+        """
         pass
 
     def unhandled_request(self, msg):
-        """Fallback method for requests without a registered handler"""
+        """Fallback method for requests without a registered handler
+
+        Parameters
+        ----------
+        msg : Message object
+            The request message that wasn't processed by any handlers.
+        """
         pass
 
     def run(self):
-        """Process reply and inform messages from the server.
-
-           @param self This object.
-           @return None
-           """
+        """Process reply and inform messages from the server."""
         self._logger.debug("Starting thread %s" % (threading.currentThread().getName()))
         timeout = 1.0 # s
 
@@ -367,14 +394,17 @@ class DeviceClient(object):
     def start(self, timeout=None, daemon=None, excepthook=None):
         """Start the client in a new thread.
 
-           @param self This object.
-           @param timeout Seconds to wait for client thread to start (as a float).
-           @param daemon If not None, the thread's setDaemon method is called with this
-                         parameter before the thread is started.
-           @param excepthook Function to call if the client throws an exception. Signature
-                             is as for sys.excepthook.
-           @return None
-           """
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for client thread to start.
+        daemon : boolean
+            If not None, the thread's setDaemon method is called with this
+            parameter before the thread is started.
+        excepthook : function
+            Function to call if the client throws an exception. Signature
+            is as for sys.excepthook.
+        """
         if self._thread:
             raise RuntimeError("Device client already started.")
 
@@ -390,10 +420,11 @@ class DeviceClient(object):
     def join(self, timeout=None):
         """Rejoin the client thread.
 
-           @param self This object.
-           @param timeout Seconds to wait for server thread to complete (as a float).
-           @return None
-           """
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for thread to finish.
+        """
         if not self._thread:
             raise RuntimeError("Device client thread not started.")
 
@@ -404,10 +435,11 @@ class DeviceClient(object):
     def stop(self, timeout=1.0):
         """Stop a running client (from another thread).
 
-           @param self This object.
-           @param timeout Seconds to wait for client to have *started* (as a float).
-           @return None
-           """
+        Parameters
+        ----------
+        timeout : float in seconds
+           Seconds to wait for client thread to have *started*.
+        """
         self._running.wait(timeout)
         if not self._running.isSet():
             raise RuntimeError("Attempt to stop client that wasn't running.")
@@ -416,47 +448,69 @@ class DeviceClient(object):
     def running(self):
         """Whether the client is running.
 
-           @param self This object.
-           @return Whether the server is running (True or False).
-           """
+        Returns
+        -------
+        running : bool
+            Whether the server is running.
+        """
         return self._running.isSet()
 
     def is_connected(self):
         """Check if the socket is currently connected.
 
-           @param self This object
-           @return Whether the client is connected (True or False).
-           """
+        Returns
+        -------
+        connected : bool
+            Whether the client is connected.
+        """
         return self._sock is not None
 
     def notify_connected(self, connected):
         """Event handler that is called wheneved the connection status changes.
-           Override in derived class for desired behaviour.
 
-           @param self This object
-           @param connected The current connection state (True or False)
-           """
+        Override in derived class for desired behaviour.
+
+        Parameters
+        ----------
+        connected : bool
+            Whether the client has just connected (True) or just disconnected
+            (False).
+        """
         pass
 
 
 class BlockingClient(DeviceClient):
-    """Implement blocking requests on top of DeviceClient."""
+    """Implement blocking requests on top of DeviceClient.
+
+    Parameters
+    ----------
+    host : string
+        Host to connect to.
+    port : int
+        Port to connect to.
+    tb_limit : int
+        Maximum number of stack frames to send in error traceback.
+    logger : object
+        Python Logger object to log to.
+    auto_reconnect : bool
+        Whether to automatically reconnect if the connection dies.
+    timeout : float in seconds
+        Default number of seconds to wait before a blocking request times
+        out. Can be overriden in individual calls to bocking_request.
+
+    Examples
+    --------
+    >>> c = BlockingClient('localhost', 10000)
+    >>> c.start()
+    >>> reply, informs = c.blocking_request(katcp.Message.request('myreq'))
+    >>> print reply
+    >>> print [str(msg) for msg in informs]
+    >>> c.stop()
+    >>> c.join()
+    """
 
     def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
                  auto_reconnect=True):
-        """Create a basic BlockingClient.
-
-           @param self This object.
-           @param host String: host to connect to.
-           @param port Integer: port to connect to.
-           @param tb_limit Integer: maximum number of stack frames to
-                           send in error traceback (default: 20).
-           @param timeout Float: seconds to wait before a blocking request
-                          times out (default: 5.0).
-           @param logger Object: Logger to log to.
-           @param auto_reconnect Boolean: Whether to automattically
-                                 reconnect if the connection dies (default: True).
-           """
         super(BlockingClient, self).__init__(host, port, tb_limit=tb_limit,
             logger=logger,auto_reconnect=auto_reconnect)
         self._request_timeout = timeout
@@ -470,13 +524,21 @@ class BlockingClient(DeviceClient):
     def blocking_request(self, msg, timeout=None):
         """Send a request messsage.
 
-           @param self This object.
-           @param msg The request Message to send.
-           @param timeout  How long to wait for a reply. The default is the
-                           the timeout set when creating the BlockingClient.
-           @return The a tuple containing the reply Message and a list of
-                   inform messages.
-           """
+        Parameters
+        ----------
+        msg : Message object
+            The request Message to send.
+        timeout : float in seconds
+            How long to wait for a reply. The default is the
+            the timeout set when creating the BlockingClient.
+
+        Returns
+        -------
+        reply : Message object
+            The reply message received.
+        informs : list of Message objects
+            A list of the inform messages received.
+        """
         try:
             self._request_lock.acquire()
             self._request_end.clear()
@@ -516,9 +578,14 @@ class BlockingClient(DeviceClient):
     def handle_inform(self, msg):
         """Handle inform messages related to any current requests.
 
-           Inform messages not related to the current request go up
-           to the base class method.
-           """
+        Inform messages not related to the current request go up to the
+        base class method.
+
+        Parameters
+        ----------
+        msg : Message object
+            The inform message to handle.
+        """
         try:
             self._request_lock.acquire()
             if msg.name == self._current_name:
@@ -532,9 +599,14 @@ class BlockingClient(DeviceClient):
     def handle_reply(self, msg):
         """Handle a reply message related to the current request.
 
-           Reply messages not related to the current request go up
-           to the base class method.
-           """
+        Reply messages not related to the current request go up to the
+        base class method.
+
+        Parameters
+        ----------
+        msg : Message object
+            The reply message to handle.
+        """
         try:
             self._request_lock.acquire()
             if msg.name == self._current_name:
@@ -551,21 +623,45 @@ class BlockingClient(DeviceClient):
 
 
 class CallbackClient(DeviceClient):
-    """Implement callback-based requests on top of DeviceClient."""
+    """Implement callback-based requests on top of DeviceClient.
+
+    Parameters
+    ----------
+    host : string
+        Host to connect to.
+    port : int
+        Port to connect to.
+    tb_limit : int
+        Maximum number of stack frames to send in error traceback.
+    logger : object
+        Python Logger object to log to.
+    auto_reconnect : bool
+        Whether to automatically reconnect if the connection dies.
+
+    Examples
+    --------
+    >>> def reply_cb(msg):
+    ...     print "Reply:", msg
+    ...
+    >>> def inform_cb(msg):
+    ...     print "Inform:", msg
+    ...
+    >>> c = CallbackClient('localhost', 10000)
+    >>> c.start()
+    >>> c.request(
+    ...     katcp.Message.request('myreq'),
+    ...     reply_cb=reply_cb,
+    ...     inform_cb=inform_cb,
+    ... )
+    ...
+    >>> # expect reply to be printed here
+    >>> # stop the client once we're finished with it
+    >>> c.stop()
+    >>> c.join()    
+    """
 
     def __init__(self, host, port, tb_limit=20, logger=log,
                  auto_reconnect=True):
-        """Create a basic CallbackClient.
-
-           @param self This object.
-           @param host String: host to connect to.
-           @param port Integer: port to connect to.
-           @param tb_limit Integer: maximum number of stack frames to
-                           send in error traceback.
-           @param logger Object: Logger to log to.
-           @param auto_reconnect Boolean: Whether to automattically
-                                 reconnect if the connection dies.
-           """
         super(CallbackClient, self).__init__(host, port, tb_limit=tb_limit,
             logger=logger,auto_reconnect=auto_reconnect)
 
@@ -600,26 +696,34 @@ class CallbackClient(DeviceClient):
     def request(self, msg, reply_cb=None, inform_cb=None, user_data=None):
         """Send a request messsage.
 
-           @param self This object.
-           @param msg The request Message to send.
-           @param reply_cb The reply callback with signature reply_cb(msg)
-                           or reply_cb(msg, *user_data)
-           @param inform_cb The inform callback with signature inform_cb(msg)
-                             or inform_cb(msg, *user_data)
-           @param user_data Optional user data to send to the reply and inform
-                            callbacks.
-           @return The a tuple containing the reply Message and a list of
-                   inform messages.
-           """
+        Parameters
+        ----------
+        msg : Message object
+            The request message to send.
+        reply_cb : function
+            The reply callback with signature reply_cb(msg)
+            or reply_cb(msg, \*user_data)
+        inform_cb : function
+            The inform callback with signature inform_cb(msg)
+            or inform_cb(msg, \*user_data)
+        user_data : tuple
+            Optional user data to send to the reply and inform
+            callbacks.
+        """
         self._push_async_request(msg.name, reply_cb, inform_cb, user_data)
         super(CallbackClient, self).request(msg)
 
     def handle_inform(self, msg):
         """Handle inform messages related to any current requests.
 
-           Inform messages not related to the current request go up
-           to the base class method.
-           """
+        Inform messages not related to the current request go up
+        to the base class method.
+
+        Parameters
+        ----------
+        msg : Message object
+            The inform message to dispatch.
+        """
         if self._has_async_request(msg.name):
             # this may also result in inform_cb being None if no
             # inform_cb was passed to the request method.
@@ -647,9 +751,14 @@ class CallbackClient(DeviceClient):
     def handle_reply(self, msg):
         """Handle a reply message related to the current request.
 
-           Reply messages not related to the current request go up
-           to the base class method.
-           """
+        Reply messages not related to the current request go up
+        to the base class method.
+
+        Parameters
+        ----------
+        msg : Message object
+            The reply message to dispatch.
+        """
         if self._has_async_request(msg.name):
             # this may also result in reply_cb being None if no
             # reply_cb was passed to the request method
