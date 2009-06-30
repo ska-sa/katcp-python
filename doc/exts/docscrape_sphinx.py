@@ -64,7 +64,7 @@ class SphinxDocString(NumpyDocString):
             prefix = getattr(self, '_name', '')
 
             if prefix:
-                prefix = '~%s.' % prefix
+                prefix = '%s.' % prefix
 
             autosum = []
             others = []
@@ -76,7 +76,7 @@ class SphinxDocString(NumpyDocString):
                     others.append((param, param_type, desc))
 
             if autosum:
-                out += ['.. autosummary::', '   :toctree:', '']
+                out += ['.. autosummary::', '']#, '   :toctree:', '']
                 out += autosum
 
             if others:
