@@ -26,36 +26,38 @@ log = logging.getLogger("katcp")
 class DeviceServerBase(object):
     """Base class for device servers.
 
-       Subclasses should add .request_* methods for dealing
-       with request messages. These methods each take the client
-       socket and msg objects as arguments and should return the
-       reply message or raise an exception as a result. In these
-       methods, the client socket should only be used as an argument
-       to .inform().
+    Subclasses should add .request\_* methods for dealing
+    with request messages. These methods each take the client
+    socket and msg objects as arguments and should return the
+    reply message or raise an exception as a result. In these
+    methods, the client socket should only be used as an argument
+    to .inform().
 
-       Subclasses can also add .inform_* and reply_* methods to handle
-       those types of messages.
+    Subclasses can also add .inform\_* and reply\_* methods to handle
+    those types of messages.
 
-       Should a subclass need to generate inform messages it should
-       do so using either the .inform() or .mass_inform() methods.
+    Should a subclass need to generate inform messages it should
+    do so using either the .inform() or .mass_inform() methods.
 
-       Finally, this class should probably not be subclassed directly
-       but rather via subclassing DeviceServer itself which implements
-       common .request_* methods.
-       """
+    Finally, this class should probably not be subclassed directly
+    but rather via subclassing DeviceServer itself which implements
+    common .request\_* methods.
+
+    Parameters
+    ----------
+    host : str
+        Host to listen on.
+    port : int
+        Port to listen on.
+    tb_limit : int
+        Maximum number of stack frames to send in error tracebacks.
+    logger : logging.Logger object
+        Logger to log messages to.
+    """
 
     __metaclass__ = DeviceMetaclass
 
     def __init__(self, host, port, tb_limit=20, logger=log):
-        """Create DeviceServer object.
-
-           @param self This object.
-           @param host String: host to listen on.
-           @param port Integer: port to listen on.
-           @param tb_limit Integer: maximum number of stack frames to
-                           send in error traceback.
-           @param logger Object: Logger to log to.
-        """
         self._parser = MessageParser()
         self._bindaddr = (host, port)
         self._tb_limit = tb_limit
@@ -120,7 +122,13 @@ class DeviceServerBase(object):
             self._data_lock.release()
 
     def get_sockets(self):
-        """Return the complete list of current client socket."""
+        """Return the complete list of current client socket.
+
+        Returns
+        -------
+        sockets : list of socket.socket objects
+            A list of connected client sockets.
+        """
         return list(self._socks)
 
     def _handle_chunk(self, sock, chunk):
@@ -157,7 +165,15 @@ class DeviceServerBase(object):
             self._data_lock.release()
 
     def handle_message(self, sock, msg):
-        """Handle messages of all types from clients."""
+        """Handle messages of all types from clients.
+
+        Parameters
+        ----------
+        sock : socket.socket
+            The socket the message was from.
+        msg : Message object
+            The message to process.
+        """
         # log messages received so that no one else has to
         self._logger.debug(msg)
 
@@ -173,7 +189,15 @@ class DeviceServerBase(object):
             self.inform(sock, self._log_msg("error", reason, "root"))
 
     def handle_request(self, sock, msg):
-        """Dispatch a request message to the appropriate method."""
+        """Dispatch a request message to the appropriate method.
+
+        Parameters
+        ----------
+        sock : socket.socket
+            The socket the message was from.
+        msg : Message object
+            The request message to process.
+        """
         send_reply = True
         if msg.name in self._request_handlers:
             try:
@@ -205,7 +229,15 @@ class DeviceServerBase(object):
             self.send_message(sock, reply)
 
     def handle_inform(self, sock, msg):
-        """Dispatch an inform message to the appropriate method."""
+        """Dispatch an inform message to the appropriate method.
+
+        Parameters
+        ----------
+        sock : socket.socket
+            The socket the message was from.
+        msg : Message object
+            The inform message to process.
+        """
         if msg.name in self._inform_handlers:
             try:
                 self._inform_handlers[msg.name](self, sock, msg)
@@ -219,7 +251,15 @@ class DeviceServerBase(object):
             self._logger.warn("%s INVALID: Unknown inform." % (msg.name,))
 
     def handle_reply(self, sock, msg):
-        """Dispatch a reply message to the appropriate method."""
+        """Dispatch a reply message to the appropriate method.
+
+        Parameters
+        ----------
+        sock : socket.socket
+            The socket the message was from.
+        msg : Message object
+            The reply message to process.
+        """
         if msg.name in self._reply_handlers:
             try:
                 self._reply_handlers[msg.name](self, sock, msg)
@@ -235,9 +275,16 @@ class DeviceServerBase(object):
     def send_message(self, sock, msg):
         """Send an arbitrary message to a particular client.
 
-           Note that failed sends disconnect the client sock and call
-           on_client_disconnect. They do not raise exceptions.
-           """
+        Note that failed sends disconnect the client sock and call
+        on_client_disconnect. They do not raise exceptions.
+
+        Parameters
+        ----------
+        sock : socket.socket
+            The socket to send the message to.
+        msg : Message object
+            The message to send.
+        """
         # TODO: should probably implement this as a queue of sockets and messages to send.
         #       and have the queue processed in the main loop
         data = str(msg) + "\n"
