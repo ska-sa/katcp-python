@@ -21,16 +21,18 @@ class KatcpType(object):
 
     name = "unknown"
 
-    def __init__(self, default=None):
+    def __init__(self, default=None, optional=False):
         """Construct a KATCP type.
 
            @param self This object.
            @param default Default value.
+           @param optional Can have a value of None.
            """
         self._default = default
+        self._optional = optional
 
     def get_default(self):
-        if self._default is None:
+        if self._default is None and not self._optional:
             raise ValueError("No value or default given")
         return self._default
 
@@ -40,6 +42,8 @@ class KatcpType(object):
     def pack(self, value, nocheck=False):
         if value is None:
             value = self.get_default()
+        if value is None:
+            return ""
         if not nocheck:
             self.check(value)
         return self.encode(value)
@@ -49,7 +53,8 @@ class KatcpType(object):
             value = self.get_default()
         else:
             value = self.decode(packed_value)
-        self.check(value)
+        if value is not None:
+            self.check(value)
         return value
 
 
@@ -65,8 +70,8 @@ class Int(KatcpType):
         except:
             raise ValueError("Could not parse value '%s' as integer." % value)
 
-    def __init__(self, min=None, max=None, default=None):
-        super(Int, self).__init__(default=default)
+    def __init__(self, min=None, max=None, **kwargs):
+        super(Int, self).__init__(**kwargs)
         self._min = min
         self._max = max
 
@@ -91,8 +96,8 @@ class Float(KatcpType):
         except:
             raise ValueError("Could not parse value '%s' as float." % value)
 
-    def __init__(self, min=None, max=None, default=None):
-        super(Float, self).__init__(default=default)
+    def __init__(self, min=None, max=None, **kwargs):
+        super(Float, self).__init__(**kwargs)
         self._min = min
         self._max = max
 
@@ -129,11 +134,11 @@ class Discrete(Str):
 
     name = "discrete"
 
-    def __init__(self, values, default=None, case_insensitive=False):
-        super(Discrete, self).__init__(default=default)
+    def __init__(self, values, **kwargs):
+        self._case_insensitive = kwargs.pop("case_insensitive", False)
+        super(Discrete, self).__init__(**kwargs)
         self._values = list(values) # just to preserve ordering
         self._valid_values = set(values)
-        self._case_insensitive = case_insensitive
         if self._case_insensitive:
             self._valid_values_lower = set([val.lower() for val in self._values])
 
@@ -197,8 +202,8 @@ class Struct(KatcpType):
 
     name = "struct"
 
-    def __init__(self, fmt, default=None):
-        super(Struct, self).__init__(default=default)
+    def __init__(self, fmt, **kwargs):
+        super(Struct, self).__init__(**kwargs)
         self._fmt = fmt
 
     def encode(self, value):
@@ -218,61 +223,14 @@ class Regex(Str):
 
     name = "regex"
 
-    def __init__(self, regex, default=None):
+    def __init__(self, regex, **kwargs):
         self._regex = regex
         self._compiled = re.compile(regex)
-        super(Regex, self).__init__(default=default)
+        super(Regex, self).__init__(**kwargs)
 
     def check(self, value):
         if not self._compiled.match(value):
             raise ValueError("Value '%s' does not match regex '%s'." % (value, self._regex))
-
-
-class Or(KatcpType):
-    """This is intended for use with individual parameters with multiple
-       allowed formats.
-
-       e.g. Or(Float(), Regex("\d\d:\d\d"))
-
-       Types are evaluated left-to-right, and the first type to pack /
-       unpack the parameter successfully will be used.  To specify a
-       default value, specify it in whichever individual type you would
-       like to be used by default: the first type with a default will
-       always pack / unpack None successfully.
-    """
-
-    name = "or"
-
-    def __init__(self, types, default=None):
-        self._types = types
-        # disable default
-        super(Or, self).__init__(default=None)
-
-    def try_type_methods(self, methodname, params):
-        returnvalue = None
-        errors = {}
-        for t in self._types:
-            try:
-                m = getattr(t, methodname)
-                returnvalue = m(*params)
-                break
-            except (ValueError, TypeError, KeyError), e:
-                errors[t.name] = str(e)
-        if returnvalue is None:
-            raise ValueError("; ".join(["%s: %s" % (name, errors[name]) for name in errors]))
-        return returnvalue
-
-    def pack(self, value, nocheck=False):
-        try:
-            return self.try_type_methods("pack", (value, nocheck))
-        except ValueError, e:
-            raise ValueError("Unable to pack value '%s' using any type in list. %s" % (value, e))
-
-    def unpack(self, packed_value):
-        try:
-            return self.try_type_methods("unpack", (packed_value,))
-        except ValueError, e:
-            raise ValueError("Unable to unpack value '%s' using any type in list. %s" % (packed_value, e))
 
 
 class DiscreteMulti(Discrete):
@@ -287,10 +245,10 @@ class DiscreteMulti(Discrete):
             return sorted(list(self._valid_values), key=str.lower)
         return sorted([v.strip() for v in value.split(self.separator)], key=str.lower)
 
-    def __init__(self, values, default=None, case_insensitive=False, separator=",", all_keyword="all"):
-        super(DiscreteMulti, self).__init__(values, default, case_insensitive)
-        self.all_keyword = all_keyword
-        self.separator = separator
+    def __init__(self, values, **kwargs):
+        self.all_keyword = kwargs.pop("all_keyword", "all")
+        self.separator = kwargs.pop("separator", ",")
+        super(DiscreteMulti, self).__init__(values, **kwargs)
 
     def check(self, value):
         for v in value:

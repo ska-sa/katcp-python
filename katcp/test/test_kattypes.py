@@ -11,344 +11,354 @@ import unittest
 from katcp import Message, FailReply, AsyncReply
 from katcp.kattypes import request, inform, return_reply, send_reply,  \
                            Bool, Discrete, Float, Int, Lru, Timestamp, \
-                           Str, Struct, Regex, Or, DiscreteMulti
+                           Str, Struct, Regex, DiscreteMulti
 
-class TestInt(unittest.TestCase):
-
-    def test_pack(self):
-        """Test packing integers."""
-        i = Int()
-        self.assertEqual(i.pack(5), "5")
-        self.assertEqual(i.pack(-5), "-5")
-        self.assertRaises(TypeError, i.pack, "a")
-        self.assertRaises(ValueError, i.pack, None)
-
-        i = Int(min=5, max=6)
-        self.assertEqual(i.pack(5), "5")
-        self.assertEqual(i.pack(6), "6")
-        self.assertRaises(ValueError, i.pack, 4)
-        self.assertRaises(ValueError, i.pack, 7)
-
-        i = Int(default=11)
-        self.assertEqual(i.pack(None), "11")
-
-    def test_unpack(self):
-        """Test unpacking integers."""
-        i = Int()
-        self.assertEqual(i.unpack("5"), 5)
-        self.assertEqual(i.unpack("-5"), -5)
-        self.assertRaises(ValueError, i.unpack, "a")
-        self.assertRaises(ValueError, i.unpack, None)
-
-        i = Int(min=5, max=6)
-        self.assertEqual(i.unpack("5"), 5)
-        self.assertEqual(i.unpack("6"), 6)
-        self.assertRaises(ValueError, i.unpack, "4")
-        self.assertRaises(ValueError, i.unpack, "7")
-
-        i = Int(default=11)
-        self.assertEqual(i.unpack(None), 11)
-
-class TestFloat(unittest.TestCase):
+class TestType(unittest.TestCase):
+    def setUp(self):
+        self._pack = []
+        self._unpack = []
 
     def test_pack(self):
-        """Test packing floats."""
-        f = Float()
-        self.assertEqual(f.pack(5.0), "5")
-        self.assertEqual(f.pack(-5.0), "-5")
-        self.assertRaises(TypeError, f.pack, "a")
-        self.assertRaises(ValueError, f.pack, None)
-
-        f = Float(min=5.0, max=6.0)
-        self.assertEqual(f.pack(5.0), "5")
-        self.assertEqual(f.pack(6.0), "6")
-        self.assertRaises(ValueError, f.pack, 4.5)
-        self.assertRaises(ValueError, f.pack, 6.5)
-
-        f = Float(default=11.0)
-        self.assertEqual(f.pack(None), "11")
+        for t, value, result in self._pack:
+            if type(result) is type and issubclass(result, Exception):
+                self.assertRaises(result, t.pack, value)
+            else:
+                self.assertEquals(t.pack(value), result)
 
     def test_unpack(self):
-        """Test unpacking floats."""
-        f = Float()
-        self.assertAlmostEqual(f.unpack("5"), 5.0)
-        self.assertAlmostEqual(f.unpack("-5"), -5.0)
-        self.assertRaises(ValueError, f.unpack, "a")
-        self.assertRaises(ValueError, f.unpack, None)
-
-        f = Float(min=5.0, max=6.0)
-        self.assertAlmostEqual(f.unpack("5"), 5.0)
-        self.assertAlmostEqual(f.unpack("6"), 6.0)
-        self.assertRaises(ValueError, f.unpack, "4.5")
-        self.assertRaises(ValueError, f.unpack, "6.5")
-
-        f = Float(default=11.0)
-        self.assertAlmostEqual(f.unpack(None), 11.0)
-
-class TestBool(unittest.TestCase):
-
-    def test_pack(self):
-        """Test packing booleans."""
-        b = Bool()
-        self.assertEqual(b.pack(True), "1")
-        self.assertEqual(b.pack(False), "0")
-        self.assertEqual(b.pack(1), "1")
-        self.assertEqual(b.pack(0), "0")
-        self.assertRaises(ValueError, b.pack, None)
-
-        b = Bool(default=True)
-        self.assertEqual(b.pack(None), "1")
-
-    def test_unpack(self):
-        """Test unpacking booleans."""
-        b = Bool()
-        self.assertEqual(b.unpack("1"), True)
-        self.assertEqual(b.unpack("0"), False)
-        self.assertRaises(ValueError, b.unpack, "2")
-        self.assertRaises(ValueError, b.unpack, None)
-
-        b = Bool(default=True)
-        self.assertEqual(b.unpack(None), True)
-
-class TestDiscrete(unittest.TestCase):
-
-    def test_pack(self):
-        """Test packing discrete types."""
-        d = Discrete(("VAL1", "VAL2"))
-        self.assertEqual(d.pack("VAL1"), "VAL1")
-        self.assertEqual(d.pack("VAL2"), "VAL2")
-        self.assertRaises(ValueError, d.pack, "VAL3")
-        self.assertRaises(ValueError, d.pack, "val1")
-        self.assertRaises(ValueError, d.pack, None)
-
-        d = Discrete(("VAL1", "VAL2"), default="VAL1")
-        self.assertEqual(d.pack(None), "VAL1")
-
-        d = Discrete(("val1", "VAL2"), case_insensitive=True)
-        self.assertEqual(d.pack("VAL1"), "VAL1")
-        self.assertEqual(d.pack("vAl2"), "vAl2")
-        self.assertRaises(ValueError, d.pack, "Val3")
-        self.assertRaises(ValueError, d.pack, None)
-
-    def test_unpack(self):
-        """Test unpacking discrete types."""
-        d = Discrete(("VAL1", "VAL2"))
-        self.assertEqual(d.unpack("VAL1"), "VAL1")
-        self.assertEqual(d.unpack("VAL2"), "VAL2")
-        self.assertRaises(ValueError, d.unpack, "VAL3")
-        self.assertRaises(ValueError, d.unpack, "val1")
-        self.assertRaises(ValueError, d.unpack, None)
-
-        d = Discrete(("VAL1", "VAL2"), default="VAL1")
-        self.assertEqual(d.unpack(None), "VAL1")
-
-        d = Discrete(("val1", "VAL2"), case_insensitive=True)
-        self.assertEqual(d.unpack("val1"), "val1")
-        self.assertRaises(ValueError, d.unpack, "val3")
-
-class TestLru(unittest.TestCase):
-
-    def test_pack(self):
-        """Test packing lru types."""
-        l = Lru()
-        self.assertEqual(l.pack(Lru.LRU_NOMINAL), "nominal")
-        self.assertEqual(l.pack(Lru.LRU_ERROR), "error")
-        self.assertRaises(ValueError, l.pack, None)
-        self.assertRaises(ValueError, l.pack, 5)
-        self.assertRaises(ValueError, l.pack, "aaa")
-
-        l = Lru(default=Lru.LRU_NOMINAL)
-        self.assertEqual(l.pack(None), "nominal")
-
-    def test_unpack(self):
-        """Test unpacking lru types."""
-        l = Lru()
-        self.assertEqual(l.unpack("nominal"), Lru.LRU_NOMINAL)
-        self.assertEqual(l.unpack("error"), Lru.LRU_ERROR)
-        self.assertRaises(ValueError, l.unpack, "aaa")
-        self.assertRaises(ValueError, l.unpack, None)
-
-        l = Lru(default=Lru.LRU_NOMINAL)
-        self.assertEqual(l.unpack(None), Lru.LRU_NOMINAL)
-
-class TestTimestamp(unittest.TestCase):
-
-    def test_pack(self):
-        """Test packing timestamps."""
-        t = Timestamp()
-        self.assertEqual(t.pack(1235475381.6966901), "1235475381696")
-        self.assertRaises(ValueError, t.pack, "a")
-        self.assertRaises(ValueError, t.pack, None)
-
-        t = Timestamp(default=1235475793.0324881)
-        self.assertEqual(t.pack(None), "1235475793032")
-
-    def test_unpack(self):
-        """Test unpacking timestamps."""
-        t = Timestamp()
-        self.assertEqual(t.unpack("1235475381696"), 1235475381.6960001)
-        self.assertRaises(ValueError, t.unpack, "a")
-        self.assertRaises(ValueError, t.unpack, None)
-
-        t = Int(default=1235475793.0324881)
-        self.assertEqual(t.unpack(None), 1235475793.0324881)
-
-class TestStr(unittest.TestCase):
-
-    def test_pack(self):
-        """Test packing strings."""
-        s = Str()
-        self.assertEqual(s.pack("adsasdasd"), "adsasdasd")
-        self.assertRaises(ValueError, s.pack, None)
-
-        s = Str(default="something")
-        self.assertEqual(s.pack(None), "something")
-
-    def test_unpack(self):
-        """Test unpacking strings."""
-        s = Str()
-        self.assertEqual(s.unpack("adsasdasd"), "adsasdasd")
-        self.assertRaises(ValueError, s.unpack, None)
-
-        s = Str(default="something")
-        self.assertEqual(s.unpack(None), "something")
-
-class TestStruct(unittest.TestCase):
-
-    def test_pack(self):
-        """Test packing structs."""
-        s = Struct(">isf")
-        self.assertEqual(s.pack((5, "s", 2.5)), "\x00\x00\x00\x05s@ \x00\x00")
-        self.assertRaises(ValueError, s.pack, ("s", 5, 2.5))
-        self.assertRaises(ValueError, s.pack, (5, "s"))
-        self.assertRaises(ValueError, s.pack, None)
-
-        s = Struct(">isf", default=(1, "f", 3.4))
-        self.assertEqual(s.pack(None), "\x00\x00\x00\x01f@Y\x99\x9a")
-
-    def test_unpack(self):
-        """Test unpacking structs."""
-        s = Struct(">isf")
-        self.assertEqual(s.unpack("\x00\x00\x00\x05s@ \x00\x00"), (5, "s", 2.5))
-        self.assertRaises(ValueError, s.unpack, "asdfgasdfas")
-        self.assertRaises(ValueError, s.unpack, "asd")
-        self.assertRaises(ValueError, s.unpack, None)
-
-        s = Struct(">isf", default=(1, "f", 3.4))
-        self.assertEqual(s.unpack(None), (1, "f", 3.4))
-
-class TestRegex(unittest.TestCase):
-
-    def test_pack(self):
-        """Test packing regexes."""
-        r = Regex("\d\d:\d\d:\d\d")
-        self.assertEqual(r.pack("12:34:56"), "12:34:56")
-        self.assertRaises(ValueError, r.pack, None)
-        self.assertRaises(ValueError, r.pack, "sdfasdfsadf")
-
-        r = Regex("\d\d:\d\d:\d\d", default="00:00:00")
-        self.assertEqual(r.pack(None), "00:00:00")
-
-    def test_unpack(self):
-        """Test unpacking regexes."""
-        r = Regex("\d\d:\d\d:\d\d")
-        self.assertEqual(r.unpack("12:34:56"), "12:34:56")
-        self.assertRaises(ValueError, r.unpack, None)
-        self.assertRaises(ValueError, r.unpack, "sdfasdfsadf")
-
-        r = Regex("\d\d:\d\d:\d\d", default="00:00:00")
-        self.assertEqual(r.unpack(None), "00:00:00")
-
-class TestOr(unittest.TestCase):
-
-    def test_pack(self):
-        """Test packing OR."""
-        o = Or((Float(), Regex("\d\d:\d\d")))
-        self.assertEqual(o.pack("12:34"), "12:34")
-        self.assertEqual(o.pack(56.7), "56.7")
-        self.assertRaises(ValueError, o.pack, None)
-        self.assertRaises(ValueError, o.pack, "sdfsdf")
-
-        o = Or((Float(default=0.0), Regex("\d\d:\d\d")))
-        self.assertEqual(o.pack(None), "0")
-
-        o = Or((Float(), Regex("\d\d:\d\d", default="00:00")))
-        self.assertEqual(o.pack(None), "00:00")
-
-    def test_unpack(self):
-        """Test unpacking OR."""
-        o = Or((Float(), Regex("\d\d:\d\d")))
-        self.assertEqual(o.unpack("12:34"), "12:34")
-        self.assertEqual(o.unpack("56.7"), 56.7)
-        self.assertRaises(ValueError, o.unpack, None)
-        self.assertRaises(ValueError, o.unpack, "sdfsdf")
-
-        o = Or((Float(default=0.0), Regex("\d\d:\d\d")))
-        self.assertEqual(o.unpack(None), 0.0)
-
-        o = Or((Float(), Regex("\d\d:\d\d", default="00:00")))
-        self.assertEqual(o.unpack(None), "00:00")
-
-class TestDiscreteMulti(unittest.TestCase):
-
-    def test_pack(self):
-        """Test packing discrete multiselect types."""
-        d = DiscreteMulti(("VAL1", "VAL2"))
-        self.assertEqual(d.pack(["VAL1"]), "VAL1")
-        self.assertEqual(d.pack(["VAL2"]), "VAL2")
-        self.assertRaises(ValueError, d.pack, "VAL2")
-        self.assertRaises(ValueError, d.pack, ["VAL3"])
-        self.assertRaises(ValueError, d.pack, ["val1"])
-        self.assertRaises(ValueError, d.pack, None)
-
-        self.assertEqual(d.pack(("VAL1","VAL2")), "VAL1,VAL2")
-        self.assertRaises(ValueError, d.pack, ("VAL1","VAL3"))
-        self.assertRaises(ValueError, d.pack, ("VAL1","val2"))
-
-        d = DiscreteMulti(("VAL1", "VAL2"), default=["VAL1"])
-        self.assertEqual(d.pack(None), "VAL1")
-
-        d = DiscreteMulti(("val1", "VAL2"), case_insensitive=True)
-        self.assertEqual(d.pack(["VAL1"]), "VAL1")
-        self.assertEqual(d.pack(["vAl2"]), "vAl2")
-        self.assertRaises(ValueError, d.pack, ["Val3"])
-        self.assertRaises(ValueError, d.pack, None)
-
-        self.assertEqual(d.pack(("Val1","vaL2")), "Val1,vaL2")
-        self.assertEqual(d.pack(["VaL1"]), "VaL1")
-        self.assertRaises(ValueError, d.pack, ("VAL1","vaL3"))
+        for t, value, result in self._unpack:
+            if type(result) is type and issubclass(result, Exception):
+                self.assertRaises(result, t.unpack, value)
+            else:
+                self.assertEquals(t.unpack(value), result)
 
 
-    def test_unpack(self):
-        """Test unpacking discrete multiselect types."""
-        d = DiscreteMulti(("VAL1", "VAL2"))
-        self.assertEqual(d.unpack("VAL1"), ["VAL1"])
-        self.assertEqual(d.unpack("VAL2"), ["VAL2"])
-        self.assertRaises(ValueError, d.unpack, "VAL3")
-        self.assertRaises(ValueError, d.unpack, "val1")
-        self.assertRaises(ValueError, d.unpack, None)
+class TestInt(TestType):
 
-        self.assertEqual(d.unpack("VAL1,VAL2"), ["VAL1", "VAL2"])
-        self.assertEqual(d.unpack("all"), ["VAL1", "VAL2"])
-        self.assertRaises(ValueError, d.unpack, "VAL1,VAL3")
-        self.assertRaises(ValueError, d.unpack, "VAL1,Val2")
+    def setUp(self):
+        basic =  Int()
+        default = Int(default=11)
+        optional = Int(optional=True)
+        default_optional = Int(default=11, optional=True)
+        self.minmax = Int(min=5, max=6)
 
-        d = DiscreteMulti(("VAL1", "VAL2"), default=["VAL1"])
-        self.assertEqual(d.unpack(None), ["VAL1"])
+        self._pack = [
+            (basic, 5, "5"),
+            (basic, -5, "-5"),
+            (basic, "a", TypeError),
+            (basic, None, ValueError),
+            (self.minmax, 5, "5"),
+            (self.minmax, 6, "6"),
+            (self.minmax, 4, ValueError),
+            (self.minmax, 7, ValueError),
+            (default, None, "11"),
+            (default_optional, None, "11"),
+            (optional, None, ""),
+        ]
 
-        d = DiscreteMulti(("val1", "VAL2"), case_insensitive=True)
-        self.assertEqual(d.unpack("val1"), ["val1"])
-        self.assertRaises(ValueError, d.unpack, "val3")
+        self._unpack = [
+            (basic, "5", 5),
+            (basic, "-5", -5),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (self.minmax, "5", 5),
+            (self.minmax, "6", 6),
+            (self.minmax, "4", ValueError),
+            (self.minmax, "7", ValueError),
+            (default, None, 11),
+            (default_optional, None, 11),
+            (optional, None, None),
+        ]
 
-        self.assertEqual(d.unpack("val1,val2"), ["val1", "val2"])
-        self.assertEqual(d.unpack("all"), ["val1","VAL2"])
+class TestFloat(TestType):
 
-        d = DiscreteMulti(("VAL1", "VAL2"), all_keyword="XXXX")
-        self.assertEqual(d.unpack("XXXX"), ["VAL1", "VAL2"])
-        self.assertRaises(ValueError, d.unpack, "all")
+    def setUp(self):
+        basic =  Int()
+        default = Int(default=11.0)
+        optional = Int(optional=True)
+        default_optional = Int(default=11.0, optional=True)
+        self.minmax = Int(min=5.0, max=6.0)
 
-        d = DiscreteMulti(("1,2,3", "4,5,6"), separator="|")
-        self.assertEqual(d.unpack("1,2,3|4,5,6"), ["1,2,3", "4,5,6"])
+        self._pack = [
+            (basic, 5.0, "5"),
+            (basic, -5.0, "-5"),
+            (basic, "a", TypeError),
+            (basic, None, ValueError),
+            (self.minmax, 5.0, "5"),
+            (self.minmax, 6.0, "6"),
+            (self.minmax, 4.5, ValueError),
+            (self.minmax, 6.5, ValueError),
+            (default, None, "11"),
+            (default_optional, None, "11"),
+            (optional, None, ""),
+        ]
+
+        self._unpack = [
+            (basic, "5", 5.0),
+            (basic, "-5", -5.0),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (self.minmax, "5", 5.0),
+            (self.minmax, "6", 6.0),
+            (self.minmax, "4.5", ValueError),
+            (self.minmax, "6.5", ValueError),
+            (default, None, 11.0),
+            (default_optional, None, 11.0),
+            (optional, None, None),
+        ]
+
+
+class TestBool(TestType):
+
+    def setUp(self):
+        basic =  Bool()
+        default = Bool(default=True)
+        optional = Bool(optional=True)
+        default_optional = Bool(default=True, optional=True)
+
+        self._pack = [
+            (basic, True, "1"),
+            (basic, False, "0"),
+            (basic, 1, "1"),
+            (basic, 0, "0"),
+            (basic, "a", "1"),
+            (basic, None, ValueError),
+            (default, None, "1"),
+            (default_optional, None, "1"),
+            (optional, None, ""),
+        ]
+
+        self._unpack = [
+            (basic, "1", True),
+            (basic, "0", False),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (default, None, True),
+            (default_optional, None, True),
+            (optional, None, None),
+        ]
+
+
+class TestDiscrete(TestType):
+
+    def setUp(self):
+        basic =  Discrete(("VAL1", "VAL2"))
+        default = Discrete(("VAL1", "VAL2"), default="VAL1")
+        optional = Discrete(("VAL1", "VAL2"), optional=True)
+        default_optional = Discrete(("VAL1", "VAL2"), default="VAL1", optional=True)
+        case_insensitive = Discrete(("val1", "VAL2"), case_insensitive=True)
+
+        self._pack = [
+            (basic, "VAL1", "VAL1"),
+            (basic, "VAL2", "VAL2"),
+            (basic, "a", ValueError),
+            (basic, "val1", ValueError),
+            (basic, None, ValueError),
+            (default, None, "VAL1"),
+            (default_optional, None, "VAL1"),
+            (optional, None, ""),
+            (case_insensitive, "VAL1", "VAL1"),
+            (case_insensitive, "vAl2", "vAl2"),
+            (case_insensitive, "a", ValueError),
+        ]
+
+        self._unpack = [
+            (basic, "VAL1", "VAL1"),
+            (basic, "VAL2", "VAL2"),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (default, None, "VAL1"),
+            (default_optional, None, "VAL1"),
+            (optional, None, None),
+            (case_insensitive, "val1", "val1"),
+            (case_insensitive, "vAl2", "vAl2"),
+            (case_insensitive, "a", ValueError),
+        ]
+
+
+class TestLru(TestType):
+
+    def setUp(self):
+        basic =  Lru()
+        default = Lru(default=Lru.LRU_NOMINAL)
+        optional = Lru(optional=True)
+        default_optional = Lru(default=Lru.LRU_NOMINAL, optional=True)
+
+        self._pack = [
+            (basic, Lru.LRU_NOMINAL, "nominal"),
+            (basic, Lru.LRU_ERROR, "error"),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (default, None, "nominal"),
+            (default_optional, None, "nominal"),
+            (optional, None, ""),
+        ]
+
+        self._unpack = [
+            (basic, "nominal", Lru.LRU_NOMINAL),
+            (basic, "error", Lru.LRU_ERROR),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (default, None, Lru.LRU_NOMINAL),
+            (default_optional, None, Lru.LRU_NOMINAL),
+            (optional, None, None),
+        ]
+
+
+class TestTimestamp(TestType):
+
+    def setUp(self):
+        basic =  Timestamp()
+        default = Timestamp(default=1235475793.0324881)
+        optional = Timestamp(optional=True)
+        default_optional = Timestamp(default=1235475793.0324881, optional=True)
+
+        self._pack = [
+            (basic, 1235475381.6966901, "1235475381696"),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (default, None, "1235475793032"),
+            (default_optional, None, "1235475793032"),
+            (optional, None, ""),
+        ]
+
+        self._unpack = [
+            (basic, "1235475381696", 1235475381.6960001),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (default, None, 1235475793.0324881),
+            (default_optional, None, 1235475793.0324881),
+            (optional, None, None),
+        ]
+
+
+class TestStr(TestType):
+
+    def setUp(self):
+        basic =  Str()
+        default = Str(default="something")
+        optional = Str(optional=True)
+        default_optional = Str(default="something", optional=True)
+
+        self._pack = [
+            (basic, "adsasdasd", "adsasdasd"),
+            (basic, None, ValueError),
+            (default, None, "something"),
+            (default_optional, None, "something"),
+            (optional, None, ""),
+        ]
+
+        self._unpack = [
+            (basic, "adsasdasd", "adsasdasd"),
+            (basic, None, ValueError),
+            (default, None, "something"),
+            (default_optional, None, "something"),
+            (optional, None, None),
+        ]
+
+
+class TestStruct(TestType):
+
+    def setUp(self):
+        basic =  Struct(">isf")
+        default = Struct(">isf", default=(1, "f", 3.4))
+        optional = Struct(">isf", optional=True)
+        default_optional = Struct(">isf", default=(1, "f", 3.4), optional=True)
+
+        self._pack = [
+            (basic, (5, "s", 2.5), "\x00\x00\x00\x05s@ \x00\x00"),
+            (basic, ("s", 5, 2.5), ValueError),
+            (basic, (5, "s"), ValueError),
+            (basic, None, ValueError),
+            (default, None, "\x00\x00\x00\x01f@Y\x99\x9a"),
+            (default_optional, None, "\x00\x00\x00\x01f@Y\x99\x9a"),
+            (optional, None, ""),
+        ]
+
+        self._unpack = [
+            (basic, "\x00\x00\x00\x05s@ \x00\x00", (5, "s", 2.5)),
+            (basic, "asdfgasdfas", ValueError),
+            (basic, None, ValueError),
+            (default, None, (1, "f", 3.4)),
+            (default_optional, None, (1, "f", 3.4)),
+            (optional, None, None),
+        ]
+
+
+class TestRegex(TestType):
+
+    def setUp(self):
+        basic =  Regex("\d\d:\d\d:\d\d")
+        default = Regex("\d\d:\d\d:\d\d", default="00:00:00")
+        optional = Regex("\d\d:\d\d:\d\d", optional=True)
+        default_optional = Regex("\d\d:\d\d:\d\d", default="00:00:00", optional=True)
+
+        self._pack = [
+            (basic, "12:34:56", "12:34:56"),
+            (basic, "sdfasdfsadf", ValueError),
+            (basic, None, ValueError),
+            (default, None, "00:00:00"),
+            (default_optional, None, "00:00:00"),
+            (optional, None, ""),
+        ]
+
+        self._unpack = [
+            (basic, "12:34:56", "12:34:56"),
+            (basic, "sdfasdfsadf", ValueError),
+            (basic, None, ValueError),
+            (default, None, "00:00:00"),
+            (default_optional, None, "00:00:00"),
+            (optional, None, None),
+        ]
+
+
+class TestDiscreteMulti(TestType):
+
+    def setUp(self):
+        basic =  DiscreteMulti(("VAL1", "VAL2"))
+        default = DiscreteMulti(("VAL1", "VAL2"), default=["VAL1"])
+        optional = DiscreteMulti(("VAL1", "VAL2"), optional=True)
+        default_optional = DiscreteMulti(("VAL1", "VAL2"), default=["VAL1"], optional=True)
+        case_insensitive = DiscreteMulti(("val1", "VAL2"), case_insensitive=True)
+
+        self._pack = [
+            (basic, ["VAL1"], "VAL1"),
+            (basic, ["VAL2"], "VAL2"),
+            (basic, ["VAL1","VAL2"], "VAL1,VAL2"),
+            (basic, "a", ValueError),
+            (basic, "VAL1", ValueError),
+            (basic, ["aaa"], ValueError),
+            (basic, ["val1"], ValueError),
+            (basic, ["VAL1","val2"], ValueError),
+            (basic, ["VAL1","aaa"], ValueError),
+            (basic, None, ValueError),
+            (default, None, "VAL1"),
+            (default_optional, None, "VAL1"),
+            (optional, None, ""),
+            (case_insensitive, ["VAL1"], "VAL1"),
+            (case_insensitive, ["vAl2"], "vAl2"),
+            (case_insensitive, ["VAL1","val2"], "VAL1,val2"),
+            (case_insensitive, ["aaa"], ValueError),
+        ]
+
+        self._unpack = [
+            (basic, "VAL1", ["VAL1"]),
+            (basic, "VAL2", ["VAL2"]),
+            (basic, "VAL1,VAL2", ["VAL1","VAL2"]),
+            (basic, "all", ["VAL1","VAL2"]),
+            (basic, "VAL1,aaa", ValueError),
+            (basic, "VAL1,val2", ValueError),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (default, None, ["VAL1"]),
+            (default_optional, None, ["VAL1"]),
+            (optional, None, None),
+            (case_insensitive, "val1", ["val1"]),
+            (case_insensitive, "vAl2", ["vAl2"]),
+            (case_insensitive, "VAL1,val2", ["VAL1","val2"]),
+            (case_insensitive, "VAL1,aaa", ValueError),
+            (case_insensitive, "a", ValueError),
+        ]
 
 
 class TestDevice(object):
