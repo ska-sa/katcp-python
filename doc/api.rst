@@ -9,14 +9,34 @@ API
 Client
 ^^^^^^
 
-.. autoclass:: DeviceClient
-    :members:
+Two different clients are provided: the :class:`BlockingClient <katcp.BlockingClient>`
+for synchronous communication with a server and the :class:`CallbackClient <katcp.CallbackClient>`
+for asynchronous communication. Both clients raise :exc:`KatcpClientError <katcp.KatcpClientError>`
+when exceptions occur.
+
+The :class:`DeviceClient <katcp.DeviceClient>` base class is provided as a foundation for
+those wishing to implement their own clients.
+
+BlockingClient
+""""""""""""""
 
 .. autoclass:: BlockingClient
     :members:
 
+CallbackClient
+""""""""""""""
+
 .. autoclass:: CallbackClient
     :members:
+
+Base Classes
+""""""""""""
+
+.. autoclass:: DeviceClient
+    :members:
+
+Exceptions
+""""""""""
 
 .. autoclass:: KatcpClientError
     :members:
@@ -24,17 +44,32 @@ Client
 Server
 ^^^^^^
 
-.. autoclass:: DeviceServerBase
-    :members:
+DeviceServer
+""""""""""""
 
 .. autoclass:: DeviceServer
     :members:
 
+DeviceServerBase
+""""""""""""""""
+
+.. autoclass:: DeviceServerBase
+    :members:
+
+DeviceLogger
+""""""""""""
+
 .. autoclass:: DeviceLogger
     :members:
 
+Sensor
+""""""
+
 .. autoclass:: Sensor
     :members:
+
+Exceptions
+""""""""""
 
 .. autoclass:: FailReply
     :members:
@@ -48,11 +83,20 @@ Server
 Message Parsing
 ^^^^^^^^^^^^^^^
 
+Message
+"""""""
+
 .. autoclass:: Message
     :members:
 
+MessageParser
+"""""""""""""
+
 .. autoclass:: MessageParser
     :members:
+
+Exceptions
+""""""""""
 
 .. autoclass:: KatcpSyntaxError
     :members:
@@ -60,8 +104,14 @@ Message Parsing
 Other
 ^^^^^
 
+DeviceMetaclass
+"""""""""""""""
+
 .. autoclass:: DeviceMetaclass
     :members:
+
+ExcepthookThread
+""""""""""""""""
 
 .. autoclass:: ExcepthookThread
     :members:
