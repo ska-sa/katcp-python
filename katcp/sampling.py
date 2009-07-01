@@ -19,7 +19,18 @@ log = logging.getLogger("katcp.sampling")
 # pylint: disable-msg=W0142
 
 class SampleStrategy(object):
-    """Base class for strategies for sampling sensors."""
+    """Base class for strategies for sampling sensors.
+
+    Parameters
+    ----------
+    inform_callback : callable
+        Callback to send inform messages with,
+        used as inform_callback(msg).
+    sensor : Sensor object
+        Sensor to sample.
+    params : list of objects
+        Custom sampling parameters.
+    """
 
     # Sampling strategy constants
     NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL = range(5)
@@ -43,25 +54,29 @@ class SampleStrategy(object):
     # pylint: enable-msg = E0602
 
     def __init__(self, inform_callback, sensor, *params):
-        """Create a SampleStrategy instance.
-
-           @param inform_callback  Callback to send inform messages with,
-                                   used as inform_callback(msg).
-           @param sensor  Sensor to sample.
-           @param params  Custom sampling parameters.
-           """
         self._inform_callback = inform_callback
         self._sensor = sensor
         self._params = params
 
     @staticmethod
     def get_strategy(strategyName, inform_callback, sensor, *params):
-        """Factory method to create a suitable strategy object given the
-           necessary details.
-           FIXME: Reimplement using singleton factory which new strategies
-                  can register with. You can probably register lambda
-                  functions to create the objects.
-           """
+        """Factory method to create a strategy object.
+
+        Parameters
+        ----------
+        inform_callback : callable
+            Callback to send inform messages with,
+            used as inform_callback(msg).
+        sensor : Sensor object
+            Sensor to sample.
+        params : list of objects
+            Custom sampling parameters.
+        
+        Returns
+        -------
+        strategy : SampleStrategy object
+            The created sampling strategy.
+        """
         if strategyName not in SampleStrategy.SAMPLING_LOOKUP_REV:
             raise ValueError("Unknown sampling strategy '%s'."
                                 " Known strategies are %s."
@@ -80,22 +95,41 @@ class SampleStrategy(object):
             return SamplePeriod(inform_callback, sensor, *params)
 
     def update(self, sensor):
-        """This update method is called whenever the sensor value is set
-           so sensor will contain the right info. Note that the strategy
-           does not really need to be passed sensor because it already has
-           a handle to it but receives it due to the generic observer
-           mechanism.
-           """
+        """Callback used by the sensor's notify method.
+        
+        This update method is called whenever the sensor value is set
+        so sensor will contain the right info. Note that the strategy
+        does not really need to be passed sensor because it already has
+        a handle to it but receives it due to the generic observer
+        mechanism.
+
+        Sub-classes should override this method or :meth:`periodic` to
+        provide the necessary sampling strategy.
+
+        Parameters
+        ----------
+        sensor : Sensor object
+            The sensor which was just updated.
+        """
         pass
 
     def periodic(self, timestamp):
         """This method is called when a period strategy is being configured
            or periodically after that.
 
-           @param self This object.
-           @param timestamp is the time at which the next sample was requested
-           @return the desired timestamp for the next sample
-           """
+        Sub-classes should override this method or :meth:`update` to
+        provide the necessary sampling strategy.
+
+        Parameters
+        ----------
+        timestamp : float in seconds
+            The time at which the next sample was requested.
+        
+        Returns
+        -------
+        next_timestamp : float in seconds
+            The desired timestamp for the next sample.
+        """
         pass
 
     def inform(self):
@@ -105,20 +139,32 @@ class SampleStrategy(object):
                     timestamp_ms, "1", self._sensor.name, status, value))
 
     def get_sampling(self):
-        """FIXME: deprecate this method and rather return the sampling name from
-           each strategy. Then we can live without the SAMPLING_LOOKUP. This goes
-           hand in hand with the changes to the factory method, ie removing the
-           switch and introducing a dynamic mechanism.
-           """
+        """Return the Strategy constant for this sampling strategy.
+        
+        Sub-classes should implement this method and return the
+        appropriate constant.
+        
+        Returns
+        -------
+        strategy : Strategy constant
+            The strategy type constant for this strategy.
+        """
         raise NotImplementedError
 
     def get_sampling_formatted(self):
         """Return the current sampling strategy and parameters.
 
-           The strategy is returned as a string and the values
-           in the parameter list are formatted as strings using
-           the formatter for this sensor type.
-           """
+        The strategy is returned as a string and the values
+        in the parameter list are formatted as strings using
+        the formatter for this sensor type.
+
+        Returns
+        -------
+        strategy_name : string
+            KATCP name for the strategy.
+        params : list of strings
+            KATCP formatted parameters for the strategy.
+        """
         strategy = self.get_sampling()
         strategy = self.SAMPLING_LOOKUP[strategy]
         params = [str(p) for p in self._params]
@@ -134,8 +180,7 @@ class SampleStrategy(object):
 
 
 class SampleEvent(SampleStrategy):
-    """Sampling strategy implementation which sends updates on any event of
-       the sensor.
+    """Strategy which sends updates when the sensor value or status changes.
        """
 
     def __init__(self, inform_callback, sensor, *params):
@@ -158,10 +203,9 @@ class SampleEvent(SampleStrategy):
         self.update(self._sensor)
         super(SampleEvent, self).attach()
 
+
 class SampleAuto(SampleStrategy):
-    """Sampling strategy implementation which sends updates
-       whenever the sensor itself is updated.
-       """
+    """Strategy which sends updates whenever the sensor itself is updated."""
 
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
@@ -186,11 +230,13 @@ class SampleNone(SampleStrategy):
     def get_sampling(self):
         return SampleStrategy.NONE
 
+
 class SampleDifferential(SampleStrategy):
-    """Sampling strategy for integer and float sensors which sends updates only
-       when the value has changed by more than some specified threshold, or the
-       status changes.
-       """
+    """Differential sampling strategy for integer and float sensors.
+    
+    Sends updates only when the value has changed by more than some
+    specified threshold, or the status changes.
+    """
 
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
@@ -229,9 +275,10 @@ class SampleDifferential(SampleStrategy):
 
 
 class SamplePeriod(SampleStrategy):
-    """Sampling strategy for periodic sampling of any sensor. Note that the
-       requested period can be decoupled from the rate at which the sensor changes.
-       """
+    """Periodic sampling strategy.
+    
+    For periodic sampling of any sensor.
+    """
 
     ## @brief Number of milliseconds in a second (as a float).
     MILLISECOND = 1e3
@@ -257,12 +304,18 @@ class SamplePeriod(SampleStrategy):
 
 
 class SampleReactor(ExcepthookThread):
-    """This class keeps track of all the sensors and what strategy is currently
-       used to sample each one.
-       """
+    """SampleReactor manages sampling strategies.
+    
+    This class keeps track of all the sensors and what strategy
+    is currently used to sample each one.  It also provides a
+    thread that calls periodic sampling strategies as needed.
 
+    Parameters
+    ----------
+    logger : logging.Logger object
+        Python logger to write logs to.
+    """
     def __init__(self, logger=log):
-        """Create a SampleReactor."""
         super(SampleReactor, self).__init__()
         self._strategies = set()
         self._stopEvent = threading.Event()
@@ -273,12 +326,18 @@ class SampleReactor(ExcepthookThread):
         self.setDaemon(True)
 
     def add_strategy(self, strategy):
-        """Add a sensor strategy to the reactor. Strategies should be removed
-           using remove_strategy.
+        """Add a sensor strategy to the reactor.
+        
+        Strategies should be removed using :meth:`remove_strategy`.
 
-           The new strategy is then attached to the sensor for updates and a
-           periodic sample is triggered to schedule the next one.
-           """
+        The new strategy is then attached to the sensor for updates and a
+        periodic sample is triggered to schedule the next one.
+
+        Parameters
+        ----------
+        strategy : SampleStrategy object
+            The sampling strategy to add to the reactor.
+        """
         self._strategies.add(strategy)
         strategy.attach()
 
@@ -288,7 +347,15 @@ class SampleReactor(ExcepthookThread):
             self._wakeEvent.set()
 
     def remove_strategy(self, strategy):
-        """Remove a strategy from the reactor."""
+        """Remove a strategy from the reactor.
+
+        Strategies are added with :meth:`add_strategy`.
+
+        Parameters
+        ----------
+        strategy : SampleStrategy object
+            The sampling strategy to remove from the reactor.
+        """
         strategy.detach()
         self._strategies.remove(strategy)
 
