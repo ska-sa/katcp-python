@@ -169,7 +169,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        sock : socket.socket
+        sock : socket.socket object
             The socket the message was from.
         msg : Message object
             The message to process.
@@ -193,7 +193,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        sock : socket.socket
+        sock : socket.socket object
             The socket the message was from.
         msg : Message object
             The request message to process.
@@ -233,7 +233,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        sock : socket.socket
+        sock : socket.socket object
             The socket the message was from.
         msg : Message object
             The inform message to process.
@@ -255,7 +255,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        sock : socket.socket
+        sock : socket.socket object
             The socket the message was from.
         msg : Message object
             The reply message to process.
@@ -280,7 +280,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        sock : socket.socket
+        sock : socket.socket object
             The socket to send the message to.
         msg : Message object
             The message to send.
@@ -338,14 +338,28 @@ class DeviceServerBase(object):
             self.on_client_disconnect(sock, msg, False)
 
     def inform(self, sock, msg):
-        """Send an inform messages to a particular client."""
+        """Send an inform messages to a particular client.
+
+        Parameters
+        ----------
+        sock : socket.socket object
+            The client to send the message to.
+        msg : Message object
+            The inform message to send.
+        """
         # could be a function but we don't want it to be
         # pylint: disable-msg = R0201
         assert (msg.mtype == Message.INFORM)
         self.send_message(sock, msg)
 
     def mass_inform(self, msg):
-        """Send an inform message to all clients."""
+        """Send an inform message to all clients.
+
+        Parameters
+        ----------
+        msg : Message object
+            The inform message to send.
+        """
         assert (msg.mtype == Message.INFORM)
         for sock in list(self._socks):
             if sock is self._sock:
@@ -431,14 +445,17 @@ class DeviceServerBase(object):
     def start(self, timeout=None, daemon=None, excepthook=None):
         """Start the server in a new thread.
 
-           @param self This object.
-           @param timeout Seconds to wait for server thread to start (as a float).
-           @param daemon If not None, the thread's setDaemon method is called with this
-                         parameter before the thread is started. 
-           @param excepthook Function to call if the client throws an exception. Signature
-                             is as for sys.excepthook.
-           @return None
-           """
+        Parameters
+        ----------
+        timeout : float in seconds
+            Time to wait for server thread to start.
+        daemon : boolean
+            If not None, the thread's setDaemon method is called with this
+            parameter before the thread is started. 
+        excepthook : function
+            Function to call if the client throws an exception. Signature
+            is as for sys.excepthook.
+        """
         if self._thread:
             raise RuntimeError("Device server already started.")
 
@@ -452,7 +469,13 @@ class DeviceServerBase(object):
                 raise RuntimeError("Device server failed to start.")
 
     def join(self, timeout=None):
-        """Rejoin the server thread."""
+        """Rejoin the server thread.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Time to wait for the thread to finish.
+        """
         if not self._thread:
             raise RuntimeError("Device server thread not started.")
 
@@ -463,10 +486,11 @@ class DeviceServerBase(object):
     def stop(self, timeout=1.0):
         """Stop a running server (from another thread).
 
-           @param self This object.
-           @param timeout Seconds to wait for server to have *started* (as a float).
-           @return None
-           """
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for server to have *started*.
+        """
         self._running.wait(timeout)
         if not self._running.isSet():
             raise RuntimeError("Attempt to stop server that wasn't running.")
@@ -479,67 +503,80 @@ class DeviceServerBase(object):
     def on_client_connect(self, sock):
         """Called after client connection is established.
 
-           Subclasses should override if they wish to send clients
-           message or perform house-keeping at this point.
-           """
+        Subclasses should override if they wish to send clients
+        message or perform house-keeping at this point.
+
+        Parameters
+        ----------
+        sock : socket.socket object
+            The client connection that has been successfully established.
+        """
         pass
 
     def on_client_disconnect(self, sock, msg, sock_valid):
         """Called before a client connection is closed.
 
-           Subclasses should override if they wish to send clients
-           message or perform house-keeping at this point. The server
-           cannot guarantee this will be called (for example, the client
-           might drop the connection). The message parameter contains
-           the reason for the disconnection.
+        Subclasses should override if they wish to send clients
+        message or perform house-keeping at this point. The server
+        cannot guarantee this will be called (for example, the client
+        might drop the connection). The message parameter contains
+        the reason for the disconnection.
 
-           @param sock Client socket being disconnected.
-           @param msg Reason client is being disconnected.
-           @param sock_valid True if sock is still openf for sending,
-                             False otherwise.
-           """
+        Parameters
+        ----------
+        sock : socket.socket object
+            Client socket being disconnected.
+        msg : str
+            Reason client is being disconnected.
+        sock_valid : boolean
+            True if sock is still open for sending,
+            False otherwise.
+        """
         pass
 
 
 class DeviceServer(DeviceServerBase):
     """Implements some standard messages on top of DeviceServerBase.
 
-       Inform messages handled are:
-         - version (sent on connect)
-         - build-state (sent on connect)
-         - log (via self.log.warn(...), etc)
-         - disconnect
-         - client-connected
+    Inform messages handled are:
 
-       Requests handled are:
-         - halt
-         - help
-         - log-level
-         - restart [1]
-         - client-list
-         - sensor-list
-         - sensor-sampling
-         - sensor-value
-         - watchdog
+      * version (sent on connect)
+      * build-state (sent on connect)
+      * log (via self.log.warn(...), etc)
+      * disconnect
+      * client-connected
 
-       [1] Restart relies on .set_restart_queue() being used to register
-           a restart queue with the device. When the device needs to be
-           restarted, it will be added to the restart queue.  The queue should
-           be a Python Queue.Queue object without a maximum size.
-           
-       Unhandled standard messages are:
-         ?configure
-         ?mode
+    Requests handled are:
 
-       Subclasses can define the tuple VERSION_INFO to set the interface
-       name, major and minor version numbers. The BUILD_INFO tuple can
-       be defined to give a string describing a particular interface
-       instance and may have a fourth element containing additional
-       version information (e.g. rc1).
+      * halt
+      * help
+      * log-level
+      * restart [#restartf1]_
+      * client-list
+      * sensor-list
+      * sensor-sampling
+      * sensor-value
+      * watchdog
 
-       Subclasses must override the .setup_sensors() method. If they
-       have no sensors to register, the method should just be a pass.
-       """
+    .. [#restartf1] Restart relies on .set_restart_queue() being used to
+      register a restart queue with the device. When the device needs to be
+      restarted, it will be added to the restart queue.  The queue should
+      be a Python Queue.Queue object without a maximum size.
+
+    Unhandled standard requests are:
+
+      * configure
+      * mode
+
+    Subclasses can define the tuple VERSION_INFO to set the interface
+    name, major and minor version numbers. The BUILD_INFO tuple can
+    be defined to give a string describing a particular interface
+    instance and may have a fourth element containing additional
+    version information (e.g. rc1).
+
+    Subclasses must override the .setup_sensors() method. If they
+    have no sensors to register, the method should just be a pass.
+    """
 
     # DeviceServer has a lot of methods because there is a method
     # per request type and it's an abstract class which is only
@@ -559,7 +596,6 @@ class DeviceServer(DeviceServerBase):
     # pylint: disable-msg = W0142
 
     def __init__(self, *args, **kwargs):
-        """Create a DeviceServer."""
         super(DeviceServer, self).__init__(*args, **kwargs)
         self.log = DeviceLogger(self, python_logger=self._logger)
         self._restart_queue = None
@@ -572,13 +608,30 @@ class DeviceServer(DeviceServerBase):
     # pylint: enable-msg = W0142
 
     def on_client_connect(self, sock):
-        """Inform client of build state and version on connect."""
+        """Inform client of build state and version on connect.
+
+        Parameters
+        ----------
+        sock : socket.socket object
+            The client connection that has been successfully established.        
+        """
         self._strategies[sock] = {} # map of sensors -> sampling strategies
         self.inform(sock, Message.inform("version", self.version()))
         self.inform(sock, Message.inform("build-state", self.build_state()))
 
     def on_client_disconnect(self, sock, msg, sock_valid):
-        """Inform client it is about to be disconnected."""
+        """Inform client it is about to be disconnected.
+
+        Parameters
+        ----------
+        sock : socket.socket object
+            Client socket being disconnected.
+        msg : str
+            Reason client is being disconnected.
+        sock_valid : boolean
+            True if sock is still open for sending,
+            False otherwise.
+        """
         if sock in self._strategies:
             strategies = self._strategies[sock]
             del self._strategies[sock]
@@ -600,40 +653,70 @@ class DeviceServer(DeviceServerBase):
     def add_sensor(self, sensor):
         """Add a sensor to the device.
 
-           Should only be called inside .setup_sensors().
-           """
+        Should only be called inside .setup_sensors().
+
+        Parameters
+        ----------
+        sensor : Sensor object
+            The sensor object to register with the device server.
+        """
         name = sensor.name
         self._sensors[name] = sensor
 
     def get_sensor(self, sensor_name):
-        """Fetch the sensor with the given name."""
+        """Fetch the sensor with the given name.
+
+        Parameters
+        ----------
+        sensor_name : str
+            Name of the sensor to retrieve.
+
+        Returns
+        -------
+        sensor : Sensor object
+            The sensor with the given name.
+        """
         sensor = self._sensors.get(sensor_name, None)
         if not sensor:
             raise ValueError("Unknown sensor '%s'." % (sensor_name,))
         return sensor
 
     def get_sensors(self):
-        """Fetch a list of all sensors"""
+        """Fetch a list of all sensors
+
+        Returns
+        -------
+        sensors : list of Sensor objects
+            The list of sensors registered with the device server.
+        """
         return self._sensors.values()
 
     def set_restart_queue(self, restart_queue):
-        """The the restart queue.
+        """Set the restart queue.
         
-           When the device server should be restarted, it will be added to the queue.
-           """
+        When the device server should be restarted, it will be added to the queue.
+
+        Parameters
+        ----------
+        restart_queue : Queue.Queue object
+            The queue to add the device server to when it should be restarted.
+        """
         self._restart_queue = restart_queue
 
     def setup_sensors(self):
         """Populate the dictionary of sensors.
 
-           Unimplemented by default -- subclasses should add their sensors
-           here or pass if there are no sensors.
+        Unimplemented by default -- subclasses should add their sensors
+        here or pass if there are no sensors.
 
-           e.g. def setup_sensors(self):
-                    self.add_sensor(Sensor(...))
-                    self.add_sensor(Sensor(...))
-                    ...
-           """
+        Examples
+        --------
+        >>> class MyDevice(DeviceServer):
+        ...     def setup_sensors(self):
+        ...         self.add_sensor(Sensor(...))
+        ...         self.add_sensor(Sensor(...))
+        ...
+        """
         raise NotImplementedError("Device server subclasses must implement"
                                     " setup_sensors.")
 
@@ -1045,9 +1128,17 @@ class DeviceServer(DeviceServerBase):
 class DeviceLogger(object):
     """Object for logging messages from a DeviceServer.
 
-       Log messages are logged at a particular level and under
-       a particular name. Names use dotted notation to form
-       a virtual hierarchy of loggers with the device."""
+    Log messages are logged at a particular level and under
+    a particular name. Names use dotted notation to form
+    a virtual hierarchy of loggers with the device.
+
+    Parameters
+    ----------
+    device_server : DeviceServerBase object
+        The device server this logger should use for sending out logs.
+    root_logger : str
+        The name of the root logger.
+    """
 
     # level values are used as indexes into the LEVELS list
     # so these to lists should be in the same order
@@ -1068,12 +1159,6 @@ class DeviceLogger(object):
     }
 
     def __init__(self, device_server, root_logger="root", python_logger=None):
-        """Create a DeviceLogger.
-
-           @param self This object.
-           @param device_server DeviceServer this logger logs for.
-           @param root_logger String containing root logger name.
-           """
         self._device_server = device_server
         self._python_logger = python_logger
         self._log_level = self.WARN
@@ -1082,7 +1167,18 @@ class DeviceLogger(object):
     def level_name(self, level=None):
         """Return the name of the given level value.
 
-           If level is None, return the name of the current level."""
+        If level is None, return the name of the current level.
+
+        Parameters
+        ----------
+        level : logging level constant
+            The logging level constant whose name to retrieve.
+
+        Returns
+        -------
+        level_name : str
+            The name of the logging level.
+        """
         if level is None:
             level = self._log_level
         return self.LEVELS[level]
@@ -1090,22 +1186,60 @@ class DeviceLogger(object):
     def level_from_name(self, level_name):
         """Return the level constant for a given name.
 
-           If the level_name is not known, raise a ValueError."""
+        If the level_name is not known, raise a ValueError.
+
+        Parameters
+        ----------
+        level_name : str
+            The logging level name whose logging level constant
+            to retrieve.
+
+        Returns
+        -------
+        level : logging level constant
+            The logging level constant associated with the name.        
+        """
         try:
             return self.LEVELS.index(level_name)
         except ValueError:
             raise ValueError("Unknown logging level name '%s'" % (level_name,))
 
     def set_log_level(self, level):
-        """Set the logging level."""
+        """Set the logging level.
+
+        Parameters
+        ----------
+        level : logging level constant
+            The value to set the logging level to.
+        """
         self._log_level = level
 
     def set_log_level_by_name(self, level_name):
-        """Set the logging level using a level name."""
+        """Set the logging level using a level name.
+
+        Parameters
+        ----------
+        level_name : str
+            The name of the logging level.
+        """
         self._log_level = self.level_from_name(level_name)
 
     def log(self, level, msg, name=None, timestamp=None):
-        """Log a message and inform all clients."""
+        """Log a message and inform all clients.
+
+        Parameters
+        ----------
+        level : logging level constant
+            The level to log the message at.
+        msg : str
+            The text for the log message.
+        name : str
+            The name of the logger to log the message to (defaults
+            to the root logger).
+        timestamp : float in seconds
+            The time at which the log message was generated (defaults
+            to now).
+        """
         if self._python_logger is not None:
             self._python_logger.log(self.PYTHON_LEVEL[level], msg)
         if level >= self._log_level:
@@ -1141,7 +1275,15 @@ class DeviceLogger(object):
 
     @staticmethod
     def log_to_python(logger, msg):
-        """Log a KATCP logging message to a Python logger."""
+        """Log a KATCP logging message to a Python logger.
+
+        Parameters
+        ----------
+        logger : logging.Logger object
+            The Python logger to log the given message to.
+        msg : Message object
+            The #log message to create a log entry from.
+        """
         (level, timestamp, name, message) = tuple(msg.arguments)
         #created = float(timestamp) * 1e-6
         #msecs = int(timestamp) % 1000
