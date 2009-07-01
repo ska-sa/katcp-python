@@ -14,7 +14,17 @@ import re
 import time
 
 class Message(object):
-    """Represents a KAT device control language message."""
+    """Represents a KAT device control language message.
+
+    Parameters
+    ----------
+    mtype : Message type constant
+        The message type (request, reply or inform).
+    name : str
+        The message name.
+    arguments : list of strings
+        The message arguments.
+    """
 
     # Message types
     REQUEST, REPLY, INFORM = range(3)
@@ -78,13 +88,6 @@ class Message(object):
     # @brief List of string message arguments.
 
     def __init__(self, mtype, name, arguments=None):
-        """Create a KATCP Message.
-
-           @param self This object.
-           @param mtype Message::Type constant.
-           @param name String: message name.
-           @param arguments List of strings: message arguments.
-           """
         self.mtype = mtype
         self.name = name
         if arguments is None:
@@ -111,15 +114,23 @@ class Message(object):
                                 % (name,))
 
     def copy(self):
-        """Return a shallow copy of the message object and its arguments."""
+        """Return a shallow copy of the message object and its arguments.
+
+        Returns
+        -------
+        msg : Message
+            A copy of the message object.
+        """
         return Message(self.mtype, self.name, self.arguments)
 
     def __str__(self):
         """Return Message serialized for transmission.
 
-           @param self This object.
-           @return Message encoded as a ASCII string.
-           """
+        Returns
+        -------
+        msg : str
+           The message encoded as a ASCII string.
+        """
         if self.arguments:
             escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
                             for x in self.arguments]
@@ -140,17 +151,41 @@ class Message(object):
 
     @classmethod
     def request(cls, name, *args):
-        """Helper method for creating request messages."""
+        """Helper method for creating request messages.
+
+        Parameters
+        ----------
+        name : str
+            The name of the message.
+        args : list of strings
+            The message arguments.
+        """
         return cls(cls.REQUEST, name, args)
 
     @classmethod
     def reply(cls, name, *args):
-        """Helper method for creating reply messages."""
+        """Helper method for creating reply messages.
+
+        Parameters
+        ----------
+        name : str
+            The name of the message.
+        args : list of strings
+            The message arguments.        
+        """
         return cls(cls.REPLY, name, args)
 
     @classmethod
     def inform(cls, name, *args):
-        """Helper method for creating inform messages."""
+        """Helper method for creating inform messages.
+
+        Parameters
+        ----------
+        name : str
+            The name of the message.
+        args : list of strings
+            The message arguments.
+        """
         return cls(cls.INFORM, name, args)
 
     # pylint: enable-msg = W0142
@@ -202,10 +237,17 @@ class MessageParser(object):
     def parse(self, line):
         """Parse a line, return a Message.
 
-           @param self This object.
-           @param line a string to parse.
-           @return the resulting Message.
-           """
+        Parameters
+        ----------
+        line : str
+            The line to parse (should not contain the terminating newline
+            or carriage return).
+
+        Returns
+        -------
+        msg : Message object
+            The resulting Message.
+        """
         # find command type and check validity
         if not line:
             raise KatcpSyntaxError("Empty message received.")
@@ -231,19 +273,26 @@ class MessageParser(object):
 class DeviceMetaclass(type):
     """Metaclass for DeviceServer and DeviceClient classes.
 
-       Collects up methods named request_* and adds
+       Collects up methods named request\_* and adds
        them to a dictionary of supported methods on the class.
-       All request_* methods must have a doc string so that help
-       can be generated.  The same is done for inform_* and
-       reply_* methods.
+       All request\_* methods must have a doc string so that help
+       can be generated.  The same is done for inform\_* and
+       reply\_* methods.
        """
+
     def __init__(mcs, name, bases, dct):
         """Constructor for DeviceMetaclass.  Should not be used directly.
 
-           @param mcs The metaclass instance
-           @param name The metaclass name
-           @param bases List of base classes
-           @param dct Class dict
+        Parameters
+        ----------
+        mcs : class
+            The metaclass instance
+        name : str
+            The metaclass name
+        bases : list of classes
+            List of base classes
+        dct : dict
+            Class dictionary
         """
         super(DeviceMetaclass, mcs).__init__(name, bases, dct)
         mcs._request_handlers = {}
@@ -270,46 +319,77 @@ class DeviceMetaclass(type):
 
 
 class KatcpDeviceError(Exception):
-    """Exception raised by KATCP servers when errors occur will
-       communicating with a device.  Note that socket.error can also be raised
-       if low-level network exceptions occurs.
+    """Raised by KATCP servers when errors occur.
 
-       Deprecated. Servers should not raise errors if communication with a
-       client fails -- errors are simply logged instead.
-       """
+    .. versionchanged:: 0.1
+        Deprecated in 0.1. Servers should not raise errors if communication
+        with a client fails -- errors are simply logged instead.
+    """
     pass
 
 
 class FailReply(Exception):
-    """A custom exception which, when thrown in a request handler,
-       causes DeviceServerBase to send a fail reply with the specified
-       fail message, bypassing the generic exception handling, which
-       would send a fail reply with a full traceback.
-       """
+    """Raised by request handlers to indicate a failure.
+    
+    A custom exception which, when thrown in a request handler,
+    causes DeviceServerBase to send a fail reply with the specified
+    fail message, bypassing the generic exception handling, which
+    would send a fail reply with a full traceback.
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     def request_myreq(self, sock, msg):
+    ...         raise FailReply("This request always fails.")
+    ...
+    """
     pass
 
 
 class AsyncReply(Exception):
-    """A custom exception which, when thrown in a request handler,
-       indicates to DeviceServerBase that no reply has been returned
-       by the handler but that the handler has arranged for a reply
-       message to be sent at a later time.
-       """
+    """Raised by a request handlers to indicate it will reply later.
+
+    A custom exception which, when thrown in a request handler,
+    indicates to DeviceServerBase that no reply has been returned
+    by the handler but that the handler has arranged for a reply
+    message to be sent at a later time.
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     def request_myreq(self, sock, msg):
+    ...         self.callback_client.request(
+    ...             Message.request("otherreq"),
+    ...             reply_cb=self._send_reply,
+    ...         )
+    ...         raise AsyncReply()
+    ...
+
+    """
     pass
 
 
 class KatcpClientError(Exception):
-    """Exception raised by KATCP clients when errors occur while
-       communicating with a device.  Note that socket.error can also be raised
-       if low-level network exceptions occure."""
+    """Raised by KATCP clients when errors occur."""
     pass
 
 
 class ExcepthookThread(threading.Thread):
-    """A custom Thread class that passes exceptions up to an
-       excepthook callable that functions like sys.excepthook for
-       threads.
-       """
+    """A custom Thread class that provides an exception hook.
+    
+    Exceptions are passed up to an excepthook callable that
+    functions like sys.excepthook.
+
+    Parameters
+    ----------
+    excepthook : callable
+        Function to call when the thread raises an unhandled
+        exception. The signature is the same as for sys.excepthook.
+    args : additional arguments
+        Passed to the threading.Thread constructor.
+    kwargs: additional keyword arguments
+        Passed to the threading.Thread constructor.
+    """
     def __init__(self, excepthook=None, *args, **kwargs):
         if excepthook is None:
             excepthook = getattr(threading.currentThread(), "_excepthook", None)
@@ -332,7 +412,37 @@ class ExcepthookThread(threading.Thread):
 from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp
 
 class Sensor(object):
-    """Base class for sensor classes."""
+    """Instantiate a new sensor object.
+
+    Subclasses will usually pass in a fixed sensor_type which should
+    be one of the sensor type constants. The list params if set will
+    have its values formatter by the type formatter for the given
+    sensor type.
+
+    Parameters
+    ----------
+    sensor_type : Sensor type constant
+        The type of sensor.
+    name : str
+        The name of the sensor.
+    description : str
+        A short description of the sensor.
+    units : str
+        The units of the sensor value. May be the empty string
+        if there are no applicable units.
+    params : list
+        Additional parameters, dependent on the type of sensor:
+        
+          * For :const:`INTEGER` and :const:`FLOAT` the list should
+            give the minimum and maximum that define the range
+            of the sensor value.
+          * For :const:`DISCRETE` the list should contain all
+            possible values the sensor may take.
+          * For all other types, params should be omitted.  
+    default : object
+        An initial value for the sensor. By default this is
+        determined by the sensor type.
+    """
 
     # Sensor needs the instance attributes it has and
     # is an abstract class used only outside this module
@@ -418,13 +528,6 @@ class Sensor(object):
     # are specific to the sensor type)
 
     def __init__(self, sensor_type, name, description, units, params=None, default=None):
-        """Instantiate a new sensor object.
-
-           Subclasses will usually pass in a fixed sensor_type which should
-           be one of the sensor type constants. The list params if set will
-           have its values formatter by the type formatter for the given
-           sensor type.
-           """
         if params is None:
             params = []
 
@@ -459,13 +562,27 @@ class Sensor(object):
             self._value = default
 
     def attach(self, observer):
-        """Attach an observer to this sensor. The observer must support a call
-           to update(sensor)
-           """
+        """Attach an observer to this sensor.
+        
+        The observer must support a call to observer.update(sensor).
+
+        Parameters
+        ----------
+        observer : object
+            Object with an .update(sensor) method that will be called
+            when the sensor value is set.
+        """
         self._observers.add(observer)
 
     def detach(self, observer):
-        """Detach an observer from this sensor."""
+        """Detach an observer from this sensor.
+
+        Parameters
+        ----------
+        observer : object
+            The observer to remove from the set of observers notified
+            when the sensor value is set.
+        """
         self._observers.discard(observer)
 
     def notify(self):
@@ -477,33 +594,47 @@ class Sensor(object):
     def parse_value(self, s_value):
         """Parse a value from a string.
 
-           @param self This object.
-           @param s_value the value of the sensor (as a string)
-           @return None
-           """
+        Parameters
+        ----------
+        s_value : str
+            A string value to attempt to convert to a value for
+            the sensor.
+
+        Returns
+        -------
+        value : object
+            A value of a type appropriate to the sensor.
+        """
         return self._parser(s_value)
 
     def set(self, timestamp, status, value):
         """Set the current value of the sensor.
 
-           @param self This object.
-           @param timestamp standard python time double
-           @param status the status of the sensor
-           @param value the value of the sensor
-           @return None
-           """
+        Parameters
+        ----------
+        timestamp : float in seconds
+           The time at which the sensor value was determined.
+        status : Sensor status constant
+            Whether the value represents an error condition or not.
+        value : object
+            The value of the sensor (the type should be appropriate to the
+            sensor's type).
+        """
         self._timestamp, self._status, self._value = timestamp, status, value
         self.notify()
 
     def set_formatted(self, raw_timestamp, raw_status, raw_value):
         """Set the current value of the sensor.
 
-           @param self This object
-           @param timestamp KATCP formatted timestamp string
-           @param status KATCP formatted sensor status string
-           @param value KATCP formatted sensor value
-           @return None
-           """
+        Parameters
+        ----------
+        timestamp : str
+            KATCP formatted timestamp string
+        status : str
+            KATCP formatted sensor status string
+        value : str
+            KATCP formatted sensor value
+        """
         timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp)
         status = self.STATUS_NAMES[raw_status]
         value = self.parse_value(raw_value)
@@ -512,9 +643,18 @@ class Sensor(object):
     def read_formatted(self):
         """Read the sensor and return a timestamp_ms, status, value tuple.
 
-           All values are strings formatted as specified in the Sensor Type
-           Formats in the katcp specification.
-           """
+        All values are strings formatted as specified in the Sensor Type
+        Formats in the katcp specification.
+
+        Returns
+        -------
+        timestamp : str
+            KATCP formatted timestamp string
+        status : str
+            KATCP formatted sensor status string
+        value : str
+            KATCP formatted sensor value
+        """
         timestamp, status, value = self.read()
         return (self.TIMESTAMP_TYPE.encode(timestamp),
                 self.STATUSES[status],
@@ -523,29 +663,60 @@ class Sensor(object):
     def read(self):
         """Read the sensor and return a timestamp, status, value tuple.
 
-           - timestamp: the timestamp in since the Unix epoch as a float.
-           - status: Sensor status constant.
-           - value: int, float, bool, Sensor value constant (for lru values)
-               or str (for discrete values)
-
-           Subclasses should implement this method.
-           """
+        Returns
+        -------
+        timestamp : float in seconds
+           The time at which the sensor value was determined.
+        status : Sensor status constant
+            Whether the value represents an error condition or not.
+        value : object
+            The value of the sensor (the type will be appropriate to the
+            sensor's type).
+        """
         return (self._timestamp, self._status, self._value)
 
     def set_value(self, value, status=NOMINAL, timestamp=None):
-        """Check and then set the value of the sensor."""
+        """Check and then set the value of the sensor.
+
+        Parameters
+        ----------
+        value : object
+            Value of the appropriate type for the sensor.
+        status : Sensor status constant
+            Whether the value represents an error condition or not.
+        timestamp : float in seconds
+           The time at which the sensor value was determined.        
+        """
         self._kattype.check(value)
         if timestamp is None:
             timestamp = time.time()
         self.set(timestamp, status, value)
 
     def value(self):
-        """Read the current sensor value."""
+        """Read the current sensor value.
+
+        Returns
+        -------
+        value : object
+            The value of the sensor (the type will be appropriate to the
+            sensor's type).        
+        """
         return self.read()[2]
 
     @classmethod
     def parse_type(cls, type_string):
-        """Parse KATCP formatted type code into Sensor type constant."""
+        """Parse KATCP formatted type code into Sensor type constant.
+
+        Parameters
+        ----------
+        type_string : str
+            KATCP formatted type code.
+
+        Returns
+        -------
+        sensor_type : Sensor type constant
+            The corresponding Sensor type constant.
+        """
         if type_string in cls.SENSOR_TYPE_LOOKUP:
             return cls.SENSOR_TYPE_LOOKUP[type_string]
         else:
@@ -553,7 +724,20 @@ class Sensor(object):
 
     @classmethod
     def parse_params(cls, sensor_type, formatted_params):
-        """Parse KATCP formatted parameters into Python values."""
+        """Parse KATCP formatted parameters into Python values.
+
+        Parameters
+        ----------
+        sensor_type : Sensor type constant
+            The type of sensor the parameters are for.
+        formatted_params : list of strings
+            The formatted parameters that should be parsed.
+
+        Returns
+        -------
+        params : list of objects
+            The parsed parameters.
+        """
         typeclass, _value = cls.SENSOR_TYPES[sensor_type]
         if sensor_type == cls.DISCRETE:
             kattype = typeclass([])
