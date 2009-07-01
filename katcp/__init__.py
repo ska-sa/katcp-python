@@ -9,12 +9,11 @@
 
 from .katcp import Message, KatcpSyntaxError, MessageParser, \
                   DeviceMetaclass, ExcepthookThread, FailReply, \
-                  AsyncReply, KatcpDeviceError, KatcpClientError
+                  AsyncReply, KatcpDeviceError, KatcpClientError, \
+                  Sensor
 
 from .server import DeviceServerBase, DeviceServer, DeviceLogger
 
 from .client import DeviceClient, BlockingClient, CallbackClient
-
-from .kattypes import Sensor
 
 from .version import VERSION, VERSION_STR

@@ -53,7 +53,7 @@ class TestInt(TestType):
             (self.minmax, 7, ValueError),
             (default, None, "11"),
             (default_optional, None, "11"),
-            (optional, None, ""),
+            (optional, None, ValueError),
         ]
 
         self._unpack = [
@@ -90,7 +90,7 @@ class TestFloat(TestType):
             (self.minmax, 6.5, ValueError),
             (default, None, "11"),
             (default_optional, None, "11"),
-            (optional, None, ""),
+            (optional, None, ValueError),
         ]
 
         self._unpack = [
@@ -125,7 +125,7 @@ class TestBool(TestType):
             (basic, None, ValueError),
             (default, None, "1"),
             (default_optional, None, "1"),
-            (optional, None, ""),
+            (optional, None, ValueError),
         ]
 
         self._unpack = [
@@ -156,7 +156,7 @@ class TestDiscrete(TestType):
             (basic, None, ValueError),
             (default, None, "VAL1"),
             (default_optional, None, "VAL1"),
-            (optional, None, ""),
+            (optional, None, ValueError),
             (case_insensitive, "VAL1", "VAL1"),
             (case_insensitive, "vAl2", "vAl2"),
             (case_insensitive, "a", ValueError),
@@ -191,7 +191,7 @@ class TestLru(TestType):
             (basic, None, ValueError),
             (default, None, "nominal"),
             (default_optional, None, "nominal"),
-            (optional, None, ""),
+            (optional, None, ValueError),
         ]
 
         self._unpack = [
@@ -219,7 +219,7 @@ class TestTimestamp(TestType):
             (basic, None, ValueError),
             (default, None, "1235475793032"),
             (default_optional, None, "1235475793032"),
-            (optional, None, ""),
+            (optional, None, ValueError),
         ]
 
         self._unpack = [
@@ -245,7 +245,7 @@ class TestStr(TestType):
             (basic, None, ValueError),
             (default, None, "something"),
             (default_optional, None, "something"),
-            (optional, None, ""),
+            (optional, None, ValueError),
         ]
 
         self._unpack = [
@@ -272,7 +272,7 @@ class TestStruct(TestType):
             (basic, None, ValueError),
             (default, None, "\x00\x00\x00\x01f@Y\x99\x9a"),
             (default_optional, None, "\x00\x00\x00\x01f@Y\x99\x9a"),
-            (optional, None, ""),
+            (optional, None, ValueError),
         ]
 
         self._unpack = [
@@ -299,7 +299,7 @@ class TestRegex(TestType):
             (basic, None, ValueError),
             (default, None, "00:00:00"),
             (default_optional, None, "00:00:00"),
-            (optional, None, ""),
+            (optional, None, ValueError),
         ]
 
         self._unpack = [
@@ -334,7 +334,7 @@ class TestDiscreteMulti(TestType):
             (basic, None, ValueError),
             (default, None, "VAL1"),
             (default_optional, None, "VAL1"),
-            (optional, None, ""),
+            (optional, None, ValueError),
             (case_insensitive, ["VAL1"], "VAL1"),
             (case_insensitive, ["vAl2"], "vAl2"),
             (case_insensitive, ["VAL1","val2"], "VAL1,val2"),

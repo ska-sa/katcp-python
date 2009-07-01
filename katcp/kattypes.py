@@ -17,38 +17,88 @@ from .katcp import Message, FailReply, KatcpSyntaxError
 #
 
 class KatcpType(object):
-    """Class representing a KATCP type."""
+    """Class representing a KATCP type.
+
+    Sub-classes should:
+    
+      * Set the :attr:`name` attribute.
+      * Implement the :meth:`encode` method.
+      * Implement the :meth:`decode` method.
+
+    Parameters
+    ----------
+    default : object
+        The default value for this type.
+    optional : boolean
+        Whether the value is allowed to be None.
+    """
 
     name = "unknown"
 
     def __init__(self, default=None, optional=False):
-        """Construct a KATCP type.
-
-           @param self This object.
-           @param default Default value.
-           @param optional Can have a value of None.
-           """
         self._default = default
         self._optional = optional
 
     def get_default(self):
+        """Return the default value.
+        
+        Raise a ValueError if the value is not optional
+        and there is no default.
+
+        Returns
+        -------
+        default : object
+            The default value.
+        """
         if self._default is None and not self._optional:
             raise ValueError("No value or default given")
         return self._default
 
     def check(self, value):
+        """Check whether the value is valid.
+
+        Do nothing if the value is valid. Raise an exception
+        if the value is not valid.
+        """
         pass
 
     def pack(self, value, nocheck=False):
+        """Return the value formatted as a KATCP parameter.
+
+        Parameters
+        ----------
+        value : object
+            The value to pack.
+        nocheck : bool
+            Whether to check that the value is valid before
+            packing it.
+
+        Returns
+        -------
+        packed_value : str
+            The unescaped KATCP string representing the value.
+        """
         if value is None:
             value = self.get_default()
         if value is None:
-            return ""
+            raise ValueError("Cannot pack a None value.")
         if not nocheck:
             self.check(value)
         return self.encode(value)
 
     def unpack(self, packed_value):
+        """Parse a KATCP parameter into an object.
+        
+        Parameters
+        ----------
+        packed_value : str
+            The unescaped KATCP string to parse into a value.
+
+        Returns
+        -------
+        value : object
+            The value the KATCP string represented.
+        """
         if packed_value is None:
             value = self.get_default()
         else:
@@ -59,6 +109,15 @@ class KatcpType(object):
 
 
 class Int(KatcpType):
+    """The KATCP integer type.
+    
+    Parameters
+    ----------
+    min : int
+        The minimum allowed value. Ignored if not given.
+    max : int
+        The maximum allowed value. Ignored if not given.
+    """
 
     name = "integer"
 
@@ -76,6 +135,10 @@ class Int(KatcpType):
         self._max = max
 
     def check(self, value):
+        """Check whether the value is between the minimum and maximum.
+
+        Raise a ValueError if it is not.
+        """
         if self._min is not None and value < self._min:
             raise ValueError("Integer %d is lower than minimum %d."
                 % (value, self._min))
@@ -85,6 +148,15 @@ class Int(KatcpType):
 
 
 class Float(KatcpType):
+    """The KATCP float type.
+    
+    Parameters
+    ----------
+    min : float
+        The minimum allowed value. Ignored if not given.
+    max : float
+        The maximum allowed value. Ignored if not given.
+    """
 
     name = "float"
 
@@ -102,6 +174,10 @@ class Float(KatcpType):
         self._max = max
 
     def check(self, value):
+        """Check whether the value is between the minimum and maximum.
+
+        Raise a ValueError if it is not.
+        """
         if self._min is not None and value < self._min:
             raise ValueError("Float %g is lower than minimum %g."
                 % (value, self._min))
@@ -111,6 +187,7 @@ class Float(KatcpType):
 
 
 class Bool(KatcpType):
+    """The KATCP boolean type."""
 
     name = "boolean"
 
@@ -123,6 +200,7 @@ class Bool(KatcpType):
 
 
 class Str(KatcpType):
+    """The KATCP string type."""
 
     name = "string"
 
@@ -131,18 +209,31 @@ class Str(KatcpType):
 
 
 class Discrete(Str):
+    """The KATCP discrete type.
+
+    Parameters
+    ----------
+    values : list of str
+        List of the values the discrete type may accept.
+    case_insensitive : bool
+        Whether case-insensitive value matching should be used.
+    """
 
     name = "discrete"
 
-    def __init__(self, values, **kwargs):
-        self._case_insensitive = kwargs.pop("case_insensitive", False)
+    def __init__(self, values, case_insensitive=False, **kwargs):
         super(Discrete, self).__init__(**kwargs)
+        self._case_insensitive = case_insensitive
         self._values = list(values) # just to preserve ordering
         self._valid_values = set(values)
         if self._case_insensitive:
             self._valid_values_lower = set([val.lower() for val in self._values])
 
     def check(self, value):
+        """Check whether the value in the set of allowed values.
+
+        Raise a ValueError if it is not.
+        """
         if self._case_insensitive:
             value = value.lower()
             values = self._valid_values_lower
@@ -156,6 +247,7 @@ class Discrete(Str):
 
 
 class Lru(KatcpType):
+    """The KATCP lru type"""
 
     name = "lru"
 
@@ -186,6 +278,7 @@ class Lru(KatcpType):
 
 
 class Timestamp(KatcpType):
+    """The KATCP timestamp type."""
 
     name = "timestamp"
 
@@ -199,6 +292,14 @@ class Timestamp(KatcpType):
 
 
 class Struct(KatcpType):
+    """KatcpType for parsing and packing values using the :mod:`struct` module.
+
+    Parameters
+    ----------
+    fmt : str
+        Format to use for packing and unpacking values. It is passed directly
+        into :func:`struct.pack` and :func:`struct.unpack`.
+    """
 
     name = "struct"
 
@@ -220,20 +321,52 @@ class Struct(KatcpType):
 
 
 class Regex(Str):
+    """String type that checks values using a regular expression.
+    
+    Parameters
+    ----------
+    regex : str or regular expression object
+        Regular expression that values should match.
+    """
 
     name = "regex"
 
+    _re_flags = [
+        ('I', re.I), ('L', re.L), ('M', re.M),
+        ('S', re.S), ('U', re.U), ('X', re.X)
+    ]
+
     def __init__(self, regex, **kwargs):
-        self._regex = regex
-        self._compiled = re.compile(regex)
+        if hasattr(regex, 'pattern'):
+            self._pattern = regex.pattern
+            self._compiled = regex
+        else:
+            self._pattern = regex
+            self._compiled = re.compile(regex)
+        self._flags = ",".join([name for name, value in self._re_flags
+            if self._compiled.flags & value])
         super(Regex, self).__init__(**kwargs)
 
     def check(self, value):
         if not self._compiled.match(value):
-            raise ValueError("Value '%s' does not match regex '%s'." % (value, self._regex))
+            raise ValueError("Value '%s' does not match regex '%s' with flags '%s'."
+                % (value, self._pattern, self._flags))
 
 
 class DiscreteMulti(Discrete):
+    """Discrete type which can accept multiple values.
+    
+    Its value is always a list.
+    
+    Parameters
+    ----------
+    values : list of str
+        Set of allowed values.
+    all_keyword : str
+        The string which represents the list of all allowed values.
+    separator : str
+        The separator used in the packed value string.
+    """
 
     name = "discretemulti"
 
@@ -245,35 +378,63 @@ class DiscreteMulti(Discrete):
             return sorted(list(self._valid_values), key=str.lower)
         return sorted([v.strip() for v in value.split(self.separator)], key=str.lower)
 
-    def __init__(self, values, **kwargs):
-        self.all_keyword = kwargs.pop("all_keyword", "all")
-        self.separator = kwargs.pop("separator", ",")
+    def __init__(self, values, all_keyword="all", separator=",", **kwargs):
+        self.all_keyword = all_keyword
+        self.separator = separator
         super(DiscreteMulti, self).__init__(values, **kwargs)
 
     def check(self, value):
+        """Check that each item in the value list is in the allowed set."""
         for v in value:
             super(DiscreteMulti, self).check(v)
 
 
 class Parameter(object):
-    """Wrapper for kattypes which holds parameter-specific information"""
+    """Wrapper for kattypes which holds parameter-specific information
+
+    Parameters
+    ----------
+    position : int
+        The parameter's position (starts at 1)
+    name : str
+        The parameter's name (introspected)
+    kattype : KatcpType object
+        The parameter's kattype
+    """
 
     def __init__(self, position, name, kattype):
-        """Construct a Parameter.
-
-           @param self This object.
-           @param position The parameter's position (starts at 1)
-           @param name The parameter's name (introspected)
-           @param kattype The parameter's kattype
-           """
         self.position = position
         self.name = name
         self._kattype = kattype
 
     def pack(self, value):
+        """Pack the parameter using its kattype.
+        
+        Parameters
+        ----------
+        value : object
+            The value to pack
+        
+        Returns
+        -------
+        packed_value : str
+            The unescaped KATCP string representing the value.
+        """
         return self._kattype.pack(value)
 
     def unpack(self, value):
+        """Unpack the parameter using its kattype.
+
+        Parameters
+        ----------
+        packed_value : str
+            The unescaped KATCP string to unpack.
+        
+        Returns
+        -------
+        value : object
+            The unpacked value.
+        """
         # Wrap errors in FailReplies with information identifying the parameter
         try:
             return self._kattype.unpack(value)
@@ -287,10 +448,24 @@ class Parameter(object):
 def request(*types):
     """Decorator for request handler methods.
 
-       The method being decorated should take a sock argument followed
-       by arguments matching the list of types. The decorator will
-       unpack the request message into the arguments.
-       """
+    The method being decorated should take a sock argument followed
+    by arguments matching the list of types. The decorator will
+    unpack the request message into the arguments.
+
+    Parameters
+    ----------
+    types : list of kattypes
+        The types of the request message parameters (in order).
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     @request(Int(), Float(), Bool())
+    ...     @reply(Int(), Float())
+    ...     def request_myreq(self, sock, my_int, my_float, my_bool):
+    ...         return ("ok", my_int + 1, my_float / 2.0)
+    ...
+    """
     def decorator(handler):
         argnames = []
         orig_argnames = getattr(handler, "_orig_argnames", None)
@@ -334,15 +509,28 @@ inform.__doc__ = """Decorator for inform handler methods.
 def return_reply(*types):
     """Decorator for returning replies from request handler methods
 
-       The method being decorated should return an iterable of result
-       values. If the first value is 'ok', the decorator will check the
-       remaining values against the specified list of types (if any).
-       If the first value is 'fail' or 'error', there must be only
-       one remaining parameter, and it must be a string describing the
-       failure or error  In both cases, the decorator will pack the
-       values into a reply message.
-    """
+    The method being decorated should return an iterable of result
+    values. If the first value is 'ok', the decorator will check the
+    remaining values against the specified list of types (if any).
+    If the first value is 'fail' or 'error', there must be only
+    one remaining parameter, and it must be a string describing the
+    failure or error  In both cases, the decorator will pack the
+    values into a reply message.
 
+    Parameters
+    ----------
+    types : list of kattypes
+        The types of the reply message parameters (in order).
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     @request(Int())
+    ...     @reply(Int(), Float())
+    ...     def request_myreq(self, sock, my_int):
+    ...         return ("ok", my_int + 1, my_int * 2.0)
+    ...
+    """
     def decorator(handler):
         if not handler.__name__.startswith("request_"):
             raise ValueError("This decorator can only be used on a katcp request handler.")
@@ -371,19 +559,33 @@ def return_reply(*types):
 def send_reply(msgname, *types):
     """Decorator for sending replies from request callback methods
 
-       This decorator constructs a reply from a list or tuple returned
-       from a callback method, but unlike the return_reply decorator it
-       also sends the reply rather than returning it.  The message name
-       must be passed in explicitly, since the callback method is not
-       expected to have a predictable name or input parameters.
+    This decorator constructs a reply from a list or tuple returned
+    from a callback method, but unlike the return_reply decorator it
+    also sends the reply rather than returning it.  The message name
+    must be passed in explicitly, since the callback method is not
+    expected to have a predictable name or input parameters.
 
-       The list/tuple returned from the callback method must have a sock
-       as its first parameter.
+    The list/tuple returned from the callback method must have a sock
+    as its first parameter.
 
-       The device with the callback method must have a send_message
-       method.
+    The device with the callback method must have a send_message
+    method.
+
+    Parameters
+    ----------
+    msgname : str
+        Name of the reply message.
+    types : list of kattypes
+        The types of the reply message parameters (in order).
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     @send_reply('myreq', Int(), Float())
+    ...     def my_callback(self, sock):
+    ...         return (sock, "ok", 5, 2.0)
+    ...
     """
-
     def decorator(handler):
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
@@ -395,7 +597,17 @@ def send_reply(msgname, *types):
     return decorator
 
 def make_reply(msgname, types, arguments):
-    """Helper method for constructing a reply message from a list or tuple"""
+    """Helper method for constructing a reply message from a list or tuple
+
+    Parameters
+    ----------
+    msgname : str
+        Name of the reply message.
+    types : list of kattypes
+        The types of the reply message parameters (in order).
+    arguments : list of objects
+        The (unpacked) reply message parameters.
+    """
     status = arguments[0]
     if status == "fail":
         return Message.reply(msgname, *pack_types((Str(), Str()), arguments))
@@ -405,8 +617,16 @@ def make_reply(msgname, types, arguments):
 
 def unpack_types(types, args, argnames):
     """Parse arguments according to types list.
-       """
-
+ 
+    Parameters
+    ----------
+    types : list of kattypes
+        The types of the arguments (in order).
+    args : list of strings
+        The arguments to parse. 
+    argnames : list of strings
+        The names of the arguments.
+    """
     if len(types) < len(args):
         raise FailReply("Too many parameters given.")
 
@@ -423,239 +643,15 @@ def unpack_types(types, args, argnames):
 
 def pack_types(types, args):
     """Pack arguments according the the types list.
-       """
+
+    Parameters
+    ----------
+    types : list of kattypes
+        The types of the arguments (in order).
+    args : list of objects
+        The arguments to format.
+    """
     if len(types) < len(args):
         raise ValueError("Too many arguments to pack.")
     # if len(args) < len(types) this passes in None for missing args
     return map(lambda ktype, arg: ktype.pack(arg), types, args)
-
-
-class Sensor(object):
-    """Base class for sensor classes."""
-
-    # Sensor needs the instance attributes it has and
-    # is an abstract class used only outside this module
-    # pylint: disable-msg = R0902
-
-    # Type names and formatters
-    #
-    # Formatters take the sensor object and the value to
-    # be formatted as arguments. They may raise exceptions
-    # if the value cannot be formatted.
-    #
-    # Parsers take the sensor object and the value to
-    # parse as arguments
-    #
-    # type -> (name, formatter, parser)
-    INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE, STRING, TIMESTAMP = range(7)
-
-    ## @brief Mapping from sensor type to tuple containing the type name,
-    #  a kattype with functions to format and parse a value and a
-    #  default value for sensors of that type.
-    SENSOR_TYPES = {
-        INTEGER: (Int, 0),
-        FLOAT: (Float, 0.0),
-        BOOLEAN: (Bool, False),
-        LRU: (Lru, Lru.LRU_NOMINAL),
-        DISCRETE: (Discrete, "unknown"),
-        STRING: (Str, ""),
-        TIMESTAMP: (Timestamp, 0.0),
-    }
-
-    # map type strings to types
-    SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
-
-    # Sensor status constants
-    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE = range(5)
-
-    ## @brief Mapping from sensor status to status name.
-    STATUSES = {
-        UNKNOWN: 'unknown',
-        NOMINAL: 'nominal',
-        WARN: 'warn',
-        ERROR: 'error',
-        FAILURE: 'failure',
-    }
-
-    ## @brief Mapping from status name to sensor status.
-    STATUS_NAMES = dict((v, k) for k, v in STATUSES.items())
-
-    # LRU sensor values
-    LRU_NOMINAL, LRU_ERROR = Lru.LRU_NOMINAL, Lru.LRU_ERROR
-
-    ## @brief Mapping from LRU value constant to LRU value name.
-    LRU_VALUES = Lru.LRU_VALUES
-
-    # LRU_VALUES not found by pylint
-    # pylint: disable-msg = E0602
-
-    ## @brief Mapping from LRU value name to LRU value constant.
-    LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
-
-    # pylint: enable-msg = E0602
-
-    ## @brief Number of milliseconds in a second.
-    MILLISECOND = 1000
-
-    ## @brief kattype Timestamp instance for encoding and decoding timestamps
-    TIMESTAMP_TYPE = Timestamp()
-
-    ## @var stype
-    # @brief Sensor type constant.
-
-    ## @var name
-    # @brief Sensor name.
-
-    ## @var description
-    # @brief String describing the sensor.
-
-    ## @var units
-    # @brief String contain the units for the sensor value.
-
-    ## @var params
-    # @brief List of strings containing the additional parameters (length and interpretation
-    # are specific to the sensor type)
-
-    def __init__(self, sensor_type, name, description, units, params=None, default=None):
-        """Instantiate a new sensor object.
-
-           Subclasses will usually pass in a fixed sensor_type which should
-           be one of the sensor type constants. The list params if set will
-           have its values formatter by the type formatter for the given
-           sensor type.
-           """
-        if params is None:
-            params = []
-
-        self._sensor_type = sensor_type
-        self._observers = set()
-        self._timestamp = time.time()
-        self._status = Sensor.UNKNOWN
-
-        typeclass, self._value = self.SENSOR_TYPES[sensor_type]
-
-        if self._sensor_type in [Sensor.INTEGER, Sensor.FLOAT]:
-            if not params[0] <= self._value <= params[1]:
-                self._value = params[0]
-            self._kattype = typeclass(params[0], params[1])
-        elif self._sensor_type == Sensor.DISCRETE:
-            self._value = params[0]
-            self._kattype = typeclass(params)
-        else:
-            self._kattype = typeclass()
-
-        self._formatter = self._kattype.pack
-        self._parser = self._kattype.unpack
-        self.stype = self._kattype.name
-
-        self.name = name
-        self.description = description
-        self.units = units
-        self.params = params
-        self.formatted_params = [self._formatter(p, True) for p in params]
-
-        if default is not None:
-            self._value = default
-
-    def attach(self, observer):
-        """Attach an observer to this sensor. The observer must support a call
-           to update(sensor)
-           """
-        self._observers.add(observer)
-
-    def detach(self, observer):
-        """Detach an observer from this sensor."""
-        self._observers.discard(observer)
-
-    def notify(self):
-        """Notify all observers of changes to this sensor."""
-        # copy list before iterating in case new observers arrive
-        for o in list(self._observers):
-            o.update(self)
-
-    def parse_value(self, s_value):
-        """Parse a value from a string.
-
-           @param self This object.
-           @param s_value the value of the sensor (as a string)
-           @return None
-           """
-        return self._parser(s_value)
-
-    def set(self, timestamp, status, value):
-        """Set the current value of the sensor.
-
-           @param self This object.
-           @param timestamp standard python time double
-           @param status the status of the sensor
-           @param value the value of the sensor
-           @return None
-           """
-        self._timestamp, self._status, self._value = timestamp, status, value
-        self.notify()
-
-    def set_formatted(self, raw_timestamp, raw_status, raw_value):
-        """Set the current value of the sensor.
-
-           @param self This object
-           @param timestamp KATCP formatted timestamp string
-           @param status KATCP formatted sensor status string
-           @param value KATCP formatted sensor value
-           @return None
-           """
-        timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp)
-        status = self.STATUS_NAMES[raw_status]
-        value = self.parse_value(raw_value)
-        self.set(timestamp, status, value)
-
-    def read_formatted(self):
-        """Read the sensor and return a timestamp_ms, status, value tuple.
-
-           All values are strings formatted as specified in the Sensor Type
-           Formats in the katcp specification.
-           """
-        timestamp, status, value = self.read()
-        return (self.TIMESTAMP_TYPE.encode(timestamp),
-                self.STATUSES[status],
-                self._formatter(value, True))
-
-    def read(self):
-        """Read the sensor and return a timestamp, status, value tuple.
-
-           - timestamp: the timestamp in since the Unix epoch as a float.
-           - status: Sensor status constant.
-           - value: int, float, bool, Sensor value constant (for lru values)
-               or str (for discrete values)
-
-           Subclasses should implement this method.
-           """
-        return (self._timestamp, self._status, self._value)
-
-    def set_value(self, value, status=NOMINAL, timestamp=None):
-        """Check and then set the value of the sensor."""
-        self._kattype.check(value)
-        if timestamp is None:
-            timestamp = time.time()
-        self.set(timestamp, status, value)
-
-    def value(self):
-        """Read the current sensor value."""
-        return self.read()[2]
-
-    @classmethod
-    def parse_type(cls, type_string):
-        """Parse KATCP formatted type code into Sensor type constant."""
-        if type_string in cls.SENSOR_TYPE_LOOKUP:
-            return cls.SENSOR_TYPE_LOOKUP[type_string]
-        else:
-            raise KatcpSyntaxError("Invalid sensor type string %s" % type_string)
-
-    @classmethod
-    def parse_params(cls, sensor_type, formatted_params):
-        """Parse KATCP formatted parameters into Python values."""
-        typeclass, _value = cls.SENSOR_TYPES[sensor_type]
-        if sensor_type == cls.DISCRETE:
-            kattype = typeclass([])
-        else:
-            kattype = typeclass()
-        return [kattype.decode(x) for x in formatted_params]
