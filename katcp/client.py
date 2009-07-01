@@ -469,6 +469,12 @@ class DeviceClient(object):
         """Event handler that is called wheneved the connection status changes.
 
         Override in derived class for desired behaviour.
+        
+        .. note::
+        
+           This function should never block. Doing so will cause the client to
+           cease processing data from the server until notify_connected
+           completes.
 
         Parameters
         ----------
