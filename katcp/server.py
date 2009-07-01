@@ -1273,8 +1273,8 @@ class DeviceLogger(object):
         """Log a fatal error message."""
         self.log(self.FATAL, msg, name, timestamp)
 
-    @staticmethod
-    def log_to_python(logger, msg):
+    @classmethod
+    def log_to_python(cls, logger, msg):
         """Log a KATCP logging message to a Python logger.
 
         Parameters

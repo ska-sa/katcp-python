@@ -58,8 +58,8 @@ class SampleStrategy(object):
         self._sensor = sensor
         self._params = params
 
-    @staticmethod
-    def get_strategy(strategyName, inform_callback, sensor, *params):
+    @classmethod
+    def get_strategy(cls, strategyName, inform_callback, sensor, *params):
         """Factory method to create a strategy object.
 
         Parameters
@@ -77,21 +77,21 @@ class SampleStrategy(object):
         strategy : SampleStrategy object
             The created sampling strategy.
         """
-        if strategyName not in SampleStrategy.SAMPLING_LOOKUP_REV:
+        if strategyName not in cls.SAMPLING_LOOKUP_REV:
             raise ValueError("Unknown sampling strategy '%s'."
                                 " Known strategies are %s."
-                                % (strategyName, SampleStrategy.SAMPLING_LOOKUP.values()))
+                                % (strategyName, cls.SAMPLING_LOOKUP.values()))
 
-        strategyType = SampleStrategy.SAMPLING_LOOKUP_REV[strategyName]
-        if strategyType == SampleStrategy.NONE:
+        strategyType = cls.SAMPLING_LOOKUP_REV[strategyName]
+        if strategyType == cls.NONE:
             return SampleNone(inform_callback, sensor, *params)
-        elif strategyType == SampleStrategy.AUTO:
+        elif strategyType == cls.AUTO:
             return SampleAuto(inform_callback, sensor, *params)
-        elif strategyType == SampleStrategy.EVENT:
+        elif strategyType == cls.EVENT:
             return SampleEvent(inform_callback, sensor, *params)
-        elif strategyType == SampleStrategy.DIFFERENTIAL:
+        elif strategyType == cls.DIFFERENTIAL:
             return SampleDifferential(inform_callback, sensor, *params)
-        elif strategyType == SampleStrategy.PERIOD:
+        elif strategyType == cls.PERIOD:
             return SamplePeriod(inform_callback, sensor, *params)
 
     def update(self, sensor):
