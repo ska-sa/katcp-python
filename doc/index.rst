@@ -8,6 +8,8 @@ Contents
    :maxdepth: 2
 
    api
+   kattypes
+   sampling
    tutorial
 
 Indices and tables

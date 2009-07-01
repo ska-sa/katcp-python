@@ -1,8 +1,8 @@
-.. API
+.. Core API
 
-***
-API
-***
+********
+Core API
+********
 
 .. module:: katcp
 
