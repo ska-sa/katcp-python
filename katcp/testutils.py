@@ -40,13 +40,6 @@ class DeviceTestSensor(Sensor):
         super(DeviceTestSensor, self).__init__(
             sensor_type, name, description, units, params)
         self.set(timestamp, status, value)
-        self.__sampling_changes = []
-
-    def _apply_sampling_change(self, strategy, params):
-        self.__sampling_changes.append((strategy, params))
-
-    def get_changes(self):
-        return self.__sampling_changes
 
 
 class TestClientMetaclass(DeviceMetaclass):
