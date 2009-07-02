@@ -755,8 +755,8 @@ class DeviceServer(DeviceServerBase):
         request : str, optional
             The name of the request to return help for (the default is to return help for all requests).
 
-        Inform Arguments
-        ----------------
+        Informs
+        -------
         request : str
             The name of a request.
         description : str
@@ -853,8 +853,8 @@ class DeviceServer(DeviceServerBase):
 
         The list of clients is sent as a sequence of #client-list informs.
 
-        Inform Arguments
-        ----------------
+        Informs
+        -------
         addr : str
             The address of the client as host:port with host in dotted quad
             notation. If the address of the client could not be determined
@@ -895,8 +895,8 @@ class DeviceServer(DeviceServerBase):
         name : str, optional
             Name of the sensor to list (the default is to list all sensors).
         
-        Inform Arguments
-        ----------------
+        Informs
+        -------
         name : str
             The name of the sensor being described.
         description : str
@@ -959,8 +959,8 @@ class DeviceServer(DeviceServerBase):
         name : str, optional
             Name of the sensor to poll (the default is to send values for all sensors).
         
-        Inform Arguments
-        ----------------
+        Informs
+        -------
         timestamp : float
             Timestamp of the sensor reading in milliseconds since the Unix epoch.
         count : {1}
