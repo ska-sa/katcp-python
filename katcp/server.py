@@ -736,8 +736,10 @@ class DeviceServer(DeviceServerBase):
 
         Examples
         --------
-        ?halt
-        !halt ok
+        ::
+
+            ?halt
+            !halt ok
         """
         self.stop()
         # this message makes it through because stop
@@ -771,15 +773,17 @@ class DeviceServer(DeviceServerBase):
         
         Examples
         --------
-        ?help
-        #help halt ...description...
-        #help help ...description...
-        ...
-        !help ok 5
+        ::
 
-        ?help halt
-        #help halt ...description...
-        !help ok 1
+            ?help
+            #help halt ...description...
+            #help help ...description...
+            ...
+            !help ok 5
+
+            ?help halt
+            #help halt ...description...
+            !help ok 1
         """
         if not msg.arguments:
             for name, method in sorted(self._request_handlers.items()):
@@ -813,11 +817,13 @@ class DeviceServer(DeviceServerBase):
 
         Examples
         --------
-        ?log-level
-        !log-level ok warn
+        ::
 
-        ?log-level info
-        !log-level ok info
+            ?log-level
+            !log-level ok warn
+
+            ?log-level info
+            !log-level ok info
         """
         if msg.arguments:
             try:
@@ -836,8 +842,10 @@ class DeviceServer(DeviceServerBase):
 
         Examples
         --------
-        ?restart
-        !restart ok
+        ::
+
+            ?restart
+            !restart ok
         """
         if self._restart_queue is None:
             raise FailReply("No restart queue registered -- cannot restart.")
@@ -870,9 +878,11 @@ class DeviceServer(DeviceServerBase):
         
         Examples
         --------
-        ?client-list
-        #client-list 127.0.0.1:53600
-        !client-list ok 1
+        ::
+        
+            ?client-list
+            #client-list 127.0.0.1:53600
+            !client-list ok 1
         """
         clients = self.get_sockets()
         num_clients = len(clients)
@@ -920,15 +930,17 @@ class DeviceServer(DeviceServerBase):
 
         Examples
         --------
-        ?sensor-list
-        #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
-        #sensor-list cpu.status CPU\_status. \@ discrete on off error
-        ...
-        !sensor-list ok 5
+        ::
+        
+            ?sensor-list
+            #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
+            #sensor-list cpu.status CPU\_status. \@ discrete on off error
+            ...
+            !sensor-list ok 5
 
-        ?sensor-list cpu.power.on
-        #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
-        !sensor-list ok 1
+            ?sensor-list cpu.power.on
+            #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
+            !sensor-list ok 1
         """
         if not msg.arguments:
             for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
@@ -980,15 +992,17 @@ class DeviceServer(DeviceServerBase):
         
         Examples
         --------
-        ?sensor-value
-        #sensor-value 1244631611415.231 1 psu.voltage 4.5
-        #sensor-value 1244631611415.200 1 cpu.status off
-        ...
-        !sensor-value ok 5
-        
-        ?sensor-value cpu.power.on
-        #sensor-value 1244631611415.231 1 cpu.power.on 0
-        !sensor-value ok 1
+        ::
+
+            ?sensor-value
+            #sensor-value 1244631611415.231 1 psu.voltage 4.5
+            #sensor-value 1244631611415.200 1 cpu.status off
+            ...
+            !sensor-value ok 5
+
+            ?sensor-value cpu.power.on
+            #sensor-value 1244631611415.231 1 cpu.power.on 0
+            !sensor-value ok 1
         """
         if not msg.arguments:
             for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
@@ -1042,11 +1056,13 @@ class DeviceServer(DeviceServerBase):
         
         Examples
         --------
-        ?sensor-sampling cpu.power.on
-        !sensor-sampling ok cpu.power.on none
-        
-        ?sensor-sampling cpu.power.on period 500
-        !sensor-sampling ok cpu.power.on period 500
+        ::
+
+            ?sensor-sampling cpu.power.on
+            !sensor-sampling ok cpu.power.on none
+
+            ?sensor-sampling cpu.power.on period 500
+            !sensor-sampling ok cpu.power.on period 500
         """
         if not msg.arguments:
             raise FailReply("No sensor name given.")
@@ -1102,8 +1118,10 @@ class DeviceServer(DeviceServerBase):
 
         Examples
         --------
-        ?watchdog
-        !watchdog ok
+        ::
+
+            ?watchdog
+            !watchdog ok
         """
         # not a function, just doesn't use self
         # pylint: disable-msg = R0201
