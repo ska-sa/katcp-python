@@ -143,10 +143,10 @@ class DeviceClient(object):
 
     def _connect(self):
         """Connect to the server."""
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            self._sock.connect(self._bindaddr)
-            self._sock.setblocking(0)
+            sock.connect(self._bindaddr)
+            sock.setblocking(0)
             if self._connect_failures >= 5:
                 self._logger.warn("Reconnected to %r" % (self._bindaddr,))
             self._connect_failures = 0
@@ -157,12 +157,13 @@ class DeviceClient(object):
                 self._logger.warn("Failed to connect to %r: %s" % (self._bindaddr, e))
             else:
                 self._logger.debug("Failed to connect to %r: %s" % (self._bindaddr, e))
-            self._sock.close()
-            self._sock = None
+            sock.close()
+            sock = None
 
-        if self._sock is None:
+        if sock is None:
             return
 
+        self._sock = sock
         self._waiting_chunk = ""
         self._connected.set()
 
