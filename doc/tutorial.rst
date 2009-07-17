@@ -137,12 +137,163 @@ is called.
 Your own client may hook into this dispath tree at any point by implementing
 or overriding the appropriate methods.
 
+An example of a simple client that only handles replies to :samp:`help`
+messages is presented below::
+
+    from katcp import DeviceClient, Message
+    import time
+
+    device_host = "www.example.com"
+    device_port = 5000
+
+    class MyClient(DeviceClient):
+
+        def reply_help(self, msg):
+            """Print out help replies."""
+            print msg.name, msg.arguments
+
+        def inform_help(self, msg):
+            """Print out help inform messages."""
+            meth, desc = msg.arguments[:2]
+            print "---------", meth, "---------"
+            print
+            print desc
+            print "----------------------------"
+
+        def unhandled_reply(self, msg):
+            """Print out unhandled replies."""
+            print "Unhandled reply", msg.name
+
+        def unhandled_inform(self, msg):
+            "Print out unhandled informs."""
+            print "Unhandled inform", msg.name
+
+
+    client = MyClient(device_host, device_port)
+    client.start()
+
+    client.request(Message.request("help"))
+    client.request(Message.request("watchdog"))
+
+    time.sleep(0.5)
+
+    client.stop()
+    client.join()
+
+
 Writing your own Server
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Coming soon!
+Creating a server requires sub-classing :class:`DeviceServer <katcp.DeviceServer>`.
+This class already provides all the requests and inform messages required by the
+KATCP protocol.  However, its implementations require a little assistance from the
+sub-class in order to function.
 
-.. todo::
+A very simple server example looks like::
 
-    Write this section.
+    from katcp import DeviceServer, Sensor
+    from katcp.kattypes import Str, Float, Timestamp, Discrete, request, return_reply
+    import time
+    import random
 
+    server_host = ""
+    server_port = 5000
+
+    class MyServer(DeviceServer):
+
+        VERSION_INFO = ("example-api", 1, 0)
+        BUILD_INFO = ("example-implementation", 0, 1, "")
+
+        FRUIT = [
+            "apple", "banana", "pear", "kiwi",
+        ]
+
+        def setup_sensors(self):
+            """Setup some server sensors."""
+            self._add_result = Sensor(Sensor.FLOAT, "add.result",
+                "Last ?add result.", "", [-10000, 10000])
+
+            self._time_result = Sensor(Sensor.TIMESTAMP, "time.result",
+                "Last ?time result.", "")
+
+            self._eval_result = Sensor(Sensor.STRING, "eval.result",
+                "Last ?eval result.", "")
+
+            self._fruit_result = Sensor(Sensor.DISCRETE, "fruit.result",
+                "Last ?pick-fruit result.", "", self.FRUIT)
+
+            self.add_sensor(self._add_result)
+            self.add_sensor(self._time_result)
+            self.add_sensor(self._eval_result)
+            self.add_sensor(self._fruit_result)
+
+        @request(Float(), Float())
+        @return_reply(Float())
+        def request_add(self, sock, x, y):
+            """Add two numbers"""
+            r = x + y
+            self._add_result.set_value(r)
+            return ("ok", r)
+
+        @request()
+        @return_reply(Timestamp())
+        def request_time(self, sock):
+            """Return the current time in ms since the Unix Epoch."""
+            r = time.time()
+            self._time_result.set_value(r)
+            return ("ok", r)
+
+        @request(Str())
+        @return_reply(Str())
+        def request_eval(self, sock, expression):
+            """Evaluate a Python expression."""
+            r = str(eval(expression))
+            self._eval_result.set_value(r)
+            return ("ok", r)
+
+        @request()
+        @return_reply(Discrete(FRUIT))
+        def request_pick_fruit(self, sock):
+            """Pick a random fruit."""
+            r = random.choice(self.FRUIT + [None])
+            if r is None:
+                return ("fail", "No fruit.")
+            self._fruit_result.set_value(r)
+            return ("ok", r)
+
+    if __name__ == "__main__":
+
+        server = MyServer(server_host, server_port)
+        server.start()
+        server.join()
+
+
+Notice that :class:`MyServer` has two special class attributes :const:`VERSION_INFO` and
+:const:`BUILD_INFO`. :const:`VERSION_INFO` gives the version of the server API. Many
+implementations might use the same :const:`VERSION_INFO`. :const:`BUILD_INFO` gives the
+version of the software that provides the device. Each device implementation should have
+a unique :const:`BUILD_INFO`.
+
+The :meth:`setup_sensors` method registers :class:`Sensor <katcp.Sensor>` objects with
+the device server. The base class uses this information to implement the :samp:`?sensor-list`,
+:samp:`?sensor-value` and :samp:`?sensor-sampling` requests.  :meth:`add_sensor` should be
+called once for each sensor the device should contain. You may create the sensor objects
+inside :meth:`setup_sensors` (as done in the example) or elsewhere if you wish.
+
+Request handlers are added to the server by creating methods whose names start with
+"request_".  These methods take two arguments -- the client socket that the request
+came from and the request message.  Notice that the message argument is missing from the
+methods in the example. This is a result of the :meth:`request` decorator that has been
+applied to the methods.
+
+The :meth:`request` decorator takes a list of :class:`kattype <katcp.kattypes.KatcpType`
+objects describing the request arguments. Once the arguments have been checked they are
+passed in to the underly request method as additional parameters instead of the request
+message.
+
+The :meth:`return_reply` decorator performs a similar operation for replies. Once the
+request method returns a tuple (or list) of reply arguments, the decorator checks the
+values of the arguments and constructs a suitable reply message.
+
+Use of the :meth:`request` and :meth:`return_reply` decorators is encouraged but entirely
+optional.
