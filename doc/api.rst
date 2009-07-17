@@ -22,12 +22,14 @@ BlockingClient
 
 .. autoclass:: BlockingClient
     :members:
+    :inherited-members:
 
 CallbackClient
 """"""""""""""
 
 .. autoclass:: CallbackClient
     :members:
+    :inherited-members:
 
 Base Classes
 """"""""""""
@@ -49,6 +51,7 @@ DeviceServer
 
 .. autoclass:: DeviceServer
     :members:
+    :inherited-members:
 
 DeviceServerBase
 """"""""""""""""
