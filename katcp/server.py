@@ -1041,7 +1041,8 @@ class DeviceServer(DeviceServerBase):
             For the differential strategy, the parameter is an integer or float
             giving the amount by which the sensor value may change before an
             updated value is sent. For the period strategy, the parameter is the
-            period to sample at in milliseconds. 
+            period to sample at in milliseconds. For the event strategy, an
+            optional minimum time between updates in milliseconds may be given.
 
         Returns
         -------
