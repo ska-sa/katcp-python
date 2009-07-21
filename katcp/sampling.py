@@ -312,7 +312,6 @@ class SamplePeriod(SampleStrategy):
         self._value = sensor._value
 
     def periodic(self, timestamp):
-        self._sensor._timestamp = timestamp
         self.inform()
         return timestamp + self._period
 
