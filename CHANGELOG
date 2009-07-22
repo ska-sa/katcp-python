@@ -1,5 +1,7 @@
 22 Jul 2009
  * Update version to 0.2.x.
-
+ * Fix download url and license in setup.py.
+ * Have Sphinx read the version number from katcp.VERSION and katcp.VERSION_STR.
+ 
 29 Jun 2009
  * Start of CHANGELOG in preparation for 0.1.0 release.
