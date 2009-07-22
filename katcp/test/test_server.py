@@ -13,7 +13,7 @@ import time
 import logging
 import threading
 from katcp.testutils import TestLogHandler, \
-    DeviceTestClient, DeviceTestServer, TestUtilMixin
+    BlockingTestClient, DeviceTestServer, TestUtilMixin
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -26,7 +26,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
         host, port = self.server._sock.getsockname()
 
-        self.client = DeviceTestClient(host, port)
+        self.client = BlockingTestClient(host, port)
         self.client.start(timeout=0.1)
 
     def tearDown(self):
@@ -109,9 +109,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("sensor-sampling", "an.int", "differential", "2"))
         self.client.request(katcp.Message.request("sensor-sampling"))
         self.client.request(katcp.Message.request("sensor-sampling", "an.unknown", "auto"))
-        self.client.request(katcp.Message.request("sensor-sampling", "an.int", "unknown"))
-
-        time.sleep(0.1)
+        self.client.blocking_request(katcp.Message.request("sensor-sampling", "an.int", "unknown"))
 
         self.server.log.trace("trace-msg")
         self.server.log.debug("debug-msg")
