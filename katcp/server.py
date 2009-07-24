@@ -451,7 +451,7 @@ class DeviceServerBase(object):
             Time to wait for server thread to start.
         daemon : boolean
             If not None, the thread's setDaemon method is called with this
-            parameter before the thread is started. 
+            parameter before the thread is started.
         excepthook : function
             Function to call if the client throws an exception. Signature
             is as for sys.excepthook.
@@ -613,7 +613,7 @@ class DeviceServer(DeviceServerBase):
         Parameters
         ----------
         sock : socket.socket object
-            The client connection that has been successfully established.        
+            The client connection that has been successfully established.
         """
         self._strategies[sock] = {} # map of sensors -> sampling strategies
         self.inform(sock, Message.inform("version", self.version()))
@@ -693,7 +693,7 @@ class DeviceServer(DeviceServerBase):
 
     def set_restart_queue(self, restart_queue):
         """Set the restart queue.
-        
+
         When the device server should be restarted, it will be added to the queue.
 
         Parameters
@@ -749,9 +749,9 @@ class DeviceServer(DeviceServerBase):
 
     def request_help(self, sock, msg):
         """Return help on the available requests.
-        
+
         Return a description of the available requests using a seqeunce of #help informs.
-        
+
         Parameters
         ----------
         request : str, optional
@@ -763,14 +763,14 @@ class DeviceServer(DeviceServerBase):
             The name of a request.
         description : str
             Documentation for the named request.
-        
+
         Returns
         -------
         success : {'ok', 'fail'}
             Whether sending the help succeeded.
         informs : int
             Number of #help inform messages sent.
-        
+
         Examples
         --------
         ::
@@ -802,7 +802,7 @@ class DeviceServer(DeviceServerBase):
 
     def request_log_level(self, sock, msg):
         """Query or set the current logging level.
-        
+
         Parameters
         ----------
         level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', 'off'}, optional
@@ -875,11 +875,11 @@ class DeviceServer(DeviceServerBase):
             Whether sending the client list succeeded.
         informs : int
             Number of #client-list inform messages sent.
-        
+
         Examples
         --------
         ::
-        
+
             ?client-list
             #client-list 127.0.0.1:53600
             !client-list ok 1
@@ -897,14 +897,14 @@ class DeviceServer(DeviceServerBase):
 
     def request_sensor_list(self, sock, msg):
         """Request the list of sensors.
-        
+
         The list of sensors is sent as a sequence of #sensor-list informs.
 
         Parameters
         ----------
         name : str, optional
             Name of the sensor to list (the default is to list all sensors).
-        
+
         Informs
         -------
         name : str
@@ -920,7 +920,7 @@ class DeviceServer(DeviceServerBase):
             sensors the additional parameters are the minimum and maximum sensor
             value. For discrete sensors the additional parameters are the allowed
             values. For all other types no additional parameters are sent.
-            
+
         Returns
         -------
         success : {'ok', 'fail'}
@@ -931,7 +931,7 @@ class DeviceServer(DeviceServerBase):
         Examples
         --------
         ::
-        
+
             ?sensor-list
             #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
             #sensor-list cpu.status CPU\_status. \@ discrete on off error
@@ -963,14 +963,14 @@ class DeviceServer(DeviceServerBase):
 
     def request_sensor_value(self, sock, msg):
         """Request the value of a sensor or sensors.
-        
+
         A list of sensor values as a sequence of #sensor-value informs.
-        
+
         Parameters
         ----------
         name : str, optional
             Name of the sensor to poll (the default is to send values for all sensors).
-        
+
         Informs
         -------
         timestamp : float
@@ -982,14 +982,14 @@ class DeviceServer(DeviceServerBase):
             Name of the sensor whose value is being reported.
         value : object
             Value of the named sensor. Type depends on the type of the sensor.
-        
+
         Returns
         -------
         success : {'ok', 'fail'}
             Whether sending the list of values succeeded.
         informs : int
             Number of #sensor-value inform messages sent.
-        
+
         Examples
         --------
         ::
@@ -1054,7 +1054,7 @@ class DeviceServer(DeviceServerBase):
             Name of the new or current sampling strategy for the sensor.
         params : list of str
             Additional strategy parameters (see description under Parameters).
-        
+
         Examples
         --------
         ::
@@ -1112,7 +1112,7 @@ class DeviceServer(DeviceServerBase):
 
     def request_watchdog(self, sock, msg):
         """Check that the server is still alive.
-        
+
         Returns
         -------
             success : {'ok'}
@@ -1216,7 +1216,7 @@ class DeviceLogger(object):
         Returns
         -------
         level : logging level constant
-            The logging level constant associated with the name.        
+            The logging level constant associated with the name.
         """
         try:
             return self.LEVELS.index(level_name)

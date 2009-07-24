@@ -71,7 +71,7 @@ class SampleStrategy(object):
             Sensor to sample.
         params : list of objects
             Custom sampling parameters.
-        
+
         Returns
         -------
         strategy : SampleStrategy object
@@ -96,7 +96,7 @@ class SampleStrategy(object):
 
     def update(self, sensor):
         """Callback used by the sensor's notify method.
-        
+
         This update method is called whenever the sensor value is set
         so sensor will contain the right info. Note that the strategy
         does not really need to be passed sensor because it already has
@@ -124,7 +124,7 @@ class SampleStrategy(object):
         ----------
         timestamp : float in seconds
             The time at which the next sample was requested.
-        
+
         Returns
         -------
         next_timestamp : float in seconds
@@ -140,10 +140,10 @@ class SampleStrategy(object):
 
     def get_sampling(self):
         """Return the Strategy constant for this sampling strategy.
-        
+
         Sub-classes should implement this method and return the
         appropriate constant.
-        
+
         Returns
         -------
         strategy : Strategy constant
@@ -185,7 +185,7 @@ class SampleEvent(SampleStrategy):
        This implementation of the event strategy extends the KATCP guidelines
        to allow an optional minimum time between updates (in millseconds) to
        be specified as a parameter. If further sensor updates occur before
-       this time has elapsed, no additional events are sent out. 
+       this time has elapsed, no additional events are sent out.
        """
 
     def __init__(self, inform_callback, sensor, *params):
@@ -250,7 +250,7 @@ class SampleNone(SampleStrategy):
 
 class SampleDifferential(SampleStrategy):
     """Differential sampling strategy for integer and float sensors.
-    
+
     Sends updates only when the value has changed by more than some
     specified threshold, or the status changes.
     """
@@ -293,7 +293,7 @@ class SampleDifferential(SampleStrategy):
 
 class SamplePeriod(SampleStrategy):
     """Periodic sampling strategy.
-    
+
     For periodic sampling of any sensor.
     """
 
@@ -321,7 +321,7 @@ class SamplePeriod(SampleStrategy):
 
 class SampleReactor(ExcepthookThread):
     """SampleReactor manages sampling strategies.
-    
+
     This class keeps track of all the sensors and what strategy
     is currently used to sample each one.  It also provides a
     thread that calls periodic sampling strategies as needed.
@@ -343,7 +343,7 @@ class SampleReactor(ExcepthookThread):
 
     def add_strategy(self, strategy):
         """Add a sensor strategy to the reactor.
-        
+
         Strategies should be removed using :meth:`remove_strategy`.
 
         The new strategy is then attached to the sensor for updates and a

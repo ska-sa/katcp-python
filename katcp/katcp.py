@@ -171,7 +171,7 @@ class Message(object):
         name : str
             The name of the message.
         args : list of strings
-            The message arguments.        
+            The message arguments.
         """
         return cls(cls.REPLY, name, args)
 
@@ -330,7 +330,7 @@ class KatcpDeviceError(Exception):
 
 class FailReply(Exception):
     """Raised by request handlers to indicate a failure.
-    
+
     A custom exception which, when thrown in a request handler,
     causes DeviceServerBase to send a fail reply with the specified
     fail message, bypassing the generic exception handling, which
@@ -376,7 +376,7 @@ class KatcpClientError(Exception):
 
 class ExcepthookThread(threading.Thread):
     """A custom Thread class that provides an exception hook.
-    
+
     Exceptions are passed up to an excepthook callable that
     functions like sys.excepthook.
 
@@ -432,13 +432,13 @@ class Sensor(object):
         if there are no applicable units.
     params : list
         Additional parameters, dependent on the type of sensor:
-        
+
           * For :const:`INTEGER` and :const:`FLOAT` the list should
             give the minimum and maximum that define the range
             of the sensor value.
           * For :const:`DISCRETE` the list should contain all
             possible values the sensor may take.
-          * For all other types, params should be omitted.  
+          * For all other types, params should be omitted.
     default : object
         An initial value for the sensor. By default this is
         determined by the sensor type.
@@ -563,7 +563,7 @@ class Sensor(object):
 
     def attach(self, observer):
         """Attach an observer to this sensor.
-        
+
         The observer must support a call to observer.update(sensor).
 
         Parameters
@@ -685,7 +685,7 @@ class Sensor(object):
         status : Sensor status constant
             Whether the value represents an error condition or not.
         timestamp : float in seconds
-           The time at which the sensor value was determined.        
+           The time at which the sensor value was determined.
         """
         self._kattype.check(value)
         if timestamp is None:
@@ -699,7 +699,7 @@ class Sensor(object):
         -------
         value : object
             The value of the sensor (the type will be appropriate to the
-            sensor's type).        
+            sensor's type).
         """
         return self.read()[2]
 

@@ -30,7 +30,7 @@ class DeviceClient(object):
     and implement unhandled_inform, unhandled_reply and
     unhandled_request to provide fallbacks for messages for
     which there is no handler.
- 
+
     Request messages can be sent by calling .request().
 
     Parameters
@@ -58,7 +58,7 @@ class DeviceClient(object):
     >>> # expect reply to be printed here
     >>> # stop the client once we're finished with it
     >>> c.stop()
-    >>> c.join()  
+    >>> c.join()
     """
 
     __metaclass__ = DeviceMetaclass
@@ -307,7 +307,7 @@ class DeviceClient(object):
 
     def unhandled_inform(self, msg):
         """Fallback method for inform messages without a registered handler
-        
+
         Parameters
         ----------
         msg : Message object
@@ -317,7 +317,7 @@ class DeviceClient(object):
 
     def unhandled_reply(self, msg):
         """Fallback method for reply messages without a registered handler
-        
+
         Parameters
         ----------
         msg : Message object
@@ -470,9 +470,9 @@ class DeviceClient(object):
         """Event handler that is called wheneved the connection status changes.
 
         Override in derived class for desired behaviour.
-        
+
         .. note::
-        
+
            This function should never block. Doing so will cause the client to
            cease processing data from the server until notify_connected
            completes.
@@ -664,7 +664,7 @@ class CallbackClient(DeviceClient):
     >>> # expect reply to be printed here
     >>> # stop the client once we're finished with it
     >>> c.stop()
-    >>> c.join()    
+    >>> c.join()
     """
 
     def __init__(self, host, port, tb_limit=20, logger=log,

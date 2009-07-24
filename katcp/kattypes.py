@@ -20,7 +20,7 @@ class KatcpType(object):
     """Class representing a KATCP type.
 
     Sub-classes should:
-    
+
       * Set the :attr:`name` attribute.
       * Implement the :meth:`encode` method.
       * Implement the :meth:`decode` method.
@@ -41,7 +41,7 @@ class KatcpType(object):
 
     def get_default(self):
         """Return the default value.
-        
+
         Raise a ValueError if the value is not optional
         and there is no default.
 
@@ -88,7 +88,7 @@ class KatcpType(object):
 
     def unpack(self, packed_value):
         """Parse a KATCP parameter into an object.
-        
+
         Parameters
         ----------
         packed_value : str
@@ -110,7 +110,7 @@ class KatcpType(object):
 
 class Int(KatcpType):
     """The KATCP integer type.
-    
+
     Parameters
     ----------
     min : int
@@ -149,7 +149,7 @@ class Int(KatcpType):
 
 class Float(KatcpType):
     """The KATCP float type.
-    
+
     Parameters
     ----------
     min : float
@@ -322,7 +322,7 @@ class Struct(KatcpType):
 
 class Regex(Str):
     """String type that checks values using a regular expression.
-    
+
     Parameters
     ----------
     regex : str or regular expression object
@@ -355,9 +355,9 @@ class Regex(Str):
 
 class DiscreteMulti(Discrete):
     """Discrete type which can accept multiple values.
-    
+
     Its value is always a list.
-    
+
     Parameters
     ----------
     values : list of str
@@ -409,12 +409,12 @@ class Parameter(object):
 
     def pack(self, value):
         """Pack the parameter using its kattype.
-        
+
         Parameters
         ----------
         value : object
             The value to pack
-        
+
         Returns
         -------
         packed_value : str
@@ -429,7 +429,7 @@ class Parameter(object):
         ----------
         packed_value : str
             The unescaped KATCP string to unpack.
-        
+
         Returns
         -------
         value : object
@@ -617,13 +617,13 @@ def make_reply(msgname, types, arguments):
 
 def unpack_types(types, args, argnames):
     """Parse arguments according to types list.
- 
+
     Parameters
     ----------
     types : list of kattypes
         The types of the arguments (in order).
     args : list of strings
-        The arguments to parse. 
+        The arguments to parse.
     argnames : list of strings
         The names of the arguments.
     """
