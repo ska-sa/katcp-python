@@ -1,3 +1,7 @@
+29 Jul 2009
+ * Enable TCP_NODELAY on server and client sockets since katcp protocol messages
+   are often small.
+
 22 Jul 2009
  * Update version to 0.2.x.
  * Fix download url and license in setup.py.
