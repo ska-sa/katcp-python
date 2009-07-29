@@ -281,7 +281,7 @@ called once for each sensor the device should contain. You may create the sensor
 inside :meth:`setup_sensors` (as done in the example) or elsewhere if you wish.
 
 Request handlers are added to the server by creating methods whose names start with
-"request_".  These methods take two arguments -- the client socket that the request
+"request\_".  These methods take two arguments -- the client socket that the request
 came from and the request message.  Notice that the message argument is missing from the
 methods in the example. This is a result of the :meth:`request` decorator that has been
 applied to the methods.
