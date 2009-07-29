@@ -147,6 +147,9 @@ class DeviceClient(object):
         try:
             sock.connect(self._bindaddr)
             sock.setblocking(0)
+            if hasattr(socket, 'TCP_NODELAY'):
+                # our message packets are small, don't delay sending them.
+                sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
             if self._connect_failures >= 5:
                 self._logger.warn("Reconnected to %r" % (self._bindaddr,))
             self._connect_failures = 0

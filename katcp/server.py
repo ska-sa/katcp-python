@@ -95,6 +95,9 @@ class DeviceServerBase(object):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setblocking(0)
+        if hasattr(socket, 'TCP_NODELAY'):
+            # our message packets are small, don't delay sending them.
+            sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
         sock.bind(bindaddr)
         sock.listen(5)
         return sock
