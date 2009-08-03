@@ -362,8 +362,9 @@ class DeviceClient(object):
                     readers, _writers, errors = _select(
                         [self._sock], [], [self._sock], timeout
                     )
-                except _socket_error, e:
+                except Exception, e:
                     # call to select got an error
+                    self._logger.debug("Select error: %s" % (e,))
                     errors = [self._sock]
 
                 if errors:
