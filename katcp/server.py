@@ -391,12 +391,16 @@ class DeviceServerBase(object):
                 readers, _writers, errors = _select(
                     all_socks, [], all_socks, timeout
                 )
-            except _socket_error, e:
+            except Exception, e:
+                # catch Exception because class of exception thrown
+                # varies drastically between Mac and Linux
+                self._logger.debug("Select error: %s" % (e,))
+
                 # search for broken socket
                 for sock in list(self._socks):
                     try:
                         _readers, _writers, _errors = _select([sock], [], [], 0)
-                    except _socket_error, e:
+                    except Exception, e:
                         self._remove_socket(sock)
                         self.on_client_disconnect(sock, "Client socket died with error %s" % (e,), False)
                 # check server socket

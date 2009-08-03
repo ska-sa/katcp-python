@@ -363,7 +363,8 @@ class DeviceClient(object):
                         [self._sock], [], [self._sock], timeout
                     )
                 except Exception, e:
-                    # call to select got an error
+                    # catch Exception because class of exception thrown
+                    # various drastically between Mac and Linux
                     self._logger.debug("Select error: %s" % (e,))
                     errors = [self._sock]
 
