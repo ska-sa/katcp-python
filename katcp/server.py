@@ -207,9 +207,9 @@ class DeviceServerBase(object):
                 reply = self._request_handlers[msg.name](self, sock, msg)
                 assert (reply.mtype == Message.REPLY)
                 assert (reply.name == msg.name)
-                self._logger.info("%s OK" % (msg.name,))
+                self._logger.debug("%s OK" % (msg.name,))
             except AsyncReply, e:
-                self._logger.info("%s ASYNC OK" % (msg.name,))
+                self._logger.debug("%s ASYNC OK" % (msg.name,))
                 send_reply = False
             except FailReply, e:
                 reason = str(e)

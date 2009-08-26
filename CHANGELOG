@@ -1,3 +1,6 @@
+26 Aug 2009
+ * Downgrade logging of successful request handling to DEBUG log level.
+
 29 Jul 2009
  * Enable TCP_NODELAY on server and client sockets since katcp protocol messages
    are often small.
