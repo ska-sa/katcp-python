@@ -1,3 +1,6 @@
+01 Sep 2009
+ * Fix bug where AUTO strategy did not set updates on connect.
+
 26 Aug 2009
  * Downgrade logging of successful request handling to DEBUG log level.
 

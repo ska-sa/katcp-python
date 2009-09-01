@@ -235,6 +235,10 @@ class SampleAuto(SampleStrategy):
     def get_sampling(self):
         return SampleStrategy.AUTO
 
+    def attach(self):
+        self.update(self._sensor)
+        super(SampleAuto, self).attach()
+
 
 class SampleNone(SampleStrategy):
     """Sampling strategy which never sends any updates."""
