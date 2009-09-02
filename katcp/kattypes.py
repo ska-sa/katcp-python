@@ -291,6 +291,28 @@ class Timestamp(KatcpType):
             raise ValueError("Could not parse value '%s' as timestamp." % value)
 
 
+class TimestampOrNow(Timestamp):
+    """KatcpType representing either a Timestamp or the special value :const:`katcp.kattypes.TimestampOrNow.NOW`.
+
+       Floats are encoded as for :class:`katcp.kattypes.Timestamp`. :const:`katcp.kattypes.TimestampOrNow.NOW`
+       is encoded as the string "now".
+       """
+
+    name = "timestamp_or_now"
+
+    NOW = object()
+
+    def encode(self, value):
+        if value is self.NOW:
+            return "now"
+        return super(TimestampOrNow, self).encode(value)
+
+    def decode(self, value):
+        if value == "now":
+            return self.NOW
+        return super(TimestampOrNow, self).decode(value)
+
+
 class Struct(KatcpType):
     """KatcpType for parsing and packing values using the :mod:`struct` module.
 

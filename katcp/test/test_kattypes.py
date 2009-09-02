@@ -11,7 +11,7 @@ import unittest
 from katcp import Message, FailReply, AsyncReply
 from katcp.kattypes import request, inform, return_reply, send_reply,  \
                            Bool, Discrete, Float, Int, Lru, Timestamp, \
-                           Str, Struct, Regex, DiscreteMulti
+                           Str, Struct, Regex, DiscreteMulti, TimestampOrNow
 
 class TestType(unittest.TestCase):
     def setUp(self):
@@ -229,6 +229,40 @@ class TestTimestamp(TestType):
             (default, None, 1235475793.0324881),
             (default_optional, None, 1235475793.0324881),
             (optional, None, None),
+        ]
+
+
+class TestTimestampOrNow(TestType):
+
+    def setUp(self):
+        basic =  TimestampOrNow()
+        default = TimestampOrNow(default=1235475793.0324881)
+        optional = TimestampOrNow(optional=True)
+        default_optional = TimestampOrNow(default=1235475793.0324881, optional=True)
+        default_now = TimestampOrNow(default=TimestampOrNow.NOW)
+
+        self._pack = [
+            (basic, 1235475381.6966901, "1235475381696"),
+            (basic, "a", ValueError),
+            (basic, TimestampOrNow.NOW, "now"),
+            (basic, None, ValueError),
+            (default, None, "1235475793032"),
+            (default, TimestampOrNow.NOW, "now"),
+            (default_optional, None, "1235475793032"),
+            (optional, None, ValueError),
+            (default_now, None, "now"),
+        ]
+
+        self._unpack = [
+            (basic, "1235475381696", 1235475381.6960001),
+            (basic, "a", ValueError),
+            (basic, "now", TimestampOrNow.NOW),
+            (basic, None, ValueError),
+            (default, None, 1235475793.0324881),
+            (default, "now", TimestampOrNow.NOW),
+            (default_optional, None, 1235475793.0324881),
+            (optional, None, None),
+            (default_now, None, TimestampOrNow.NOW),
         ]
 
 
