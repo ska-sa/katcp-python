@@ -357,23 +357,27 @@ class DeviceClient(object):
 
         self._running.set()
         while self._running.isSet():
-            if self.is_connected():
+            # this is equivalent to self.is_connected()
+            # but ensure we have a socket object and not
+            # None for the select-and-read part of this loop
+            sock = self._sock
+            if sock is not None:
                 try:
                     readers, _writers, errors = _select(
-                        [self._sock], [], [self._sock], timeout
+                        [sock], [], [sock], timeout
                     )
                 except Exception, e:
                     # catch Exception because class of exception thrown
                     # various drastically between Mac and Linux
                     self._logger.debug("Select error: %s" % (e,))
-                    errors = [self._sock]
+                    errors = [sock]
 
                 if errors:
                     self._disconnect()
 
                 elif readers:
                     try:
-                        chunk = self._sock.recv(4096)
+                        chunk = sock.recv(4096)
                     except _socket_error:
                         # an error when sock was within ready list presumably
                         # means the client needs to be ditched.
