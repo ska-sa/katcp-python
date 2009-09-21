@@ -1,3 +1,7 @@
+21 Sep 2009
+ * Fix bug in client run loop where self._sock could become
+   None while it was being used by select(..) and .recv(...).
+
 02 Sep 2009
  * Implement TimestampOrNow kattype.
 
