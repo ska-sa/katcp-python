@@ -239,6 +239,48 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             [("!help ok 12", "")]
         )
 
+    def test_timeout(self):
+        """Test requests that timeout."""
+
+        replies = []
+        informs = []
+        timeout = 0.000001
+
+        def reply_cb(msg):
+            replies.append(msg)
+
+        def inform_cb(msg):
+            informs.append(msg)
+
+        self.client.request(
+            katcp.Message.request("help"),
+            reply_cb=reply_cb,
+            inform_cb=inform_cb,
+            timeout=timeout,
+        )
+
+        time.sleep(0.1)
+        self.assertEqual(len(replies), 1)
+        self.assertEqual(len(informs), 0)
+        self.assertEqual([msg.name for msg in replies], ["help"])
+        self.assertEqual([msg.arguments for msg in replies], [["fail", "Timed out after %f seconds" % timeout]])
+
+        del replies[:]
+        del informs[:]
+
+        # test next request succeeds
+        self.client.request(
+            katcp.Message.request("help"),
+            reply_cb=reply_cb,
+            inform_cb=inform_cb,
+        )
+
+        time.sleep(0.1)
+        self.assertEqual(len(replies), 1)
+        self.assertEqual(len(informs), 12)
+        self.assertEqual([msg.name for msg in replies + informs], ["help"]*len(replies+informs))
+        self.assertEqual([msg.arguments for msg in replies], [["ok", str(len(informs))]])
+
     def test_user_data(self):
         """Test callbacks with user data."""
         help_replies = []
