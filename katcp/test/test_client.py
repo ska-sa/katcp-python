@@ -351,6 +351,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             replies, informs, done = results[thread_id]
             done.wait(1.0)
             self.assertEqual(len(replies), 1)
+            self.assertEqual(replies[0].arguments[0], "ok")
             if len(informs) != 12:
                 print thread_id, len(informs)
                 print [x.arguments[0] for x in informs]

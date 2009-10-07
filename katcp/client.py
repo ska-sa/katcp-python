@@ -15,7 +15,6 @@ import select
 import time
 import logging
 import errno
-import uuid
 from .katcp import DeviceMetaclass, MessageParser, Message, ExcepthookThread, \
                    KatcpClientError
 
@@ -687,6 +686,10 @@ class CallbackClient(DeviceClient):
 
         self._request_timeout = timeout
 
+        # message id and lock
+        self._last_msg_id = 0
+        self._msg_id_lock = threading.Lock()
+
         # lock for checking and popping requests
         self._async_lock = threading.Lock()
 
@@ -712,13 +715,15 @@ class CallbackClient(DeviceClient):
         finally:
             self._async_lock.release()
 
-    def _pop_async_request(self, msg_id):
+    def _pop_async_request(self, msg_id, msg_name):
         """Pop the set of callbacks for a request.
 
            Return tuple of Nones if callbacks already popped (or don't exist).
            """
         self._async_lock.acquire()
         try:
+            if msg_id is None:
+                msg_id = self._msg_id_for_name(msg_name)
             if msg_id in self._async_queue:
                 callback_tuple = self._async_queue[msg_id]
                 del self._async_queue[msg_id]
@@ -729,13 +734,15 @@ class CallbackClient(DeviceClient):
         finally:
             self._async_lock.release()
 
-    def _peek_async_request(self, msg_id):
+    def _peek_async_request(self, msg_id, msg_name):
         """Peek at the set of callbacks for a request
 
            Return tuple of Nones if callbacks don't exist.
            """
         self._async_lock.acquire()
         try:
+            if msg_id is None:
+                msg_id = self._msg_id_for_name(msg_name)
             if msg_id in self._async_queue:
                 return self._async_queue[msg_id]
             else:
@@ -746,14 +753,21 @@ class CallbackClient(DeviceClient):
     def _msg_id_for_name(self, msg_name):
         """Find the msg_id for a given request name.
 
+           Should only be called while the async lock is acquired.
+
            Return None if no message id exists.
            """
-        self._async_lock.acquire()
+        if msg_name in self._async_id_stack and self._async_id_stack[msg_name]:
+            return self._async_id_stack[msg_name][0]
+
+    def _next_id(self):
+        """Return the next available message id."""
+        self._msg_id_lock.acquire()
         try:
-            if msg_name in self._async_id_stack and self._async_id_stack[msg_name]:
-                return self._async_id_stack[msg_name][0]
+            self._last_msg_id += 1
+            return str(self._last_msg_id)
         finally:
-            self._async_lock.release()
+            self._msg_id_lock.release()
 
     def request(self, msg, reply_cb=None, inform_cb=None, user_data=None, timeout=None):
         """Send a request messsage.
@@ -778,7 +792,7 @@ class CallbackClient(DeviceClient):
         if timeout is None:
             timeout = self._request_timeout
 
-        msg_id = uuid.uuid1()
+        msg_id = self._next_id()
         timer = threading.Timer(timeout, self._handle_timeout, (msg_id,))
 
         self._push_async_request(msg_id, msg.name, reply_cb, inform_cb, user_data, timer)
@@ -798,8 +812,7 @@ class CallbackClient(DeviceClient):
         """
         # this may also result in inform_cb being None if no
         # inform_cb was passed to the request method.
-        msg_id = self._msg_id_for_name(msg.name)
-        _msg_name, _reply_cb, inform_cb, user_data, _timer = self._peek_async_request(msg_id)
+        _msg_name, _reply_cb, inform_cb, user_data, _timer = self._peek_async_request(None, msg.name)
 
         if inform_cb is None:
             inform_cb = super(CallbackClient, self).handle_inform
@@ -828,7 +841,7 @@ class CallbackClient(DeviceClient):
         """
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
-        msg_name, reply_cb, _inform_cb, user_data, timer = self._pop_async_request(msg_id)
+        msg_name, reply_cb, _inform_cb, user_data, timer = self._pop_async_request(msg_id, None)
 
         if reply_cb is None:
             # this happens if no reply_cb was passed in to the request or
@@ -861,8 +874,7 @@ class CallbackClient(DeviceClient):
         """
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
-        msg_id = self._msg_id_for_name(msg.name)
-        _msg_name, reply_cb, _inform_cb, user_data, timer = self._pop_async_request(msg_id)
+        _msg_name, reply_cb, _inform_cb, user_data, timer = self._pop_async_request(None, msg.name)
 
         if timer is not None:
             timer.cancel()
