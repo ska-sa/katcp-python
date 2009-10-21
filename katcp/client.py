@@ -341,7 +341,7 @@ class DeviceClient(object):
     def run(self):
         """Process reply and inform messages from the server."""
         self._logger.debug("Starting thread %s" % (threading.currentThread().getName()))
-        timeout = 1.0 # s
+        timeout = 0.5 # s
 
         # save globals so that the thread can run cleanly
         # even while Python is setting module globals to
