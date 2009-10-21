@@ -145,6 +145,9 @@ class Message(object):
         """Given a re.Match object, return the escape code for it."""
         return "\\" + self.REVERSE_ESCAPE_LOOKUP[match.group()]
 
+    def reply_ok(self):
+        """Return True if the message is a reply and its first argument is 'ok'."""
+        return self.mtype == self.REPLY and self.arguments and self.arguments[0] == self.OK
 
     # * and ** magic useful here
     # pylint: disable-msg = W0142

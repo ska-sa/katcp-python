@@ -16,6 +16,16 @@ log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 
 
+class TestMessage(unittest.TestCase):
+    def test_reply_ok(self):
+        """Test reply checking."""
+        self.assertEqual(katcp.Message.reply("foo", "ok").reply_ok(), True)
+        self.assertEqual(katcp.Message.reply("foo", "ok", 1).reply_ok(), True)
+        self.assertEqual(katcp.Message.reply("foo", "fail").reply_ok(), False)
+        self.assertEqual(katcp.Message.reply("foo", "fail", "ok").reply_ok(), False)
+        self.assertEqual(katcp.Message.request("foo", "ok").reply_ok(), False)
+
+
 class TestMessageParser(unittest.TestCase):
     def setUp(self):
         self.p = katcp.MessageParser()
