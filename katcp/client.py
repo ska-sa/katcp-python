@@ -799,6 +799,44 @@ class CallbackClient(DeviceClient):
         timer.start()
         super(CallbackClient, self).request(msg)
 
+    def blocking_request(self, msg, timeout=None):
+        """Send a request messsage.
+
+        Parameters
+        ----------
+        msg : Message object
+            The request Message to send.
+        timeout : float in seconds
+            How long to wait for a reply. The default is the
+            the timeout set when creating the CallbackClient.
+
+        Returns
+        -------
+        reply : Message object
+            The reply message received.
+        informs : list of Message objects
+            A list of the inform messages received.
+        """
+        if timeout is None:
+            timeout = self._request_timeout
+
+        done = threading.Event()
+        informs = []
+        replies = []
+
+        def reply_cb(msg):
+            replies.append(msg)
+            done.set()
+
+        def inform_cb(msg):
+            informs.append(msg)
+
+        self.request(msg, reply_cb=reply_cb, inform_cb=inform_cb, timeout=timeout)
+        done.wait()
+        reply = replies[0]
+
+        return reply, informs
+
     def handle_inform(self, msg):
         """Handle inform messages related to any current requests.
 

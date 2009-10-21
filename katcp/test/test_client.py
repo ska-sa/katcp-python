@@ -356,3 +356,22 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
                 print thread_id, len(informs)
                 print [x.arguments[0] for x in informs]
             self.assertEqual(len(informs), 12)
+
+    def test_blocking_request(self):
+        """Test the callback client's blocking request."""
+        reply, informs = self.client.blocking_request(
+            katcp.Message.request("help"),
+        )
+
+        self.assertEqual(reply.name, "help")
+        self.assertEqual(reply.arguments, ["ok", "12"])
+        self.assertEqual(len(informs), 12)
+
+        reply, informs = self.client.blocking_request(
+            katcp.Message.request("help"),
+            timeout = 0.000001,
+        )
+
+        self.assertEqual(reply.name, "help")
+        self.assertEqual(reply.arguments[0], "fail")
+        self.assertTrue(reply.arguments[1].startswith("Timed out after"))
