@@ -17,9 +17,10 @@
 
     Grammar:
 
-          <message> ::= <type> <name> <arguments> <eol>
+          <message> ::= <type> <name> <id> <arguments> <eol>
              <type> ::= "?" | "!" | "#"
              <name> ::= alpha (alpha | digit | "-")*
+               <id> ::= "" | "[" digit+ "]"
        <whitespace> ::= (space | tab) [<whitespace>]
               <eol> ::= newline | carriage-return
         <arguments> ::= (<whitespace> <argument> <arguments>) | <whitespace> | ""
@@ -47,11 +48,12 @@ class DclLexer(object):
     tokens = (
         # any state
         'EOL',
+        'WHITESPACE',
         # initial state
         'TYPE',
         'NAME',
+        'ID',
         # argument
-        'WHITESPACE',
         'PLAIN',
         'ESCAPE',
     )
@@ -62,14 +64,18 @@ class DclLexer(object):
 
     t_ANY_EOL = r'[\n\r]'
 
+    def t_ANY_WHITESPACE(self, t):
+        r'[ \t]+'
+        t.lexer.begin("argument")
+        return t
+
     # initial state
 
     t_TYPE = r'[?!#]'
 
-    def t_NAME(self, t):
-        r'[a-zA-Z][a-zA-Z0-9\-]*'
-        t.lexer.begin("argument")
-        return t
+    t_NAME = r'[a-zA-Z][a-zA-Z0-9\-]*'
+
+    t_ID = r'\[[0-9]+\]'
 
     def t_error(self, t):
         """Error handler."""
@@ -82,13 +88,7 @@ class DclLexer(object):
 
     t_argument_PLAIN = r'[^ \t\e\n\r\\\0]'
 
-    def t_argument_ESCAPE(self, t):
-        r'\\[\\_0nret@]'
-        return t
-
-    def t_argument_WHITESPACE(self, t):
-        r'[ \t]+'
-        return t
+    t_argument_ESCAPE = r'\\[\\_0nret@]'
 
     def t_argument_error(self, t):
         """Argument error handler."""
@@ -105,16 +105,26 @@ class DclGrammar(object):
     tokens = DclLexer.tokens
 
     def p_message(self, p):
-        """message : TYPE NAME arguments eol"""
+        """message : TYPE NAME id arguments eol"""
         mtype = katcp.Message.TYPE_SYMBOL_LOOKUP[p[1]]
         name = p[2]
-        arguments = p[3]
-        p[0] = katcp.Message(mtype, name, arguments)
+        mid = p[3]
+        arguments = p[4]
+        p[0] = katcp.Message(mtype, name, arguments, mid)
 
     def p_eol(self, p):
         """eol : EOL
                | empty"""
         pass
+
+    def p_id(self, p):
+        """id : ID
+              | empty"""
+        if p[1] is not None:
+            # strip [] brackets
+            p[0] = p[1][1:-1]
+        else:
+            p[0] = None
 
     def p_arguments(self, p):
         """arguments : WHITESPACE argument arguments
@@ -232,3 +242,17 @@ class TestBnf(unittest.TestCase):
         """Test that form feeds are not treated as whitespace."""
         m = self.p.parse("!baz \fa\fb\f")
         self.assertEqual(m.arguments, ["\fa\fb\f"])
+
+    def test_message_ids(self):
+        """Test that messages with message ids are parsed as expected."""
+        m = self.p.parse("?bar[123]")
+        self.assertEqual(m.mtype, m.REQUEST)
+        self.assertEqual(m.name, "bar")
+        self.assertEqual(m.arguments, [])
+        self.assertEqual(m.mid, "123")
+
+        m = self.p.parse("!baz[1234] a b c")
+        self.assertEqual(m.mtype, m.REPLY)
+        self.assertEqual(m.name, "baz")
+        self.assertEqual(m.arguments, ["a", "b", "c"])
+        self.assertEqual(m.mid, "1234")

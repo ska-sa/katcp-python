@@ -24,6 +24,10 @@ class Message(object):
         The message name.
     arguments : list of strings
         The message arguments.
+    mid : str, digits only
+        The message identifier. Replies and informs that
+        are part of the reply to a request should have the
+        same id as the request did.
     """
 
     # Message types
@@ -87,9 +91,15 @@ class Message(object):
     ## @var arguments
     # @brief List of string message arguments.
 
-    def __init__(self, mtype, name, arguments=None):
+    def __init__(self, mtype, name, arguments=None, mid=None):
         self.mtype = mtype
         self.name = name
+
+        if mid is None:
+            self.mid = None
+        else:
+            self.mid = str(mid)
+
         if arguments is None:
             self.arguments = []
         else:
@@ -99,6 +109,11 @@ class Message(object):
 
         if mtype not in self.TYPE_SYMBOLS:
             raise KatcpSyntaxError("Invalid command type %r." % (mtype,))
+
+        # check message id
+
+        if self.mid is not None and not self.mid.isdigit():
+            raise KatcpSyntaxError("Invalid message id %r." % (mid,))
 
         # check command name validity
 
@@ -139,7 +154,12 @@ class Message(object):
         else:
             arg_str = ""
 
-        return "%s%s%s" % (self.TYPE_SYMBOLS[self.mtype], self.name, arg_str)
+        if self.mid is not None:
+            mid_str = "[%s]" % self.mid
+        else:
+            mid_str = ""
+
+        return "%s%s%s%s" % (self.TYPE_SYMBOLS[self.mtype], self.name, mid_str, arg_str)
 
     def _escape_match(self, match):
         """Given a re.Match object, return the escape code for it."""
@@ -220,6 +240,9 @@ class MessageParser(object):
     ## @brief Regular expresion matching KATCP whitespace (just space and tab)
     WHITESPACE_RE = re.compile(r"[ \t]+")
 
+    ## @brief Regular expression matching name and ID
+    NAME_RE = re.compile(r"^(?P<name>[a-zA-Z][a-zA-Z0-9\-]*)(\[(?P<id>[0-9]+)\])?$")
+
     def _unescape_match(self, match):
         """Given an re.Match, unescape the escape code it represents."""
         char = match.group(1)
@@ -270,7 +293,15 @@ class MessageParser(object):
         name = parts[0][1:]
         arguments = [self._parse_arg(x) for x in parts[1:]]
 
-        return Message(mtype, name, arguments)
+        # split out message id
+        match = self.NAME_RE.match(name)
+        if match:
+            name = match.group('name')
+            mid = match.group('id')
+        else:
+            raise KatcpSyntaxError("Bad message name (and possibly id) %r." % (name,))
+
+        return Message(mtype, name, arguments, mid)
 
 
 class DeviceMetaclass(type):

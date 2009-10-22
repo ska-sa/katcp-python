@@ -102,6 +102,20 @@ class TestMessageParser(unittest.TestCase):
         m = self.p.parse("!baz \fa\fb\f")
         self.assertEqual(m.arguments, ["\fa\fb\f"])
 
+    def test_message_ids(self):
+        """Test that messages with message ids are parsed as expected."""
+        m = self.p.parse("?bar[123]")
+        self.assertEqual(m.mtype, m.REQUEST)
+        self.assertEqual(m.name, "bar")
+        self.assertEqual(m.arguments, [])
+        self.assertEqual(m.mid, "123")
+
+        m = self.p.parse("!baz[1234] a b c")
+        self.assertEqual(m.mtype, m.REPLY)
+        self.assertEqual(m.name, "baz")
+        self.assertEqual(m.arguments, ["a", "b", "c"])
+        self.assertEqual(m.mid, "1234")
+
 
 class TestSensor(unittest.TestCase):
     def test_int_sensor(self):
