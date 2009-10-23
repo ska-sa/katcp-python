@@ -173,7 +173,7 @@ class Message(object):
     # pylint: disable-msg = W0142
 
     @classmethod
-    def request(cls, name, *args):
+    def request(cls, name, *args, **kwargs):
         """Helper method for creating request messages.
 
         Parameters
@@ -183,10 +183,10 @@ class Message(object):
         args : list of strings
             The message arguments.
         """
-        return cls(cls.REQUEST, name, args)
+        return cls(cls.REQUEST, name, args, kwargs.get('mid'))
 
     @classmethod
-    def reply(cls, name, *args):
+    def reply(cls, name, *args, **kwargs):
         """Helper method for creating reply messages.
 
         Parameters
@@ -196,10 +196,10 @@ class Message(object):
         args : list of strings
             The message arguments.
         """
-        return cls(cls.REPLY, name, args)
+        return cls(cls.REPLY, name, args, kwargs.get('mid'))
 
     @classmethod
-    def inform(cls, name, *args):
+    def inform(cls, name, *args, **kwargs):
         """Helper method for creating inform messages.
 
         Parameters
@@ -209,7 +209,7 @@ class Message(object):
         args : list of strings
             The message arguments.
         """
-        return cls(cls.INFORM, name, args)
+        return cls(cls.INFORM, name, args, kwargs.get('mid'))
 
     # pylint: enable-msg = W0142
 

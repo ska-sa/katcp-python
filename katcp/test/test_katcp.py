@@ -25,6 +25,24 @@ class TestMessage(unittest.TestCase):
         self.assertEqual(katcp.Message.reply("foo", "fail", "ok").reply_ok(), False)
         self.assertEqual(katcp.Message.request("foo", "ok").reply_ok(), False)
 
+    def test_request(self):
+        """Test request method."""
+        self.assertEqual(str(katcp.Message.request("foo")), "?foo")
+        self.assertEqual(str(katcp.Message.request("foo", mid=123)), "?foo[123]")
+        self.assertEqual(str(katcp.Message.request("foo", "a", "b", mid=123)), "?foo[123] a b")
+
+    def test_reply(self):
+        """Test reply method."""
+        self.assertEqual(str(katcp.Message.reply("foo")), "!foo")
+        self.assertEqual(str(katcp.Message.reply("foo", mid=123)), "!foo[123]")
+        self.assertEqual(str(katcp.Message.reply("foo", "a", "b", mid=123)), "!foo[123] a b")
+
+    def test_inform(self):
+        """Test inform method."""
+        self.assertEqual(str(katcp.Message.inform("foo")), "#foo")
+        self.assertEqual(str(katcp.Message.inform("foo", mid=123)), "#foo[123]")
+        self.assertEqual(str(katcp.Message.inform("foo", "a", "b", mid=123)), "#foo[123] a b")
+
 
 class TestMessageParser(unittest.TestCase):
     def setUp(self):

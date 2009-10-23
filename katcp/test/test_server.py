@@ -172,6 +172,90 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#log fatal", r"root fatal-msg"),
         ])
 
+    def test_standard_requests_with_ids(self):
+        """Test standard request and replies."""
+        self.client.request(katcp.Message.request("watchdog"))
+        self.client.request(katcp.Message.request("restart"))
+        self.client.request(katcp.Message.request("log-level"))
+        self.client.request(katcp.Message.request("log-level", "trace"))
+        self.client.request(katcp.Message.request("log-level", "unknown"))
+        self.client.request(katcp.Message.request("help"))
+        self.client.request(katcp.Message.request("help", "watchdog"))
+        self.client.request(katcp.Message.request("help", "unknown-request"))
+        self.client.request(katcp.Message.request("client-list"))
+        self.client.request(katcp.Message.request("sensor-list"))
+        self.client.request(katcp.Message.request("sensor-list", "an.int"))
+        self.client.request(katcp.Message.request("sensor-list", "an.unknown"))
+        self.client.request(katcp.Message.request("sensor-value"))
+        self.client.request(katcp.Message.request("sensor-value", "an.int"))
+        self.client.request(katcp.Message.request("sensor-value", "an.unknown"))
+        self.client.request(katcp.Message.request("sensor-sampling", "an.int"))
+        self.client.request(katcp.Message.request("sensor-sampling", "an.int", "differential", "2"))
+        self.client.request(katcp.Message.request("sensor-sampling"))
+        self.client.request(katcp.Message.request("sensor-sampling", "an.unknown", "auto"))
+        self.client.blocking_request(katcp.Message.request("sensor-sampling", "an.int", "unknown"))
+
+        self.server.log.trace("trace-msg")
+        self.server.log.debug("debug-msg")
+        self.server.log.info("info-msg")
+        self.server.log.warn("warn-msg")
+        self.server.log.error("error-msg")
+        self.server.log.fatal("fatal-msg")
+
+        time.sleep(0.1)
+
+        msgs = self.client.messages()
+        self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
+        self._assert_msgs_like(msgs, [
+            (r"#version device_stub-0.1", ""),
+            (r"#build-state name-0.1", ""),
+            (r"!watchdog ok", ""),
+            (r"!restart ok", ""),
+            (r"!log-level ok warn", ""),
+            (r"!log-level ok trace", ""),
+            (r"!log-level fail Unknown\_logging\_level\_name\_'unknown'", ""),
+            (r"#help client-list", ""),
+            (r"#help halt", ""),
+            (r"#help help", ""),
+            (r"#help log-level", ""),
+            (r"#help new-command", ""),
+            (r"#help raise-exception", ""),
+            (r"#help raise-fail", ""),
+            (r"#help restart", ""),
+            (r"#help sensor-list", ""),
+            (r"#help sensor-sampling", ""),
+            (r"#help sensor-value", ""),
+            (r"#help watchdog", ""),
+            (r"!help ok 12", ""),
+            (r"#help watchdog", ""),
+            (r"!help ok 1", ""),
+            (r"!help fail", ""),
+            (r"#client-list", ""),
+            (r"!client-list ok 1", ""),
+            (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
+            (r"!sensor-list ok 1", ""),
+            (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
+            (r"!sensor-list ok 1", ""),
+            (r"!sensor-list fail", ""),
+            (r"#sensor-value 12345000 1 an.int nominal 3", ""),
+            (r"!sensor-value ok 1", ""),
+            (r"#sensor-value 12345000 1 an.int nominal 3", ""),
+            (r"!sensor-value ok 1", ""),
+            (r"!sensor-value fail", ""),
+            (r"!sensor-sampling ok an.int none", ""),
+            (r"#sensor-status 12345000 1 an.int nominal 3", ""),
+            (r"!sensor-sampling ok an.int differential 2", ""),
+            (r"!sensor-sampling fail No\_sensor\_name\_given.", ""),
+            (r"!sensor-sampling fail Unknown\_sensor\_name.", ""),
+            (r"!sensor-sampling fail Unknown\_strategy\_name.", ""),
+            (r"#log trace", r"root trace-msg"),
+            (r"#log debug", r"root debug-msg"),
+            (r"#log info", r"root info-msg"),
+            (r"#log warn", r"root warn-msg"),
+            (r"#log error", r"root error-msg"),
+            (r"#log fatal", r"root fatal-msg"),
+        ])
+
     def test_halt_request(self):
         """Test halt request."""
         self.client.request(katcp.Message.request("halt"))
