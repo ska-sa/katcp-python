@@ -295,6 +295,7 @@ class DeviceClient(object):
 
         try:
             reply = method(self, msg)
+            reply.mid = msg.mid
             assert (reply.mtype == Message.REPLY)
             assert (reply.name == msg.name)
             self._logger.info("%s OK" % (msg.name,))

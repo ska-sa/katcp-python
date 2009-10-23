@@ -1,3 +1,15 @@
+23 Oct 2009
+ * Add support for message ids to server and client request handling.
+   * Server gained new .reply() and .reply_inform() methods that set
+     message ids.
+   * Server had .send_message() moved to ._send_message() since it is
+     now rather important to use .reply() and .reply_inform() when
+     replying. Old servers will need to upgrade. Calls to .send_message()
+     should be replaced with calls to either .reply(), .reply_inform() or
+     .inform(). Calls to .inform() should be changed to calls to
+     .reply_inform() if they are part of the response to a request.
+   * Client request handler handles message ids correctly.
+
 22 Oct 2009
  * Add support for message ids to KATCP message and message parser classes.
 

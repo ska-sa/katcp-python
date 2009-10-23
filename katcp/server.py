@@ -229,7 +229,7 @@ class DeviceServerBase(object):
             reply = Message.reply(msg.name, "invalid", "Unknown request.")
 
         if send_reply:
-            self.send_message(sock, reply)
+            self.reply(sock, reply, msg)
 
     def handle_inform(self, sock, msg):
         """Dispatch an inform message to the appropriate method.
@@ -275,7 +275,7 @@ class DeviceServerBase(object):
         else:
             self._logger.warn("%s INVALID: Unknown reply." % (msg.name,))
 
-    def send_message(self, sock, msg):
+    def _send_message(self, sock, msg):
         """Send an arbitrary message to a particular client.
 
         Note that failed sends disconnect the client sock and call
@@ -343,6 +343,12 @@ class DeviceServerBase(object):
     def inform(self, sock, msg):
         """Send an inform messages to a particular client.
 
+        Should only be used for asynchronous informs. Informs
+        that are part of the response to a request should use
+        :meth:`reply_inform` so that the message identifier
+        from the original request can be attached to the
+        inform.
+
         Parameters
         ----------
         sock : socket.socket object
@@ -353,7 +359,7 @@ class DeviceServerBase(object):
         # could be a function but we don't want it to be
         # pylint: disable-msg = R0201
         assert (msg.mtype == Message.INFORM)
-        self.send_message(sock, msg)
+        self._send_message(sock, msg)
 
     def mass_inform(self, msg):
         """Send an inform message to all clients.
@@ -368,6 +374,42 @@ class DeviceServerBase(object):
             if sock is self._sock:
                 continue
             self.inform(sock, msg)
+
+    def reply(self, sock, reply, orig_req):
+        """Send an asynchronous reply to an earlier request.
+
+        Parameters
+        ----------
+        sock : socket.socket object
+            The client to send the reply to.
+        reply : Message object
+            The reply message to send.
+        orig_req : Message object
+            The request message being replied to. The reply message's
+            id is overridden with the id from orig_req before the
+            reply is sent.
+        """
+        assert (reply.mtype == Message.REPLY)
+        reply.mid = orig_req.mid
+        self._send_message(sock, reply)
+
+    def reply_inform(self, sock, inform, orig_req):
+        """Send an inform as part of the reply to an earlier request.
+
+        Parameters
+        ----------
+        sock : socket.socket object
+            The client to send the inform to.
+        inform : Message object
+            The inform message to send.
+        orig_req : Message object
+            The request message being replied to. The inform message's
+            id is overridden with the id from orig_req before the
+            inform is sent.
+        """
+        assert (inform.mtype == Message.INFORM)
+        inform.mid = orig_req.mid
+        self._send_message(sock, inform)
 
     def run(self):
         """Listen for clients and process their requests."""
@@ -795,7 +837,7 @@ class DeviceServer(DeviceServerBase):
         if not msg.arguments:
             for name, method in sorted(self._request_handlers.items()):
                 doc = method.__doc__
-                self.inform(sock, Message.inform("help", name, doc))
+                self.reply_inform(sock, Message.inform("help", name, doc), msg)
             num_methods = len(self._request_handlers)
             return Message.reply("help", "ok", str(num_methods))
         else:
@@ -803,7 +845,7 @@ class DeviceServer(DeviceServerBase):
             if name in self._request_handlers:
                 method = self._request_handlers[name]
                 doc = method.__doc__.strip()
-                self.inform(sock, Message.inform("help", name, doc))
+                self.reply_inform(sock, Message.inform("help", name, doc), msg)
                 return Message.reply("help", "ok", "1")
             return Message.reply("help", "fail", "Unknown request method.")
 
@@ -899,7 +941,7 @@ class DeviceServer(DeviceServerBase):
             except socket.error, e:
                 # client may be gone, in which case just send a description
                 addr = repr(client)
-            self.inform(sock, Message.inform("client-list", addr))
+            self.reply_inform(sock, Message.inform("client-list", addr), msg)
         return Message.reply("client-list", "ok", str(num_clients))
 
     def request_sensor_list(self, sock, msg):
@@ -951,18 +993,18 @@ class DeviceServer(DeviceServerBase):
         """
         if not msg.arguments:
             for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
-                self.inform(sock, Message.inform("sensor-list",
+                self.reply_inform(sock, Message.inform("sensor-list",
                     name, sensor.description, sensor.units, sensor.stype,
-                    *sensor.formatted_params))
+                    *sensor.formatted_params), msg)
             return Message.reply("sensor-list",
                     "ok", str(len(self._sensors)))
         else:
             name = msg.arguments[0]
             if name in self._sensors:
                 sensor = self._sensors[name]
-                self.inform(sock, Message.inform("sensor-list",
+                self.reply_inform(sock, Message.inform("sensor-list",
                     name, sensor.description, sensor.units, sensor.stype,
-                    *sensor.formatted_params))
+                    *sensor.formatted_params), msg)
                 return Message.reply("sensor-list", "ok", "1")
             else:
                 return Message.reply("sensor-list", "fail",
@@ -1014,8 +1056,8 @@ class DeviceServer(DeviceServerBase):
         if not msg.arguments:
             for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
                 timestamp_ms, status, value = sensor.read_formatted()
-                self.inform(sock, Message.inform("sensor-value",
-                    timestamp_ms, "1", name, status, value))
+                self.reply_inform(sock, Message.inform("sensor-value",
+                    timestamp_ms, "1", name, status, value), msg)
             return Message.reply("sensor-value",
                     "ok", str(len(self._sensors)))
         else:
@@ -1023,8 +1065,8 @@ class DeviceServer(DeviceServerBase):
             if name in self._sensors:
                 sensor = self._sensors[name]
                 timestamp_ms, status, value = sensor.read_formatted()
-                self.inform(sock, Message.inform("sensor-value",
-                    timestamp_ms, "1", name, status, value))
+                self.reply_inform(sock, Message.inform("sensor-value",
+                    timestamp_ms, "1", name, status, value), msg)
                 return Message.reply("sensor-value", "ok", "1")
             else:
                 return Message.reply("sensor-value", "fail",
