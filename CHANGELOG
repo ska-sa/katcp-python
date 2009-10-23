@@ -1,3 +1,18 @@
+22 Oct 2009
+ * Add support for message ids to KATCP message and message parser classes.
+
+21 Oct 2009
+ * Add blocking_request implementation to callback client.
+ * Reduce client sleep to 0.5s (from 1.0s) to make shutdown more responsive.
+ * Add Message.reply_ok() method for checking that a message represents
+   a successful reply.
+
+07 Oct 2009
+ * Fix bug in new callback client time outs.
+
+05 Oct 2009
+ * Support for commands timing out in callback client.
+
 21 Sep 2009
  * Fix bug in client run loop where self._sock could become
    None while it was being used by select(..) and .recv(...).
