@@ -578,25 +578,21 @@ def return_reply(*types):
 
     return decorator
 
-def send_reply(msgname, *types):
+def send_reply(*types):
     """Decorator for sending replies from request callback methods
 
     This decorator constructs a reply from a list or tuple returned
     from a callback method, but unlike the return_reply decorator it
-    also sends the reply rather than returning it.  The message name
-    must be passed in explicitly, since the callback method is not
-    expected to have a predictable name or input parameters.
+    also sends the reply rather than returning it.
 
     The list/tuple returned from the callback method must have a sock
-    as its first parameter.
+    as its first parameter and the original message as the second. The
+    original message is needed to determine the message name and ID.
 
-    The device with the callback method must have a send_message
-    method.
+    The device with the callback method must have a reply method.
 
     Parameters
     ----------
-    msgname : str
-        Name of the reply message.
     types : list of kattypes
         The types of the reply message parameters (in order).
 
@@ -604,16 +600,17 @@ def send_reply(msgname, *types):
     --------
     >>> class MyDevice(DeviceServer):
     ...     @send_reply('myreq', Int(), Float())
-    ...     def my_callback(self, sock):
-    ...         return (sock, "ok", 5, 2.0)
+    ...     def my_callback(self, msg, sock):
+    ...         return (sock, msg, "ok", 5, 2.0)
     ...
     """
     def decorator(handler):
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
             sock = reply_args[0]
-            reply = make_reply(msgname, types, reply_args[1:])
-            self.send_message(sock, reply)
+            msg = reply_args[1]
+            reply = make_reply(msg.name, types, reply_args[2:])
+            self.reply(sock, reply, msg)
         return raw_handler
 
     return decorator

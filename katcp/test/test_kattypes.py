@@ -409,15 +409,17 @@ class TestDevice(object):
         if i == 6:
             return ("ok", i, d, b, "extra parameter")
         if i == 9:
-            self.finish_request_one(sock, i, d, b)
+            # This actually gets put in the callback params automatically
+            orig_msg = Message.request("one", "foo", "bar")
+            self.finish_request_one(orig_msg, sock, i, d, b)
             raise AsyncReply()
         return ("ok", i, d, b)
 
-    @send_reply("one", Int(min=1,max=10),Discrete(("on","off")),Bool())
-    def finish_request_one(self, sock, i, d, b):
-        return (sock, "ok", i, d, b)
+    @send_reply(Int(min=1,max=10),Discrete(("on","off")),Bool())
+    def finish_request_one(self, msg, sock, i, d, b):
+        return (sock, msg, "ok", i, d, b)
 
-    def send_message(self, sock, msg):
+    def reply(self, sock, msg, orig_msg):
         self.sent_messages.append([sock, msg])
 
     @request(Int(min=1,max=3,default=2), Discrete(("on","off"),default="off"), Bool(default=True))
