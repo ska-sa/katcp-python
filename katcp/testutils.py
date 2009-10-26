@@ -297,6 +297,9 @@ class TestUtilMixin(object):
 def device_wrapper(device):
     outgoing_informs = []
 
+    def reply_inform(sock, msg, orig_msg):
+        outgoing_informs.append(msg)
+
     def inform(sock, msg):
         outgoing_informs.append(msg)
 
