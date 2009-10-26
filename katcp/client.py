@@ -648,15 +648,19 @@ class CallbackClient(DeviceClient):
         Host to connect to.
     port : int
         Port to connect to.
-    tb_limit : int
-        Maximum number of stack frames to send in error traceback.
-    logger : object
-        Python Logger object to log to.
-    auto_reconnect : bool
-        Whether to automatically reconnect if the connection dies.
-    timeout : float in seconds
+    tb_limit : int, optional
+        Maximum number of stack frames to send in error traceback. Default
+        is 20.
+    logger : object, optional
+        Python Logger object to log to. Default is a logger named 'katcp'.
+    auto_reconnect : bool, optional
+        Whether to automatically reconnect if the connection dies. Default
+        is True.
+    timeout : float in seconds, optional
         Default number of seconds to wait before a callback request times
-        out. Can be overriden in individual calls to request.
+        out. Can be overriden in individual calls to request. Default is 5s.
+    use_ids : bool, optional
+        Whether to send messages with ids. Default is False.
 
     Examples
     --------
@@ -681,11 +685,12 @@ class CallbackClient(DeviceClient):
     """
 
     def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
-                 auto_reconnect=True):
+                 auto_reconnect=True, use_ids=False):
         super(CallbackClient, self).__init__(host, port, tb_limit=tb_limit,
             logger=logger,auto_reconnect=auto_reconnect)
 
         self._request_timeout = timeout
+        self._use_ids = use_ids
 
         # message id and lock
         self._last_msg_id = 0
@@ -797,6 +802,8 @@ class CallbackClient(DeviceClient):
         timer = threading.Timer(timeout, self._handle_timeout, (msg_id,))
 
         self._push_async_request(msg_id, msg.name, reply_cb, inform_cb, user_data, timer)
+        if self._use_ids:
+            msg.mid = msg_id
         timer.start()
         super(CallbackClient, self).request(msg)
 
@@ -851,7 +858,13 @@ class CallbackClient(DeviceClient):
         """
         # this may also result in inform_cb being None if no
         # inform_cb was passed to the request method.
-        _msg_name, _reply_cb, inform_cb, user_data, _timer = self._peek_async_request(None, msg.name)
+        if self._use_ids:
+            if msg.mid is not None:
+                _msg_name, _reply_cb, inform_cb, user_data, _timer = self._peek_async_request(msg.mid, None)
+            else:
+                inform_cb, user_data = None, None
+        else:
+            _msg_name, _reply_cb, inform_cb, user_data, _timer = self._peek_async_request(None, msg.name)
 
         if inform_cb is None:
             inform_cb = super(CallbackClient, self).handle_inform
@@ -913,7 +926,13 @@ class CallbackClient(DeviceClient):
         """
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
-        _msg_name, reply_cb, _inform_cb, user_data, timer = self._pop_async_request(None, msg.name)
+        if self._use_ids:
+            if msg.mid is not None:
+                _msg_name, reply_cb, _inform_cb, user_data, timer = self._pop_async_request(msg.mid, None)
+            else:
+                reply_cb, user_data, timer = None, None, None
+        else:
+            _msg_name, reply_cb, _inform_cb, user_data, timer = self._pop_async_request(None, msg.name)
 
         if timer is not None:
             timer.cancel()

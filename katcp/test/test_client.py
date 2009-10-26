@@ -244,7 +244,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         replies = []
         informs = []
-        timeout = 0.000001
+        timeout = 0.0000001
 
         def reply_cb(msg):
             replies.append(msg)
@@ -375,3 +375,47 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(reply.name, "help")
         self.assertEqual(reply.arguments[0], "fail")
         self.assertTrue(reply.arguments[1].startswith("Timed out after"))
+
+    def test_use_ids(self):
+        """Test the callbak client's use of message ids."""
+        self.client._use_ids = True
+
+        watchdog_replies = []
+
+        def watchdog_reply(reply):
+            self.assertEqual(reply.name, "watchdog")
+            self.assertEqual(reply.arguments, ["ok"])
+            watchdog_replies.append(reply)
+
+        self.client.request(
+            katcp.Message.request("watchdog"),
+            reply_cb=watchdog_reply,
+        )
+
+        time.sleep(0.1)
+        self.assertTrue(watchdog_replies)
+
+        help_replies = []
+        help_informs = []
+
+        def help_reply(reply):
+            self.assertEqual(reply.name, "help")
+            self.assertEqual(reply.arguments, ["ok", "12"])
+            self.assertEqual(len(help_informs), int(reply.arguments[1]))
+            help_replies.append(reply)
+
+        def help_inform(inform):
+            self.assertEqual(inform.name, "help")
+            self.assertEqual(len(inform.arguments), 2)
+            help_informs.append(inform)
+
+        self.client.request(
+            katcp.Message.request("help"),
+            reply_cb=help_reply,
+            inform_cb=help_inform,
+        )
+
+        time.sleep(0.1)
+        self.assertEqual(len(help_replies), 1)
+        self.assertEqual(len(help_informs), 12)
+
