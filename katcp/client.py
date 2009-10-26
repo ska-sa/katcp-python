@@ -911,7 +911,7 @@ class CallbackClient(DeviceClient):
             reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, self._tb_limit
             ))
-            self._logger.error("Callback reply during timeout %s FAIL: %s" % (msg.name, reason))
+            self._logger.error("Callback reply during timeout %s FAIL: %s" % (msg_name, reason))
 
     def handle_reply(self, msg):
         """Handle a reply message related to the current request.

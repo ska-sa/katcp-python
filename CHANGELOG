@@ -1,3 +1,8 @@
+26 Oct 2009
+ * Add include_msg option to request decorator to give decorated
+   requests a means to access the original message and the message id.
+ * Add support for msg ids to callback client. 
+
 23 Oct 2009
  * Add support for message ids to server and client request handling.
    * Server gained new .reply() and .reply_inform() methods that set
