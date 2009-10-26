@@ -467,7 +467,7 @@ class Parameter(object):
 ## request, return_reply and inform method decorators
 #
 
-def request(*types):
+def request(*types, **options):
     """Decorator for request handler methods.
 
     The method being decorated should take a sock argument followed
@@ -488,6 +488,8 @@ def request(*types):
     ...         return ("ok", my_int + 1, my_float / 2.0)
     ...
     """
+    include_msg = options.get('include_msg', False)
+
     def decorator(handler):
         argnames = []
         orig_argnames = getattr(handler, "_orig_argnames", None)
@@ -509,11 +511,17 @@ def request(*types):
             if has_sock:
                 (sock, msg) = args
                 new_args = unpack_types(types, msg.arguments, argnames)
-                return handler(self, sock, *new_args)
+                if include_msg:
+                    return handler(self, sock, msg, *new_args)
+                else:
+                    return handler(self, sock, *new_args)
             else:
                 (msg,) = args
                 new_args = unpack_types(types, msg.arguments, argnames)
-                return handler(self, *new_args)
+                if include_msg:
+                    return handler(self, msg, *new_args)
+                else:
+                    return handler(self, *new_args)
 
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__

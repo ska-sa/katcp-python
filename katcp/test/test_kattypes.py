@@ -451,6 +451,16 @@ class TestDevice(object):
     def request_six(self, i, d, b):
         return ("ok", i, d, b)
 
+    @return_reply(Int(), Str())
+    @request(Int(), include_msg=True)
+    def request_seven(self, msg, i):
+        return ("ok", i, msg.name)
+
+    @return_reply(Int(), Str())
+    @request(Int(), include_msg=True)
+    def request_eight(self, sock, msg, i):
+        return ("ok", i, msg.name)
+
 
 class TestDecorator(unittest.TestCase):
     def setUp(self):
@@ -526,3 +536,12 @@ class TestDecorator(unittest.TestCase):
         self.assertRaises(FailReply, self.device.request_six, Message.request("six", "2", "on", "3"))
 
         self.assertRaises(FailReply, self.device.request_six, Message.request("six", "2", "on"))
+
+    def test_request_seven(self):
+        """Test client request with no sock but with a message."""
+        self.assertEqual(str(self.device.request_seven(Message.request("seven", "7"))), "!seven ok 7 seven")
+
+    def test_request_eight(self):
+        """Test server request with a message argument."""
+        sock = ""
+        self.assertEqual(str(self.device.request_eight(sock, Message.request("eight", "8"))), "!eight ok 8 eight")
