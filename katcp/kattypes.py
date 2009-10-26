@@ -10,8 +10,7 @@
 import inspect
 import struct
 import re
-import time
-from .katcp import Message, FailReply, KatcpSyntaxError
+from .katcp import Message, FailReply
 
 # KATCP Type Classes
 #
@@ -492,20 +491,22 @@ def request(*types, **options):
 
     def decorator(handler):
         argnames = []
-        orig_argnames = getattr(handler, "_orig_argnames", None)
 
-        if orig_argnames is not None:
-            # If this decorator is on the outside, get the parameter names which have been preserved by the other decorator
-            argnames = orig_argnames
-            # and the sock flag
-            has_sock = getattr(handler, "_has_sock")
-        else:
-            # Introspect the parameter names.
-            # Slightly hacky way of determining whether there is a sock
-            has_sock = inspect.getargspec(handler)[0][1] == "sock"
-            params_start = 2 if has_sock else 1
-            # Get other parameter names
-            argnames = inspect.getargspec(handler)[0][params_start:]
+        # If this decorator is on the outside, get the parameter names which have been preserved by the other decorator
+        all_argnames = getattr(handler, "_orig_argnames", None)
+
+        if all_argnames is None:
+            # We must be on the inside. Introspect the parameter names.
+            all_argnames = inspect.getargspec(handler)[0]
+
+        # Slightly hacky way of determining whether there is a sock
+        has_sock = all_argnames[1] == "sock"
+
+        params_start = 1
+        if has_sock: params_start += 1
+        if include_msg: params_start += 1
+        # Get other parameter names
+        argnames = all_argnames[params_start:]
 
         def raw_handler(self, *args):
             if has_sock:
@@ -525,6 +526,8 @@ def request(*types, **options):
 
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
+        # explicitly note that this decorator has been run, so that return_reply can know if it's on the outside.
+        raw_handler._request_decorated = True
         return raw_handler
 
     return decorator
@@ -570,18 +573,12 @@ def return_reply(*types):
             return make_reply(msgname, types, reply_args)
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
-        try:
-            # We must preserve the original function parameter names for the other decorator in case this decorator is on the inside
-            # Slightly hacky way of determining whether there is a sock
-            has_sock = inspect.getargspec(handler)[0][1] == "sock"
-            params_start = 2 if has_sock else 1
-            # Get other parameter names
-            raw_handler._orig_argnames = inspect.getargspec(handler)[0][params_start:]
-            # we must also note whether there is a sock
-            raw_handler._has_sock = has_sock
-        except IndexError:
-            # This probably means that this decorator is on the outside.
-            pass
+
+        if not getattr(handler, "_request_decorated", False):
+            # We are on the inside.
+            # We must preserve the original function parameter names for the request decorator
+            raw_handler._orig_argnames = inspect.getargspec(handler)[0]
+
         return raw_handler
 
     return decorator
