@@ -285,14 +285,16 @@ class TestUtilMixin(object):
         else:
             cmpfun = lambda got, exp: sensortype(got) == exp
 
+        lastval = None
         while time.time() < stoptime:
-            if cmpfun(get_sensor_method(sensorname), value):
+            lastval = get_sensor_method(sensorname)
+            if cmpfun(lastval, value):
                 success = True
                 break
             time.sleep(0.1)
 
         if not success:
-            self.fail("Timed out while waiting %ss for %s sensor to become %s." % (timeout, sensorname, value))
+            self.fail("Timed out while waiting %ss for %s sensor to become %s. Last value was %s." % (timeout, sensorname, value, lastval))
 
 def device_wrapper(device):
     outgoing_informs = []
