@@ -159,7 +159,7 @@ class Float(KatcpType):
 
     name = "float"
 
-    encode = lambda self, value: "%g" % (value,)
+    encode = lambda self, value: "%.15g" % (value,)
 
     def decode(self, value):
         try:
