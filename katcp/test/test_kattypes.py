@@ -74,11 +74,11 @@ class TestInt(TestType):
 class TestFloat(TestType):
 
     def setUp(self):
-        basic =  Int()
-        default = Int(default=11.0)
-        optional = Int(optional=True)
-        default_optional = Int(default=11.0, optional=True)
-        self.minmax = Int(min=5.0, max=6.0)
+        basic =  Float()
+        default = Float(default=11.0)
+        optional = Float(optional=True)
+        default_optional = Float(default=11.0, optional=True)
+        self.minmax = Float(min=5.0, max=6.0)
 
         self._pack = [
             (basic, 5.0, "5"),
