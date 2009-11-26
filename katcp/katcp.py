@@ -103,7 +103,7 @@ class Message(object):
         if arguments is None:
             self.arguments = []
         else:
-            self.arguments = [str(arg) for arg in arguments]
+            self.arguments = [type(x) is float and repr(x) or str(x) for x in arguments]
 
         # check message type
 
