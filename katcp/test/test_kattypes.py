@@ -11,7 +11,8 @@ import unittest
 from katcp import Message, FailReply, AsyncReply
 from katcp.kattypes import request, inform, return_reply, send_reply,  \
                            Bool, Discrete, Float, Int, Lru, Timestamp, \
-                           Str, Struct, Regex, DiscreteMulti, TimestampOrNow
+                           Str, Struct, Regex, DiscreteMulti, TimestampOrNow, \
+                           StrictTimestamp
 
 class TestType(unittest.TestCase):
     def setUp(self):
@@ -228,6 +229,33 @@ class TestTimestamp(TestType):
             (basic, None, ValueError),
             (default, None, 1235475793.0324881),
             (default_optional, None, 1235475793.0324881),
+            (optional, None, None),
+        ]
+
+
+class TestStrictTimestamp(TestType):
+
+    def setUp(self):
+        basic =  StrictTimestamp()
+        default = StrictTimestamp(default=1235475793.03249)
+        optional = StrictTimestamp(optional=True)
+        default_optional = StrictTimestamp(default=1235475793.03249, optional=True)
+
+        self._pack = [
+            (basic, 1235475381.69669, "1235475381696.69"),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (default, None, "1235475793032.49"),
+            (default_optional, None, "1235475793032.49"),
+            (optional, None, ValueError),
+        ]
+
+        self._unpack = [
+            (basic, "1235475381696", 1235475381.6960001),
+            (basic, "a", ValueError),
+            (basic, None, ValueError),
+            (default, None, 1235475793.03249),
+            (default_optional, None, 1235475793.03249),
             (optional, None, None),
         ]
 

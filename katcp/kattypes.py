@@ -312,6 +312,35 @@ class TimestampOrNow(Timestamp):
         return super(TimestampOrNow, self).decode(value)
 
 
+class StrictTimestamp(KatcpType):
+    """The a timestamp that enforces the XXXX.YYY format for timestamps.
+    """
+
+    name = "strict_timestamp"
+
+    def encode(self, value):
+        try:
+            return "%.15g" % (value * 1000.0)
+        except:
+            raise ValueError("Could not encode value %r as strict timestamp." % value)
+
+    def decode(self, value):
+        try:
+            parts = value.split(".", 1)
+            _int_parts = [int(x) for x in parts]
+            return float(value) / 1000.0
+        except:
+            raise ValueError("Could not parse value '%s' as strict timestamp." % value)
+
+    def check(self, value):
+        """Check whether the value is positive.
+
+        Raise a ValueError if it is not.
+        """
+        if value < 0:
+            raise ValueError("Strict timestamps may not be negative.")
+
+
 class Struct(KatcpType):
     """KatcpType for parsing and packing values using the :mod:`struct` module.
 
