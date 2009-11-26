@@ -154,6 +154,11 @@ class DeviceTestServer(DeviceServer):
         """A handler which raises a FailReply."""
         raise FailReply("There was a problem with your request.")
 
+    def request_slow_command(self, sock, msg):
+        """A slow command, sleeps for msg.arguments[0]"""
+        time.sleep(float(msg.arguments[0]))
+        return Message.reply(msg.name, "ok", msgid=msg.mid)
+
     def handle_message(self, sock, msg):
         self.__msgs.append(msg)
         super(DeviceTestServer, self).handle_message(sock, msg)

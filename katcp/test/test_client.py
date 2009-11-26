@@ -147,17 +147,17 @@ class TestBlockingClient(unittest.TestCase):
         reply, informs = self.client.blocking_request(
             katcp.Message.request("help"))
         assert reply.name == "help"
-        assert reply.arguments == ["ok", "12"]
+        assert reply.arguments == ["ok", "13"]
         assert len(informs) == int(reply.arguments[1])
 
     def test_timeout(self):
         """Test calling blocking_request with a timeout."""
         try:
             self.client.blocking_request(
-                katcp.Message.request("help"),
+                katcp.Message.request("slow-command", "0.5"),
                 timeout=0.001)
         except RuntimeError, e:
-            self.assertEqual(str(e), "Request help timed out after 0.001 seconds.")
+            self.assertEqual(str(e), "Request slow-command timed out after 0.001 seconds.")
         else:
             self.assertFalse("Expected timeout on request")
 
@@ -203,7 +203,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def help_reply(reply):
             self.assertEqual(reply.name, "help")
-            self.assertEqual(reply.arguments, ["ok", "12"])
+            self.assertEqual(reply.arguments, ["ok", "13"])
             self.assertEqual(len(help_informs), int(reply.arguments[1]))
             help_replies.append(reply)
 
@@ -220,7 +220,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         time.sleep(0.2)
         self.assertEqual(len(help_replies), 1)
-        self.assertEqual(len(help_informs), 12)
+        self.assertEqual(len(help_informs), 13)
 
     def test_no_callback(self):
         """Test request without callback."""
@@ -235,8 +235,8 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_like(msgs,
             [("#version ", "")] +
             [("#build-state ", "")] +
-            [("#help ", "")]*12 +
-            [("!help ok 12", "")]
+            [("#help ", "")]*13 +
+            [("!help ok 13", "")]
         )
 
     def test_timeout(self):
@@ -244,7 +244,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         replies = []
         informs = []
-        timeout = 0.0000001
+        timeout = 0.001
 
         def reply_cb(msg):
             replies.append(msg)
@@ -253,16 +253,16 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             informs.append(msg)
 
         self.client.request(
-            katcp.Message.request("help"),
+            katcp.Message.request("slow-command", "0.1"),
             reply_cb=reply_cb,
             inform_cb=inform_cb,
             timeout=timeout,
         )
 
-        time.sleep(0.1)
+        time.sleep(0.2)
         self.assertEqual(len(replies), 1)
         self.assertEqual(len(informs), 0)
-        self.assertEqual([msg.name for msg in replies], ["help"])
+        self.assertEqual([msg.name for msg in replies], ["slow-command"])
         self.assertEqual([msg.arguments for msg in replies], [["fail", "Timed out after %f seconds" % timeout]])
 
         del replies[:]
@@ -270,16 +270,16 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         # test next request succeeds
         self.client.request(
-            katcp.Message.request("help"),
+            katcp.Message.request("slow-command", "0.05"),
             reply_cb=reply_cb,
             inform_cb=inform_cb,
         )
 
-        time.sleep(0.1)
+        time.sleep(0.2)
         self.assertEqual(len(replies), 1)
-        self.assertEqual(len(informs), 12)
-        self.assertEqual([msg.name for msg in replies + informs], ["help"]*len(replies+informs))
-        self.assertEqual([msg.arguments for msg in replies], [["ok", str(len(informs))]])
+        self.assertEqual(len(informs), 0)
+        self.assertEqual([msg.name for msg in replies + informs], ["slow-command"]*len(replies+informs))
+        self.assertEqual([msg.arguments for msg in replies], [["ok"]])
 
     def test_user_data(self):
         """Test callbacks with user data."""
@@ -307,7 +307,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         time.sleep(0.1)
         self.assertEqual(len(help_replies), 1)
-        self.assertEqual(len(help_informs), 12)
+        self.assertEqual(len(help_informs), 13)
 
     def test_twenty_thread_mayhem(self):
         """Test using callbacks from twenty threads simultaneously."""
@@ -352,10 +352,10 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             done.wait(1.0)
             self.assertEqual(len(replies), 1)
             self.assertEqual(replies[0].arguments[0], "ok")
-            if len(informs) != 12:
+            if len(informs) != 13:
                 print thread_id, len(informs)
                 print [x.arguments[0] for x in informs]
-            self.assertEqual(len(informs), 12)
+            self.assertEqual(len(informs), 13)
 
     def test_blocking_request(self):
         """Test the callback client's blocking request."""
@@ -364,15 +364,15 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         )
 
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "12"])
-        self.assertEqual(len(informs), 12)
+        self.assertEqual(reply.arguments, ["ok", "13"])
+        self.assertEqual(len(informs), 13)
 
         reply, informs = self.client.blocking_request(
-            katcp.Message.request("help"),
-            timeout = 0.000001,
+            katcp.Message.request("slow-command", "0.5"),
+            timeout = 0.001,
         )
 
-        self.assertEqual(reply.name, "help")
+        self.assertEqual(reply.name, "slow-command")
         self.assertEqual(reply.arguments[0], "fail")
         self.assertTrue(reply.arguments[1].startswith("Timed out after"))
 
@@ -400,7 +400,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def help_reply(reply):
             self.assertEqual(reply.name, "help")
-            self.assertEqual(reply.arguments, ["ok", "12"])
+            self.assertEqual(reply.arguments, ["ok", "13"])
             self.assertEqual(len(help_informs), int(reply.arguments[1]))
             help_replies.append(reply)
 
@@ -417,5 +417,5 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         time.sleep(0.1)
         self.assertEqual(len(help_replies), 1)
-        self.assertEqual(len(help_informs), 12)
+        self.assertEqual(len(help_informs), 13)
 

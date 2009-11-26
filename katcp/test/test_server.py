@@ -111,6 +111,8 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("sensor-sampling", "an.unknown", "auto"))
         self.client.blocking_request(katcp.Message.request("sensor-sampling", "an.int", "unknown"))
 
+        time.sleep(0.1)
+
         self.server.log.trace("trace-msg")
         self.server.log.debug("debug-msg")
         self.server.log.info("info-msg")
@@ -141,8 +143,9 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#help sensor-list", ""),
             (r"#help sensor-sampling", ""),
             (r"#help sensor-value", ""),
+            (r"#help slow-command", ""),
             (r"#help watchdog", ""),
-            (r"!help ok 12", ""),
+            (r"!help ok 13", ""),
             (r"#help watchdog", ""),
             (r"!help ok 1", ""),
             (r"!help fail", ""),
@@ -230,8 +233,9 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#help[6] sensor-list", ""),
             (r"#help[6] sensor-sampling", ""),
             (r"#help[6] sensor-value", ""),
+            (r"#help[6] slow-command", ""),
             (r"#help[6] watchdog", ""),
-            (r"!help[6] ok 12", ""),
+            (r"!help[6] ok 13", ""),
             (r"#help[7] watchdog", ""),
             (r"!help[7] ok 1", ""),
             (r"!help[8] fail", ""),
