@@ -419,3 +419,21 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(len(help_replies), 1)
         self.assertEqual(len(help_informs), 13)
 
+    def test_request_fail_on_raise(self):
+        """Test that the callback is called even if send_message raises
+           KatcpClientError."""
+        def raise_error(msg):
+            raise katcp.KatcpClientError("Error %s" % msg.name)
+        self.client.send_message = raise_error
+
+        replies = []
+        def reply_cb(msg):
+            replies.append(msg)
+
+        self.client.request(katcp.Message.request("foo"),
+            reply_cb=reply_cb,
+        )
+
+        self.assertEqual(len(replies), 1)
+        self.assertEqual(replies[0].name, "foo")
+        self.assertEqual(replies[0].arguments, ["fail", "Error foo"])

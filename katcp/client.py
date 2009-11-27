@@ -805,7 +805,13 @@ class CallbackClient(DeviceClient):
         if self._use_ids:
             msg.mid = msg_id
         timer.start()
-        super(CallbackClient, self).request(msg)
+        try:
+            super(CallbackClient, self).request(msg)
+        except KatcpClientError, e:
+            reply = Message.request(msg.name, "fail", str(e))
+            if self._use_ids:
+                reply.mid = msg_id
+            self.handle_reply(reply)
 
     def blocking_request(self, msg, timeout=None):
         """Send a request messsage.
