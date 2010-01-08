@@ -537,8 +537,9 @@ class BlockingClient(DeviceClient):
         self._current_name = None
         self._current_informs = None
         self._current_reply = None
+        self._current_inform_count = None
 
-    def blocking_request(self, msg, timeout=None):
+    def blocking_request(self, msg, timeout=None, keepalive=False):
         """Send a request messsage.
 
         Parameters
@@ -548,6 +549,9 @@ class BlockingClient(DeviceClient):
         timeout : float in seconds
             How long to wait for a reply. The default is the
             the timeout set when creating the BlockingClient.
+        keepalive : boolean
+            Whether the arrival of an inform should
+            cause the timeout to be reset.
 
         Returns
         -------
@@ -562,6 +566,7 @@ class BlockingClient(DeviceClient):
             self._current_name = msg.name
             self._current_informs = []
             self._current_reply = None
+            self._current_inform_count = 0
         finally:
             self._request_lock.release()
 
@@ -570,7 +575,15 @@ class BlockingClient(DeviceClient):
 
         try:
             self.request(msg)
-            self._request_end.wait(timeout)
+            while True:
+                self._request_end.wait(timeout)
+                if self._request_end.is_set() or not keepalive:
+                    break
+                new_inform_count = len(self._current_informs)
+                if new_inform_count == self._current_inform_count:
+                    # no new informs received either
+                    break
+                self._current_inform_count = new_inform_count
         finally:
             try:
                 self._request_lock.acquire()
@@ -580,6 +593,7 @@ class BlockingClient(DeviceClient):
                 reply = self._current_reply
 
                 self._request_end.clear()
+                self._current_inform_count = None
                 self._current_informs = None
                 self._current_reply = None
                 self._current_name = None
