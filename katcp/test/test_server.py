@@ -65,14 +65,15 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
     def test_bad_requests(self):
         """Test request failure paths in device server."""
         self.client.raw_send("bad msg\n")
-
-        time.sleep(0.1)
+        # wait for reply
+        self.client.blocking_request(katcp.Message.request("watchdog"))
 
         msgs = self.client.messages()
         self._assert_msgs_like(msgs, [
             (r"#version device_stub-0.1", ""),
             (r"#build-state name-0.1", ""),
             (r"#log error", "KatcpSyntaxError:\_Bad\_type\_character\_'b'.\\n"),
+            (r"!watchdog ok", ""),
         ])
 
     def test_server_ignores_informs_and_replies(self):
