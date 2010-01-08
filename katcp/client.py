@@ -577,7 +577,7 @@ class BlockingClient(DeviceClient):
             self.request(msg)
             while True:
                 self._request_end.wait(timeout)
-                if self._request_end.is_set() or not keepalive:
+                if self._request_end.isSet() or not keepalive:
                     break
                 new_inform_count = len(self._current_informs)
                 if new_inform_count == self._current_inform_count:
