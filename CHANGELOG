@@ -1,3 +1,8 @@
+20 Jan 2010
+ * Allow logging using .warn(fmt, arg1, arg2, ...) format as used
+   in Python logging (allows msg formatting to be delayed until it
+   is known whether the message will actually be logged).
+
 26 Oct 2009
  * Add include_msg option to request decorator to give decorated
    requests a means to access the original message and the message id.

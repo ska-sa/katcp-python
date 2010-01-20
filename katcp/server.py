@@ -1292,7 +1292,7 @@ class DeviceLogger(object):
         """
         self._log_level = self.level_from_name(level_name)
 
-    def log(self, level, msg, name=None, timestamp=None):
+    def log(self, level, msg, *args, **kwargs):
         """Log a message and inform all clients.
 
         Parameters
@@ -1300,46 +1300,51 @@ class DeviceLogger(object):
         level : logging level constant
             The level to log the message at.
         msg : str
-            The text for the log message.
-        name : str
-            The name of the logger to log the message to (defaults
-            to the root logger).
-        timestamp : float in seconds
-            The time at which the log message was generated (defaults
-            to now).
+            The text format for the log message.
+        args : list of objects
+            Arguments to pass to log format string. Final message text is
+            created using: msg % args.
+        kwargs : additional keyword parameters
+            Allowed keywords are 'name' and 'timestamp'. The name is the name of the logger to
+            log the message to. If not given the name defaults to the root logger. The timestamp
+            is a float in seconds. If not given the timestamp defaults to the current time.
         """
         if self._python_logger is not None:
-            self._python_logger.log(self.PYTHON_LEVEL[level], msg)
+            self._python_logger.log(self.PYTHON_LEVEL[level], msg, *args)
         if level >= self._log_level:
+            name = kwargs.get("name")
+            timestamp = kwargs.get("timestamp")
             if name is None:
                 name = self._root_logger_name
             self._device_server.mass_inform(
-                self._device_server._log_msg(self.level_name(level), msg, name, timestamp=timestamp)
+                self._device_server._log_msg(self.level_name(level), msg % args,
+                    name, timestamp=timestamp
+                )
             )
 
-    def trace(self, msg, name=None, timestamp=None):
+    def trace(self, msg, *args, **kwargs):
         """Log a trace message."""
-        self.log(self.TRACE, msg, name, timestamp)
+        self.log(self.TRACE, msg, *args, **kwargs)
 
-    def debug(self, msg, name=None, timestamp=None):
+    def debug(self, msg, *args, **kwargs):
         """Log a debug message."""
-        self.log(self.DEBUG, msg, name, timestamp)
+        self.log(self.DEBUG, msg, *args, **kwargs)
 
-    def info(self, msg, name=None, timestamp=None):
+    def info(self, msg, *args, **kwargs):
         """Log an info message."""
-        self.log(self.INFO, msg, name, timestamp)
+        self.log(self.INFO, msg, *args, **kwargs)
 
-    def warn(self, msg, name=None, timestamp=None):
+    def warn(self, msg, *args, **kwargs):
         """Log an warning message."""
-        self.log(self.WARN, msg, name, timestamp)
+        self.log(self.WARN, msg, *args, **kwargs)
 
-    def error(self, msg, name=None, timestamp=None):
+    def error(self, msg, *args, **kwargs):
         """Log an error message."""
-        self.log(self.ERROR, msg, name, timestamp)
+        self.log(self.ERROR, msg, *args, **kwargs)
 
-    def fatal(self, msg, name=None, timestamp=None):
+    def fatal(self, msg, *args, **kwargs):
         """Log a fatal error message."""
-        self.log(self.FATAL, msg, name, timestamp)
+        self.log(self.FATAL, msg, *args, **kwargs)
 
     @classmethod
     def log_to_python(cls, logger, msg):
