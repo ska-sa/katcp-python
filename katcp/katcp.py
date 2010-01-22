@@ -91,6 +91,9 @@ class Message(object):
     ## @var arguments
     # @brief List of string message arguments.
 
+    ## @brief Attempt to optimize messages by specifying attributes up front
+    __slots__ = ["mtype", "name", "mid", "arguments"]
+
     def __init__(self, mtype, name, arguments=None, mid=None):
         self.mtype = mtype
         self.name = name
