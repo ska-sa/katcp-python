@@ -415,7 +415,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             inform_cb=help_inform,
         )
 
-        time.sleep(0.1)
+        time.sleep(0.2)
         self.assertEqual(len(help_replies), 1)
         self.assertEqual(len(help_informs), 13)
 
