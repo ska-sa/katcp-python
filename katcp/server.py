@@ -652,6 +652,8 @@ class DeviceServer(DeviceServerBase):
         self._reactor = None # created in run
         # map client sockets to map of sensors -> sampling strategies
         self._strategies = {}
+        # strat lock (should be held for updates to _strategies)
+        self._strat_lock = threading.Lock()
         self.setup_sensors()
 
     # pylint: enable-msg = W0142
@@ -664,7 +666,11 @@ class DeviceServer(DeviceServerBase):
         sock : socket.socket object
             The client connection that has been successfully established.
         """
-        self._strategies[sock] = {} # map of sensors -> sampling strategies
+        self._strat_lock.acquire()
+        try:
+            self._strategies[sock] = {} # map of sensors -> sampling strategies
+        finally:
+            self._strat_lock.release()
         self.inform(sock, Message.inform("version", self.version()))
         self.inform(sock, Message.inform("build-state", self.build_state()))
 
@@ -681,12 +687,15 @@ class DeviceServer(DeviceServerBase):
             True if sock is still open for sending,
             False otherwise.
         """
-        if sock in self._strategies:
-            strategies = self._strategies[sock]
-            del self._strategies[sock]
-            for sensor, strategy in list(strategies.items()):
-                del strategies[sensor]
-                self._reactor.remove_strategy(strategy)
+        self._strat_lock.acquire()
+        try:
+            strategies = self._strategies.pop(sock, None)
+            if strategies is not None:
+                for sensor, strategy in list(strategies.items()):
+                    del strategies[sensor]
+                    self._reactor.remove_strategy(strategy)
+        finally:
+            self._strat_lock.release()
 
         if sock_valid:
             self.inform(sock, Message.inform("disconnect", msg))
@@ -702,15 +711,36 @@ class DeviceServer(DeviceServerBase):
     def add_sensor(self, sensor):
         """Add a sensor to the device.
 
-        Should only be called inside .setup_sensors().
+        Usually called inside .setup_sensors() but may be called from elsewhere.
 
         Parameters
         ----------
         sensor : Sensor object
             The sensor object to register with the device server.
         """
-        name = sensor.name
-        self._sensors[name] = sensor
+        self._sensors[sensor.name] = sensor
+
+    def remove_sensor(self, sensor):
+        """Remove a sensor from the device.
+
+        Also deregisters all clients observing the sensor.
+
+        Parameters
+        ----------
+        sensor : Sensor object
+            The sensor object to remove from the device server.
+        """
+        del self._sensors[sensor.name]
+
+        self._strat_lock.acquire()
+        try:
+            for strategies in self._strategies.values():
+                for other_sensor, strategy in list(strategies.items()):
+                    if other_sensor.name == sensor.name:
+                        del strategies[other_sensor]
+                        self._reactor.remove_strategy(strategy)
+        finally:
+            self._strat_lock.release()
 
     def get_sensor(self, sensor_name):
         """Fetch the sensor with the given name.
@@ -1139,17 +1169,23 @@ class DeviceServer(DeviceServerBase):
             new_strategy = SampleStrategy.get_strategy(strategy,
                                         inform_callback, sensor, *params)
 
-            old_strategy = self._strategies[sock].get(sensor, None)
-            if old_strategy is not None:
-                self._reactor.remove_strategy(old_strategy)
+            self._strat_lock.acquire()
+            try:
+                old_strategy = self._strategies[sock].get(sensor, None)
+                if old_strategy is not None:
+                    self._reactor.remove_strategy(old_strategy)
 
-            # todo: replace isinstance check with something better
-            if isinstance(new_strategy, SampleNone):
-                if sensor in self._strategies[sock]:
-                    del self._strategies[sock][sensor]
-            else:
-                self._strategies[sock][sensor] = new_strategy
-                self._reactor.add_strategy(new_strategy)
+                # todo: replace isinstance check with something better
+                if isinstance(new_strategy, SampleNone):
+                    if sensor in self._strategies[sock]:
+                        del self._strategies[sock][sensor]
+                else:
+                    self._strategies[sock][sensor] = new_strategy
+                    # reactor.add_strategy() sends out an inform
+                    # which is not great while the lock is held.
+                    self._reactor.add_strategy(new_strategy)
+            finally:
+                self._strat_lock.release()
 
         current_strategy = self._strategies[sock].get(sensor, None)
         if not current_strategy:

@@ -415,3 +415,33 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
         # close socket -- server didn't shut down correctly
         self.server._sock.close()
+
+    def test_sampling(self):
+        """Test sensor sampling."""
+        self.client.request(katcp.Message.request("sensor-sampling", "an.int", "period", 100))
+        start = time.time()
+        time.sleep(1.0)
+        self.client.request(katcp.Message.request("sensor-sampling", "an.int", "none"))
+        end = time.time()
+        time.sleep(0.5)
+
+        msgs = self.client.messages()
+        updates = [x for x in msgs if x.name == "sensor-status"]
+        others = [x for x in msgs if x.name != "sensor-status"]
+        self.assertTrue(abs(len(updates) - 12) < 2, "Expected 12 informs, saw %d." % len(updates))
+
+        self._assert_msgs_equal(others, [
+            r"#version device_stub-0.1",
+            r"#build-state name-0.1",
+            r"!sensor-sampling ok an.int period 100",
+            r"!sensor-sampling ok an.int none",
+        ])
+
+        self.assertEqual(updates[0].arguments[1:], ["1", "an.int", "nominal", "3"])
+
+    def test_add_remove_sensors(self):
+        """Test adding and removing sensors from a running device."""
+        an_int = self.server._sensors["an.int"]
+        self.server.remove_sensor(an_int)
+        self.server.add_sensor(an_int)
+        self.test_sampling()

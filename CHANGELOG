@@ -1,3 +1,6 @@
+02 Feb 2010
+ * Allow adding and removing sensors on the fly.
+
 20 Jan 2010
  * Allow logging using .warn(fmt, arg1, arg2, ...) format as used
    in Python logging (allows msg formatting to be delayed until it
