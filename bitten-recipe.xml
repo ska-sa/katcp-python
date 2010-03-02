@@ -50,7 +50,7 @@
                ret = call([&quot;pylint&quot;,
                            &quot;--output-format=parseable&quot;,
                            &quot;--rcfile=tools/svnds-code.pylintrc&quot;,
-                           &quot;katuilib&quot;]);
+                           &quot;katcp&quot;]);
                sys.exit(ret if (ret &gt; 31 or ret &lt; 0) else 0);'"
      output="build/pylint.out"/>
     <python:pylint file="build/pylint.out"/>
