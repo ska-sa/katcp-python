@@ -44,11 +44,14 @@
   </step>
 
   <step id="lint" description="Analyse source code" onerror="continue">
-    <sh:exec executable="pylint" 
-     args="
-      --output-format=parseable 
-      --rcfile=tools/svnds-code.pylintrc
-      katcp"
+    <sh:exec executable="python" 
+     args="-c 'from subprocess import call;
+               import sys;
+               ret = call([&quot;pylint&quot;,
+                           &quot;--output-format=parseable&quot;,
+                           &quot;--rcfile=tools/svnds-code.pylintrc&quot;,
+                           &quot;katuilib&quot;]);
+               sys.exit(ret if (ret &gt; 31 or ret &lt; 0) else 0);'"
      output="build/pylint.out"/>
     <python:pylint file="build/pylint.out"/>
   </step>
