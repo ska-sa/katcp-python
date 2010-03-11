@@ -1,3 +1,7 @@
+11 Mar 2010
+ * Add check to client to bail out of re-trying sends if the client
+   has disconnected.
+
 02 Feb 2010
  * Allow adding and removing sensors on the fly.
 

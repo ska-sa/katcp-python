@@ -118,7 +118,7 @@ class DeviceClient(object):
                 try:
                     sent = sock.send(data[totalsent:])
                 except socket.error, e:
-                    if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
+                    if len(e.args) == 2 and e.args[0] == errno.EAGAIN and sock is self._sock:
                         continue
                     else:
                         send_failed = True
