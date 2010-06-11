@@ -19,6 +19,10 @@
                   dir="tools"/>
   </step>
 
+  <step id="install-dependencies" description="Install local dependencies">
+    <!-- no dependencies yet -->
+  </step>
+
   <step id="build" description="Compile to byte code">
     <python:distutils command="build"/>
   </step>
