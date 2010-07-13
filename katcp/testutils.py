@@ -115,14 +115,399 @@ class BlockingTestClient(client.BlockingClient):
     """Test blocking client."""
     __metaclass__ = TestClientMetaclass
 
-    def get_sensor_value(self, sensorname):
-        reply, informs = self.blocking_request(Message.request("sensor-value", sensorname))
+    def __init__(self, test, *args, **kwargs):
+        """Takes a TestCase class as an additional parameter."""
+        self.test = test
+        super(BlockingTestClient, self).__init__(*args, **kwargs)
 
-        if str(reply) == "!sensor-value ok 1":
-            value = str(informs[0]).split(" ")[5]
+    def _sensor_lag(self):
+        """The expected lag before device changes are applied."""
+        return getattr(self.test, "sensor_lag", 0)
+
+    @staticmethod
+    def expected_sensor_value_tuple(sensorname, value, sensortype=str, places=7):
+        """Helper method for completing optional values in expected sensor value tuples.
+
+        Parameters
+        ----------
+        sensorname : str
+            The name of the sensor.
+        value : obj
+            The expected value of the sensor.  Type must match sensortype.
+        sensortype : type, optional
+            The type to use to convert the sensor value. Default: str.
+        places : int, optional
+            The number of places to use in a float comparison.  Has no effect if
+            sensortype is not float. Default: 7.
+        """
+
+        return (sensorname, value, sensortype, places)
+
+    # SENSOR VALUES
+
+    def get_sensor_value(self, sensorname, sensortype=str):
+        """Retrieve the value of a sensor.
+
+        Parameters
+        ----------
+        sensorname : str
+            The name of the sensor.
+        sensortype : type, optional
+            The type to use to convert the sensor value. Default: str.
+        """
+
+        reply, informs = self.blocking_request(Message.request("sensor-value", sensorname))
+        self.test.assertTrue(reply.reply_ok(),
+            "Could not retrieve value of sensor '%s': %s"
+            % (sensorname, (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
+        )
+
+        value = informs[0].arguments[4]
+
+        if sensortype == bool:
+            return bool(int(value))
+
+        return sensortype(value)
+
+    def get_sensor_status(self, sensorname):
+        """Retrieve the status of a sensor.
+
+        Parameters
+        ----------
+        sensorname : str
+            The name of the sensor.
+        """
+
+        reply, informs = self.blocking_request(Message.request("sensor-value", sensorname))
+        self.test.assertTrue(reply.reply_ok(),
+            "Could not retrieve status of sensor '%s': %s"
+            % (sensorname, (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
+        )
+
+        return informs[0].arguments[3]
+
+    def assert_sensor_equals(self, sensorname, expected, sensortype=str, msg=None, places=7):
+        """Assert that a sensor's value is equal to the given value.
+
+        Parameters
+        ----------
+        sensorname : str
+            The name of the sensor.
+        expected : obj
+            The expected value of the sensor.  Type must match sensortype.
+        sensortype : type, optional
+            The type to use to convert the sensor value. Default: str.
+        msg : str, optional
+            A custom message to print if the assertion fails.  If the string
+            contains %r, it will be replaced with the sensor's value. A default
+            message is defined in this method.
+        places : int, optional
+            The number of places to use in a float comparison.  Has no effect if
+            sensortype is not float. Default: 7.
+        """
+
+        if msg is None:
+            places_msg = " (within %d decimal places)" % places if sensortype == float else ""
+            msg = "Value of sensor '%s' is %%r. Expected %r%s." % (sensorname, expected, places_msg)
+
+        got = self.get_sensor_value(sensorname, sensortype)
+        if '%r' in msg:
+            msg = msg % got
+
+        if sensortype == float:
+            self.test.assertAlmostEqual(got, expected, places, msg)
         else:
-            raise ValueError(str(reply))
-        return value
+            self.test.assertEqual(got, expected, msg)
+
+    def assert_sensor_status_equals(self, sensorname, expected_status, msg=None):
+        """Assert that a sensor's status is equal to the given status.
+
+        Parameters
+        ----------
+        sensorname : str
+            The name of the sensor.
+        expected_status : str
+            The expected status of the sensor.
+        msg : str, optional
+            A custom message to print if the assertion fails.  If the string
+            contains %r, it will be replaced with the sensor's value. A default
+            message is defined in this method.
+        """
+
+        if msg is None:
+            msg = "Status of sensor '%s' is %%r. Expected %r." % (sensorname, expected_status)
+
+        got_status = self.get_sensor_status(sensorname)
+        if '%r' in msg:
+            msg = msg % got_status
+
+        self.test.assertEqual(got_status, expected_status, msg)
+
+    def assert_sensor_not_equal(self, sensorname, expected, sensortype=str, msg=None, places=7):
+        """Assert that a sensor's value is not equal to the given value.
+
+        Parameters
+        ----------
+        sensorname : str
+            The name of the sensor.
+        expected : obj
+            The expected value of the sensor.  Type must match sensortype.
+        sensortype : type, optional
+            The type to use to convert the sensor value. Default: str.
+        msg : str, optional
+            A custom message to print if the assertion fails.  If the string
+            contains %r, it will be replaced with the sensor's value. A default
+            message is defined in this method.
+        places : int, optional
+            The number of places to use in a float comparison.  Has no effect if
+            sensortype is not float. Default: 7.
+        """
+
+        if msg is None:
+            places_msg = " (within %d decimal places)" % places if sensortype == float else ""
+            msg = "Value of sensor '%s' is %%r. Expected a different value%s." % (sensorname, places_msg)
+
+        got = self.get_sensor_value(sensorname, sensortype)
+        if '%r' in msg:
+            msg = msg % got
+
+        if sensortype == float:
+            self.test.assertNotAlmostEqual(got, expected, places, msg)
+        else:
+            self.test.assertNotEqual(got, expected, msg)
+
+    def assert_sensors_equal(self, sensor_tuples, msg=None):
+        """Assert that the values of several sensors are equal to the given values.
+
+        Parameters
+        ----------
+        sensor_tuples : list of tuples
+            A list of tuples specifying the sensor values to be checked.  See :meth:`expected_sensor_value_tuple`.
+        msg : str, optional
+            A custom message to print if the assertion fails.  If the string
+            contains %r, it will be replaced with the sensor's value. A default
+            message is defined in this method.
+        """
+
+        sensor_tuples = [self.expected_sensor_value_tuple(*t) for t in sensor_tuples]
+        for sensorname, expected, sensortype, places in sensor_tuples:
+            self.assert_sensor_equals(sensorname, expected, sensortype, msg=msg, places=places)
+
+    def assert_sensors_not_equal(self, sensor_tuples, msg=None):
+        """Assert that the values of several sensors are not equal to the given values.
+
+        Parameters
+        ----------
+        sensor_tuples : list of tuples
+            A list of tuples specifying the sensor values to be checked.  See :meth:`expected_sensor_value_tuple`.
+        msg : str, optional
+            A custom message to print if the assertion fails.  If the string
+            contains %r, it will be replaced with the sensor's value. A default
+            message is defined in this method.
+        """
+
+        sensor_tuples = [self.expected_sensor_value_tuple(*t) for t in sensor_tuples]
+        for sensorname, expected, sensortype, places in sensor_tuples:
+            self.assert_sensor_not_equal(sensorname, expected, sensortype, msg=msg, places=places)
+
+    def wait_until_sensor_equals(self, timeout, sensorname, value, sensortype=str, places=7, pollfreq=0.1):
+        """Wait until a sensor's value is equal to the given value, or time out.
+
+        Parameters
+        ----------
+        timeout : float
+            How long to wait before timing out, in seconds.
+        sensorname : str
+            The name of the sensor.
+        value : obj
+            The expected value of the sensor.  Type must match sensortype.
+        sensortype : type, optional
+            The type to use to convert the sensor value. Default: str.
+        places : int, optional
+            The number of places to use in a float comparison.  Has no effect if
+            sensortype is not float. Default: 7.
+        pollfreq : float, optional
+            How frequently to poll for the sensor value. Default: 0.1.
+        """
+
+        stoptime = time.time() + timeout
+        success = False
+
+        if sensortype == float:
+            cmpfun = lambda got, exp: abs(got-exp) < 10**-places
+        else:
+            cmpfun = lambda got, exp: got == exp
+
+        lastval = None
+        while time.time() < stoptime:
+            lastval = self.get_sensor_value(sensorname, sensortype)
+            if cmpfun(lastval, value):
+                success = True
+                break
+            time.sleep(pollfreq)
+
+        if not success:
+            self.fail("Timed out while waiting %ss for %s sensor to become %s. Last value was %s." % (timeout, sensorname, value, lastval))
+
+    # REQUEST PARAMETERS
+
+    def test_sensor_list(self, expected_sensors, ignore_descriptions=False):
+        """Test that the list of sensors on the device equals the provided list.
+
+        Parameters
+        ----------
+        expected_sensors : list of tuples
+            The list of expected sensors.  Each tuple contains the arguments
+            returned by each sensor-list inform, as unescaped strings.
+        ignore_descriptions : boolean, optional
+            If this is true, sensor descriptions will be ignored in the
+            comparison. Default: False.
+        """
+
+        def sensortuple(name, description, units, stype, *params):
+            # ensure float params reduced to the same format
+            if stype == "float":
+                params = ["%g" % float(p) for p in params]
+            return (name, description, units, stype) + tuple(params)
+
+        reply, informs = self.blocking_request(Message.request("sensor-list"))
+
+        expected_sensors = [sensortuple(*t) for t in expected_sensors]
+        got_sensors = [sensortuple(*m.arguments) for m in informs]
+
+        #print ",\n".join([str(t) for t in got_sensors])
+
+        if ignore_descriptions:
+            expected_sensors = [s[:1]+s[2:] for s in expected_sensors]
+            got_sensors = [s[:1]+s[2:] for s in got_sensors]
+
+        expected_set = set(expected_sensors)
+        got_set = set(got_sensors)
+
+        self.test.assertEqual(got_set, expected_set,
+            "Sensor list differs from expected list.\nThese sensors are missing:\n%s\nFound these unexpected sensors:\n%s"
+            % ("\n".join(sorted([str(t) for t in expected_set - got_set])), "\n".join(sorted([str(t) for t in got_set - expected_set])))
+        )
+
+    def assert_request_succeeds(self, requestname, *params):
+        """Assert that the given request completes successfully when called with the given parameters.
+
+        Parameters
+        ----------
+        requestname : str
+            The name of the request.
+        params : list of objects
+            The parameters with which to call the request.
+        """
+
+        reply, informs = self.blocking_request(Message.request(requestname, *params))
+        self.test.assertTrue(reply.reply_ok(),
+            "Expected request '%s' called with parameters %r to succeed, but it failed %s."
+            % (requestname, params, ("with error '%s'" % reply.arguments[1] if len(reply.arguments) >= 2 else "(with no error message)"))
+        )
+
+    def assert_request_fails(self, requestname, *params):
+        """Assert that the given request fails when called with the given parameters.
+
+        Parameters
+        ----------
+        requestname : str
+            The name of the request.
+        params : list of objects
+            The parameters with which to call the request.
+        """
+
+        reply, informs = self.blocking_request(Message.request(requestname, *params))
+        self.test.assertFalse(reply.reply_ok(),
+            "Expected request '%s' called with parameters %r to fail, but it was successful."
+            % (requestname, params)
+        )
+
+    def test_setter_request(self, requestname, sensorname, sensortype=str, good=(), bad=(), places=7):
+        """Test a request which simply sets the value of a sensor.
+
+        Parameters
+        ----------
+        requestname : str
+            The name of the request.
+        sensorname : str
+            The name of the sensor.
+        sensortype : type, optional
+            The type to use to convert the sensor value. Default: str.
+        good : list of objects
+            A list of values to which this request can successfully set the
+            sensor.  The object type should match sensortype.
+        bad : list of objects
+            A list of values to which this request cannot successfully set the
+            sensor.  The object type should match sensortype.
+        places : int, optional
+            The number of places to use in a float comparison.  Has no effect if
+            sensortype is not float. Default: 7.
+        """
+
+        for value in good:
+            self.assert_request_succeeds(requestname, value)
+            time.sleep(self._sensor_lag())
+
+            self.assert_sensor_equals(
+                sensorname, value, sensortype,
+                "After request '%s' was called with parameter %r, value of sensor '%s' is %%r. Expected %r%s."
+                % (requestname, value, sensorname, value, (" (within %d decimal places)" % places if sensortype == float else "")),
+                places
+            )
+
+        for value in bad:
+            self.assert_request_fails(requestname, value)
+
+    def test_multi_setter_request(self, requestname, good=(), bad=()):
+        """Test a request which causes several sensor values to change.
+
+        Parameters
+        ----------
+        requestname : str
+            The name of the request.
+        good : list of tuples
+            Each tuple contains a tuple of successful parameters, a tuple of
+            expected sensor values (see :meth:`expected_sensor_value_tuple`), and
+            optionally a dict of options. Permitted options are: "statuses" and
+            a list of status tuples to check, or "delay" and a float in seconds
+            specifying an additional delay before the sensors are expected to
+            change.
+        bad : list of tuples
+            Each tuple is set of parameters which should cause the request to fail.
+        """
+
+        def testtuple(params, expected_values, options={}):
+            return (params, expected_values, options)
+
+        good = [testtuple(*t) for t in good]
+
+        for params, expected_values, options in good:
+            delay = options.get("delay", 0)
+            expected_statuses = options.get("statuses", ())
+
+            self.assert_request_succeeds(requestname, *params)
+            time.sleep(self._sensor_lag() + delay)
+
+            expected_values = [self.expected_sensor_value_tuple(*t) for t in expected_values]
+
+            for sensorname, value, sensortype, places in expected_values:
+                self.assert_sensor_equals(
+                    sensorname, value, sensortype,
+                    "After request '%s' was called with parameters %r, value of sensor '%s' is %%r. Expected %r%s."
+                    % (requestname, params, sensorname, value, (" (within %d decimal places)" % places if sensortype == float else "")),
+                    places
+                )
+
+            for sensorname, status in expected_statuses:
+                self.assert_sensor_status_equals(
+                    sensorname, status,
+                    "After request '%s' was called with parameters %r, status of sensor '%s' is %%r. Expected %r."
+                    % (requestname, params, sensorname, status)
+                )
+
+        for params in bad:
+            self.assert_request_fails(requestname, *params)
 
 
 class DeviceTestServer(DeviceServer):
@@ -226,81 +611,8 @@ class TestUtilMixin(object):
                 )
         self._assert_msgs_length(actual_msgs, len(expected))
 
-    def _check_request_params(self, request, returns=None, raises=None):
-        sock = ""
-        requestname = request.__name__[8:].replace("_", "-")
-        if returns is None:
-            returns = []
-        if raises is None:
-            raises = []
 
-        returned_msgs = [(request(sock, Message.request(requestname, *tuple(params))), expected) for (params, expected) in returns]
-
-        msgs_equal = [(msg, expected) for (msg, expected) in returned_msgs if not hasattr(expected, "__iter__")]
-        msgs_like = [(msg, expected) for (msg, expected) in returned_msgs if hasattr(expected, "__iter__")]
-
-        if msgs_equal:
-            self._assert_msgs_equal(*zip(*msgs_equal))
-        if msgs_like:
-            self._assert_msgs_like(*zip(*msgs_like))
-
-        for params in raises:
-            self.assertRaises(FailReply, request, sock, Message.request(requestname, *tuple(params)))
-
-    def _assert_sensors_equal(self, get_sensor_method, sensor_tuples):
-        sensor_tuples = [t + (None,)*(4-len(t)) for t in sensor_tuples]
-        for sensorname, sensortype, expected, places in sensor_tuples:
-            try:
-                if sensortype == bool:
-                    self.assertEqual(bool(int(get_sensor_method(sensorname))), expected)
-                elif sensortype == float:
-                    if places is not None:
-                        self.assertAlmostEqual(float(get_sensor_method(sensorname)), expected, places)
-                    else:
-                        self.assertAlmostEqual(float(get_sensor_method(sensorname)), expected)
-                else:
-                    self.assertEqual(sensortype(get_sensor_method(sensorname)), expected)
-            except AssertionError, e:
-                raise AssertionError("Sensor %s: %s" % (sensorname, e))
-
-    def _assert_sensors_not_equal(self, get_sensor_method, sensor_tuples):
-        sensor_tuples = [t + (None,)*(4-len(t)) for t in sensor_tuples]
-        for sensorname, sensortype, expected, places in sensor_tuples:
-            try:
-                if sensortype == bool:
-                    self.assertNotEqual(bool(int(get_sensor_method(sensorname))), expected)
-                elif sensortype == float:
-                    if places is not None:
-                        self.assertNotAlmostEqual(float(get_sensor_method(sensorname)), expected, places)
-                    else:
-                        self.assertNotAlmostEqual(float(get_sensor_method(sensorname)), expected)
-                else:
-                    self.assertNotEqual(sensortype(get_sensor_method(sensorname)), expected)
-            except AssertionError, e:
-                raise AssertionError("Sensor %s: %s" % (sensorname, e))
-
-    def _wait_until_sensor_equals(self, timeout, get_sensor_method, sensorname, sensortype, value, places=7):
-        stoptime = time.time() + timeout
-        success = False
-
-        if sensortype == bool:
-            cmpfun = lambda got, exp: bool(int(got)) == exp
-        elif sensortype == float:
-            cmpfun = lambda got, exp: abs(float(got)-exp) < 10**-places
-        else:
-            cmpfun = lambda got, exp: sensortype(got) == exp
-
-        lastval = None
-        while time.time() < stoptime:
-            lastval = get_sensor_method(sensorname)
-            if cmpfun(lastval, value):
-                success = True
-                break
-            time.sleep(0.1)
-
-        if not success:
-            self.fail("Timed out while waiting %ss for %s sensor to become %s. Last value was %s." % (timeout, sensorname, value, lastval))
-
+# TODO: this is obsolete; remove it once all the tests that use it have been refactored
 def device_wrapper(device):
     outgoing_informs = []
 

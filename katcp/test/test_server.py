@@ -26,7 +26,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
         host, port = self.server._sock.getsockname()
 
-        self.client = BlockingTestClient(host, port)
+        self.client = BlockingTestClient(self, host, port)
         self.client.start(timeout=0.1)
 
     def tearDown(self):
