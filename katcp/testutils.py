@@ -372,6 +372,11 @@ class BlockingTestClient(client.BlockingClient):
 
         reply, informs = self.blocking_request(Message.request("sensor-list"))
 
+        self.test.assertTrue(reply.reply_ok(),
+            "Could not retrieve sensor list: %s"
+            % (reply.arguments[1] if len(reply.arguments) >= 2 else "")
+        )
+
         expected_sensors = [sensortuple(*t) for t in expected_sensors]
         got_sensors = [sensortuple(*m.arguments) for m in informs]
 
@@ -386,6 +391,61 @@ class BlockingTestClient(client.BlockingClient):
 
         self.test.assertEqual(got_set, expected_set,
             "Sensor list differs from expected list.\nThese sensors are missing:\n%s\nFound these unexpected sensors:\n%s"
+            % ("\n".join(sorted([str(t) for t in expected_set - got_set])), "\n".join(sorted([str(t) for t in got_set - expected_set])))
+        )
+
+    def test_help(self, expected_requests, full_descriptions=False, exclude_defaults=True):
+        """Test that the list of requests on the device equals the provided list.
+
+        Parameters
+        ----------
+        expected_requests : list of tuples or strings
+            The list of expected requests.  May be a list of request names as
+            strings.  May also be a list of tuples, each of which contains the
+            request name and either the first line or the full text of the
+            request description, as unescaped strings.  If full_descriptions is
+            true, full description text must be provided.
+        full_descriptions : boolean, optional
+            If this is true, the full text of descriptions is compared,
+            otherwise only text up to the first newline is compared.  Has no
+            effect if expected_requests is a list of strings.  Default: False.
+        exclude_defaults : boolean, optional
+            If this is true, exclude requests on the device which match requests
+            found on :class:`katcp.DeviceServer` by name.  Default: True.
+        """
+
+        descriptions = True
+        if not expected_requests or isinstance(expected_requests[0], str):
+            descriptions = False
+
+        reply, informs = self.blocking_request(Message.request("help"))
+        self.test.assertTrue(reply.reply_ok(),
+            "Could not retrieve help list: %s"
+            % (reply.arguments[1] if len(reply.arguments) >= 2 else "")
+        )
+
+        got_requests = [tuple(m.arguments) for m in informs]
+
+        if descriptions:
+            if not full_descriptions:
+                got_requests = [(name, desc.split('\n')[0]) for (name, desc) in got_requests]
+                expected_requests = [(name, desc.split('\n')[0]) for (name, desc) in expected_requests]
+        else:
+            got_requests = [name for (name, desc) in got_requests]
+
+        got_set = set(got_requests)
+        expected_set = set(expected_requests)
+
+        if exclude_defaults:
+            default_request_names = set(DeviceServer._request_handlers.keys())
+
+            if not descriptions:
+                got_set = got_set - default_request_names
+            else:
+                got_set = set([(name, desc) for (name, desc) in got_set if name not in default_request_names])
+
+        self.test.assertEqual(got_set, expected_set,
+            "Help list differs from expected list.\nThese requests are missing:\n%s\nFound these unexpected requests:\n%s"
             % ("\n".join(sorted([str(t) for t in expected_set - got_set])), "\n".join(sorted([str(t) for t in got_set - expected_set])))
         )
 
