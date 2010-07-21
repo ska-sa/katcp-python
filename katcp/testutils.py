@@ -145,6 +145,36 @@ class BlockingTestClient(client.BlockingClient):
 
     # SENSOR VALUES
 
+    def _get_sensor(self, sensorname):
+        """Helper method for retrieving a sensor.
+
+        Parameters
+        ----------
+        sensorname : str
+            The name of the sensor.
+        """
+
+        reply, informs = self.blocking_request(Message.request("sensor-value", sensorname))
+        self.test.assertTrue(reply.reply_ok(),
+            "Could not retrieve sensor '%s': %s"
+            % (sensorname, (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
+        )
+
+        self.test.assertEqual(len(informs), 1,
+            "Expected one sensor value inform for sensor '%s', but received %d."
+            % (sensorname, len(informs))
+        )
+
+        inform = informs[0]
+
+        self.test.assertEqual(len(inform.arguments), 5,
+            "Expected sensor value inform for sensor '%s' to have five arguments, but received %d."
+            % (sensorname, len(inform.arguments))
+        )
+
+        timestamp, num, name, status, value = inform.arguments
+        return value, status, timestamp
+
     def get_sensor_value(self, sensorname, sensortype=str):
         """Retrieve the value of a sensor.
 
@@ -156,18 +186,21 @@ class BlockingTestClient(client.BlockingClient):
             The type to use to convert the sensor value. Default: str.
         """
 
-        reply, informs = self.blocking_request(Message.request("sensor-value", sensorname))
-        self.test.assertTrue(reply.reply_ok(),
-            "Could not retrieve value of sensor '%s': %s"
-            % (sensorname, (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
-        )
+        value, status, timestamp = self._get_sensor(sensorname)
 
-        value = informs[0].arguments[4]
+        try:
+            if sensortype == bool:
+                typestr = "%r and then %r" % (int, bool)
+                value =  bool(int(value))
+            else:
+                typestr = "%r" % sensortype
+                value = sensortype(value)
+        except ValueError, e:
+            self.test.fail("Could not convert value %r of sensor '%s' to type %s: %s"
+                % (value, sensorname, typestr, e)
+            )
 
-        if sensortype == bool:
-            return bool(int(value))
-
-        return sensortype(value)
+        return value
 
     def get_sensor_status(self, sensorname):
         """Retrieve the status of a sensor.
@@ -178,13 +211,33 @@ class BlockingTestClient(client.BlockingClient):
             The name of the sensor.
         """
 
-        reply, informs = self.blocking_request(Message.request("sensor-value", sensorname))
-        self.test.assertTrue(reply.reply_ok(),
-            "Could not retrieve status of sensor '%s': %s"
-            % (sensorname, (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
+        value, status, timestamp = self._get_sensor(sensorname)
+
+        self.test.assertTrue(status in Sensor.STATUSES.values(),
+            "Got invalid status value %r for sensor '%s'." % (status, sensorname)
         )
 
-        return informs[0].arguments[3]
+        return status
+
+    def get_sensor_timestamp(self, sensorname):
+        """Retrieve the timestamp of a sensor.
+
+        Parameters
+        ----------
+        sensorname : str
+            The name of the sensor.
+        """
+
+        value, status, timestamp = self._get_sensor(sensorname)
+
+        try:
+            timestamp =  int(timestamp)
+        except ValueError, e:
+            self.test.fail("Could not convert timestamp %r of sensor '%s' to type %r: %s"
+                % (timestamp, sensorname, int, e)
+            )
+
+        return timestamp
 
     def assert_sensor_equals(self, sensorname, expected, sensortype=str, msg=None, places=7):
         """Assert that a sensor's value is equal to the given value.
@@ -449,8 +502,8 @@ class BlockingTestClient(client.BlockingClient):
             % ("\n".join(sorted([str(t) for t in expected_set - got_set])), "\n".join(sorted([str(t) for t in got_set - expected_set])))
         )
 
-    def assert_request_succeeds(self, requestname, *params):
-        """Assert that the given request completes successfully when called with the given parameters.
+    def assert_request_succeeds(self, requestname, *params, **kwargs):
+        """Assert that the given request completes successfully when called with the given parameters, and optionally check the arguments.
 
         Parameters
         ----------
@@ -458,15 +511,62 @@ class BlockingTestClient(client.BlockingClient):
             The name of the request.
         params : list of objects
             The parameters with which to call the request.
+        args_echo : boolean, optional
+            Keyword parameter.  Assert that the reply arguments after 'ok' equal
+            the request parameters.  Takes precedence over args_equal, args_in
+            and args_length. Default False.
+        args_equal : tuple, optional
+            Keyword parameter.  Assert that the reply arguments after 'ok' equal
+            this tuple.  Ignored if args_echo is present; takes precedence over
+            args_echo, args_in and args_length.
+        args_in : list of tuples, optional
+            Keyword parameter.  Assert that the reply arguments after 'ok' equal
+            one of these tuples.  Ignored if args_equal or args_echo is present;
+            takes precedence over args_length.
+        args_length : int, optional
+            Keyword parameter.  Assert that the length of the reply arguments
+            after 'ok' matches this number. Ignored if args_equal, args_echo or
+            args_in is present.
         """
 
         reply, informs = self.blocking_request(Message.request(requestname, *params))
+
+        self.test.assertEqual(reply.name, requestname, "Reply to request '%s' has name '%s'." % (requestname, reply.name))
+
         self.test.assertTrue(reply.reply_ok(),
             "Expected request '%s' called with parameters %r to succeed, but it failed %s."
             % (requestname, params, ("with error '%s'" % reply.arguments[1] if len(reply.arguments) >= 2 else "(with no error message)"))
         )
 
-    def assert_request_fails(self, requestname, *params):
+        args = reply.arguments[1:]
+
+        args_echo = kwargs.get("args_echo", False)
+        args_equal = kwargs.get("args_equal")
+        args_in = kwargs.get("args_in")
+        args_length = kwargs.get("args_length")
+
+        if args_echo:
+            args_equal = list(params)
+
+        if args_equal is not None:
+            self.test.assertEqual(args, args_equal,
+                "Expected reply to request '%s' called with parameters %r to have arguments %s, but received %s."
+                % (requestname, params, args_equal, args)
+            )
+        elif args_in is not None:
+            self.test.assertTrue(args in args_in,
+                "Expected reply to request '%s' called with parameters %r to have arguments in %s, but received %s."
+                % (requestname, params, args_in, args)
+            )
+        elif args_length is not None:
+            self.test.assertEqual(len(args), args_length,
+                "Expected reply to request '%s' called with parameters %r to have %d arguments, but received %d: %s."
+                % (requestname, params, args_length, len(args), args)
+            )
+
+        return args
+
+    def assert_request_fails(self, requestname, *params, **kwargs):
         """Assert that the given request fails when called with the given parameters.
 
         Parameters
@@ -475,15 +575,43 @@ class BlockingTestClient(client.BlockingClient):
             The name of the request.
         params : list of objects
             The parameters with which to call the request.
+        status_equals : string, optional
+            Keyword parameter.  Assert that the reply status equals this string.
+        error_equals : string, optional
+            Keyword parameter.  Assert that the error message equals this
+            string.
         """
 
         reply, informs = self.blocking_request(Message.request(requestname, *params))
+
+        self.test.assertEqual(reply.name, requestname, "Reply to request '%s' has name '%s'." % (requestname, reply.name))
+
         self.test.assertFalse(reply.reply_ok(),
             "Expected request '%s' called with parameters %r to fail, but it was successful."
             % (requestname, params)
         )
 
-    def test_setter_request(self, requestname, sensorname, sensortype=str, good=(), bad=(), places=7):
+        status = reply.arguments[0]
+        error = reply.arguments[1] if len(reply.arguments) > 1 else None
+
+        status_equals = kwargs.get("status_equals")
+        error_equals = kwargs.get("error_equals")
+
+        if status_equals is not None:
+            self.test.assertTrue(status == status_equals,
+                "Expected request '%s' called with parameters %r to return status %s, but the status was %r."
+                % (requestname, params, status_equals, status)
+            )
+
+        if error_equals is not None:
+            self.test.assertTrue(error is not None and error == error_equals,
+                "Expected request '%s' called with parameters %r to fail with error %s, but the error was %r."
+                % (requestname, params, error_equals, error)
+            )
+
+        return status, error
+
+    def test_setter_request(self, requestname, sensorname, sensortype=str, good=(), bad=(), places=7, args_echo=False):
         """Test a request which simply sets the value of a sensor.
 
         Parameters
@@ -503,10 +631,13 @@ class BlockingTestClient(client.BlockingClient):
         places : int, optional
             The number of places to use in a float comparison.  Has no effect if
             sensortype is not float. Default: 7.
+        args_echo : boolean, optional
+            Check that the value is echoed as an argument by the reply to the
+            request.  Default: False.
         """
 
         for value in good:
-            self.assert_request_succeeds(requestname, value)
+            self.assert_request_succeeds(requestname, value, args_echo=args_echo)
             time.sleep(self._sensor_lag())
 
             self.assert_sensor_equals(
