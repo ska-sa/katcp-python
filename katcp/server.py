@@ -5,7 +5,7 @@
 # BSD license - see COPYING for details
 
 """Servers for the KAT device control language.
-   """
+"""
 
 import socket
 import errno
