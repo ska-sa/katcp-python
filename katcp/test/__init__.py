@@ -12,6 +12,7 @@ import test_katcp
 import test_client
 import test_kattypes
 import test_sampling
+import test_sensortree
 import test_server
 
 try:
@@ -28,6 +29,7 @@ def suite():
     suite.addTests(loader.loadTestsFromModule(test_client))
     suite.addTests(loader.loadTestsFromModule(test_kattypes))
     suite.addTests(loader.loadTestsFromModule(test_sampling))
+    suite.addTests(loader.loadTestsFromModule(test_sensortree))
     suite.addTests(loader.loadTestsFromModule(test_server))
     if ply is not None:
         suite.addTests(loader.loadTestsFromModule(test_katcp_bnf))
