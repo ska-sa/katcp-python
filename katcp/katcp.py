@@ -598,6 +598,11 @@ class Sensor(object):
         if default is not None:
             self._value = default
 
+    def __repr__(self):
+        cls = self.__class__
+        return "<%s.%s object name=%r at 0x%x>" % \
+               (cls.__module__, cls.__name__, self.name, id(self))
+
     def attach(self, observer):
         """Attach an observer to this sensor.
 
