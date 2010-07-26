@@ -1,5 +1,5 @@
 
-from katcp.txclient import KatCP
+from katcp.txprotocol import KatCP
 from katcp.test.testserver import run_subprocess, PORT
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
