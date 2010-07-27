@@ -1,6 +1,7 @@
 
 from twisted.protocols.basic import LineReceiver
 from twisted.internet.defer import Deferred
+from katcp import MessageParser
 
 class UnhandledMessage(Exception):
     pass
@@ -11,28 +12,26 @@ class NoQuerriesProcessed(Exception):
 class WrongQueryOrder(Exception):
     pass
 
-def general_failure(msg):
-    print msg
-    reactor.stop()
+class UnknownType(Exception):
+    pass
 
 class KatCP(LineReceiver):
     delimiter = '\n'
 
     def __init__(self, *args, **kwds):
         self.queries = []
+        self.parser = MessageParser()
 
     def do_halt(self):
         d = Deferred()
         self.transport.write("?halt\n")
         self.queries.append(('halt', d, []))
-        d.addErrback(general_failure)
         return d
 
     def do_help(self):
         self.transport.write("?help\n")
         d = Deferred()
         self.queries.append(('help', d, [])) # hopefully it would be only 1
-        d.addErrback(general_failure)
         return d
 
     def lineReceived(self, line):
@@ -43,8 +42,7 @@ class KatCP(LineReceiver):
         elif tp == '!':
             self.handle_reply(rest)
         else:
-            print line
-            xxx
+            raise UnknownType(tp)
 
     # some default informs
     def inform_version(self, args):
