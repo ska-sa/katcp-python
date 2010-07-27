@@ -145,7 +145,7 @@ class Message(object):
         return Message(self.mtype, self.name, self.arguments)
 
     def __str__(self):
-        """Return Message serialized for transmission.
+        """ Return Message serialized for transmission.
 
         Returns
         -------
@@ -166,6 +166,22 @@ class Message(object):
             mid_str = ""
 
         return "%s%s%s%s" % (self.TYPE_SYMBOLS[self.mtype], self.name, mid_str, arg_str)
+
+    def __repr__(self):
+        """ Return message displayed in a readable form
+        """
+        tp = self.TYPE_NAMES[self.mtype].lower()
+        name = self.name
+        if self.arguments:
+            escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
+                            for x in self.arguments]
+            for arg in escaped_args:
+                if len(arg) > 10:
+                    arg = arg[:10] + "..."
+            args = "(" + ", ".join(escaped_args) + ")"
+        else:
+            args = ""
+        return "<Message %(tp)s %(name)s %(args)s>" % locals()
 
     def _escape_match(self, match):
         """Given a re.Match object, return the escape code for it."""
