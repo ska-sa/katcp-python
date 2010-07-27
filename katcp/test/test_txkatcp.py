@@ -34,8 +34,8 @@ class TestKatCP(TestCase):
         return d
 
     def test_help(self):
-        def received_help(args, protocol):
-            assert len(args) == 9
+        def received_help((msgs, reply_msg), protocol):
+            assert len(msgs) == 9
             protocol.do_halt()
             
         def connected(protocol):

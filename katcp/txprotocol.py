@@ -35,48 +35,45 @@ class KatCP(LineReceiver):
         return d
 
     def lineReceived(self, line):
-        tp = line[0]
-        rest = line[1:]
-        if tp == '#':
-            self.handle_inform(rest)
-        elif tp == '!':
-            self.handle_reply(rest)
+        msg = self.parser.parse(line)
+        if msg.mtype == msg.INFORM:
+            self.handle_inform(msg)
+        elif msg.mtype == msg.REPLY:
+            self.handle_reply(msg)
         else:
-            raise UnknownType(tp)
+            assert False # this could never happen since parser should complain
 
     # some default informs
-    def inform_version(self, args):
-        self.version = args[0]
+    def inform_version(self, msg):
+        self.version = msg.arguments[0]
 
-    def inform_build_state(self, args):
-        self.build_state = args[0]
+    def inform_build_state(self, msg):
+        self.build_state = msg.arguments[0]
 
     def inform_disconnect(self, args):
         pass # unnecessary, we have a callback on looseConnection
 
     def handle_inform(self, msg):
-        parts = msg.split(" ")
         # if we have a request being processed, store all the informs
         # in a list of stuff to process
-        name = parts[0]
+        name = msg.name
         name = name.replace('-', '_')
         meth = getattr(self, 'inform_' + name, None)
         if meth is not None:
-            meth(parts[1:])
+            meth(msg)
         elif self.queries:
             name, d, queue = self.queries[0]
-            if name != parts[0]:
-                raise WrongQueryOrder(name, parts[0])
-            queue.append(parts[1:]) # unespace?
+            if name != msg.name:
+                raise WrongQueryOrder(name, msg.name)
+            queue.append(msg) # unespace?
         else:
             raise UnhandledMessage(msg)
 
     def handle_reply(self, msg):
-        parts = msg.split(" ")
         if not self.queries:
             raise NoQuerriesProcessed()
-        name, d, args = self.queries[0]
-        if name != parts[0]:
+        name, d, queue = self.queries[0]
+        if name != msg.name:
             d.errback("Wrong request order")
         self.queries.pop(0) # hopefully it's not large
-        d.callback(args)
+        d.callback((queue, msg))
