@@ -1,7 +1,7 @@
 
 from twisted.protocols.basic import LineReceiver
 from twisted.internet.defer import Deferred
-from katcp import MessageParser
+from katcp import MessageParser, Message
 
 class UnhandledMessage(Exception):
     pass
@@ -40,6 +40,8 @@ class KatCP(LineReceiver):
             self.handle_inform(msg)
         elif msg.mtype == msg.REPLY:
             self.handle_reply(msg)
+        elif msg.mtype == msg.REQUEST:
+            self.handle_request(msg)
         else:
             assert False # this could never happen since parser should complain
 
@@ -69,6 +71,12 @@ class KatCP(LineReceiver):
         else:
             raise UnhandledMessage(msg)
 
+    def handle_request(self, msg):
+        name = msg.name
+        name = name.replace('-', '_')
+        # XXX handle the unknown case
+        getattr(self, 'request_' + name, self.request_unknown)(msg)
+
     def handle_reply(self, msg):
         if not self.queries:
             raise NoQuerriesProcessed()
@@ -77,3 +85,17 @@ class KatCP(LineReceiver):
             d.errback("Wrong request order")
         self.queries.pop(0) # hopefully it's not large
         d.callback((queue, msg))
+
+    def send_message(self, msg):
+        # just serialize a message
+        self.transport.write(str(msg) + self.delimiter)
+
+    # ---------- some default responses ------------------
+
+    def request_halt(self, msg):
+        self.transport.write(str(Message(Message.REPLY, "halt",
+                                         ["ok"])) + self.delimiter)
+        self.transport.loseConnection()
+
+    def request_unknown(self, msg):
+        xxx # untested
