@@ -17,7 +17,7 @@ class UnknownType(Exception):
 
 class KatCP(LineReceiver):
     delimiter = '\n'
-
+    
     def __init__(self, *args, **kwds):
         self.queries = []
         self.parser = MessageParser()
