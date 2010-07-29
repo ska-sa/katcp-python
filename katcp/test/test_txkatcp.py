@@ -1,5 +1,5 @@
 
-from katcp.txprotocol import KatCP
+from katcp.txprotocol import ClientKatCP, ServerKatCP, ProxyKatCP
 from katcp import Message
 from katcp.test.testserver import run_subprocess, PORT
 from twisted.trial.unittest import TestCase
@@ -20,18 +20,18 @@ class TestKatCP(TestCase):
     """
     def test_server_infrastructure(self):
         def connected(protocol):
-            protocol.do_halt()
+            protocol.send_request('halt')
 
-        d, process = run_subprocess(connected, KatCP)
+        d, process = run_subprocess(connected, ClientKatCP)
         return d
 
     def test_version_check(self):
-        class TestKatCP(KatCP):
+        class TestKatCP(ClientKatCP):
             def inform_build_state(self, args):
-                KatCP.inform_build_state(self, args)
+                ClientKatCP.inform_build_state(self, args)
                 # check that version is already set
                 assert self.version == 'device_stub-0.1'
-                self.do_halt()
+                self.send_request('halt')
 
         d, process = run_subprocess(None, TestKatCP)
         return d
@@ -39,23 +39,28 @@ class TestKatCP(TestCase):
     def test_help(self):
         def received_help((msgs, reply_msg), protocol):
             assert len(msgs) == 9
-            protocol.do_halt()
+            protocol.send_request('halt')
             
         def connected(protocol):
-            d = protocol.do_help()
+            d = protocol.send_request('help')
             d.addCallback(received_help, protocol)
 
-        d, process = run_subprocess(connected, KatCP)
+        d, process = run_subprocess(connected, ClientKatCP)
         return d
 
-class ServerProtocol(KatCP):
+    def test_server_introspection(self):
+        def connected(protocol):
+            assert len(protocol.sensors) == 2
+            protocol.send_request('halt')
+        
+        d, process = run_subprocess(connected, ProxyKatCP)
+        return d
+
+class ServerProtocol(ServerKatCP):
     def request_help(self, msg):
         self.send_message(Message(Message.REPLY,
                                   msg.name,
                                   ["ok"]))
-
-class ClientProtocol(KatCP):
-    pass
 
 class TestKatCPServer(TestCase):
     def test_simple_server(self):
@@ -65,17 +70,17 @@ class TestKatCPServer(TestCase):
         
         def help((args, reply), protocol):
             assert reply.arguments == ["ok"]
-            d = protocol.do_halt()
+            d = protocol.send_request('halt')
             d.addCallback(halt_replied)
         
         def connected(protocol):
-            d = protocol.do_help()
+            d = protocol.send_request('help')
             d.addCallback(help, protocol)
         
         f = Factory()
         f.protocol = ServerProtocol
         port = reactor.listenTCP(0, f, interface='127.0.0.1')
-        cc = ClientCreator(reactor, ClientProtocol)
+        cc = ClientCreator(reactor, ServerKatCP)
         d = cc.connectTCP(port.getHost().host, port.getHost().port)
         d.addCallback(connected)
         finish = Deferred()

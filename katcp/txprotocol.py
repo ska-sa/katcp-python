@@ -1,6 +1,8 @@
 
 from twisted.protocols.basic import LineReceiver
 from twisted.internet.defer import Deferred
+from twisted.internet import reactor
+from twisted.internet.protocol import ClientCreator
 from katcp import MessageParser, Message
 
 class UnhandledMessage(Exception):
@@ -15,23 +17,31 @@ class WrongQueryOrder(Exception):
 class UnknownType(Exception):
     pass
 
+def run_client((host, port), ClientClass, connection_made):
+    def client_connected(protocol):
+        d = Deferred()
+        protocol.setup_done = d
+        return d
+    
+    cc = ClientCreator(reactor, ClientClass)
+    d = cc.connectTCP(host, port)
+    if ClientClass.needs_setup:
+        d.addCallback(client_connected)
+    if connection_made is not None:
+        d.addCallback(connection_made)
+    return d
+
 class KatCP(LineReceiver):
     delimiter = '\n'
     
-    def __init__(self, *args, **kwds):
+    def __init__(self):
         self.queries = []
         self.parser = MessageParser()
 
-    def do_halt(self):
+    def send_request(self, name, *args):
         d = Deferred()
-        self.transport.write("?halt\n")
-        self.queries.append(('halt', d, []))
-        return d
-
-    def do_help(self):
-        self.transport.write("?help\n")
-        d = Deferred()
-        self.queries.append(('help', d, [])) # hopefully it would be only 1
+        self.send_message(Message.request(name, *args))
+        self.queries.append((name, d, []))
         return d
 
     def lineReceived(self, line):
@@ -99,3 +109,25 @@ class KatCP(LineReceiver):
 
     def request_unknown(self, msg):
         xxx # untested
+
+class ClientKatCP(KatCP):
+    needs_setup = False
+    
+class ProxyKatCP(KatCP):
+    needs_setup = True
+    
+    def got_sensor_list(self, (informs, reply)):
+        lgt = int(reply.arguments[1])
+        assert lgt == len(informs)
+        self.sensors = []
+        for inform in informs:
+            # XXXX
+            self.sensors.append(None)
+        self.setup_done.callback(self)
+    
+    def connectionMade(self):
+        d = self.send_request('sensor-list')
+        d.addCallback(self.got_sensor_list)
+
+class ServerKatCP(KatCP):
+    pass

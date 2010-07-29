@@ -5,12 +5,12 @@ import os, re, sys
 sys.path.insert(0, '.') # not sure why python adds '.' or not depending on
 # obscure details how you run it
 from katcp.server import DeviceServer
+from katcp.txprotocol import run_client
 from katcp import Sensor
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
 from twisted.internet.error import ProcessDone
-from twisted.internet.protocol import ClientCreator
 
 class FloatSensor(Sensor):
     def get_value(self):
@@ -81,10 +81,7 @@ def run_subprocess(connected, ClientClass):
         d.callback(None)
 
     def server_running(port):
-        cc = ClientCreator(reactor, ClientClass)
-        d = cc.connectTCP('localhost', port)
-        if connected is not None:
-            d.addCallback(connected)
+        run_client(('localhost', port), ClientClass, connected)
 
     dname = os.path.dirname
     protocol = ServerSubprocess(server_running, server_ended, failed_to_run)
