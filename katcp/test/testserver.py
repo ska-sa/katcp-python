@@ -5,15 +5,41 @@ import os, re, sys
 sys.path.insert(0, '.') # not sure why python adds '.' or not depending on
 # obscure details how you run it
 from katcp.server import DeviceServer
+from katcp import Sensor
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
 from twisted.internet.error import ProcessDone
 from twisted.internet.protocol import ClientCreator
 
+class FloatSensor(Sensor):
+    def get_value(self):
+        self.__value += .1
+        self.__value %= 10
+        return self.__value
+
+    def set_value(self, v):
+        self.__value = v
+
+    _value = property(get_value, set_value)
+
+class IntSensor(Sensor):
+    def get_value(self):
+        self.__value += 1
+        self.__value %= 50
+        return self.__value
+
+    def set_value(self, v):
+        self.__value = v
+
+    _value = property(get_value, set_value)
+
 class TestServer(DeviceServer):
     def setup_sensors(self):
-        pass
+        self.add_sensor(FloatSensor(Sensor.FLOAT, "float_sensor", "descr",
+                                    "milithaum", params=[-1.0, 1.0]))
+        self.add_sensor(IntSensor(Sensor.INTEGER, "int_sensor", "descr2",
+                               "cows", params=[-100, 100]))
 
     def _bind(self, *args):
         sock = DeviceServer._bind(self, *args)
