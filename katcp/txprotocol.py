@@ -53,7 +53,7 @@ class KatCP(LineReceiver):
         self.build_state = msg.arguments[0]
 
     def inform_disconnect(self, args):
-        pass # unnecessary, we have a callback on looseConnection
+        pass # unnecessary, we have a callback on loseConnection
 
     def handle_inform(self, msg):
         # if we have a request being processed, store all the informs
