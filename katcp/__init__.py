@@ -7,7 +7,7 @@
 """Root of katcp package.
    """
 
-from .katcp import Message, KatcpSyntaxError, MessageParser, \
+from .core import Message, KatcpSyntaxError, MessageParser, \
                   DeviceMetaclass, ExcepthookThread, FailReply, \
                   AsyncReply, KatcpDeviceError, KatcpClientError, \
                   Sensor

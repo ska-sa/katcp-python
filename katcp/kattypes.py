@@ -10,7 +10,7 @@
 import inspect
 import struct
 import re
-from .katcp import Message, FailReply
+from .core import Message, FailReply
 
 # KATCP Type Classes
 #
