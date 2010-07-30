@@ -1,6 +1,7 @@
 
-from katcp.txprotocol import ClientKatCP, ServerKatCP, ProxyKatCP
-from katcp import Message
+from katcp.txprotocol import (ClientKatCP, ServerKatCP, ProxyKatCP,
+                              ServerFactory, run_client)
+from katcp import Message, Sensor
 from katcp.test.testserver import run_subprocess, PORT
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
@@ -80,8 +81,31 @@ class TestKatCPServer(TestCase):
         f = Factory()
         f.protocol = ServerProtocol
         port = reactor.listenTCP(0, f, interface='127.0.0.1')
-        cc = ClientCreator(reactor, ServerKatCP)
+        cc = ClientCreator(reactor, ClientKatCP)
         d = cc.connectTCP(port.getHost().host, port.getHost().port)
         d.addCallback(connected)
         finish = Deferred()
         return finish
+
+    def test_server_sensors(self):
+        def halt_replied(self):
+            peer.stopListening()
+            finish.callback(None)
+        
+        def connected(protocol):
+            assert len(protocol.sensors) == 1
+            d = protocol.send_request('halt')
+            d.addCallback(halt_replied)
+            
+        class TestFactory(ServerFactory):
+            def setup_sensors(self):
+                self.add_sensor(Sensor(int, 'int_sensor', 'descr', 'unit',
+                                       params=[-10, 10]))
+        
+        f = TestFactory()
+        f.protocol = ServerKatCP
+        peer = reactor.listenTCP(0, f, interface='127.0.0.1')
+        run_client(('localhost', peer.getHost().port), ProxyKatCP, connected)
+        finish = Deferred()
+        return finish
+        

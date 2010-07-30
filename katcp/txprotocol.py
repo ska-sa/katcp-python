@@ -3,6 +3,7 @@ from twisted.protocols.basic import LineReceiver
 from twisted.internet.defer import Deferred
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientCreator
+from twisted.internet.protocol import Factory
 from katcp import MessageParser, Message
 
 class UnhandledMessage(Exception):
@@ -108,11 +109,15 @@ class KatCP(LineReceiver):
         self.transport.loseConnection()
 
     def request_unknown(self, msg):
-        xxx # untested
+        self.send_message(Message.inform(msg.name, "Unknown request"))
 
 class ClientKatCP(KatCP):
     needs_setup = False
-    
+
+class ProxyFactory(Factory):
+    def __init__(self):
+        self.sensor_info = []
+
 class ProxyKatCP(KatCP):
     needs_setup = True
     
@@ -129,5 +134,21 @@ class ProxyKatCP(KatCP):
         d = self.send_request('sensor-list')
         d.addCallback(self.got_sensor_list)
 
+class ServerFactory(Factory):
+    def __init__(self):
+        self.sensors = []
+        self.setup_sensors()
+
+    def add_sensor(self, sensor):
+        self.sensors.append(sensor)
+    
+    def setup_sensors(self):
+        pass # override to provide some sensors
+
 class ServerKatCP(KatCP):
-    pass
+    def request_sensor_list(self, msg):
+        for sensor in self.factory.sensors:
+            self.send_message(Message.inform(msg.name, sensor.name))
+        self.send_message(Message.reply(msg.name, "ok",
+                                        len(self.factory.sensors)))
+
