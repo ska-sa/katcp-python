@@ -114,10 +114,6 @@ class KatCP(LineReceiver):
 class ClientKatCP(KatCP):
     needs_setup = False
 
-class ProxyFactory(Factory):
-    def __init__(self):
-        self.sensor_info = []
-
 class ProxyKatCP(KatCP):
     needs_setup = True
     
