@@ -529,6 +529,13 @@ class Sensor(object):
         TIMESTAMP: (Timestamp, 0.0),
     }
 
+    SENSOR_SHORTCUTS = {
+        int: INTEGER,
+        float: FLOAT,
+        str: STRING,
+        bool: BOOLEAN,
+      }
+
     # map type strings to types
     SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
 
@@ -586,6 +593,8 @@ class Sensor(object):
     def __init__(self, sensor_type, name, description, units, params=None, default=None):
         if params is None:
             params = []
+
+        sensor_type = self.SENSOR_SHORTCUTS.get(sensor_type, sensor_type)
 
         self._sensor_type = sensor_type
         self._observers = set()
