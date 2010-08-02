@@ -14,6 +14,7 @@ import test_kattypes
 import test_sampling
 import test_sensortree
 import test_server
+import test_txkatcp
 
 try:
     # BNF tests reply on PLY (Python Lexx/Yacc)
@@ -31,6 +32,7 @@ def suite():
     suite.addTests(loader.loadTestsFromModule(test_sampling))
     suite.addTests(loader.loadTestsFromModule(test_sensortree))
     suite.addTests(loader.loadTestsFromModule(test_server))
+    suite.addTests(loader.loadTestsFromModule(test_txkatcp))
     if ply is not None:
         suite.addTests(loader.loadTestsFromModule(test_katcp_bnf))
     return suite
