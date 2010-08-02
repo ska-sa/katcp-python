@@ -109,7 +109,8 @@ class KatCP(LineReceiver):
         self.transport.loseConnection()
 
     def request_unknown(self, msg):
-        self.send_message(Message.inform(msg.name, "Unknown request"))
+        self.send_message(Message.reply(msg.name, "invalid",
+                                        "Unknown request."))
 
 class ClientKatCP(KatCP):
     needs_setup = False

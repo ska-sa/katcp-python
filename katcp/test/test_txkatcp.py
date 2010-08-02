@@ -12,6 +12,8 @@ from twisted.internet.protocol import ClientCreator
 import time
 import sys, os, re
 
+timeout = 5
+
 class TestKatCP(TestCase):
     """ A tesited test case, run with trial testing
 
@@ -19,6 +21,7 @@ class TestKatCP(TestCase):
     tail -F --max-unchanged-stats=0 _trial_temp/test.log
     
     """
+    
     def test_server_infrastructure(self):
         def connected(protocol):
             protocol.send_request('halt')
@@ -78,6 +81,31 @@ class TestKatCPServer(TestCase):
             d = protocol.send_request('help')
             d.addCallback(help, protocol)
         
+        f = Factory()
+        f.protocol = ServerProtocol
+        port = reactor.listenTCP(0, f, interface='127.0.0.1')
+        cc = ClientCreator(reactor, ClientKatCP)
+        d = cc.connectTCP(port.getHost().host, port.getHost().port)
+        d.addCallback(connected)
+        finish = Deferred()
+        return finish
+
+    def test_unknown_request(self):
+        def halt_replied(self):
+            port.stopListening() # XXX handle it in a better way somehow
+            finish.callback(None)
+
+        def got_unknown((args, reply), protocol):
+            assert len(args) == 0
+            assert reply.arguments[0] == 'invalid'
+            assert reply.arguments[1] == 'Unknown request.'
+            d = protocol.send_request('halt')
+            d.addCallback(halt_replied)
+        
+        def connected(protocol):
+            d = protocol.send_request('unknown-request')
+            d.addCallback(got_unknown, protocol)
+            
         f = Factory()
         f.protocol = ServerProtocol
         port = reactor.listenTCP(0, f, interface='127.0.0.1')
