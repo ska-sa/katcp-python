@@ -16,9 +16,6 @@ import sys
 import re
 import time
 
-class NoRule(Exception):
-    pass
-
 class Message(object):
     """Represents a KAT device control language message.
 
@@ -817,59 +814,3 @@ class Sensor(object):
         else:
             kattype = typeclass()
         return [kattype.decode(x) for x in formatted_params]
-
-class AggregateSensor(Sensor):
-    """
-    A subclass of Sensor that represents an aggregate sensor.  It has a rule,
-    and a method that applies the rule to values of sensors that it aggregates.
-
-    Parameters
-    ----------
-    (As for Sensor - only AggregateSensor specifics listed here.)
-    params : list
-        Additional parameters:
-        The list should contain one element, the aggregation rule as a string.
-        E.g. '('a' > 1) AND ('b' == 'low')', where a and b are sensor names.
-
-    """
-    def __init__(self, sensor_type, name, description, units, params=None, default=None):
-        super(AggregateSensor, self).__init__(sensor_type, name, description, units, params=params, default=default)
-        # get rule
-        self._rule = params[0]
-
-    def rule_function(self, _parent, sensors):
-        """For an aggregate type sensor, this function applies a logical
-        rule to the values of the list of sensors that are provided
-        as a parameter. Sets own value if rule was applied successfully.
-
-        Parameters
-        ----------
-        _parent : object
-            Not used - for compatibility with SensorTree only.
-        sensors : list of object
-            A list of Sensor objects that the tule needs to be applied to.
-
-        Raises
-        ------
-        Exception if no rule s not defined. This is raised to make it easier
-        to distinguish from other failures that cause exceptions.
-        (If SyntaxError or NameError can be expected if there is something
-        wrong with the rule or if evaluation fails, but these are not handled
-        here.)
-
-        """
-        # check for no rule
-        if self._rule is None:
-            raise NoRule("Aggregate sensor %s has no rule" % self.name)
-        # substitute sensor names with sensor values
-        for sensor in sensors:
-            rule_used = self._rule.replace('\'' + sensor.name + '\'',
-                                           str(sensor.value))
-        # evaluate rule
-        value = eval(rule_used)
-        if value:
-            status = Sensor.NOMINAL
-        else:
-            status = Sensor.FAILURE
-        # set own value and statue
-        self.set_value(value, status)
