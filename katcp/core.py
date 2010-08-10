@@ -16,6 +16,9 @@ import sys
 import re
 import time
 
+class NoRule(Exception):
+    pass
+
 class Message(object):
     """Represents a KAT device control language message.
 
@@ -856,13 +859,12 @@ class AggregateSensor(Sensor):
 
         """
         # check for no rule
-        if self._rule == None:
-            raise Exception("Aggregate sensor %s has no rule" % self.name)
-        rule_used = self._rule
+        if self._rule is None:
+            raise NoRule("Aggregate sensor %s has no rule" % self.name)
         # substitute sensor names with sensor values
         for sensor in sensors:
-            rule_used = rule_used.replace('\'' + sensor.name + '\'',
-                                          str(sensor.value))
+            rule_used = self._rule.replace('\'' + sensor.name + '\'',
+                                           str(sensor.value))
         # evaluate rule
         value = eval(rule_used)
         if value:
