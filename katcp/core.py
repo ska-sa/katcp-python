@@ -183,6 +183,17 @@ class Message(object):
             args = ""
         return "<Message %(tp)s %(name)s %(args)s>" % locals()
 
+    def __eq__(self, other):
+        if not isinstance(other, Message):
+            return NotImplemented
+        for name in self.__slots__:
+            if getattr(self, name) != getattr(other, name):
+                return False
+        return True
+
+    def __ne__(self, other):
+        return not self == other
+
     def _escape_match(self, match):
         """Given a re.Match object, return the escape code for it."""
         return "\\" + self.REVERSE_ESCAPE_LOOKUP[match.group()]

@@ -43,6 +43,18 @@ class TestMessage(unittest.TestCase):
         self.assertEqual(str(katcp.Message.inform("foo", mid=123)), "#foo[123]")
         self.assertEqual(str(katcp.Message.inform("foo", "a", "b", mid=123)), "#foo[123] a b")
 
+    def test_equality(self):
+        class AlwaysEqual(object):
+            def __eq__(self, other):
+                return True
+        
+        msg = katcp.Message.inform("foo", "a", "b")
+        assert msg == katcp.Message.inform("foo", "a", "b")
+        assert msg != katcp.Message.request("foo", "a", "b")
+        assert msg != katcp.Message.inform("bar", "a", "b")
+        assert msg != katcp.Message.inform("foo", "a", "b", "c")
+        assert msg != 3
+        assert msg == AlwaysEqual()
 
 class TestMessageParser(unittest.TestCase):
     def setUp(self):
