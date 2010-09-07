@@ -12,7 +12,7 @@ import threading
 import time
 import logging
 import heapq
-from .katcp import Message, Sensor, ExcepthookThread
+from .core import Message, Sensor, ExcepthookThread
 
 log = logging.getLogger("katcp.sampling")
 

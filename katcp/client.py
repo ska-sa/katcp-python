@@ -15,7 +15,7 @@ import select
 import time
 import logging
 import errno
-from .katcp import DeviceMetaclass, MessageParser, Message, ExcepthookThread, \
+from .core import DeviceMetaclass, MessageParser, Message, ExcepthookThread, \
                    KatcpClientError
 
 #logging.basicConfig(level=logging.DEBUG)

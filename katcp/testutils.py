@@ -12,7 +12,7 @@ import logging
 import re
 import time
 import Queue
-from .katcp import Sensor, Message, DeviceMetaclass
+from .core import Sensor, Message, DeviceMetaclass
 from .server import DeviceServer, FailReply
 
 class TestLogHandler(logging.Handler):

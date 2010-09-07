@@ -15,7 +15,7 @@ import traceback
 import logging
 import sys
 import time
-from .katcp import DeviceMetaclass, ExcepthookThread, Message, MessageParser, \
+from .core import DeviceMetaclass, ExcepthookThread, Message, MessageParser, \
                    FailReply, AsyncReply
 from .sampling import SampleReactor, SampleStrategy, SampleNone
 
