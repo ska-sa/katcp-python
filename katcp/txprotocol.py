@@ -85,7 +85,6 @@ class KatCP(LineReceiver):
     def handle_request(self, msg):
         name = msg.name
         name = name.replace('-', '_')
-        # XXX handle the unknown case
         getattr(self, 'request_' + name, self.request_unknown)(msg)
 
     def handle_reply(self, msg):
@@ -133,19 +132,44 @@ class ProxyKatCP(KatCP):
 
 class ServerFactory(Factory):
     def __init__(self):
-        self.sensors = []
+        self.sensors = {}
         self.setup_sensors()
 
     def add_sensor(self, sensor):
-        self.sensors.append(sensor)
+        self.sensors[sensor.name] = sensor
     
     def setup_sensors(self):
         pass # override to provide some sensors
 
 class ServerKatCP(KatCP):
+    def request_sensor_value(self, msg):
+        if not msg.arguments:
+            for name, sensor in sorted(self.factory.sensors.iteritems()):
+                timestamp_ms, status, value = sensor.read_formatted()
+                self.send_message(Message.inform(msg.name, timestamp_ms, "1",
+                                                 name, status, value))
+            self.send_message(Message.reply(msg.name, "ok",
+                                            len(self.factory.sensors)))
+            return
+        try:
+            sensor = self.factory.sensors[msg.arguments[0]]
+        except KeyError:
+            self.send_message(Message.reply(msg.name, "fail",
+                                            "Unknown sensor name"))
+        else:
+            timestamp_ms, status, value = sensor.read_formatted()
+            self.send_message(Message.inform(msg.name, timestamp_ms, "1",
+                                             sensor.name, status, value))
+            self.send_message(Message.reply(msg.name, "ok", "1"))
+
     def request_sensor_list(self, msg):
-        for sensor in self.factory.sensors:
-            self.send_message(Message.inform(msg.name, sensor.name))
+        for name, sensor in sorted(self.factory.sensors.iteritems()):
+            self.send_message(Message.inform(msg.name, name, sensor.description,
+                                             sensor.units, sensor.stype,
+                                             *sensor.formatted_params))
         self.send_message(Message.reply(msg.name, "ok",
                                         len(self.factory.sensors)))
 
+    def request_help(self, msg):
+        # for now
+        self.send_message(Message.reply(msg.name, "ok", "0"))

@@ -66,74 +66,93 @@ class ServerProtocol(ServerKatCP):
                                   msg.name,
                                   ["ok"]))
 
+class TestFactory(ServerFactory):
+    protocol = ServerKatCP
+
+    def setup_sensors(self):
+        sensor = Sensor(int, 'int_sensor', 'descr', 'unit',
+                               params=[-10, 10])
+        sensor._timestamp = 0
+        self.add_sensor(sensor)
+        sensor = Sensor(float, 'float_sensor', 'descr', 'unit',
+                               params=[-3.5, 3.5])
+        sensor._timestamp = 1
+        self.add_sensor(sensor)
+
 class TestKatCPServer(TestCase):
-    def test_simple_server(self):
-        def halt_replied(self):
-            port.stopListening() # XXX handle it in a better way somehow
+    def base_test(self, req, callback):
+        def end_test(_):
+            peer.stopListening()
             finish.callback(None)
-        
-        def help((args, reply), protocol):
-            assert reply.arguments == ["ok"]
-            d = protocol.send_request('halt')
-            d.addCallback(halt_replied)
+
+        def wrapper(arg, protocol):
+            callback(arg, protocol)
+            protocol.send_request('halt').addCallback(end_test)
         
         def connected(protocol):
-            d = protocol.send_request('help')
-            d.addCallback(help, protocol)
-        
-        f = Factory()
-        f.protocol = ServerProtocol
-        port = reactor.listenTCP(0, f, interface='127.0.0.1')
+            d = protocol.send_request(*req)
+            d.addCallback(wrapper, protocol)
+
+        f = TestFactory()
+        peer = reactor.listenTCP(0, f, interface='127.0.0.1')
         cc = ClientCreator(reactor, ClientKatCP)
-        d = cc.connectTCP(port.getHost().host, port.getHost().port)
+        d = cc.connectTCP(peer.getHost().host, peer.getHost().port)
         d.addCallback(connected)
         finish = Deferred()
         return finish
+    
+    def test_help(self):
+        def help((args, reply), protocol):
+            self.assertEquals(reply, Message.reply('help', "ok", '0'))
+
+        return self.base_test(('help',), help)
 
     def test_unknown_request(self):
-        def halt_replied(self):
-            port.stopListening() # XXX handle it in a better way somehow
-            finish.callback(None)
-
         def got_unknown((args, reply), protocol):
             assert len(args) == 0
             assert reply.arguments[0] == 'invalid'
             assert reply.arguments[1] == 'Unknown request.'
-            d = protocol.send_request('halt')
-            d.addCallback(halt_replied)
-        
-        def connected(protocol):
-            d = protocol.send_request('unknown-request')
-            d.addCallback(got_unknown, protocol)
-            
-        f = Factory()
-        f.protocol = ServerProtocol
-        port = reactor.listenTCP(0, f, interface='127.0.0.1')
-        cc = ClientCreator(reactor, ClientKatCP)
-        d = cc.connectTCP(port.getHost().host, port.getHost().port)
-        d.addCallback(connected)
-        finish = Deferred()
-        return finish
 
-    def test_server_sensors(self):
-        def halt_replied(self):
-            peer.stopListening()
-            finish.callback(None)
+        return self.base_test(('unknown-request',), got_unknown)
         
-        def connected(protocol):
-            assert len(protocol.sensors) == 1
-            d = protocol.send_request('halt')
-            d.addCallback(halt_replied)
-            
-        class TestFactory(ServerFactory):
-            def setup_sensors(self):
-                self.add_sensor(Sensor(int, 'int_sensor', 'descr', 'unit',
-                                       params=[-10, 10]))
-        
-        f = TestFactory()
-        f.protocol = ServerKatCP
-        peer = reactor.listenTCP(0, f, interface='127.0.0.1')
-        run_client(('localhost', peer.getHost().port), ProxyKatCP, connected)
-        finish = Deferred()
-        return finish
-        
+    def test_run_basic_sensors(self):
+        def sensor_value_replied((informs, reply), protocol):
+            self.assertEquals(informs, [Message.inform('sensor-value', '0', '1',
+                                                       'int_sensor', 'unknown',
+                                                       '0')])
+            self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
+
+        return self.base_test(('sensor-value', 'int_sensor'),
+                              sensor_value_replied)
+
+    def test_unknown_sensor(self):
+        def reply((informs, reply), protocol):
+            self.assertEquals(informs, [])
+            self.assertEquals(reply, Message.reply('sensor-value',
+                                                   'fail',
+                                                   'Unknown sensor name'))
+
+        return self.base_test(('sensor-value', 'xxx'),
+                              reply)
+
+    def test_all_sensor_values(self):
+        def reply((informs, reply), protocol):
+            msg1 = Message.inform('sensor-value', '1000', '1', 'float_sensor',
+                                  'unknown', '0')
+            msg2 = Message.inform('sensor-value', '0', '1', 'int_sensor',
+                                  'unknown', '0')
+            self.assertEquals(informs, [msg1, msg2])
+            self.assertEquals(reply, Message.reply('sensor-value', 'ok', '2'))
+
+        return self.base_test(('sensor-value',), reply)
+
+    def test_sensor_list(self):
+        def reply((informs, reply), protocol):
+            msg1 = Message.inform('sensor-list', 'int_sensor', 'descr', 'unit',
+                                  'integer', '-10', '10')
+            msg2 = Message.inform('sensor-list', 'float_sensor', 'descr',
+                                  'unit', 'float', '-3.5', '3.5')
+            self.assertEquals(informs, [msg2, msg1])
+            self.assertEquals(reply, Message.reply('sensor-list', 'ok', '2'))
+
+        return self.base_test(('sensor-list',), reply)
