@@ -230,6 +230,7 @@ class TxDeviceServer(KatCP):
                                         "Unknown request."))
 
 class ProxyKatCP(TxDeviceServer):
+    # XXXX this should be on a factory level
     needs_setup = True
     
     def got_sensor_list(self, (informs, reply)):
