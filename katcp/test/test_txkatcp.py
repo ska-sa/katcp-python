@@ -285,22 +285,32 @@ class TestTxDeviceServer(TestCase):
         return self.base_test(('sensor-sampling', 'int_sensor', 'event'), reply)
 
     def test_sensor_sampling_differential(self):
-        def even_more((informs, reply), protocol):
+        def first((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
             self.assertEquals(informs, [Message.inform('sensor-value', '0',
                                                        '1', 'int_sensor',
-                                                       'nominal', '6')])
-            protocol.send_request('halt').addCallback(self.end_test)
-        
-        def more((informs, reply), protocol):
-            self.assertEquals(len(self.client.status_updates), 0)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
-                                                       '1', 'int_sensor',
-                                                       'nominal', '3')])
-            self.factory.sensors['int_sensor'].set_value(6)
+                                                       'nominal', '2')])
+            self.factory.sensors['int_sensor'].set_value(5)
             self.factory.sensors['int_sensor']._timestamp = 0
             protocol.send_request('sensor-value',
-                                  'int_sensor').addCallback(even_more, protocol)
+                                  'int_sensor').addCallback(second, protocol)
+
+        def second((informs, reply), protocol):
+            self.assertEquals(len(self.client.status_updates), 1)
+            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+                                                       '1', 'int_sensor',
+                                                       'nominal', '5')])
+            self.factory.sensors['int_sensor'].set_value(10)
+            self.factory.sensors['int_sensor']._timestamp = 0
+            protocol.send_request('sensor-value',
+                                  'int_sensor').addCallback(third, protocol)
+
+        def third((informs, reply), protocol):
+            self.assertEquals(len(self.client.status_updates), 2)
+            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+                                                       '1', 'int_sensor',
+                                                       'nominal', '10')])
+            protocol.send_request('halt').addCallback(self.end_test)
 
         def reply((informs, reply), protocol):
             self.assertEquals(informs, [])
@@ -312,13 +322,11 @@ class TestTxDeviceServer(TestCase):
             self.factory.sensors['int_sensor'].set_value(2)
             self.factory.sensors['int_sensor']._timestamp = 0
             protocol.send_request('sensor-value',
-                                  'int_sensor').addCallback(more, protocol)
+                                  'int_sensor').addCallback(first, protocol)
             return True
         
         return self.base_test(('sensor-sampling', 'int_sensor',
                                'differential', '3'), reply)
-
-    test_sensor_sampling_differential.skip = True
 
     def test_raising_traceback(self):
         class FaultyServer(TxDeviceServer):

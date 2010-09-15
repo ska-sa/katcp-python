@@ -72,7 +72,7 @@ class DifferentialStrategy(ObserverStrategy):
         self.status = sensor._status
 
     def run(self, threshold):
-        self.threshold = threshold
+        self.threshold = float(threshold)
         ObserverStrategy.run(self)
 
     def update(self, sensor):
