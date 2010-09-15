@@ -5,6 +5,8 @@ from twisted.internet import reactor
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.protocol import Factory
 from katcp import MessageParser, Message
+from katcp.txsampling import (DifferentialStrategy, AutoStrategy,
+    EventStrategy, NoStrategy, PeriodicStrategy)
 import sys, traceback
 
 class UnhandledMessage(Exception):
@@ -36,11 +38,16 @@ def run_client((host, port), ClientClass, connection_made):
     return d
 
 class KatCP(LineReceiver):
+    """ A base class for protocol implementation of KatCP on top of twisted
+    infrastructure. Specific subclasses provide client and server parts
+    (which are not shared).
+    """
+    
     delimiter = '\n'
     
     def __init__(self):
-        self.queries = []
         self.parser = MessageParser()
+        self.queries = []
 
     def send_request(self, name, *args):
         d = Deferred()
@@ -111,20 +118,6 @@ class KatCP(LineReceiver):
         # just serialize a message
         self.transport.write(str(msg) + self.delimiter)
 
-    # ---------- some default responses ------------------
-
-    def request_halt(self, msg):
-        self.transport.write(str(Message(Message.REPLY, "halt",
-                                         ["ok"])) + self.delimiter)
-        self.transport.loseConnection()
-        self.factory.port.stopListening()
-        if getattr(self.factory, 'production', None):
-            reactor.stop()
-
-    def request_unknown(self, msg):
-        self.send_message(Message.reply(msg.name, "invalid",
-                                        "Unknown request."))
-
 class ClientKatCP(KatCP):
     needs_setup = False
 
@@ -133,22 +126,6 @@ class ClientKatCP(KatCP):
 
     def update_sensor_status(self, msg):
         raise NotImplementedError("Override update_sensor_status")
-
-class ProxyKatCP(KatCP):
-    needs_setup = True
-    
-    def got_sensor_list(self, (informs, reply)):
-        lgt = int(reply.arguments[1])
-        assert lgt == len(informs)
-        self.sensors = []
-        for inform in informs:
-            # XXXX
-            self.sensors.append(None)
-        self.setup_done.callback(self)
-    
-    def connectionMade(self):
-        d = self.send_request('sensor-list')
-        d.addCallback(self.got_sensor_list)
 
 class ServerFactory(Factory):
     def __init__(self):
@@ -160,89 +137,6 @@ class ServerFactory(Factory):
     
     def setup_sensors(self):
         pass # override to provide some sensors
-
-class SamplingStrategy(object):
-    """ Base class for all sampling strategies
-    """
-    def __init__(self, protocol, sensor):
-        self.protocol = protocol
-        self.sensor = sensor
-    
-    def run(self):
-        """ Run the strategy. Override in subclasses.
-        """
-        raise NotImplementedError("purely abstract base class")
-
-    def cancel(self):
-        """ Cancel running strategy. Override in subclasses.
-        """
-        pass
-
-class PeriodicStrategy(SamplingStrategy):
-    next = None
-
-    def _run_once(self):
-        self.protocol.send_sensor_status(self.sensor)
-        self.next = reactor.callLater(self.period, self._run_once)
-
-    def cancel(self):
-        self.next.cancel()
-
-    def run(self, period):
-        self.period = float(period) / 1000
-        self._run_once()
-
-class NoStrategy(SamplingStrategy):
-    def run(self):
-        pass
-
-class ObserverStrategy(SamplingStrategy):
-    """ A common superclass for strategies that watch sensors and take
-    actions accordingly
-    """
-    def run(self):
-        self.sensor.attach(self)
-
-    def cancel(self):
-        self.sensor.detach(self)
-
-
-class AutoStrategy(ObserverStrategy):
-    def update(self, sensor):
-        self.protocol.send_sensor_status(sensor)
-
-class EventStrategy(ObserverStrategy):
-    def __init__(self, protocol, sensor):
-        ObserverStrategy.__init__(self, protocol, sensor)
-        self.value = sensor.value()
-        self.status = sensor._status
-
-    def update(self, sensor):
-        newval = sensor.value()
-        newstatus = sensor._status
-        if self.status != newstatus or self.value != newval:
-            self.status = newstatus
-            self.value = newval
-            self.protocol.send_sensor_status(sensor)
-            
-class DifferentialStrategy(ObserverStrategy):
-    def __init__(self, protocol, sensor):
-        ObserverStrategy.__init__(self, protocol, sensor)
-        self.value = sensor.value()
-        self.status = sensor._status
-
-    def run(self, threshold):
-        self.threshold = threshold
-        ObserverStrategy.run(self)
-
-    def update(self, sensor):
-        newval = sensor.value()
-        newstatus = sensor._status
-        if (self.status != newstatus or
-            abs(self.value - newval) > self.threshold):
-            self.protocol.send_sensor_status(sensor)
-            self.status = newstatus
-            self.value = newval
 
 class TxDeviceServer(KatCP):
     SAMPLING_STRATEGIES = {'period'       : PeriodicStrategy,
@@ -322,6 +216,34 @@ class TxDeviceServer(KatCP):
         strategy.run(*msg.arguments[2:])
         self.strategies[sensor.name] = strategy
         self.send_message(Message.reply(msg.name, "ok", *msg.arguments))
+
+    def request_halt(self, msg):
+        self.transport.write(str(Message(Message.REPLY, "halt",
+                                         ["ok"])) + self.delimiter)
+        self.transport.loseConnection()
+        self.factory.port.stopListening()
+        if getattr(self.factory, 'production', None):
+            reactor.stop()
+
+    def request_unknown(self, msg):
+        self.send_message(Message.reply(msg.name, "invalid",
+                                        "Unknown request."))
+
+class ProxyKatCP(TxDeviceServer):
+    needs_setup = True
+    
+    def got_sensor_list(self, (informs, reply)):
+        lgt = int(reply.arguments[1])
+        assert lgt == len(informs)
+        self.sensors = []
+        for inform in informs:
+            # XXXX
+            self.sensors.append(None)
+        self.setup_done.callback(self)
+    
+    def connectionMade(self):
+        d = self.send_request('sensor-list')
+        d.addCallback(self.got_sensor_list)
 
 def run_server(FactoryClass, port, interface='0.0.0.0'):
     f = FactoryClass()
