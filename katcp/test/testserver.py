@@ -16,6 +16,7 @@ class FloatSensor(Sensor):
     def get_value(self):
         self.__value += .1
         self.__value %= 10
+        self.notify()
         return self.__value
 
     def set_value(self, v):
@@ -27,6 +28,7 @@ class IntSensor(Sensor):
     def get_value(self):
         self.__value += 1
         self.__value %= 50
+        self.notify()
         return self.__value
 
     def set_value(self, v):

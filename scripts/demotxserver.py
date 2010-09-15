@@ -1,27 +1,29 @@
 
 from twisted.internet import reactor
-from katcp.txprotocol import KatCP
+from katcp.txprotocol import TxDeviceServer, ServerFactory, run_server
+from katcp import Sensor
 from twisted.internet.protocol import Factory
 from twisted.python import log
 from katcp import Message
+from katcp.test.testserver import IntSensor, FloatSensor
 
 PORT = 1235 # or 0
 
 import sys
 
-class DemoServer(KatCP):
-    def connectionMade(self):
-        self.send_message(Message(Message.INFORM, "version", ["demotxserver"]))
-
-    def request_halt(self, msg):
-        self.factory.port.stopListening()
-        reactor.stop()
+class DemoServerFactory(ServerFactory):
+    protocol = TxDeviceServer
+    production = True
+    
+    def setup_sensors(self):
+        self.add_sensor(FloatSensor(Sensor.FLOAT, "float_sensor", "descr",
+                                    "milithaum", params=[-1.0, 1.0]))
+        self.add_sensor(IntSensor(Sensor.INTEGER, "int_sensor", "descr2",
+                               "cows", params=[-100, 100]))
 
 def main():
-    f = Factory()
-    f.protocol = DemoServer
-    f.port = reactor.listenTCP(PORT, f)
-    print f.port.getHost()
+    factory = run_server(DemoServerFactory, PORT)
+    print factory.port.getHost()
     reactor.run()
 
 if __name__ == '__main__':

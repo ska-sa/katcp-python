@@ -5,6 +5,7 @@ from twisted.internet import reactor
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.protocol import Factory
 from katcp import MessageParser, Message
+import sys, traceback
 
 class UnhandledMessage(Exception):
     pass
@@ -17,6 +18,8 @@ class WrongQueryOrder(Exception):
 
 class UnknownType(Exception):
     pass
+
+TB_LIMIT = 20
 
 def run_client((host, port), ClientClass, connection_made):
     def client_connected(protocol):
@@ -46,6 +49,7 @@ class KatCP(LineReceiver):
         return d
 
     def lineReceived(self, line):
+        line = line.rstrip("\r")
         msg = self.parser.parse(line)
         if msg.mtype == msg.INFORM:
             self.handle_inform(msg)
@@ -85,7 +89,14 @@ class KatCP(LineReceiver):
     def handle_request(self, msg):
         name = msg.name
         name = name.replace('-', '_')
-        getattr(self, 'request_' + name, self.request_unknown)(msg)
+        try:
+            getattr(self, 'request_' + name, self.request_unknown)(msg)
+        except Exception:
+            e_type, e_value, trace = sys.exc_info()
+            reason = "\n".join(traceback.format_exception(
+                e_type, e_value, trace, TB_LIMIT
+                ))
+            self.send_message(Message.reply(msg.name, "fail", reason))
 
     def handle_reply(self, msg):
         if not self.queries:
@@ -106,6 +117,9 @@ class KatCP(LineReceiver):
         self.transport.write(str(Message(Message.REPLY, "halt",
                                          ["ok"])) + self.delimiter)
         self.transport.loseConnection()
+        self.factory.port.stopListening()
+        if getattr(self.factory, 'production', None):
+            reactor.stop()
 
     def request_unknown(self, msg):
         self.send_message(Message.reply(msg.name, "invalid",
@@ -113,6 +127,12 @@ class KatCP(LineReceiver):
 
 class ClientKatCP(KatCP):
     needs_setup = False
+
+    def inform_sensor_status(self, msg):
+        self.update_sensor_status(msg)
+
+    def update_sensor_status(self, msg):
+        raise NotImplementedError("Override update_sensor_status")
 
 class ProxyKatCP(KatCP):
     needs_setup = True
@@ -141,7 +161,111 @@ class ServerFactory(Factory):
     def setup_sensors(self):
         pass # override to provide some sensors
 
-class ServerKatCP(KatCP):
+class SamplingStrategy(object):
+    """ Base class for all sampling strategies
+    """
+    def __init__(self, protocol, sensor):
+        self.protocol = protocol
+        self.sensor = sensor
+    
+    def run(self):
+        """ Run the strategy. Override in subclasses.
+        """
+        raise NotImplementedError("purely abstract base class")
+
+    def cancel(self):
+        """ Cancel running strategy. Override in subclasses.
+        """
+        pass
+
+class PeriodicStrategy(SamplingStrategy):
+    next = None
+
+    def _run_once(self):
+        self.protocol.send_sensor_status(self.sensor)
+        self.next = reactor.callLater(self.period, self._run_once)
+
+    def cancel(self):
+        self.next.cancel()
+
+    def run(self, period):
+        self.period = float(period) / 1000
+        self._run_once()
+
+class NoStrategy(SamplingStrategy):
+    def run(self):
+        pass
+
+class ObserverStrategy(SamplingStrategy):
+    """ A common superclass for strategies that watch sensors and take
+    actions accordingly
+    """
+    def run(self):
+        self.sensor.attach(self)
+
+    def cancel(self):
+        self.sensor.detach(self)
+
+
+class AutoStrategy(ObserverStrategy):
+    def update(self, sensor):
+        self.protocol.send_sensor_status(sensor)
+
+class EventStrategy(ObserverStrategy):
+    def __init__(self, protocol, sensor):
+        ObserverStrategy.__init__(self, protocol, sensor)
+        self.value = sensor.value()
+        self.status = sensor._status
+
+    def update(self, sensor):
+        newval = sensor.value()
+        newstatus = sensor._status
+        if self.status != newstatus or self.value != newval:
+            self.status = newstatus
+            self.value = newval
+            self.protocol.send_sensor_status(sensor)
+            
+class DifferentialStrategy(ObserverStrategy):
+    def __init__(self, protocol, sensor):
+        ObserverStrategy.__init__(self, protocol, sensor)
+        self.value = sensor.value()
+        self.status = sensor._status
+
+    def run(self, threshold):
+        self.threshold = threshold
+        ObserverStrategy.run(self)
+
+    def update(self, sensor):
+        newval = sensor.value()
+        newstatus = sensor._status
+        if (self.status != newstatus or
+            abs(self.value - newval) > self.threshold):
+            self.protocol.send_sensor_status(sensor)
+            self.status = newstatus
+            self.value = newval
+
+class TxDeviceServer(KatCP):
+    SAMPLING_STRATEGIES = {'period'       : PeriodicStrategy,
+                           'none'         : NoStrategy,
+                           'auto'         : AutoStrategy,
+                           'event'        : EventStrategy,
+                           'differential' : DifferentialStrategy}
+    
+    def __init__(self, *args, **kwds):
+        KatCP.__init__(self, *args, **kwds)
+        self.strategies = {}
+
+    def connectionMade(self):
+        """ Called when connection is made. Send default informs - version
+        and build data
+        """
+        self.send_message(Message.inform("version", "txdeviceserver", "0.1"))
+
+    def send_sensor_status(self, sensor):
+        timestamp_ms, status, value = sensor.read_formatted()
+        self.send_message(Message.inform('sensor-status', timestamp_ms, "1",
+                                         sensor.name, status, value))
+
     def request_sensor_value(self, msg):
         if not msg.arguments:
             for name, sensor in sorted(self.factory.sensors.iteritems()):
@@ -173,3 +297,33 @@ class ServerKatCP(KatCP):
     def request_help(self, msg):
         # for now
         self.send_message(Message.reply(msg.name, "ok", "0"))
+
+    def request_sensor_sampling(self, msg):
+        if not msg.arguments:
+            self.send_message(Message.reply(msg.name, "fail",
+                                            "No sensor name given."))
+            return
+        sensor = self.factory.sensors.get(msg.arguments[0], None)
+        if sensor is None:
+            self.send_message(Message.reply(msg.name, "fail",
+                                            "Unknown sensor name."))
+            return
+        StrategyClass = self.SAMPLING_STRATEGIES.get(msg.arguments[1], None)
+        if StrategyClass is None:
+            self.send_message(Message.reply(msg.name, "fail",
+                                            "Unknown strategy name."))
+            return
+        # stop the previous strategy
+        try:
+            self.strategies[sensor.name].cancel()
+        except KeyError:
+            pass
+        strategy = StrategyClass(self, sensor)
+        strategy.run(*msg.arguments[2:])
+        self.strategies[sensor.name] = strategy
+        self.send_message(Message.reply(msg.name, "ok", *msg.arguments))
+
+def run_server(FactoryClass, port, interface='0.0.0.0'):
+    f = FactoryClass()
+    f.port = reactor.listenTCP(port, f, interface=interface)
+    return f
