@@ -145,7 +145,7 @@ class ServerFactory(Factory):
     def setup_sensors(self):
         pass # override to provide some sensors
 
-class TxDeviceServer(KatCP):
+class TxDeviceProtocol(KatCP):
     SAMPLING_STRATEGIES = {'period'       : PeriodicStrategy,
                            'none'         : NoStrategy,
                            'auto'         : AutoStrategy,
@@ -414,8 +414,19 @@ class TxDeviceServer(KatCP):
     def request_unknown(self, msg):
         return Message.reply(msg.name, "invalid", "Unknown request.")
 
+class TxDeviceServer(ServerFactory):
+    protocol = TxDeviceProtocol
+
+    def __init__(self, port, host):
+        ServerFactory.__init__(self)
+        self.port = port
+        self.host = host
+
+    def run(self):
+        self.port = reactor.listenTCP(self.port, self, interface=self.host)
+        return self.port
+
 class ProxyKatCP(TxDeviceServer):
-    # XXXX this should be on a factory level
     needs_setup = True
     
     def got_sensor_list(self, (informs, reply)):
@@ -430,8 +441,3 @@ class ProxyKatCP(TxDeviceServer):
     def connectionMade(self):
         d = self.send_request('sensor-list')
         d.addCallback(self.got_sensor_list)
-
-def run_server(FactoryClass, port, interface='0.0.0.0'):
-    f = FactoryClass()
-    f.port = reactor.listenTCP(port, f, interface=interface)
-    return f

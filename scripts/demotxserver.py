@@ -1,6 +1,6 @@
 
 from twisted.internet import reactor
-from katcp.txprotocol import TxDeviceServer, ServerFactory, run_server
+from katcp.txprotocol import TxDeviceServer
 from katcp import Sensor
 from twisted.internet.protocol import Factory
 from twisted.python import log
@@ -11,8 +11,7 @@ PORT = 1235 # or 0
 
 import sys
 
-class DemoServerFactory(ServerFactory):
-    protocol = TxDeviceServer
+class DemoServerFactory(TxDeviceServer):
     production = True
     
     def setup_sensors(self):
@@ -22,8 +21,8 @@ class DemoServerFactory(ServerFactory):
                                "cows", params=[-100, 100]))
 
 def main():
-    factory = run_server(DemoServerFactory, PORT)
-    print factory.port.getHost()
+    factory = DemoServerFactory(PORT, '')
+    print factory.run().getHost()
     reactor.run()
 
 if __name__ == '__main__':

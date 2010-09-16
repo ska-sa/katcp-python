@@ -1,6 +1,6 @@
 
-from katcp.txprotocol import (ClientKatCP, TxDeviceServer, ProxyKatCP,
-                              ServerFactory, run_client, run_server)
+from katcp.txprotocol import (ClientKatCP, TxDeviceServer, TxDeviceProtocol,
+                              run_client)
 from katcp import Message, Sensor
 from katcp.test.testserver import run_subprocess, PORT, IntSensor, FloatSensor
 from twisted.trial.unittest import TestCase
@@ -54,14 +54,6 @@ class TestKatCP(TestCase):
         d, process = run_subprocess(connected, ClientKatCP)
         return d
 
-    def test_server_introspection(self):
-        def connected(protocol):
-            assert len(protocol.sensors) == 2
-            protocol.send_request('halt')
-        
-        d, process = run_subprocess(connected, ProxyKatCP)
-        return d
-
     def test_callback_sensor_sampling(self):
         def check(protocol):
             self.assertEquals(len(protocol.status_updates), 30)
@@ -74,9 +66,7 @@ class TestKatCP(TestCase):
         d, process = run_subprocess(connected, TestClientKatCP)
         return d
 
-class TestFactory(ServerFactory):
-    protocol = TxDeviceServer
-
+class TestFactory(TxDeviceServer):
     def setup_sensors(self):
         sensor = Sensor(int, 'int_sensor', 'descr', 'unit',
                         params=[-10, 10])
@@ -112,7 +102,8 @@ class TestTxDeviceServer(TestCase):
             d = protocol.send_request(*req)
             d.addCallback(wrapper, protocol)
 
-        self.factory = run_server(cls, 0, interface='127.0.0.1')
+        self.factory = cls(0, '127.0.0.1')
+        self.factory.run()
         cc = ClientCreator(reactor, client_cls)
         port = self.factory.port
         d = cc.connectTCP(port.getHost().host, port.getHost().port)
@@ -123,7 +114,7 @@ class TestTxDeviceServer(TestCase):
     def test_help(self):
         # check how many we really want
         count = 0
-        for i in dir(TxDeviceServer):
+        for i in dir(TxDeviceProtocol):
             if i.startswith('request_'):
                 count += 1
         
@@ -336,15 +327,19 @@ class TestTxDeviceServer(TestCase):
                                'differential', '3'), reply)
 
     def test_raising_traceback(self):
-        class FaultyServer(TxDeviceServer):
+        class FaultyProtocol(TxDeviceProtocol):
             def request_foobar(self, msg):
                 raise KeyError
         
         class FaultyFactory(TestFactory):
-            protocol = FaultyServer
+            protocol = FaultyProtocol
 
         def reply((informs, reply), protocol):
             self.assertEquals(informs, [])
             assert 'Traceback' in str(reply)
 
         return self.base_test(('foobar',), reply, cls=FaultyFactory)
+
+class TestTxProxyBase(TestCase):
+    def test_one(self):
+        pass
