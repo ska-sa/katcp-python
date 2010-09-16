@@ -30,6 +30,9 @@ class TestTxProxyBase(TestCase):
     def test_simplest_proxy(self):
         def stop_example_device(_):
             assert len(proxy.devices) == 1
+            device = proxy.devices[0]
+            assert 'sensor_list' in device.requests
+            assert 'sensor1' in device.sensors
             port.stopListening()
         
         d = Deferred()
