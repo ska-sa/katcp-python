@@ -22,6 +22,7 @@ class UnknownType(Exception):
     pass
 
 TB_LIMIT = 20
+DEBUG = False
 
 def run_client((host, port), ClientClass, connection_made):
     def client_connected(protocol):
@@ -97,8 +98,14 @@ class KatCP(LineReceiver):
         name = msg.name
         name = name.replace('-', '_')
         try:
-            getattr(self, 'request_' + name, self.request_unknown)(msg)
+            rep_msg = getattr(self, 'request_' + name, self.request_unknown)(msg)
+            if rep_msg is not None:
+                assert isinstance(rep_msg, Message)
+                self.send_message(rep_msg)
+            # otherwise reply will come at some later point
         except Exception:
+            if DEBUG:
+                raise
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, TB_LIMIT
@@ -208,19 +215,16 @@ class TxDeviceServer(KatCP):
                 timestamp_ms, status, value = sensor.read_formatted()
                 self.send_message(Message.inform(msg.name, timestamp_ms, "1",
                                                  name, status, value))
-            self.send_message(Message.reply(msg.name, "ok",
-                                            len(self.factory.sensors)))
-            return
+            return Message.reply(msg.name, "ok", len(self.factory.sensors))
         try:
             sensor = self.factory.sensors[msg.arguments[0]]
         except KeyError:
-            self.send_message(Message.reply(msg.name, "fail",
-                                            "Unknown sensor name"))
+            return Message.reply(msg.name, "fail", "Unknown sensor name")
         else:
             timestamp_ms, status, value = sensor.read_formatted()
             self.send_message(Message.inform(msg.name, timestamp_ms, "1",
                                              sensor.name, status, value))
-            self.send_message(Message.reply(msg.name, "ok", "1"))
+            return Message.reply(msg.name, "ok", "1")
 
     def request_sensor_list(self, msg):
         """Request the list of sensors.
@@ -275,8 +279,7 @@ class TxDeviceServer(KatCP):
             self.send_message(Message.inform(msg.name, name, sensor.description,
                                              sensor.units, sensor.stype,
                                              *sensor.formatted_params))
-        self.send_message(Message.reply(msg.name, "ok",
-                                        len(self.factory.sensors)))
+        return Message.reply(msg.name, "ok", len(self.factory.sensors))
 
     def request_help(self, msg):
         """Return help on the available requests.
@@ -324,7 +327,7 @@ class TxDeviceServer(KatCP):
             if name.startswith('request_') and callable(item):
                 self.send_message(Message.inform('help', name, item.__doc__))
                 count += 1
-        self.send_message(Message.reply(msg.name, "ok", str(count)))
+        return Message.reply(msg.name, "ok", str(count))
 
     def request_sensor_sampling(self, msg):
         """Configure or query the way a sensor is sampled.
@@ -369,19 +372,13 @@ class TxDeviceServer(KatCP):
             !sensor-sampling ok cpu.power.on period 500
         """
         if not msg.arguments:
-            self.send_message(Message.reply(msg.name, "fail",
-                                            "No sensor name given."))
-            return
+            return Message.reply(msg.name, "fail", "No sensor name given.")
         sensor = self.factory.sensors.get(msg.arguments[0], None)
         if sensor is None:
-            self.send_message(Message.reply(msg.name, "fail",
-                                            "Unknown sensor name."))
-            return
+            return Message.reply(msg.name, "fail", "Unknown sensor name.")
         StrategyClass = self.SAMPLING_STRATEGIES.get(msg.arguments[1], None)
         if StrategyClass is None:
-            self.send_message(Message.reply(msg.name, "fail",
-                                            "Unknown strategy name."))
-            return
+            return Message.reply(msg.name, "fail", "Unknown strategy name.")
         # stop the previous strategy
         try:
             self.strategies[sensor.name].cancel()
@@ -390,7 +387,7 @@ class TxDeviceServer(KatCP):
         strategy = StrategyClass(self, sensor)
         strategy.run(*msg.arguments[2:])
         self.strategies[sensor.name] = strategy
-        self.send_message(Message.reply(msg.name, "ok", *msg.arguments))
+        return Message.reply(msg.name, "ok", *msg.arguments)
 
     def request_halt(self, msg):
         """Halt the device server.
@@ -415,8 +412,7 @@ class TxDeviceServer(KatCP):
             reactor.stop()
 
     def request_unknown(self, msg):
-        self.send_message(Message.reply(msg.name, "invalid",
-                                        "Unknown request."))
+        return Message.reply(msg.name, "invalid", "Unknown request.")
 
 class ProxyKatCP(TxDeviceServer):
     # XXXX this should be on a factory level
