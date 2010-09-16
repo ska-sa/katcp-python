@@ -25,15 +25,8 @@ TB_LIMIT = 20
 DEBUG = False
 
 def run_client((host, port), ClientClass, connection_made):
-    def client_connected(protocol):
-        d = Deferred()
-        protocol.setup_done = d
-        return d
-    
     cc = ClientCreator(reactor, ClientClass)
     d = cc.connectTCP(host, port)
-    if ClientClass.needs_setup:
-        d.addCallback(client_connected)
     if connection_made is not None:
         d.addCallback(connection_made)
     return d
@@ -126,8 +119,6 @@ class KatCP(LineReceiver):
         self.transport.write(str(msg) + self.delimiter)
 
 class ClientKatCP(KatCP):
-    needs_setup = False
-
     def inform_sensor_status(self, msg):
         self.update_sensor_status(msg)
 
@@ -325,7 +316,8 @@ class TxDeviceProtocol(KatCP):
         for name in dir(self.__class__):
             item = getattr(self, name)
             if name.startswith('request_') and callable(item):
-                self.send_message(Message.inform('help', name, item.__doc__))
+                sname = name[len('request_'):]
+                self.send_message(Message.inform('help', sname, item.__doc__))
                 count += 1
         return Message.reply(msg.name, "ok", str(count))
 
@@ -415,6 +407,8 @@ class TxDeviceProtocol(KatCP):
         return Message.reply(msg.name, "invalid", "Unknown request.")
 
 class TxDeviceServer(ServerFactory):
+    """ This is a device server listening on a given port and address
+    """
     protocol = TxDeviceProtocol
 
     def __init__(self, port, host):
@@ -422,22 +416,6 @@ class TxDeviceServer(ServerFactory):
         self.port = port
         self.host = host
 
-    def run(self):
+    def start(self):
         self.port = reactor.listenTCP(self.port, self, interface=self.host)
         return self.port
-
-class ProxyKatCP(TxDeviceServer):
-    needs_setup = True
-    
-    def got_sensor_list(self, (informs, reply)):
-        lgt = int(reply.arguments[1])
-        assert lgt == len(informs)
-        self.sensors = []
-        for inform in informs:
-            # XXXX
-            self.sensors.append(None)
-        self.setup_done.callback(self)
-    
-    def connectionMade(self):
-        d = self.send_request('sensor-list')
-        d.addCallback(self.got_sensor_list)

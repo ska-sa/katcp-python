@@ -103,7 +103,7 @@ class TestTxDeviceServer(TestCase):
             d.addCallback(wrapper, protocol)
 
         self.factory = cls(0, '127.0.0.1')
-        self.factory.run()
+        self.factory.start()
         cc = ClientCreator(reactor, client_cls)
         port = self.factory.port
         d = cc.connectTCP(port.getHost().host, port.getHost().port)
@@ -120,6 +120,7 @@ class TestTxDeviceServer(TestCase):
         
         def help((informs, reply), protocol):
             self.assertEquals(len(informs), count)
+            assert 'request' not in informs[0].arguments[0]
             self.assertEquals(reply, Message.reply('help', "ok", str(count)))
 
         return self.base_test(('help',), help)
@@ -339,7 +340,3 @@ class TestTxDeviceServer(TestCase):
             assert 'Traceback' in str(reply)
 
         return self.base_test(('foobar',), reply, cls=FaultyFactory)
-
-class TestTxProxyBase(TestCase):
-    def test_one(self):
-        pass

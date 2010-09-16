@@ -22,7 +22,7 @@ class DemoServerFactory(TxDeviceServer):
 
 def main():
     factory = DemoServerFactory(PORT, '')
-    print factory.run().getHost()
+    print factory.start().getHost()
     reactor.run()
 
 if __name__ == '__main__':
