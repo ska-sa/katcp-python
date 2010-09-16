@@ -121,8 +121,15 @@ class TestTxDeviceServer(TestCase):
         return self.finish
     
     def test_help(self):
-        def help((args, reply), protocol):
-            self.assertEquals(reply, Message.reply('help', "ok", '0'))
+        # check how many we really want
+        count = 0
+        for i in dir(TxDeviceServer):
+            if i.startswith('request_'):
+                count += 1
+        
+        def help((informs, reply), protocol):
+            self.assertEquals(len(informs), count)
+            self.assertEquals(reply, Message.reply('help', "ok", str(count)))
 
         return self.base_test(('help',), help)
 

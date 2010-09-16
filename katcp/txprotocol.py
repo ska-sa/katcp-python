@@ -161,6 +161,48 @@ class TxDeviceServer(KatCP):
                                          sensor.name, status, value))
 
     def request_sensor_value(self, msg):
+        """Request the value of a sensor or sensors.
+
+        A list of sensor values as a sequence of #sensor-value informs.
+
+        Parameters
+        ----------
+        name : str, optional
+            Name of the sensor to poll (the default is to send values for all sensors).
+
+        Informs
+        -------
+        timestamp : float
+            Timestamp of the sensor reading in milliseconds since the Unix epoch.
+        count : {1}
+            Number of sensors described in this #sensor-value inform. Will always
+            be one. It exists to keep this inform compatible with #sensor-status.
+        name : str
+            Name of the sensor whose value is being reported.
+        value : object
+            Value of the named sensor. Type depends on the type of the sensor.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the list of values succeeded.
+        informs : int
+            Number of #sensor-value inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?sensor-value
+            #sensor-value 1244631611415.231 1 psu.voltage 4.5
+            #sensor-value 1244631611415.200 1 cpu.status off
+            ...
+            !sensor-value ok 5
+
+            ?sensor-value cpu.power.on
+            #sensor-value 1244631611415.231 1 cpu.power.on 0
+            !sensor-value ok 1
+        """
         if not msg.arguments:
             for name, sensor in sorted(self.factory.sensors.iteritems()):
                 timestamp_ms, status, value = sensor.read_formatted()
@@ -181,6 +223,54 @@ class TxDeviceServer(KatCP):
             self.send_message(Message.reply(msg.name, "ok", "1"))
 
     def request_sensor_list(self, msg):
+        """Request the list of sensors.
+
+        The list of sensors is sent as a sequence of #sensor-list informs.
+
+        Parameters
+        ----------
+        name : str, optional
+            Name of the sensor to list (the default is to list all sensors).
+
+        Informs
+        -------
+        name : str
+            The name of the sensor being described.
+        description : str
+            Description of the named sensor.
+        units : str
+            Units for the value of the named sensor.
+        type : str
+            Type of the named sensor.
+        params : list of str, optional
+            Additional sensor parameters (type dependent). For integer and float
+            sensors the additional parameters are the minimum and maximum sensor
+            value. For discrete sensors the additional parameters are the allowed
+            values. For all other types no additional parameters are sent.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the sensor list succeeded.
+        informs : int
+            Number of #sensor-list inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?sensor-list
+            #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
+            #sensor-list cpu.status CPU\_status. \@ discrete on off error
+            ...
+            !sensor-list ok 5
+
+            ?sensor-list cpu.power.on
+            #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
+            !sensor-list ok 1
+        """
+        if msg.arguments:
+            xxx
         for name, sensor in sorted(self.factory.sensors.iteritems()):
             self.send_message(Message.inform(msg.name, name, sensor.description,
                                              sensor.units, sensor.stype,
@@ -189,10 +279,95 @@ class TxDeviceServer(KatCP):
                                         len(self.factory.sensors)))
 
     def request_help(self, msg):
-        # for now
-        self.send_message(Message.reply(msg.name, "ok", "0"))
+        """Return help on the available requests.
+
+        Return a description of the available requests using a seqeunce of #help informs.
+
+        Parameters
+        ----------
+        request : str, optional
+            The name of the request to return help for (the default is to return help for all requests).
+
+        Informs
+        -------
+        request : str
+            The name of a request.
+        description : str
+            Documentation for the named request.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the help succeeded.
+        informs : int
+            Number of #help inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?help
+            #help halt ...description...
+            #help help ...description...
+            ...
+            !help ok 5
+
+            ?help halt
+            #help halt ...description...
+            !help ok 1
+        """
+        if msg.arguments:
+            xxxx
+        count = 0
+        for name in dir(self.__class__):
+            item = getattr(self, name)
+            if name.startswith('request_') and callable(item):
+                self.send_message(Message.inform('help', name, item.__doc__))
+                count += 1
+        self.send_message(Message.reply(msg.name, "ok", str(count)))
 
     def request_sensor_sampling(self, msg):
+        """Configure or query the way a sensor is sampled.
+
+        Sampled values are reported asynchronously using the #sensor-status
+        message.
+
+        Parameters
+        ----------
+        name : str
+            Name of the sensor whose sampling strategy to query or configure.
+        strategy : {'none', 'auto', 'event', 'differential', 'period'}, optional
+            Type of strategy to use to report the sensor value. The differential
+            strategy type may only be used with integer or float sensors.
+        params : list of str, optional
+            Additional strategy parameters (dependent on the strategy type).
+            For the differential strategy, the parameter is an integer or float
+            giving the amount by which the sensor value may change before an
+            updated value is sent. For the period strategy, the parameter is the
+            period to sample at in milliseconds. For the event strategy, an
+            optional minimum time between updates in milliseconds may be given.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether the sensor-sampling request succeeded.
+        name : str
+            Name of the sensor queried or configured.
+        strategy : {'none', 'auto', 'event', 'differential', 'period'}
+            Name of the new or current sampling strategy for the sensor.
+        params : list of str
+            Additional strategy parameters (see description under Parameters).
+
+        Examples
+        --------
+        ::
+
+            ?sensor-sampling cpu.power.on
+            !sensor-sampling ok cpu.power.on none
+
+            ?sensor-sampling cpu.power.on period 500
+            !sensor-sampling ok cpu.power.on period 500
+        """
         if not msg.arguments:
             self.send_message(Message.reply(msg.name, "fail",
                                             "No sensor name given."))
@@ -218,6 +393,20 @@ class TxDeviceServer(KatCP):
         self.send_message(Message.reply(msg.name, "ok", *msg.arguments))
 
     def request_halt(self, msg):
+        """Halt the device server.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether scheduling the halt succeeded.
+
+        Examples
+        --------
+        ::
+
+            ?halt
+            !halt ok
+        """
         self.transport.write(str(Message(Message.REPLY, "halt",
                                          ["ok"])) + self.delimiter)
         self.transport.loseConnection()
