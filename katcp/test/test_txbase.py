@@ -27,17 +27,26 @@ class ExampleProxy(ProxyKatCP):
         self.finish.callback(None)
 
 class TestTxProxyBase(TestCase):
-    def test_simplest_proxy(self):
-        def stop_example_device(_):
-            assert len(proxy.devices) == 1
-            device = proxy.devices[0]
-            assert 'sensor_list' in device.requests
-            assert 'sensor1' in device.sensors
+    def base_test(self, callback):
+        def wrapper(*args):
+            callback(*args)
             port.stopListening()
         
         d = Deferred()
         port = ExampleDevice(0, '').start()
-        proxy = ExampleProxy(port.getHost().port, d)
-        proxy.start()
-        d.addCallback(stop_example_device)
+        self.proxy = ExampleProxy(port.getHost().port, d)
+        self.proxy.start()
+        d.addCallback(wrapper)
         return d
+    
+    def test_simplest_proxy(self):
+        def callback(_):
+            assert len(self.proxy.devices) == 1
+            device = self.proxy.devices.values()[0]
+            assert 'sensor_list' in device.requests
+            assert 'sensor1' in device.sensors
+
+        return self.base_test(callback)
+
+    def test_forwarding_commands(self):
+        pass

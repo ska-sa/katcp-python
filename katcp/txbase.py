@@ -36,14 +36,14 @@ class ProxyKatCP(TxDeviceServer):
         self.all_devices = 0
         self.ready_devices = 0
         self.setup_devices()
-        self.devices = []
+        self.devices = {}
     
     def start(self):
         TxDeviceServer.start(self)
 
     def device_ready(self, device):
         self.ready_devices += 1
-        self.devices.append(device)
+        self.devices[device.name] = device
         if self.ready_devices == self.all_devices:
             self.devices_scan_complete()
 
@@ -69,6 +69,22 @@ class ProxyKatCP(TxDeviceServer):
         raise NotImplementedError("Override this to provide devices setup")
 
     def stop(self):
-        for device in self.devices:
+        for device in self.devices.values():
             device.transport.loseConnection(None)
         self.port.stopListening()
+
+    # --------------- requests ----------------
+
+    def request_device_list(self):
+        pass
+
+    def __getattr__(self, attr):
+        if not attr.startswith('request_'):
+            return object.__getattribute__(self, attr)
+        lst = attr.split('_')
+        if len(lst) < 3:
+            return object.__getattribute__(self, attr)
+        dev_name = lst[1]
+        if dev_name not in self.devices:
+            return object.__getattribute__(self, attr)
+        xxxx
