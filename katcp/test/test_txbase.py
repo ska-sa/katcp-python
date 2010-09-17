@@ -9,7 +9,7 @@ from katcp.kattypes import request, return_reply, Int
 from twisted.internet import reactor
 
 timeout = 5
-Deferred.debug = True
+#Deferred.debug = True
 
 class ExampleProtocol(TxDeviceProtocol):
     @request(include_msg=True)
