@@ -22,7 +22,7 @@ class UnknownType(Exception):
     pass
 
 TB_LIMIT = 20
-DEBUG = True
+DEBUG = False
 
 def run_client((host, port), ClientClass, connection_made):
     cc = ClientCreator(reactor, ClientClass)
