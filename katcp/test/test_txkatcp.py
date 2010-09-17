@@ -340,3 +340,12 @@ class TestTxDeviceServer(TestCase):
             assert 'Traceback' in str(reply)
 
         return self.base_test(('foobar',), reply, cls=FaultyFactory)
+
+class TestMisc(TestCase):
+    def test_requests(self):
+        from katcp.server import DeviceServer
+        for name in dir(DeviceServer):
+            if (name.startswith('request_') and
+                callable(getattr(DeviceServer, name))):
+                assert hasattr(TxDeviceProtocol, name)
+    test_requests.skip = True
