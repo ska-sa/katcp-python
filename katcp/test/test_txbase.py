@@ -1,6 +1,7 @@
 
 from katcp.txprotocol import TxDeviceServer, ClientKatCP
-from katcp.txbase import ProxyKatCP, DeviceHandler, TxDeviceProtocol
+from katcp.txbase import (ProxyKatCP, DeviceHandler, TxDeviceProtocol,
+                          unsynced_device)
 from twisted.trial.unittest import TestCase
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.defer import Deferred
@@ -32,6 +33,8 @@ class ExampleProxy(ProxyKatCP):
         self.finish = finish
     
     def setup_devices(self):
+        # add, but don't sync
+        self.devices['device2'] = unsynced_device
         self.add_device('device', 'localhost', self.connect_to)
 
     def devices_scan_complete(self):
@@ -73,8 +76,10 @@ class TestTxProxyBase(TestCase):
     
     def test_simplest_proxy(self):
         def callback(_):
-            assert len(self.proxy.devices) == 1
-            device = self.proxy.devices.values()[0]
+            devices = [i for i in self.proxy.devices.values() if i is not
+                      unsynced_device]
+            assert len(devices) == 1
+            device = devices[0]
             assert 'sensor_list' in device.requests
             assert 'sensor1' in device.sensors
 
@@ -85,3 +90,10 @@ class TestTxProxyBase(TestCase):
             self.assertEquals(reply, Message.reply("device-req", "ok", "3"))
         
         return self.base_test(('device-req',), callback)
+
+    def test_forwarding_unsynced(self):
+        def callback((informs, reply)):
+            self.assertEquals(reply, Message.reply('device2-req', 'fail',
+                                                   'Device not synced'))
+
+        return self.base_test(('device2-req',), callback)

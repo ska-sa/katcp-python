@@ -5,6 +5,8 @@ from twisted.internet import reactor
 from twisted.internet.protocol import ClientCreator
 from katcp import Message
 
+unsynced_device = object()
+
 class DeviceHandler(ClientKatCP):
     def __init__(self):
         ClientKatCP.__init__(self)
@@ -40,6 +42,9 @@ class DeviceServer(TxDeviceProtocol):
                                             *reply.arguments))
         
         def callback(msg):
+            if device is unsynced_device:
+                return Message.reply(dev_name + "-" + req_name, "fail",
+                                     "Device not synced")
             device.send_request(req_name,
                                 *msg.arguments).addCallback(request_returned)
         
@@ -66,8 +71,8 @@ class ProxyKatCP(TxDeviceServer):
         self.cc = ClientCreator(reactor, DeviceHandler)
         self.all_devices = 0
         self.ready_devices = 0
-        self.setup_devices()
         self.devices = {}
+        self.setup_devices()
     
     def device_ready(self, device):
         self.ready_devices += 1
@@ -85,6 +90,8 @@ class ProxyKatCP(TxDeviceServer):
             device_handler.proxy = self
 
         self.cc.connectTCP(host, port).addCallback(callback)
+        self.devices[name] = unsynced_device
+        # device is there, but not yet created
         self.all_devices += 1
 
     def devices_scan_complete(self, _):
@@ -98,5 +105,6 @@ class ProxyKatCP(TxDeviceServer):
 
     def stop(self):
         for device in self.devices.values():
-            device.transport.loseConnection(None)
+            if device is not unsynced_device:
+                device.transport.loseConnection(None)
         self.port.stopListening()
