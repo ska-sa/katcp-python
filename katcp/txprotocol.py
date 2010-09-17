@@ -22,7 +22,7 @@ class UnknownType(Exception):
     pass
 
 TB_LIMIT = 20
-DEBUG = False
+DEBUG = True
 
 def run_client((host, port), ClientClass, connection_made):
     cc = ClientCreator(reactor, ClientClass)
@@ -413,9 +413,10 @@ class TxDeviceServer(ServerFactory):
 
     def __init__(self, port, host):
         ServerFactory.__init__(self)
-        self.port = port
+        self.listen_port = port
         self.host = host
 
     def start(self):
-        self.port = reactor.listenTCP(self.port, self, interface=self.host)
+        self.port = reactor.listenTCP(self.listen_port, self,
+                                      interface=self.host)
         return self.port

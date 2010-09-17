@@ -1,8 +1,9 @@
 
-from katcp.txprotocol import TxDeviceServer, ClientKatCP
+from katcp.txprotocol import TxDeviceServer, ClientKatCP, TxDeviceProtocol
 from twisted.internet.defer import Deferred
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientCreator
+from katcp import Message
 
 class DeviceHandler(ClientKatCP):
     def __init__(self):
@@ -26,10 +27,40 @@ class DeviceHandler(ClientKatCP):
 
         self.send_request('help').addCallback(got_help)
 
+class DeviceServer(TxDeviceProtocol):
+    def request_device_list(self):
+        pass
+
+    def __getattr__(self, attr):
+        def request_returned((informs, reply)):
+            assert informs == [] # for now
+            # we *could* in theory just change message name, but let's copy
+            # just in case
+            self.send_message(Message.reply(dev_name + "-" + req_name,
+                                            *reply.arguments))
+        
+        def callback(msg):
+            device.send_request(req_name,
+                                *msg.arguments).addCallback(request_returned)
+        
+        if not attr.startswith('request_'):
+            return object.__getattribute__(self, attr)
+        lst = attr.split('_')
+        if len(lst) < 3:
+            return object.__getattribute__(self, attr)
+        dev_name = lst[1]
+        device = self.factory.devices.get(dev_name, None)
+        if device is None:
+            return object.__getattribute__(self, attr)
+        req_name = "_".join(lst[2:])
+        return callback
+
 class ProxyKatCP(TxDeviceServer):
     """ This is a proxy class that will listen on a given host and port
     providing info about underlaying clients if needed
     """
+    protocol = DeviceServer
+    
     def __init__(self, *args, **kwds):
         TxDeviceServer.__init__(self, *args, **kwds)
         self.cc = ClientCreator(reactor, DeviceHandler)
@@ -38,9 +69,6 @@ class ProxyKatCP(TxDeviceServer):
         self.setup_devices()
         self.devices = {}
     
-    def start(self):
-        TxDeviceServer.start(self)
-
     def device_ready(self, device):
         self.ready_devices += 1
         self.devices[device.name] = device
@@ -72,19 +100,3 @@ class ProxyKatCP(TxDeviceServer):
         for device in self.devices.values():
             device.transport.loseConnection(None)
         self.port.stopListening()
-
-    # --------------- requests ----------------
-
-    def request_device_list(self):
-        pass
-
-    def __getattr__(self, attr):
-        if not attr.startswith('request_'):
-            return object.__getattribute__(self, attr)
-        lst = attr.split('_')
-        if len(lst) < 3:
-            return object.__getattribute__(self, attr)
-        dev_name = lst[1]
-        if dev_name not in self.devices:
-            return object.__getattribute__(self, attr)
-        xxxx
