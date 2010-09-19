@@ -5,10 +5,12 @@ from katcp import Message, Sensor
 from katcp.test.testserver import run_subprocess, PORT, IntSensor, FloatSensor
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet.protocol import Factory
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.base import DelayedCall
+from katcp.core import FailReply
+
 DelayedCall.debug = True
 
 import time
@@ -66,7 +68,17 @@ class TestKatCP(TestCase):
         d, process = run_subprocess(connected, TestClientKatCP)
         return d
 
+class TestProtocol(TxDeviceProtocol):
+    notify_con_lost = None
+
+    def connectionLost(self, _):
+        TxDeviceProtocol.connectionLost(self, _)
+        if self.notify_con_lost:
+            self.notify_con_lost()
+
 class TestFactory(TxDeviceServer):
+    protocol = TestProtocol
+    
     def setup_sensors(self):
         sensor = Sensor(int, 'int_sensor', 'descr', 'unit',
                         params=[-10, 10])
@@ -198,11 +210,12 @@ class TestTxDeviceServer(TestCase):
 
     def test_sensor_sampling_period(self):
         def called_later(protocol):
-            # this is necessary to cleanly exit the process so twisted
-            # won't complain about leftover delayed calls
-            self.assertEquals(len(self.client.status_updates), 30)
+            assert 27 <= len(self.client.status_updates) <= 30
+            # eh, judge somehow how many it can get in exactly that period
             self.client.send_request('sensor-sampling', 'int_sensor',
                                      'none').addCallback(send_halt, protocol)
+            # this is necessary to cleanly exit the process so twisted
+            # won't complain about leftover delayed calls
 
         def send_halt(_, protocol):
             protocol.send_request('halt').addCallback(self.end_test)
@@ -341,6 +354,126 @@ class TestTxDeviceServer(TestCase):
 
         return self.base_test(('foobar',), reply, cls=FaultyFactory)
 
+    def test_watchdog(self):
+        def reply((informs, reply), protocol):
+            self.assertEquals(reply, Message.reply('watchdog', 'ok'))
+        
+        return self.base_test(('watchdog',), reply)
+
+    def test_fail(self):
+        class FaultyProtocol(TxDeviceProtocol):
+            def request_foobar(self, msg):
+                raise FailReply("failed")
+        
+        class FaultyFactory(TestFactory):
+            protocol = FaultyProtocol
+
+        def reply((informs, reply), protocol):
+            self.assertEquals(informs, [])
+            self.assertEquals(reply, Message.reply("foobar", "fail", "failed"))
+
+        return self.base_test(('foobar',), reply, cls=FaultyFactory)
+
+    def test_client_list(self):
+        def got_client_list(values, protocols):
+            for success, (informs, reply) in values:
+                assert success
+                assert len(informs) == 2
+                self.assertEquals(reply, Message.reply('client-list', 'ok',
+                                                       '2'))
+            # disconnect one and check it deregisters, with notification
+            # when tcp reaches the other end
+            for v in self.factory.clients.values():
+                v.notify_con_lost = lambda : send_client_list(protocols[1])
+            protocols[0].transport.loseConnection()
+
+        def send_client_list(protocol):
+            protocol.send_request('client-list').addCallback(client_list2,
+                                                                 protocol)
+
+        def client_list2((informs, reply), protocol):
+            assert len(informs) == 1
+            self.assertEquals(reply, Message.reply('client-list', 'ok', '1'))
+            self.factory.stop()
+            finish.callback(None)
+        
+        def connected(values):
+            l = []
+            protocols = []
+            for success, value in values:
+                assert success
+                l.append(value.send_request('client-list'))
+                protocols.append(value)
+            DeferredList(l).addCallback(got_client_list,
+                                        protocols)
+        
+        self.factory = TestFactory(0, '127.0.0.1')
+        self.factory.start()
+        cc = ClientCreator(reactor, TestClientKatCP)
+        port = self.factory.port
+        d = cc.connectTCP(port.getHost().host, port.getHost().port)
+        d2 = cc.connectTCP(port.getHost().host, port.getHost().port)
+        DeferredList([d, d2]).addCallback(connected)
+        finish = Deferred()
+        return finish
+
+    def test_log_basic(self):
+        class TestProtocol(ClientKatCP):
+            def inform_log(self, msg):
+                got_log.callback(msg)
+
+        def log_received(msg):
+            self.assertEquals(msg, Message.inform("log", "warn", "0", "root",
+                                                  "a warning"))
+            self.factory.stop()
+            finish.callback(None)
+        
+        def connected(protocol):
+            self.factory.log.warn('a warning', timestamp=0)
+        
+        self.factory = TestFactory(0, '127.0.0.1')
+        self.factory.start()
+        cc = ClientCreator(reactor, TestProtocol)
+        port = self.factory.port
+        cc.connectTCP(port.getHost().host, port.getHost().port).addCallback(
+            connected)
+        finish = Deferred()
+        got_log = Deferred()
+        got_log.addCallback(log_received)
+        return finish
+
+    def test_log_level(self):
+        class TestProtocol(ClientKatCP):
+            def __init__(self, *args, **kwds):
+                ClientKatCP.__init__(self, *args, **kwds)
+                self.msgs = []
+            
+            def inform_log(self, msg):
+                self.msgs.append(msg)
+
+        def log_level1((informs, reply), protocol):
+            self.assertEquals(reply, Message.reply('log-level', 'ok', 'warn'))
+            self.factory.log.debug('blah', timestamp=0)
+            protocol.send_request('log-level', 'debug').addCallback(log_level2,
+                                                                    protocol)
+            return True
+
+        def log_level2((informs, reply), protocol):
+            self.assertEquals(protocol.msgs, [])
+            self.factory.log.debug("foo", timestamp=0)
+            protocol.send_request('log-level').addCallback(log_level3,
+                                                           protocol)
+
+        def log_level3((informs, reply), protocol):
+            self.assertEquals(protocol.msgs, [Message.inform("log", "debug",
+                                                             "0", "root",
+                                                             "foo")])
+            self.factory.stop()
+            self.finish.callback(None)
+            
+        return self.base_test(('log-level',), log_level1,
+                              client_cls=TestProtocol)
+
 class TestMisc(TestCase):
     def test_requests(self):
         from katcp.server import DeviceServer
@@ -348,4 +481,3 @@ class TestMisc(TestCase):
             if (name.startswith('request_') and
                 callable(getattr(DeviceServer, name))):
                 assert hasattr(TxDeviceProtocol, name)
-    test_requests.skip = True

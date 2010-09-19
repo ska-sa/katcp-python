@@ -5,9 +5,12 @@ from twisted.internet import reactor
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.protocol import Factory
 from katcp import MessageParser, Message
+from katcp.core import FailReply
+from katcp.server import DeviceLogger
 from katcp.txsampling import (DifferentialStrategy, AutoStrategy,
     EventStrategy, NoStrategy, PeriodicStrategy)
 import sys, traceback
+import time
 
 class UnhandledMessage(Exception):
     pass
@@ -96,6 +99,8 @@ class KatCP(LineReceiver):
                 assert isinstance(rep_msg, Message)
                 self.send_message(rep_msg)
             # otherwise reply will come at some later point
+        except FailReply, fr:
+            self.send_message(Message.reply(name, "fail", str(fr)))
         except Exception:
             if DEBUG:
                 raise
@@ -121,6 +126,11 @@ class KatCP(LineReceiver):
 class ClientKatCP(KatCP):
     def inform_sensor_status(self, msg):
         self.update_sensor_status(msg)
+
+    def inform_log(self, msg):
+        """ Default inform when logging even happens. Ignore by default,
+        can be overriden
+        """
 
     def update_sensor_status(self, msg):
         raise NotImplementedError("Override update_sensor_status")
@@ -152,6 +162,9 @@ class TxDeviceProtocol(KatCP):
         and build data
         """
         self.send_message(Message.inform("version", "txdeviceserver", "0.1"))
+
+    def connectionLost(self, _):
+        self.factory.deregister_client(self.transport.client)
 
     def send_sensor_status(self, sensor):
         timestamp_ms, status, value = sensor.read_formatted()
@@ -398,10 +411,104 @@ class TxDeviceProtocol(KatCP):
         """
         self.transport.write(str(Message(Message.REPLY, "halt",
                                          ["ok"])) + self.delimiter)
-        self.transport.loseConnection()
-        self.factory.port.stopListening()
-        if getattr(self.factory, 'production', None):
-            reactor.stop()
+        self.factory.stop()
+
+    def request_watchdog(self, msg):
+        """Check that the server is still alive.
+
+        Returns
+        -------
+            success : {'ok'}
+
+        Examples
+        --------
+        ::
+
+            ?watchdog
+            !watchdog ok
+        """
+        return Message.reply("watchdog", "ok")
+
+    def request_restart(self, msg):
+        """Restart the device server.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether scheduling the restart succeeded.
+
+        Examples
+        --------
+        ::
+
+            ?restart
+            !restart ok
+        """
+        pass
+
+    def request_client_list(self, msg):
+        """Request the list of connected clients.
+
+        The list of clients is sent as a sequence of #client-list informs.
+
+        Informs
+        -------
+        addr : str
+            The address of the client as host:port with host in dotted quad
+            notation. If the address of the client could not be determined
+            (because, for example, the client disconnected suddenly) then
+            a unique string representing the client is sent instead.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the client list succeeded.
+        informs : int
+            Number of #client-list inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?client-list
+            #client-list 127.0.0.1:53600
+            !client-list ok 1
+        """
+        for ip, port in self.factory.clients:
+            self.send_message(Message.inform(msg.name, "%s:%s" % (ip, port)))
+        return Message.reply(msg.name, "ok", len(self.factory.clients))
+
+    def request_log_level(self, msg):
+        """Query or set the current logging level.
+
+        Parameters
+        ----------
+        level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', 'off'}, optional
+            Name of the logging level to set the device server to (the default is to leave the log level unchanged).
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether the request succeeded.
+        level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', 'off'}
+            The log level after processing the request.
+
+        Examples
+        --------
+        ::
+
+            ?log-level
+            !log-level ok warn
+
+            ?log-level info
+            !log-level ok info
+        """
+        if msg.arguments:
+            try:
+                self.factory.log.set_log_level_by_name(msg.arguments[0])
+            except ValueError, e:
+                raise FailReply(str(e))
+        return Message.reply("log-level", "ok", self.factory.log.level_name())
 
     def request_unknown(self, msg):
         return Message.reply(msg.name, "invalid", "Unknown request.")
@@ -412,11 +519,51 @@ class TxDeviceServer(ServerFactory):
     protocol = TxDeviceProtocol
 
     def __init__(self, port, host):
+        self.log = DeviceLogger(self) # python logger is None
         ServerFactory.__init__(self)
         self.listen_port = port
         self.host = host
+        self.clients = {}
 
     def start(self):
         self.port = reactor.listenTCP(self.listen_port, self,
                                       interface=self.host)
         return self.port
+
+    def register_client(self, addr, protocol):
+        self.clients[addr] = protocol
+
+    def deregister_client(self, addr):
+        del self.clients[addr]
+
+    def buildProtocol(self, addr):
+        protocol = ServerFactory.buildProtocol(self, addr)
+        self.register_client((addr.host, addr.port), protocol)
+        return protocol
+
+    def stop(self):
+        for client in self.clients.values():
+            client.transport.loseConnection()
+        self.port.stopListening()
+        if getattr(self, 'production', None):
+            reactor.stop()
+
+    def _log_msg(self, level_name, msg, name, timestamp=None):
+        """Create a katcp logging inform message.
+
+           Usually this will be called from inside a DeviceLogger object,
+           but it is also used by the methods in this class when errors
+           need to be reported to the client.
+           """
+        if timestamp is None:
+            timestamp = time.time()
+        return Message.inform("log",
+                level_name,
+                str(int(timestamp * 1000.0)), # time since epoch in ms
+                name,
+                msg,
+        )
+
+    def mass_inform(self, msg):
+        for client in self.clients.itervalues():
+            client.send_message(msg)

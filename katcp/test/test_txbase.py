@@ -1,7 +1,7 @@
 
 from katcp.txprotocol import TxDeviceServer, ClientKatCP
 from katcp.txbase import (ProxyKatCP, DeviceHandler, TxDeviceProtocol,
-                          unsynced_device)
+                          )
 from twisted.trial.unittest import TestCase
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.defer import Deferred
@@ -33,9 +33,11 @@ class ExampleProxy(ProxyKatCP):
         self.finish = finish
     
     def setup_devices(self):
-        # add, but don't sync
-        self.devices['device2'] = unsynced_device
-        self.add_device('device', 'localhost', self.connect_to)
+        dev2 = DeviceHandler('device2', 'localhost', 1221)
+        dev2.connectionMade = lambda *args: None
+        self.add_device(dev2)
+        self.ready_devices = 1
+        self.add_device(DeviceHandler('device', 'localhost', self.connect_to))
 
     def devices_scan_complete(self):
         self.finish.callback(None)
@@ -76,8 +78,8 @@ class TestTxProxyBase(TestCase):
     
     def test_simplest_proxy(self):
         def callback(_):
-            devices = [i for i in self.proxy.devices.values() if i is not
-                      unsynced_device]
+            devices = [i for i in self.proxy.devices.values() if
+                       i.state == i.SYNCED]
             assert len(devices) == 1
             device = devices[0]
             assert 'sensor_list' in device.requests
@@ -97,3 +99,17 @@ class TestTxProxyBase(TestCase):
                                                    'Device not synced'))
 
         return self.base_test(('device2-req',), callback)
+
+    def test_device_list(self):
+        def callback((informs, reply)):
+            assert len(informs) == 2
+            self.assertEquals(reply, Message.reply("device-list", "ok", "2"))
+        
+        return self.base_test(('device-list',), callback)
+
+    def test_sensor_list(self):
+        def callback((informs, reply)):
+            xxx
+        
+        return self.base_test(('sensor-list'), callback)
+    test_sensor_list.skip = True
