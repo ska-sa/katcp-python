@@ -123,6 +123,7 @@ class DeviceServer(TxDeviceProtocol):
         #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
         !sensor-list ok 1
         """
+        raise NotImplementedError
         # handle non-regex cases
         if not msg.arguments or not (msg.arguments[0].startswith("/")
             and msg.arguments[0].endswith("/")):
