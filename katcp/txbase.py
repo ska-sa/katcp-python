@@ -6,6 +6,19 @@ from twisted.internet.protocol import ClientFactory
 from katcp import Message
 from katcp.kattypes import request, return_reply, Int
 
+class ProxiedSensor(object):
+    def __init__(self, name, device, proxy):
+        self.name = name
+        self.device = device
+
+    def read_formatted(self):
+        def reply(res):
+            d.callback(res)
+        
+        d = Deferred()
+        self.device.send_request('sensor-value', self.name).addCallback(reply)
+        return d
+
 class DeviceHandler(ClientKatCP):
     SYNCING, SYNCED, UNSYNCED = range(3)
 
@@ -33,6 +46,7 @@ class DeviceHandler(ClientKatCP):
             self.state = self.SYNCED
             for inform in informs:
                 self.sensors.append(inform.arguments[0])
+                self.proxy.add_proxied_sensor(self, inform.arguments[0])
             self.proxy.device_ready(self)
 
         self.state = self.SYNCING
@@ -123,8 +137,8 @@ class DeviceServer(TxDeviceProtocol):
         #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
         !sensor-list ok 1
         """
-        raise NotImplementedError
         # handle non-regex cases
+        raise NotImplementedError
         if not msg.arguments or not (msg.arguments[0].startswith("/")
             and msg.arguments[0].endswith("/")):
             return TxDeviceServer.request_sensor_list(self, msg)
@@ -140,6 +154,80 @@ class DeviceServer(TxDeviceProtocol):
                 *sensor.formatted_params))
 
         return Message.reply(msg.name, "ok", len(sensors))
+
+    def request_sensor_value(self, msg):
+        """Poll a sensor value or value(s).
+
+        A list of sensor values as a sequence of #sensor-value informs.
+
+        Parameters
+        ----------
+        name : str or pattern, optional
+            If the name is not a pattern, list just the values of sensors with the
+            given name.  A pattern starts and ends with a slash ('/') and uses the
+            Python re module's regular expression syntax. The values of all sensors
+            whose names contain the pattern are listed.  The default is to list the
+            values of all sensors.
+
+        Inform Arguments
+        ----------------
+        timestamp : float
+            Timestamp of the sensor reading in milliseconds since the Unix epoch.
+        count : {1}
+            Number of sensors described in this #sensor-value inform. Will always
+            be one. It exists to keep this inform compatible with #sensor-status.
+        name : str
+            Name of the sensor whose value is being reported.
+        value : object
+            Value of the named sensor. Type depends on the type of the sensor.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the list of values succeeded.
+        informs : int
+            Number of #sensor-value inform messages sent.
+
+        Examples
+        --------
+        ?sensor-value
+        #sensor-value 1244631611415.231 1 psu.voltage 4.5
+        #sensor-value 1244631611415.200 1 cpu.status off
+        ...
+        !sensor-value ok 5
+
+        ?sensor-value /voltage/
+        #sensor-value 1244631611415.231 1 psu.voltage 4.5
+        #sensor-value 1244631611415.100 1 cpu.voltage 4.5
+        !sensor-value ok 2
+
+        ?sensor-value cpu.power.on
+        #sensor-value 1244631611415.231 1 cpu.power.on 0
+        !sensor-value ok 1
+        """
+        def send_single_ok((informs, reply)):
+            self.send_message(informs[0])
+            self.send_message(reply)
+        
+        if not msg.arguments:
+            xxx # all sensors
+        name = msg.arguments[0]
+        if len(name) >= 2 and name.startswith("/") and name.endswith("/"):
+            # regex case
+            xxx
+        else:
+            sensor = self.factory.sensors.get(name, None)
+            if sensor is None:
+                return Message.reply(msg.name, "fail", "Unknown sensor name.")
+            res = sensor.read_formatted()
+            if isinstance(res, Deferred):
+                res.addCallback(send_single_ok)
+                return
+            timestamp_ms, status, value = res
+            send_single_ok([Message.inform('sensor-value', timestamp_ms, "1",
+                                           name, status, value)],
+                           Message.reply(msg.name, "ok", "1"))
+            return
 
     def __getattr__(self, attr):
         def request_returned((informs, reply)):
@@ -207,6 +295,9 @@ class ProxyKatCP(TxDeviceServer):
             device.proxy = self
 
         reactor.resolve(device.host).addCallback(really_add_device)
+
+    def add_proxied_sensor(self, device, sensor_name):
+        self.sensors[sensor_name] = ProxiedSensor(sensor_name, device, self)
 
     def devices_scan_complete(self, _):
         """ A callback called when devices are properly set up and read.
