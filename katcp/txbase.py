@@ -1,6 +1,6 @@
 
 from katcp.txprotocol import TxDeviceServer, ClientKatCP, TxDeviceProtocol
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientFactory
 from katcp import Message
@@ -12,12 +12,7 @@ class ProxiedSensor(object):
         self.device = device
 
     def read_formatted(self):
-        def reply(res):
-            d.callback(res)
-        
-        d = Deferred()
-        self.device.send_request('sensor-value', self.name).addCallback(reply)
-        return d
+        return self.device.send_request('sensor-value', self.name)
 
 class DeviceHandler(ClientKatCP):
     SYNCING, SYNCED, UNSYNCED = range(3)
@@ -208,9 +203,32 @@ class DeviceServer(TxDeviceProtocol):
         def send_single_ok((informs, reply)):
             self.send_message(informs[0])
             self.send_message(reply)
+
+        def device_ok((informs, reply)):
+            for inform in informs:
+                self.send_message(inform)
+
+        def all_ok(_):
+            self.send_message(Message.reply('sensor-value', 'ok',
+                                            str(len(self.factory.sensors))))
         
         if not msg.arguments:
-            xxx # all sensors
+            wait_for = []
+            for device in self.factory.devices.itervalues():
+                if device.state == device.SYNCED:
+                    d = device.send_request('sensor-value')
+                    d.addCallback(device_ok)
+                    wait_for.append(d)
+                # otherwise we don't have the list of sensors, so we don't
+                # send the message
+            DeferredList(wait_for).addCallback(all_ok)
+            for sensor in self.factory.sensors.itervalues():
+                if not isinstance(sensor, ProxiedSensor):
+                    timestamp_ms, status, value = sensor.read_formatted()
+                    self.send_message(Message.inform('sensor-value',
+                                                     timestamp_ms, "1",
+                                                     name, status, value))
+            return
         name = msg.arguments[0]
         if len(name) >= 2 and name.startswith("/") and name.endswith("/"):
             # regex case

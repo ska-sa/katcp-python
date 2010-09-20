@@ -27,6 +27,10 @@ class ExampleDevice(TxDeviceServer):
                         [0,10])
         sensor._timestamp = 1
         self.add_sensor(sensor)
+        sensor2 = Sensor(int, "dev1.sensor2", "Test sensor 2", "count",
+                         [0, 10])
+        sensor2._timestamp = 0
+        self.add_sensor(sensor2)
 
 class ExampleProxy(ProxyKatCP):
     def __init__(self, port, finish):
@@ -113,11 +117,14 @@ class TestTxProxyBase(TestCase):
 
     def test_all_forwarded_sensors(self):
         def callback((informs, reply)):
-            import pdb
-            pdb.set_trace()
+            self.assertEquals(informs,
+                  [Message.inform('sensor-value', '1000', '1', 'dev1.sensor1',
+                                  'unknown', '0'),
+                   Message.inform('sensor-value', '0', '1', 'dev1.sensor2',
+                                  'unknown', '0')])
+            self.assertEquals(reply, Message.reply('sensor-value', 'ok', '2'))
 
         return self.base_test(('sensor-value',), callback)
-    test_all_forwarded_sensors.skip = True
 
     def test_device_list(self):
         def callback((informs, reply)):
