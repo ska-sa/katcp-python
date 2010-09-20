@@ -126,6 +126,16 @@ class TestTxProxyBase(TestCase):
 
         return self.base_test(('sensor-value',), callback)
 
+    def test_all_forwarded_sensors_regex(self):
+        def callback((informs, reply)):
+            self.assertEquals(informs,
+                  [Message.inform('sensor-value', '1000', '1', 'dev1.sensor1',
+                                  'unknown', '0')])
+            self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
+
+        return self.base_test(('sensor-value', '/dev.\.sensor1/'),
+                              callback)
+
     def test_device_list(self):
         def callback((informs, reply)):
             assert len(informs) == 2

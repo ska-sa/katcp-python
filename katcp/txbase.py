@@ -6,6 +6,8 @@ from twisted.internet.protocol import ClientFactory
 from katcp import Message
 from katcp.kattypes import request, return_reply, Int
 
+import re
+
 class ProxiedSensor(object):
     def __init__(self, name, device, proxy):
         self.name = name
@@ -150,6 +152,41 @@ class DeviceServer(TxDeviceProtocol):
 
         return Message.reply(msg.name, "ok", len(sensors))
 
+    def _send_all_sensors(self, filter=None):
+        """ Sends all sensor values with given filter (None = all)
+        """
+        counter = [0] # this has to be a list or an object, thanks to
+        # python lexical scoping rules (we could not write count += 1
+        # in a function)
+        
+        def device_ok((informs, reply)):
+            for inform in informs:
+                if filter is None or re.match(filter, inform.arguments[2]):
+                    self.send_message(inform)
+                    counter[0] += 1
+
+        def all_ok(_):
+            self.send_message(Message.reply('sensor-value', 'ok',
+                                            str(counter[0])))
+
+        wait_for = []
+        for device in self.factory.devices.itervalues():
+            if device.state == device.SYNCED:
+                d = device.send_request('sensor-value')
+                d.addCallback(device_ok)
+                wait_for.append(d)
+            # otherwise we don't have the list of sensors, so we don't
+            # send the message
+        DeferredList(wait_for).addCallback(all_ok)
+        for sensor in self.factory.sensors.itervalues():
+            if not isinstance(sensor, ProxiedSensor):
+                timestamp_ms, status, value = sensor.read_formatted()
+                counter[0] += 1
+                self.send_message(Message.inform('sensor-value',
+                                                 timestamp_ms, "1",
+                                                 name, status, value))
+
+
     def request_sensor_value(self, msg):
         """Poll a sensor value or value(s).
 
@@ -203,36 +240,14 @@ class DeviceServer(TxDeviceProtocol):
         def send_single_ok((informs, reply)):
             self.send_message(informs[0])
             self.send_message(reply)
-
-        def device_ok((informs, reply)):
-            for inform in informs:
-                self.send_message(inform)
-
-        def all_ok(_):
-            self.send_message(Message.reply('sensor-value', 'ok',
-                                            str(len(self.factory.sensors))))
         
         if not msg.arguments:
-            wait_for = []
-            for device in self.factory.devices.itervalues():
-                if device.state == device.SYNCED:
-                    d = device.send_request('sensor-value')
-                    d.addCallback(device_ok)
-                    wait_for.append(d)
-                # otherwise we don't have the list of sensors, so we don't
-                # send the message
-            DeferredList(wait_for).addCallback(all_ok)
-            for sensor in self.factory.sensors.itervalues():
-                if not isinstance(sensor, ProxiedSensor):
-                    timestamp_ms, status, value = sensor.read_formatted()
-                    self.send_message(Message.inform('sensor-value',
-                                                     timestamp_ms, "1",
-                                                     name, status, value))
+            self._send_all_sensors()
             return
         name = msg.arguments[0]
         if len(name) >= 2 and name.startswith("/") and name.endswith("/"):
             # regex case
-            xxx
+            self._send_all_sensors(name[1:-1])
         else:
             sensor = self.factory.sensors.get(name, None)
             if sensor is None:
