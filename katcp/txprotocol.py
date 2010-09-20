@@ -4,6 +4,7 @@ from twisted.internet.defer import Deferred
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.protocol import Factory
+from twisted.python import log
 from katcp import MessageParser, Message
 from katcp.core import FailReply
 from katcp.server import DeviceLogger
@@ -25,7 +26,6 @@ class UnknownType(Exception):
     pass
 
 TB_LIMIT = 20
-DEBUG = False
 
 def run_client((host, port), ClientClass, connection_made):
     cc = ClientCreator(reactor, ClientClass)
@@ -102,12 +102,12 @@ class KatCP(LineReceiver):
         except FailReply, fr:
             self.send_message(Message.reply(name, "fail", str(fr)))
         except Exception:
-            if DEBUG:
-                raise
             e_type, e_value, trace = sys.exc_info()
+            log.err()
             reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, TB_LIMIT
                 ))
+            
             self.send_message(Message.reply(msg.name, "fail", reason))
 
     def handle_reply(self, msg):

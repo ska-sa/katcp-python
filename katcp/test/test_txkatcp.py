@@ -351,6 +351,8 @@ class TestTxDeviceServer(TestCase):
         def reply((informs, reply), protocol):
             self.assertEquals(informs, [])
             assert 'Traceback' in str(reply)
+            self.flushLoggedErrors() # clean up errors so they're not reported
+            # as test failures
 
         return self.base_test(('foobar',), reply, cls=FaultyFactory)
 
