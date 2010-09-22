@@ -46,6 +46,8 @@ class DeviceHandler(ClientKatCP):
     STATE_NAMES = ['syncing', 'synced', 'unsynced']
 
     TYPE = 'full'
+
+    stopping = False
     
     def __init__(self, name, host, port):
         self.name = name
@@ -78,6 +80,15 @@ class DeviceHandler(ClientKatCP):
     def add_proxy(self, proxy):
         self.proxy = proxy
         proxy.add_sensor(StateSensor(self.name + '-' + 'state', self))
+
+    def schedule_resyncing(self):
+        reactor.connectTCP(self.host, self.port, self.proxy.client_factory)
+
+    def connectionLost(self, failure):
+        self.state = self.UNSYNCED
+        ClientKatCP.connectionLost(self, failure)
+        if not self.stopping:
+            reactor.callLater(1, self.schedule_resyncing)
 
 class DeviceServer(TxDeviceProtocol):
     @request(include_msg=True)
@@ -301,14 +312,18 @@ class DeviceServer(TxDeviceProtocol):
             # just in case
             self.send_message(Message.reply(dev_name + "-" + req_name,
                                             *reply.arguments))
-        
+
+        def request_failed(failure):
+            self.send_message(Message.reply(dev_name + '-' + req_name,
+                                            "fail", "Device not synced"))
+
         def callback(msg):
             if device.state is device.UNSYNCED:
                 return Message.reply(dev_name + "-" + req_name, "fail",
                                      "Device not synced")
-            device.send_request(req_name,
-                                *msg.arguments).addCallback(request_returned)
-        
+            d = device.send_request(req_name, *msg.arguments)
+            d.addCallbacks(request_returned, request_failed)
+                
         if not attr.startswith('request_'):
             return object.__getattribute__(self, attr)
         lst = attr.split('_')
@@ -343,10 +358,12 @@ class ProxyKatCP(TxDeviceServer):
         self.ready_devices = 0
         self.devices = {}
         self.setup_devices()
+        self.scan_called = False
     
     def device_ready(self, device):
         self.ready_devices += 1
-        if self.ready_devices == len(self.devices):
+        if self.ready_devices == len(self.devices) and not self.scan_called:
+            self.scan_called = True # one shot only
             self.devices_scan_complete()
 
     def add_device(self, device):
@@ -377,5 +394,6 @@ class ProxyKatCP(TxDeviceServer):
     def stop(self):
         for device in self.devices.values():
             if device.state != device.UNSYNCED:
+                device.stopping = True
                 device.transport.loseConnection(None)
         self.port.stopListening()

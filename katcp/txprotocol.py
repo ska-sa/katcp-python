@@ -25,6 +25,9 @@ class WrongQueryOrder(Exception):
 class UnknownType(Exception):
     pass
 
+class DeviceNotConnected(Exception):
+    pass
+
 TB_LIMIT = 20
 
 def run_client((host, port), ClientClass, connection_made):
@@ -47,6 +50,8 @@ class KatCP(LineReceiver):
         self.queries = []
 
     def send_request(self, name, *args):
+        if not self.transport.connected:
+            raise DeviceNotConnected()
         d = Deferred()
         self.send_message(Message.request(name, *args))
         self.queries.append((name, d, []))
@@ -125,8 +130,10 @@ class KatCP(LineReceiver):
 
     def connectionLost(self, failure):
         # errback all waiting queries
+        self.connection_lost = True
         for _, d, _ in self.queries:
             d.errback(failure)
+        self.queries = []
 
 class ClientKatCP(KatCP):
     def inform_sensor_status(self, msg):

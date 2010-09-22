@@ -9,7 +9,7 @@ from katcp import Sensor, Message
 from katcp.kattypes import request, return_reply, Int
 from twisted.internet import reactor
 
-timeout = 5
+#timeout = 5
 #Deferred.debug = True
 
 class ExampleProtocol(TxDeviceProtocol):
@@ -33,6 +33,8 @@ class ExampleDevice(TxDeviceServer):
         self.add_sensor(sensor2)
 
 class ExampleProxy(ProxyKatCP):
+    on_device_ready = None
+    
     def __init__(self, port, finish):
         self.connect_to = port
         ProxyKatCP.__init__(self, 0, 'localhost')
@@ -48,14 +50,21 @@ class ExampleProxy(ProxyKatCP):
     def devices_scan_complete(self):
         self.finish.callback(None)
 
+    def device_ready(self, device):
+        if self.on_device_ready is not None:
+            self.on_device_ready.callback(device)
+            self.on_device_ready = None
+        ProxyKatCP.device_ready(self, device)
+        
 class TestTxProxyBase(TestCase):
     def base_test(self, request, callback):
         def devices_scan_complete(_):
             if request is None:
                 # we don't want to send any requests, simply call callback and
                 # be done
-                callback(None)
-                port.stopListening()
+                if callback(None):
+                    return
+                self.port.stopListening()
                 self.proxy.stop()
                 finish.callback(None)
                 return
@@ -68,18 +77,21 @@ class TestTxProxyBase(TestCase):
             protocol.send_request(*request).addCallback(wrapper)
 
         def wrapper(arg):
-            callback(arg)
-            port.stopListening()
+            if callback(arg):
+                return
+            self.port.stopListening()
             self.proxy.stop()
             self.client.transport.loseConnection()
             finish.callback(None)
 
         finish = Deferred()
         d = Deferred()
-        port = ExampleDevice(0, '').start()
-        self.proxy = ExampleProxy(port.getHost().port, d)
+        self.example_device = ExampleDevice(0, '')
+        self.port = self.example_device.start()
+        self.proxy = ExampleProxy(self.port.getHost().port, d)
         self.proxy.start()
         d.addCallback(devices_scan_complete)
+        self.finish = finish
         return finish
     
     def test_simplest_proxy(self):
@@ -156,3 +168,31 @@ class TestTxProxyBase(TestCase):
         
         return self.base_test(('sensor-list'), callback)
     test_sensor_list.skip = True
+
+    def test_reconnect_base(self):
+        def works((informs, reply)):
+            self.assertEquals(reply, Message.reply('device-watchdog', 'ok'))
+            self.port.stopListening()
+            self.proxy.stop()
+            self.client.transport.loseConnection()
+            self.finish.callback(None)
+        
+        def ready(device):
+            assert device.state == device.SYNCED
+            # check if it's working
+            self.client.send_request('device-watchdog').addCallback(works)
+        
+        def failed((informs, reply)):
+            self.assertEquals(reply, Message.reply('device-watchdog', 'fail',
+                                                   'Device not synced'))
+            d = Deferred()
+            self.proxy.on_device_ready = Deferred().addCallback(ready)
+        
+        def callback(_):
+            device = self.proxy.devices['device']
+            assert device.state == DeviceHandler.SYNCED
+            self.example_device.clients.values()[0].transport.loseConnection()
+            self.client.send_request('device-watchdog').addCallback(failed)
+            return True
+        
+        return self.base_test(('watchdog',), callback)
