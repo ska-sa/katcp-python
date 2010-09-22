@@ -290,7 +290,14 @@ class TxDeviceProtocol(KatCP):
             !sensor-list ok 1
         """
         if msg.arguments:
-            xxx
+            name = msg.arguments[0]
+            sensor = self.factory.sensors.get(name, None)
+            if sensor is None:
+                return Message.reply(msg.name, 'fail', 'Unknown sensor name.')
+            self.send_message(Message.inform(msg.name, name, sensor.description,
+                                             sensor.units, sensor.stype,
+                                             *sensor.formatted_params))
+            return Message.reply(msg.name, 'ok', '1')
         for name, sensor in sorted(self.factory.sensors.iteritems()):
             self.send_message(Message.inform(msg.name, name, sensor.description,
                                              sensor.units, sensor.stype,

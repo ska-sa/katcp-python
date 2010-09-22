@@ -13,6 +13,7 @@ from twisted.internet.error import ConnectionDone
 from katcp.core import FailReply
 
 DelayedCall.debug = True
+Deferred.debug = True
 
 import time
 import sys, os, re
@@ -187,6 +188,22 @@ class TestTxDeviceServer(TestCase):
             self.assertEquals(reply, Message.reply('sensor-list', 'ok', '2'))
 
         return self.base_test(('sensor-list',), reply)
+
+    def test_sensor_list_unknown_sensor(self):
+        def reply((informs, reply), protocol):
+            self.assertEquals(reply, Message.reply('sensor-list', 'fail',
+                                                   'Unknown sensor name.'))
+        
+        return self.base_test(('sensor-list', 'dummy'), reply)
+
+    def test_sensor_list_arg(self):
+        def reply((informs, reply), protocol):
+            msg = Message.inform('sensor-list', 'int_sensor', 'descr', 'unit',
+                                 'integer', '-10', '10')
+            self.assertEquals(informs, [msg])
+            self.assertEquals(reply, Message.reply('sensor-list', 'ok', '1'))
+
+        return self.base_test(('sensor-list', 'int_sensor'), reply)
 
     def test_sensor_sampling_no_sensor_name(self):
         def reply((informs, reply), protocol):
@@ -391,6 +408,8 @@ class TestTxDeviceServer(TestCase):
             protocols[0].transport.loseConnection()
 
         def send_client_list(protocol):
+            for v in self.factory.clients.values():
+                v.notify_con_lost = None
             protocol.send_request('client-list').addCallback(client_list2,
                                                                  protocol)
 
