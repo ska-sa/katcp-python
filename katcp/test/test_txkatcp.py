@@ -9,6 +9,7 @@ from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet.protocol import Factory
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.base import DelayedCall
+from twisted.internet.error import ConnectionDone
 from katcp.core import FailReply
 
 DelayedCall.debug = True
@@ -443,6 +444,19 @@ class TestTxDeviceServer(TestCase):
         got_log = Deferred()
         got_log.addCallback(log_received)
         return finish
+
+    def test_disconnect_errbacks(self):
+        def failed(failure):
+            assert failure.type is ConnectionDone
+            self.factory.stop()
+            self.finish.callback(None)
+        
+        def callback((informs, reply), protocol):
+            self.factory.clients.values()[0].transport.loseConnection()
+            protocol.send_request('watchdog').addErrback(failed)
+            return True
+        
+        return self.base_test(('watchdog',), callback)
 
     def test_log_level(self):
         class TestProtocol(ClientKatCP):

@@ -123,6 +123,11 @@ class KatCP(LineReceiver):
         # just serialize a message
         self.transport.write(str(msg) + self.delimiter)
 
+    def connectionLost(self, failure):
+        # errback all waiting queries
+        for _, d, _ in self.queries:
+            d.errback(failure)
+
 class ClientKatCP(KatCP):
     def inform_sensor_status(self, msg):
         self.update_sensor_status(msg)
