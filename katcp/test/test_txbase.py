@@ -117,12 +117,12 @@ class TestTxProxyBase(TestCase):
 
     def test_all_forwarded_sensors(self):
         def callback((informs, reply)):
-            self.assertEquals(informs,
+            self.assertEquals(informs[2:],
                   [Message.inform('sensor-value', '1000', '1', 'dev1.sensor1',
                                   'unknown', '0'),
                    Message.inform('sensor-value', '0', '1', 'dev1.sensor2',
                                   'unknown', '0')])
-            self.assertEquals(reply, Message.reply('sensor-value', 'ok', '2'))
+            self.assertEquals(reply, Message.reply('sensor-value', 'ok', '4'))
 
         return self.base_test(('sensor-value',), callback)
 
@@ -142,6 +142,13 @@ class TestTxProxyBase(TestCase):
             self.assertEquals(reply, Message.reply("device-list", "ok", "2"))
         
         return self.base_test(('device-list',), callback)
+
+    def test_state_sensor(self):
+        def callback((informs, reply)):
+            assert len(informs) == 1
+            assert informs[0].arguments[3:] == ['ok', 'synced']
+        
+        return self.base_test(('sensor-value', 'device-state',), callback)
 
     def test_sensor_list(self):
         def callback((informs, reply)):

@@ -6,9 +6,23 @@ from twisted.internet.protocol import ClientFactory
 from katcp import Message
 from katcp.kattypes import request, return_reply, Int
 
-import re
+import re, time
+
+def value_only_formatted():
+    """ A decorator that changes a value-only read into read_formatted
+    format (using time.time and 'ok')
+    """
+    def decorator(func):
+        def new_func(self):
+            return time.time(), "ok", func(self)
+        new_func.func_name = func.func_name
+        return new_func
+    return decorator
 
 class ProxiedSensor(object):
+    """ A sensor which is a proxy for other sensor on the remote device.
+    Returns a deferred on read
+    """
     def __init__(self, name, device, proxy):
         self.name = name
         self.device = device
@@ -16,8 +30,20 @@ class ProxiedSensor(object):
     def read_formatted(self):
         return self.device.send_request('sensor-value', self.name)
 
+class StateSensor(object):
+    """ A device state sensor
+    """
+    def __init__(self, name, device):
+        self.device = device
+        self.name = name
+
+    @value_only_formatted()
+    def read_formatted(self):
+        return DeviceHandler.STATE_NAMES[self.device.state]
+
 class DeviceHandler(ClientKatCP):
     SYNCING, SYNCED, UNSYNCED = range(3)
+    STATE_NAMES = ['syncing', 'synced', 'unsynced']
 
     TYPE = 'full'
     
@@ -48,6 +74,10 @@ class DeviceHandler(ClientKatCP):
 
         self.state = self.SYNCING
         self.send_request('help').addCallback(got_help)
+
+    def add_proxy(self, proxy):
+        self.proxy = proxy
+        proxy.add_sensor(StateSensor(self.name + '-' + 'state', self))
 
 class DeviceServer(TxDeviceProtocol):
     @request(include_msg=True)
@@ -180,11 +210,13 @@ class DeviceServer(TxDeviceProtocol):
         DeferredList(wait_for).addCallback(all_ok)
         for sensor in self.factory.sensors.itervalues():
             if not isinstance(sensor, ProxiedSensor):
-                timestamp_ms, status, value = sensor.read_formatted()
-                counter[0] += 1
-                self.send_message(Message.inform('sensor-value',
-                                                 timestamp_ms, "1",
-                                                 name, status, value))
+                if filter is None or re.match(filter, sensor.name):
+                    timestamp_ms, status, value = sensor.read_formatted()
+                    counter[0] += 1
+                    self.send_message(Message.inform('sensor-value',
+                                                     timestamp_ms, "1",
+                                                     sensor.name, status,
+                                                     value))
 
 
     def request_sensor_value(self, msg):
@@ -257,9 +289,9 @@ class DeviceServer(TxDeviceProtocol):
                 res.addCallback(send_single_ok)
                 return
             timestamp_ms, status, value = res
-            send_single_ok([Message.inform('sensor-value', timestamp_ms, "1",
-                                           name, status, value)],
-                           Message.reply(msg.name, "ok", "1"))
+            send_single_ok(([Message.inform('sensor-value', timestamp_ms, "1",
+                                            name, status, value)],
+                            Message.reply(msg.name, "ok", "1")))
             return
 
     def __getattr__(self, attr):
@@ -325,9 +357,10 @@ class ProxyKatCP(TxDeviceServer):
             reactor.connectTCP(device.host, device.port, self.client_factory)
             self.devices[device.name] = device
             self.addr_mapping[(device.host, device.port)] = device
-            device.proxy = self
+            device.add_proxy(self)
 
         reactor.resolve(device.host).addCallback(really_add_device)
+        self.sensors
 
     def add_proxied_sensor(self, device, sensor_name):
         self.sensors[sensor_name] = ProxiedSensor(sensor_name, device, self)
