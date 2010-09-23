@@ -244,7 +244,7 @@ class TestTxDeviceServer(TestCase):
 
     def test_sensor_sampling_period(self):
         def called_later(protocol):
-            assert 27 <= len(self.client.status_updates) <= 30
+            assert 20 <= len(self.client.status_updates) <= 30
             # eh, judge somehow how many it can get in exactly that period
             self.client.send_request('sensor-sampling', 'int_sensor',
                                      'none').addCallback(send_halt, protocol)

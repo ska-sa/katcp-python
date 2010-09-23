@@ -1,6 +1,6 @@
 
 from twisted.protocols.basic import LineReceiver
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.protocol import Factory
@@ -17,9 +17,6 @@ class UnhandledMessage(Exception):
     pass
 
 class NoQuerriesProcessed(Exception):
-    pass
-
-class WrongQueryOrder(Exception):
     pass
 
 class UnknownType(Exception):
@@ -90,7 +87,8 @@ class KatCP(LineReceiver):
         elif self.queries:
             name, d, queue = self.queries[0]
             if name != msg.name:
-                raise WrongQueryOrder(name, msg.name)
+                return # instead of raising WrongQueryOrder, we discard informs
+                       # that we don't know about
             queue.append(msg) # unespace?
         else:
             raise UnhandledMessage(msg)
@@ -178,10 +176,35 @@ class TxDeviceProtocol(KatCP):
     def connectionLost(self, _):
         self.factory.deregister_client(self.transport.client)
 
+    def read_formatted_from_sensor(self, sensor, callback, fail,
+                                   lst_of_deferreds=None):
+        """ Read a formatted value from sensor, but be prepared that
+        it might return a deferred
+        """
+        def wrapper((informs, reply), sensor):
+            msg = informs[0]
+            callback(sensor, msg.arguments[0], msg.arguments[3],
+                     msg.arguments[4])
+
+        res = sensor.read_formatted()
+        if isinstance(res, Deferred):
+            if lst_of_deferreds is not None:
+                lst_of_deferreds.append(res)
+            res.addCallbacks(wrapper, fail, callbackArgs=(sensor,),
+                             errbackArgs=(sensor,))
+        else:
+            callback(sensor, *res)
+
     def send_sensor_status(self, sensor):
-        timestamp_ms, status, value = sensor.read_formatted()
-        self.send_message(Message.inform('sensor-status', timestamp_ms, "1",
-                                         sensor.name, status, value))
+        def callback(sensor, timestamp_ms, status, value):
+            self.send_message(Message.inform('sensor-status', timestamp_ms, "1",
+                                             sensor.name, status, value))
+
+        def fail(_, sensor):
+            self.send_message(Message.inform('sensor-status',
+                                             'Connection lost'))
+
+        self.read_formatted_from_sensor(sensor, callback, fail)
 
     def request_sensor_value(self, msg):
         """Request the value of a sensor or sensors.
@@ -226,21 +249,41 @@ class TxDeviceProtocol(KatCP):
             #sensor-value 1244631611415.231 1 cpu.power.on 0
             !sensor-value ok 1
         """
+        def one_ok(sensor, timestamp_ms, status, value):
+            self.send_message(Message.inform(msg.name, timestamp_ms, "1",
+                                             sensor.name, status, value))
+
+        def one_fail(failure, sensor):
+            self.send_message(Message.inform(msg.name, sensor.name,
+                                             "Sensor reading failed."))
+
+        def all_finished(lst):
+            # XXX write a test where lst is not-empty so we can fail
+            self.send_message(Message.reply(msg.name, "ok",
+                                            len(self.factory.sensors)))
+
+        def only_one_ok(sensor, timestamp_ms, status, value):
+            self.send_message(Message.inform(msg.name, timestamp_ms, "1",
+                                             sensor.name, status, value))
+            self.send_message(Message.reply(msg.name, "ok", "1"))
+
+        def one_wrong(failure, sensor):
+            self.send_message(Message.reply(msg.name, "fail",
+                                            "Sensor reading failed."))
+        
         if not msg.arguments:
+            lst = []
             for name, sensor in sorted(self.factory.sensors.iteritems()):
-                timestamp_ms, status, value = sensor.read_formatted()
-                self.send_message(Message.inform(msg.name, timestamp_ms, "1",
-                                                 name, status, value))
-            return Message.reply(msg.name, "ok", len(self.factory.sensors))
+                self.read_formatted_from_sensor(sensor, one_ok, one_fail,
+                                                lst)
+            DeferredList(lst).addCallback(all_finished)
+            return
         try:
             sensor = self.factory.sensors[msg.arguments[0]]
         except KeyError:
             return Message.reply(msg.name, "fail", "Unknown sensor name")
         else:
-            timestamp_ms, status, value = sensor.read_formatted()
-            self.send_message(Message.inform(msg.name, timestamp_ms, "1",
-                                             sensor.name, status, value))
-            return Message.reply(msg.name, "ok", "1")
+            self.read_formatted_from_sensor(sensor, only_one_ok, one_wrong)
 
     def request_sensor_list(self, msg):
         """Request the list of sensors.
@@ -347,16 +390,20 @@ class TxDeviceProtocol(KatCP):
             meth = getattr(self, 'request_' + name.replace('-', '_'), None)
             if meth is None:
                 return Message.reply('help', 'fail', 'Unknown request method.')
-            self.send_message(Message.inform('help', name,
-                                             meth.__doc__.strip()))
+            doc = meth.__doc__
+            if doc is not None:
+                doc = doc.strip()
+            self.send_message(Message.inform('help', name, doc))
             return Message.reply('help', 'ok', '1')
         count = 0
         for name in dir(self.__class__):
             item = getattr(self, name)
             if name.startswith('request_') and callable(item):
                 sname = name[len('request_'):]
-                self.send_message(Message.inform('help', sname,
-                                                 item.__doc__.strip()))
+                doc = item.__doc__
+                if doc is not None:
+                    doc = doc.strip()
+                self.send_message(Message.inform('help', sname, doc))
                 count += 1
         return Message.reply(msg.name, "ok", str(count))
 
@@ -435,8 +482,7 @@ class TxDeviceProtocol(KatCP):
             ?halt
             !halt ok
         """
-        self.transport.write(str(Message(Message.REPLY, "halt",
-                                         ["ok"])) + self.delimiter)
+        self.send_message(Message.reply("halt", "ok"))
         self.factory.stop()
 
     def request_watchdog(self, msg):

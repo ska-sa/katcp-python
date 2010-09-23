@@ -58,6 +58,8 @@ class DeviceHandler(ClientKatCP):
     TYPE = 'full'
 
     stopping = False
+
+    _conn_counter = 0
     
     def __init__(self, name, host, port):
         self.name = name
@@ -90,6 +92,7 @@ class DeviceHandler(ClientKatCP):
 
         self.state = self.SYNCING
         self.send_request('help').addCallback(got_help)
+        self._conn_counter = 0
 
     def add_proxy(self, proxy):
         self.proxy = proxy
@@ -102,7 +105,8 @@ class DeviceHandler(ClientKatCP):
         self.state = self.UNSYNCED
         ClientKatCP.connectionLost(self, failure)
         if not self.stopping:
-            reactor.callLater(1, self.schedule_resyncing)
+            reactor.callLater(self.proxy.CONN_DELAY_TIMEOUT,
+                              self.schedule_resyncing)
 
 class TxProxyProtocol(TxDeviceProtocol):
     @request(include_msg=True)
@@ -293,15 +297,6 @@ class TxProxyProtocol(TxDeviceProtocol):
         #sensor-value 1244631611415.231 1 cpu.power.on 0
         !sensor-value ok 1
         """
-        def send_single_ok((informs, reply)):
-            if informs:
-                self.send_message(informs[0]) # otherwise resend crash
-            self.send_message(reply)
-
-        def problem(fail):
-            self.send_message(Message.reply("sensor-value", "fail",
-                                            "Connection lost."))
-        
         if not msg.arguments:
             self._send_all_sensors()
             return
@@ -310,18 +305,7 @@ class TxProxyProtocol(TxDeviceProtocol):
             # regex case
             self._send_all_sensors(name[1:-1])
         else:
-            sensor = self.factory.sensors.get(name, None)
-            if sensor is None:
-                return Message.reply(msg.name, "fail", "Unknown sensor name.")
-            res = sensor.read_formatted()
-            if isinstance(res, Deferred):
-                res.addCallbacks(send_single_ok, problem)
-                return
-            timestamp_ms, status, value = res
-            send_single_ok(([Message.inform('sensor-value', timestamp_ms, "1",
-                                            name, status, value)],
-                            Message.reply(msg.name, "ok", "1")))
-            return
+            return TxDeviceProtocol.request_sensor_value(self, msg)
 
     def __getattr__(self, attr):
         def request_returned((informs, reply)):
@@ -357,8 +341,22 @@ class TxProxyProtocol(TxDeviceProtocol):
 class ClientDeviceFactory(ClientFactory):
     """ A factory that does uses prebuilt device handler objects
     """
-    def __init__(self, addr_mapping):
-        self.addr_mapping = addr_mapping # shared mapping with ProxyKatCP
+    def __init__(self, addr_mapping, max_reconnects, conn_delay_timeout,
+                 proxy):
+        self.addr_mapping = addr_mapping # shared dict with proxy
+        self.max_reconnects = max_reconnects
+        self.conn_delay_timeout = conn_delay_timeout
+        self.proxy = proxy
+
+    def clientConnectionFailed(self, connector, reason):
+        addr = connector.host, connector.port
+        device = self.addr_mapping[addr]
+        if device._conn_counter < self.max_reconnects:
+            device._conn_counter += 1
+            reactor.callLater(self.conn_delay_timeout,
+                              device.schedule_resyncing)
+        else:
+            self.proxy.devices_scan_failed()
 
     def buildProtocol(self, addr):
         return self.addr_mapping[(addr.host, addr.port)]
@@ -368,11 +366,17 @@ class ProxyKatCP(TxDeviceServer):
     providing info about underlaying clients if needed
     """
     protocol = TxProxyProtocol
-    
+
+    MAX_RECONNECTS = 10
+    CONN_DELAY_TIMEOUT = 1
+
     def __init__(self, *args, **kwds):
         TxDeviceServer.__init__(self, *args, **kwds)
         self.addr_mapping = {}
-        self.client_factory = ClientDeviceFactory(self.addr_mapping)
+        self.client_factory = ClientDeviceFactory(self.addr_mapping,
+                                                  self.MAX_RECONNECTS,
+                                                  self.CONN_DELAY_TIMEOUT,
+                                                  self)
         self.ready_devices = 0
         self.devices = {}
         self.setup_devices()
@@ -400,9 +404,15 @@ class ProxyKatCP(TxDeviceServer):
     def add_proxied_sensor(self, device, sensor):
         self.sensors[sensor.name] = sensor
 
-    def devices_scan_complete(self, _):
+    def devices_scan_complete(self):
         """ A callback called when devices are properly set up and read.
         Override if needed
+        """
+        pass
+
+    def devices_scan_failed(self):
+        """ A callback called when device setup failed to connect after
+        repeated tries
         """
         pass
 
@@ -414,4 +424,4 @@ class ProxyKatCP(TxDeviceServer):
             if device.state != device.UNSYNCED:
                 device.stopping = True
                 device.transport.loseConnection(None)
-        self.port.stopListening()
+        TxDeviceServer.stop(self)

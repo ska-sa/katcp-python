@@ -9,7 +9,7 @@ from katcp import Sensor, Message
 from katcp.kattypes import request, return_reply, Int
 from twisted.internet import reactor
 
-#timeout = 5
+timeout = 5
 #Deferred.debug = True
 
 class ExampleProtocol(TxDeviceProtocol):
@@ -34,6 +34,7 @@ class ExampleDevice(TxDeviceServer):
 
 class ExampleProxy(ProxyKatCP):
     on_device_ready = None
+    CONN_DELAY_TIMEOUT = 0.05
     
     def __init__(self, port, finish):
         self.connect_to = port
@@ -41,8 +42,9 @@ class ExampleProxy(ProxyKatCP):
         self.finish = finish
     
     def setup_devices(self):
-        dev2 = DeviceHandler('device2', 'localhost', 1221)
+        dev2 = DeviceHandler('device2', 'localhost', 6)
         dev2.connectionMade = lambda *args: None
+        dev2._conn_counter = 100
         self.add_device(dev2)
         self.ready_devices = 1
         self.add_device(DeviceHandler('device', 'localhost', self.connect_to))
@@ -225,9 +227,15 @@ class RogueDevice(TxDeviceServer):
         self.add_sensor(RogueSensor('rogue', self))
 
 class HandlingProxy(ExampleProxy):
+    on_device_scan_failed = None
+    
     def setup_devices(self):
         self.add_device(DeviceHandler('device', 'localhost',
                                       self.connect_to))
+
+    def devices_scan_failed(self):
+        if self.on_device_scan_failed is not None:
+            self.on_device_scan_failed.callback(None)
 
 class TestReconnect(TestCase):
     def test_rogue_device(self):
@@ -240,7 +248,7 @@ class TestReconnect(TestCase):
             self.flushLoggedErrors() # clean up error about conn lost
             self.proxy.on_device_ready = Deferred().addCallback(back)
             self.assertEquals(reply, Message.reply("sensor-value", "fail",
-                                                   "Connection lost."))
+                                                   "Sensor reading failed."))
 
         def back(_):
             self.port.stopListening()
@@ -258,5 +266,16 @@ class TestReconnect(TestCase):
         self.proxy = HandlingProxy(self.port.getHost().port, d)
         self.proxy.start()
         d.addCallback(devices_scan_complete)
+        finish = Deferred()
+        return finish
+
+    def test_max_reconnect_tries_at_start(self):
+        # port number is of tcp itself, should not have a server
+        def failed(_):
+            finish.callback(None)
+        
+        d = Deferred().addCallback(failed)
+        self.proxy = HandlingProxy(6, None)
+        self.proxy.on_device_scan_failed = d
         finish = Deferred()
         return finish
