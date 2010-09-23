@@ -90,7 +90,7 @@ class DeviceHandler(ClientKatCP):
         if not self.stopping:
             reactor.callLater(1, self.schedule_resyncing)
 
-class DeviceServer(TxDeviceProtocol):
+class TxProxyProtocol(TxDeviceProtocol):
     @request(include_msg=True)
     @return_reply(Int(min=0))
     def request_device_list(self, reqmsg):
@@ -349,7 +349,7 @@ class ProxyKatCP(TxDeviceServer):
     """ This is a proxy class that will listen on a given host and port
     providing info about underlaying clients if needed
     """
-    protocol = DeviceServer
+    protocol = TxProxyProtocol
     
     def __init__(self, *args, **kwds):
         TxDeviceServer.__init__(self, *args, **kwds)
