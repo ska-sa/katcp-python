@@ -99,7 +99,7 @@ class KatCP(LineReceiver):
         name = msg.name
         name = name.replace('-', '_')
         try:
-            rep_msg = getattr(self, 'request_' + name, self.request_unknown)(msg)
+            rep_msg = getattr(self, 'request_' + name, self._request_unknown)(msg)
             if rep_msg is not None:
                 assert isinstance(rep_msg, Message)
                 self.send_message(rep_msg)
@@ -343,13 +343,20 @@ class TxDeviceProtocol(KatCP):
             !help ok 1
         """
         if msg.arguments:
-            xxxx
+            name = msg.arguments[0]
+            meth = getattr(self, 'request_' + name.replace('-', '_'), None)
+            if meth is None:
+                return Message.reply('help', 'fail', 'Unknown request method.')
+            self.send_message(Message.inform('help', name,
+                                             meth.__doc__.strip()))
+            return Message.reply('help', 'ok', '1')
         count = 0
         for name in dir(self.__class__):
             item = getattr(self, name)
             if name.startswith('request_') and callable(item):
                 sname = name[len('request_'):]
-                self.send_message(Message.inform('help', sname, item.__doc__))
+                self.send_message(Message.inform('help', sname,
+                                                 item.__doc__.strip()))
                 count += 1
         return Message.reply(msg.name, "ok", str(count))
 
@@ -529,7 +536,7 @@ class TxDeviceProtocol(KatCP):
                 raise FailReply(str(e))
         return Message.reply("log-level", "ok", self.factory.log.level_name())
 
-    def request_unknown(self, msg):
+    def _request_unknown(self, msg):
         return Message.reply(msg.name, "invalid", "Unknown request.")
 
 class TxDeviceServer(ServerFactory):

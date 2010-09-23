@@ -139,6 +139,22 @@ class TestTxDeviceServer(TestCase):
 
         return self.base_test(('help',), help)
 
+    def test_help_arg(self):
+        def reply((informs, reply), protocol):
+            self.assertEquals(len(informs), 1)
+            expected = TxDeviceProtocol.request_sensor_list.__doc__.strip()
+            assert informs[0].arguments[1] == expected
+            self.assertEquals(reply, Message.reply('help', 'ok', '1'))
+        
+        return self.base_test(('help', 'sensor-list'), reply)
+
+    def test_help_arg_no_meth(self):
+        def reply((informs, reply), protocol):
+            self.assertEquals(reply, Message.reply('help', 'fail',
+                                                   'Unknown request method.'))
+        
+        return self.base_test(('help', 'xxxxxxxxxxxxx'), reply)
+
     def test_unknown_request(self):
         def got_unknown((args, reply), protocol):
             assert len(args) == 0
