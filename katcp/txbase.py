@@ -23,9 +23,14 @@ class ProxiedSensor(object):
     """ A sensor which is a proxy for other sensor on the remote device.
     Returns a deferred on read
     """
-    def __init__(self, name, device, proxy):
+    def __init__(self, name, description, units, stype, device, proxy,
+                 *formatted_params):
         self.name = name
         self.device = device
+        self.description = description
+        self.units = units
+        self.stype = stype
+        self.formatted_params = formatted_params
 
     def read_formatted(self):
         return self.device.send_request('sensor-value', self.name)
@@ -33,6 +38,11 @@ class ProxiedSensor(object):
 class StateSensor(object):
     """ A device state sensor
     """
+    description = 'connection state'
+    stype = 'discrete'
+    formatted_params = ()
+    units = 'unsynced syncing synced'
+    
     def __init__(self, name, device):
         self.device = device
         self.name = name
@@ -55,7 +65,7 @@ class DeviceHandler(ClientKatCP):
         self.port = port
         ClientKatCP.__init__(self)
         self.requests = []
-        self.sensors = []
+        self.sensors = {}
         self.state = self.UNSYNCED
     
     def connectionMade(self):
@@ -70,8 +80,12 @@ class DeviceHandler(ClientKatCP):
         def got_sensor_list((informs, reply)):
             self.state = self.SYNCED
             for inform in informs:
-                self.sensors.append(inform.arguments[0])
-                self.proxy.add_proxied_sensor(self, inform.arguments[0])
+                name, description, units, stype = inform.arguments[:4]
+                formatted_arguments = inform.arguments[4:]
+                sensor = ProxiedSensor(name, description, units, stype,
+                                       self, self.proxy, *formatted_arguments)
+                self.sensors[name] = sensor
+                self.proxy.add_proxied_sensor(self, sensor)
             self.proxy.device_ready(self)
 
         self.state = self.SYNCING
@@ -176,15 +190,14 @@ class TxProxyProtocol(TxDeviceProtocol):
         !sensor-list ok 1
         """
         # handle non-regex cases
-        raise NotImplementedError
         if not msg.arguments or not (msg.arguments[0].startswith("/")
             and msg.arguments[0].endswith("/")):
-            return TxDeviceServer.request_sensor_list(self, msg)
+            return TxDeviceProtocol.request_sensor_list(self, msg)
 
         # handle regex
         name_re = re.compile(msg.arguments[0][1:-1])
         sensors = dict([(name, sensor) for name, sensor in
-            self._sensors.iteritems() if name_re.search(name)])
+            self.factory.sensors.iteritems() if name_re.search(name)])
 
         for name, sensor in sorted(sensors.items(), key=lambda x: x[0]):
             self.send_message(Message.inform("sensor-list",
@@ -379,8 +392,8 @@ class ProxyKatCP(TxDeviceServer):
         reactor.resolve(device.host).addCallback(really_add_device)
         self.sensors
 
-    def add_proxied_sensor(self, device, sensor_name):
-        self.sensors[sensor_name] = ProxiedSensor(sensor_name, device, self)
+    def add_proxied_sensor(self, device, sensor):
+        self.sensors[sensor.name] = sensor
 
     def devices_scan_complete(self, _):
         """ A callback called when devices are properly set up and read.

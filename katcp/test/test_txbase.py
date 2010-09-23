@@ -164,10 +164,17 @@ class TestTxProxyBase(TestCase):
 
     def test_sensor_list(self):
         def callback((informs, reply)):
-            xxx
+            assert len(informs) == 4
+            assert reply == Message.reply('sensor-list', 'ok', '4')
         
-        return self.base_test(('sensor-list'), callback)
-    test_sensor_list.skip = True
+        return self.base_test(('sensor-list',), callback)
+
+    def test_sensor_list_regex(self):
+        def callback((informs, reply)):
+            assert len(informs) == 2
+            self.assertEquals(reply, Message.reply('sensor-list', 'ok', '2'))
+
+        return self.base_test(('sensor-list', '/state/'), callback)
 
     def test_reconnect_base(self):
         def works((informs, reply)):
