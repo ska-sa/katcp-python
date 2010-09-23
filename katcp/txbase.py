@@ -294,8 +294,13 @@ class TxProxyProtocol(TxDeviceProtocol):
         !sensor-value ok 1
         """
         def send_single_ok((informs, reply)):
-            self.send_message(informs[0])
+            if informs:
+                self.send_message(informs[0]) # otherwise resend crash
             self.send_message(reply)
+
+        def problem(fail):
+            self.send_message(Message.reply("sensor-value", "fail",
+                                            "Connection lost."))
         
         if not msg.arguments:
             self._send_all_sensors()
@@ -310,7 +315,7 @@ class TxProxyProtocol(TxDeviceProtocol):
                 return Message.reply(msg.name, "fail", "Unknown sensor name.")
             res = sensor.read_formatted()
             if isinstance(res, Deferred):
-                res.addCallback(send_single_ok)
+                res.addCallbacks(send_single_ok, problem)
                 return
             timestamp_ms, status, value = res
             send_single_ok(([Message.inform('sensor-value', timestamp_ms, "1",

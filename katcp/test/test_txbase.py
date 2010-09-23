@@ -203,3 +203,60 @@ class TestTxProxyBase(TestCase):
             return True
         
         return self.base_test(('watchdog',), callback)
+
+
+class RogueSensor(object):
+    description = 'descr'
+    units = 'some'
+    stype = 'integer'
+    formatted_params = ()
+    
+    def __init__(self, name, device):
+        self.device = device
+        self.name = name
+
+    def read_formatted(self):
+        for client in self.device.clients.values():
+            client.transport._closeSocket() # force a connection drop
+        return 1, 2, 3
+
+class RogueDevice(TxDeviceServer):
+    def setup_sensors(self):
+        self.add_sensor(RogueSensor('rogue', self))
+
+class HandlingProxy(ExampleProxy):
+    def setup_devices(self):
+        self.add_device(DeviceHandler('device', 'localhost',
+                                      self.connect_to))
+
+class TestReconnect(TestCase):
+    def test_rogue_device(self):
+        def devices_scan_complete(_):
+            cc = ClientCreator(reactor, ClientKatCP)
+            host = self.proxy.port.getHost()
+            cc.connectTCP('localhost', host.port).addCallback(connected)
+
+        def worked((informs, reply)):
+            self.flushLoggedErrors() # clean up error about conn lost
+            self.proxy.on_device_ready = Deferred().addCallback(back)
+            self.assertEquals(reply, Message.reply("sensor-value", "fail",
+                                                   "Connection lost."))
+
+        def back(_):
+            self.port.stopListening()
+            self.proxy.stop()
+            self.client.transport.loseConnection()
+            finish.callback(None)
+
+        def connected(protocol):
+            self.client = protocol
+            protocol.send_request('sensor-value', 'rogue').addCallbacks(worked)
+        
+        d = Deferred()
+        self.example_device = RogueDevice(0, '')
+        self.port = self.example_device.start()
+        self.proxy = HandlingProxy(self.port.getHost().port, d)
+        self.proxy.start()
+        d.addCallback(devices_scan_complete)
+        finish = Deferred()
+        return finish
