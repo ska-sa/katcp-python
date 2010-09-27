@@ -4,20 +4,44 @@ which will connect to both
 """
 
 import sys, os
-from katcp.txbase import ProxyKatCP, DeviceHandler
+from katcp.txbase import ProxyKatCP, DeviceHandler, TxProxyProtocol
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
 from twisted.python import log
+from katcp import Message
+
+class DemoDeviceHandler(DeviceHandler):
+    def connectionMade(self):
+        DeviceHandler.connectionMade(self)
+        print self.name, "connected"
+
+class DemoProxyProtocol(TxProxyProtocol):
+    def request_drop_connection(self, msg):
+        """ drops connection to specified device, for demo purposes
+        only
+        """
+        if not msg.arguments:
+            return Message.reply('drop-connection', 'fail',
+                                 'Argument required')
+        try:
+            dev_name = msg.arguments[0]
+            self.factory.devices[dev_name].transport.loseConnection()
+            print dev_name, "disconnected"
+            return Message.reply('drop-connection', 'ok')
+        except KeyError:
+            return Message.reply('drop-connection', 'fail',
+                                 'Unknown device %s' % dev_name)
 
 class DemoProxy(ProxyKatCP):
+    protocol = DemoProxyProtocol
     production = True
     
     def devices_scan_complete(self):
         print "Devices successfully scanned"
     
     def setup_devices(self):
-        self.add_device(DeviceHandler('ant1', 'localhost', 1221))
-        self.add_device(DeviceHandler('ant2', 'localhost', 1222))
+        self.add_device(DemoDeviceHandler('ant1', 'localhost', 1221))
+        self.add_device(DemoDeviceHandler('ant2', 'localhost', 1223))
 
 PORT = 1236 # or 0
 
