@@ -23,11 +23,11 @@ class ExampleDevice(TxDeviceServer):
     protocol = ExampleProtocol
     
     def setup_sensors(self):
-        sensor = Sensor(int, "dev1.sensor1", "Test sensor 1", "count",
+        sensor = Sensor(int, "sensor1", "Test sensor 1", "count",
                         [0,10])
         sensor._timestamp = 1
         self.add_sensor(sensor)
-        sensor2 = Sensor(int, "dev1.sensor2", "Test sensor 2", "count",
+        sensor2 = Sensor(int, "sensor2", "Test sensor 2", "count",
                          [0, 10])
         sensor2._timestamp = 0
         self.add_sensor(sensor2)
@@ -103,7 +103,7 @@ class TestTxProxyBase(TestCase):
             assert len(devices) == 1
             device = devices[0]
             assert 'sensor_list' in device.requests
-            assert 'dev1.sensor1' in device.sensors
+            assert 'sensor1' in device.sensors
 
         return self.base_test(None, callback)
 
@@ -123,18 +123,18 @@ class TestTxProxyBase(TestCase):
     def test_forwarding_sensors(self):
         def callback((informs, reply)):
             self.assertEquals(informs,
-                    [Message.inform('sensor-value', '1000', '1', 'dev1.sensor1',
+                    [Message.inform('sensor-value', '1000', '1', 'device.sensor1',
                                     'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
                                                        
-        return self.base_test(('sensor-value', 'dev1.sensor1'), callback)
+        return self.base_test(('sensor-value', 'device.sensor1'), callback)
 
     def test_all_forwarded_sensors(self):
         def callback((informs, reply)):
             self.assertEquals(informs[2:],
-                  [Message.inform('sensor-value', '1000', '1', 'dev1.sensor1',
+                  [Message.inform('sensor-value', '1000', '1', 'device.sensor1',
                                   'unknown', '0'),
-                   Message.inform('sensor-value', '0', '1', 'dev1.sensor2',
+                   Message.inform('sensor-value', '0', '1', 'device.sensor2',
                                   'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '4'))
 
@@ -143,11 +143,11 @@ class TestTxProxyBase(TestCase):
     def test_all_forwarded_sensors_regex(self):
         def callback((informs, reply)):
             self.assertEquals(informs,
-                  [Message.inform('sensor-value', '1000', '1', 'dev1.sensor1',
+                  [Message.inform('sensor-value', '1000', '1', 'device.sensor1',
                                   'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
 
-        return self.base_test(('sensor-value', '/dev.\.sensor1/'),
+        return self.base_test(('sensor-value', '/device\.sensor1/'),
                               callback)
 
     def test_device_list(self):
@@ -258,7 +258,7 @@ class TestReconnect(TestCase):
 
         def connected(protocol):
             self.client = protocol
-            protocol.send_request('sensor-value', 'rogue').addCallbacks(worked)
+            protocol.send_request('sensor-value', 'device.rogue').addCallbacks(worked)
         
         d = Deferred()
         self.example_device = RogueDevice(0, '')

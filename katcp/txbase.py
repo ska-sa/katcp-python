@@ -25,7 +25,8 @@ class ProxiedSensor(object):
     """
     def __init__(self, name, description, units, stype, device, proxy,
                  *formatted_params):
-        self.name = name
+        self.basename = name
+        self.name = device.name + '.' + name
         self.device = device
         self.description = description
         self.units = units
@@ -33,7 +34,7 @@ class ProxiedSensor(object):
         self.formatted_params = formatted_params
 
     def read_formatted(self):
-        return self.device.send_request('sensor-value', self.name)
+        return self.device.send_request('sensor-value', self.basename)
 
 class StateSensor(object):
     """ A device state sensor
@@ -84,7 +85,8 @@ class DeviceHandler(ClientKatCP):
             for inform in informs:
                 name, description, units, stype = inform.arguments[:4]
                 formatted_arguments = inform.arguments[4:]
-                sensor = ProxiedSensor(name, description, units, stype,
+                sensor = ProxiedSensor(name, description,
+                                       units, stype,
                                        self, self.proxy, *formatted_arguments)
                 self.sensors[name] = sensor
                 self.proxy.add_proxied_sensor(self, sensor)
@@ -107,6 +109,12 @@ class DeviceHandler(ClientKatCP):
         if not self.stopping:
             reactor.callLater(self.proxy.CONN_DELAY_TIMEOUT,
                               self.schedule_resyncing)
+
+    def stop(self):
+        """ A hook for stopping requested device, if necessary, does nothing
+        by default
+        """
+        pass
 
 class TxProxyProtocol(TxDeviceProtocol):
     @request(include_msg=True)
@@ -217,8 +225,10 @@ class TxProxyProtocol(TxDeviceProtocol):
         # python lexical scoping rules (we could not write count += 1
         # in a function)
         
-        def device_ok((informs, reply)):
+        def device_ok((informs, reply), device):
             for inform in informs:
+                inform.arguments[2] = device.name + '.' + \
+                                      inform.arguments[2]
                 if filter is None or re.match(filter, inform.arguments[2]):
                     self.send_message(inform)
                     counter[0] += 1
@@ -231,19 +241,19 @@ class TxProxyProtocol(TxDeviceProtocol):
         for device in self.factory.devices.itervalues():
             if device.state == device.SYNCED:
                 d = device.send_request('sensor-value')
-                d.addCallback(device_ok)
+                d.addCallback(device_ok, device)
                 wait_for.append(d)
             # otherwise we don't have the list of sensors, so we don't
             # send the message
         DeferredList(wait_for).addCallback(all_ok)
-        for sensor in self.factory.sensors.itervalues():
+        for name, sensor in self.factory.sensors.iteritems():
             if not isinstance(sensor, ProxiedSensor):
-                if filter is None or re.match(filter, sensor.name):
+                if filter is None or re.match(filter, name):
                     timestamp_ms, status, value = sensor.read_formatted()
                     counter[0] += 1
                     self.send_message(Message.inform('sensor-value',
                                                      timestamp_ms, "1",
-                                                     sensor.name, status,
+                                                     name, status,
                                                      value))
 
 
@@ -423,5 +433,6 @@ class ProxyKatCP(TxDeviceServer):
         for device in self.devices.values():
             if device.state != device.UNSYNCED:
                 device.stopping = True
+                device.stop()
                 device.transport.loseConnection(None)
         TxDeviceServer.stop(self)
