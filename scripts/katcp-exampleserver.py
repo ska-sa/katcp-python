@@ -21,6 +21,13 @@ logging.basicConfig(level=logging.INFO,
 
 
 class DeviceExampleServer(katcp.DeviceServer):
+
+    ## Interface version information.
+    VERSION_INFO = ("example-server", 0, 1)
+
+    ## Device server build / instance information.
+    BUILD_INFO = ("my-example-server", 0, 1, "rc1")
+
     #pylint: disable-msg=R0904
     def setup_sensors(self):
         pass
