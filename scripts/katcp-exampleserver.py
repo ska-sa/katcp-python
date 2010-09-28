@@ -9,21 +9,44 @@
 
 import logging
 import sys
+import Queue
 from optparse import OptionParser
 import katcp
+from katcp.kattypes import request, return_reply, Float, Int, Str
+
 
 logging.basicConfig(level=logging.INFO,
                     stream=sys.stderr,
                     format="%(asctime)s - %(name)s - %(filename)s:%(lineno)s - %(levelname)s - %(message)s")
+
 
 class DeviceExampleServer(katcp.DeviceServer):
     #pylint: disable-msg=R0904
     def setup_sensors(self):
         pass
 
-    def schedule_restart(self):
-        #pylint: disable-msg=W0201
-        self.restarted = True
+    def request_echo(self, sock, msg):
+        """Echo the arguments of the message sent."""
+        return katcp.Message.reply(msg.name, "ok", *msg.arguments)
+
+    @request(Str(), Int())
+    @return_reply(Str())
+    def request_repeat(self, sock, txt, n):
+        """Repeat txt n times."""
+        return ("ok", txt*n)
+
+    @request(Float(), Float())
+    @return_reply(Float())
+    def request_add(self, sock, x, y):
+        """Add x and y."""
+        return ("ok", x+y)
+
+    @request(Int(), Int())
+    @return_reply(Int())
+    def request_intdiv(self, sock, x, y):
+        """Perform integer division of x and y."""
+        return ("ok", x / y)
+
 
 if __name__ == "__main__":
 
@@ -36,5 +59,27 @@ if __name__ == "__main__":
     (opts, args) = parser.parse_args()
 
     print "Server listening on port %d, Ctrl-C to terminate server" % opts.port
+    restart_queue = Queue.Queue()
     server = DeviceExampleServer(opts.host, opts.port)
-    server.run()
+    server.set_restart_queue(restart_queue)
+
+    server.start()
+    print "Started."
+
+    try:
+        while True:
+            try:
+                device = restart_queue.get(timeout=0.5)
+            except Queue.Empty:
+                device = None
+            if device is not None:
+                print "Stopping ..."
+                device.stop()
+                device.join()
+                print "Restarting ..."
+                device.start()
+                print "Started."
+    except KeyboardInterrupt:
+        print "Shutting down ..."
+        server.stop()
+        server.join()
