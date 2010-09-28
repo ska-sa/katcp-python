@@ -462,6 +462,19 @@ class FunctionDoc(NumpyDocString):
         out += super(FunctionDoc, self).__str__(func_role=self._role)
         return out
 
+def getmembers(object, predicate=None):
+    """Return all members of an object as (name, value) pairs sorted by name.
+    Optionally, only return members that satisfy a given predicate."""
+    results = []
+    for key in dir(object):
+        try:
+            value = getattr(object, key)
+        except AttributeError:
+            continue
+        if not predicate or predicate(value):
+            results.append((key, value))
+    results.sort()
+    return results
 
 class ClassDoc(NumpyDocString):
     def __init__(self,cls,modulename='',func_doc=FunctionDoc,doc=None):
@@ -489,10 +502,10 @@ class ClassDoc(NumpyDocString):
 
     @property
     def methods(self):
-        return [name for name,func in inspect.getmembers(self._cls)
+        return [name for name,func in getmembers(self._cls)
                 if not name.startswith('_') and callable(func)]
 
     @property
     def properties(self):
-        return [name for name,func in inspect.getmembers(self._cls)
+        return [name for name,func in getmembers(self._cls)
                 if not name.startswith('_') and func is None]
