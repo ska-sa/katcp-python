@@ -156,7 +156,7 @@ class ServerFactory(Factory):
     def setup_sensors(self):
         pass # override to provide some sensors
 
-class TxDeviceProtocol(KatCP):
+class DeviceProtocol(KatCP):
     SAMPLING_STRATEGIES = {'period'       : PeriodicStrategy,
                            'none'         : NoStrategy,
                            'auto'         : AutoStrategy,
@@ -585,10 +585,10 @@ class TxDeviceProtocol(KatCP):
     def _request_unknown(self, msg):
         return Message.reply(msg.name, "invalid", "Unknown request.")
 
-class TxDeviceServer(ServerFactory):
+class DeviceServer(ServerFactory):
     """ This is a device server listening on a given port and address
     """
-    protocol = TxDeviceProtocol
+    protocol = DeviceProtocol
 
     def __init__(self, port, host):
         self.log = DeviceLogger(self) # python logger is None

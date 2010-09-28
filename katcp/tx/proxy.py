@@ -1,5 +1,5 @@
 
-from katcp.tx.core import TxDeviceServer, ClientKatCP, TxDeviceProtocol
+from katcp.tx.core import DeviceServer, ClientKatCP, DeviceProtocol
 from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientFactory
@@ -116,7 +116,7 @@ class DeviceHandler(ClientKatCP):
         """
         pass
 
-class TxProxyProtocol(TxDeviceProtocol):
+class ProxyProtocol(DeviceProtocol):
     @request(include_msg=True)
     @return_reply(Int(min=0))
     def request_device_list(self, reqmsg):
@@ -204,7 +204,7 @@ class TxProxyProtocol(TxDeviceProtocol):
         # handle non-regex cases
         if not msg.arguments or not (msg.arguments[0].startswith("/")
             and msg.arguments[0].endswith("/")):
-            return TxDeviceProtocol.request_sensor_list(self, msg)
+            return DeviceProtocol.request_sensor_list(self, msg)
 
         # handle regex
         name_re = re.compile(msg.arguments[0][1:-1])
@@ -315,7 +315,7 @@ class TxProxyProtocol(TxDeviceProtocol):
             # regex case
             self._send_all_sensors(name[1:-1])
         else:
-            return TxDeviceProtocol.request_sensor_value(self, msg)
+            return DeviceProtocol.request_sensor_value(self, msg)
 
     def __getattr__(self, attr):
         def request_returned((informs, reply)):
@@ -371,17 +371,17 @@ class ClientDeviceFactory(ClientFactory):
     def buildProtocol(self, addr):
         return self.addr_mapping[(addr.host, addr.port)]
 
-class ProxyKatCP(TxDeviceServer):
+class ProxyKatCP(DeviceServer):
     """ This is a proxy class that will listen on a given host and port
     providing info about underlaying clients if needed
     """
-    protocol = TxProxyProtocol
+    protocol = ProxyProtocol
 
     MAX_RECONNECTS = 10
     CONN_DELAY_TIMEOUT = 1
 
     def __init__(self, *args, **kwds):
-        TxDeviceServer.__init__(self, *args, **kwds)
+        DeviceServer.__init__(self, *args, **kwds)
         self.addr_mapping = {}
         self.client_factory = ClientDeviceFactory(self.addr_mapping,
                                                   self.MAX_RECONNECTS,
@@ -435,4 +435,4 @@ class ProxyKatCP(TxDeviceServer):
                 device.stopping = True
                 device.stop()
                 device.transport.loseConnection(None)
-        TxDeviceServer.stop(self)
+        DeviceServer.stop(self)

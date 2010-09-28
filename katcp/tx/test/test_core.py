@@ -1,5 +1,5 @@
 
-from katcp.tx.core import (ClientKatCP, TxDeviceServer, TxDeviceProtocol,
+from katcp.tx.core import (ClientKatCP, DeviceServer, DeviceProtocol,
                               run_client)
 from katcp import Message, Sensor
 from katcp.tx.test.testserver import (run_subprocess, PORT, IntSensor,
@@ -71,15 +71,15 @@ class TestKatCP(TestCase):
         d, process = run_subprocess(connected, TestClientKatCP)
         return d
 
-class TestProtocol(TxDeviceProtocol):
+class TestProtocol(DeviceProtocol):
     notify_con_lost = None
 
     def connectionLost(self, _):
-        TxDeviceProtocol.connectionLost(self, _)
+        DeviceProtocol.connectionLost(self, _)
         if self.notify_con_lost:
             self.notify_con_lost()
 
-class TestFactory(TxDeviceServer):
+class TestFactory(DeviceServer):
     protocol = TestProtocol
     
     def setup_sensors(self):
@@ -100,7 +100,7 @@ class TestClientKatCP(ClientKatCP):
     def update_sensor_status(self, msg):
         self.status_updates.append(msg)
 
-class TestTxDeviceServer(TestCase):
+class TestDeviceServer(TestCase):
     def end_test(self, _):
         self.peer = None
         self.finish.callback(None)
@@ -129,7 +129,7 @@ class TestTxDeviceServer(TestCase):
     def test_help(self):
         # check how many we really want
         count = 0
-        for i in dir(TxDeviceProtocol):
+        for i in dir(DeviceProtocol):
             if i.startswith('request_'):
                 count += 1
         
@@ -143,7 +143,7 @@ class TestTxDeviceServer(TestCase):
     def test_help_arg(self):
         def reply((informs, reply), protocol):
             self.assertEquals(len(informs), 1)
-            expected = TxDeviceProtocol.request_sensor_list.__doc__.strip()
+            expected = DeviceProtocol.request_sensor_list.__doc__.strip()
             assert informs[0].arguments[1] == expected
             self.assertEquals(reply, Message.reply('help', 'ok', '1'))
         
@@ -376,7 +376,7 @@ class TestTxDeviceServer(TestCase):
                                'differential', '3'), reply)
 
     def test_raising_traceback(self):
-        class FaultyProtocol(TxDeviceProtocol):
+        class FaultyProtocol(DeviceProtocol):
             def request_foobar(self, msg):
                 raise KeyError
         
@@ -398,7 +398,7 @@ class TestTxDeviceServer(TestCase):
         return self.base_test(('watchdog',), reply)
 
     def test_fail(self):
-        class FaultyProtocol(TxDeviceProtocol):
+        class FaultyProtocol(DeviceProtocol):
             def request_foobar(self, msg):
                 raise FailReply("failed")
         
@@ -532,4 +532,4 @@ class TestMisc(TestCase):
         for name in dir(DeviceServer):
             if (name.startswith('request_') and
                 callable(getattr(DeviceServer, name))):
-                assert hasattr(TxDeviceProtocol, name)
+                assert hasattr(DeviceProtocol, name)

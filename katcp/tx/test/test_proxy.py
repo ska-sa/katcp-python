@@ -1,7 +1,6 @@
 
-from katcp.tx.core import TxDeviceServer, ClientKatCP
-from katcp.tx.proxy import (ProxyKatCP, DeviceHandler, TxDeviceProtocol,
-                          )
+from katcp.tx.core import DeviceServer, ClientKatCP
+from katcp.tx.proxy import ProxyKatCP, DeviceHandler, DeviceProtocol
 from twisted.trial.unittest import TestCase
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.defer import Deferred
@@ -12,14 +11,14 @@ from twisted.internet import reactor
 timeout = 5
 #Deferred.debug = True
 
-class ExampleProtocol(TxDeviceProtocol):
+class ExampleProtocol(DeviceProtocol):
     @request(include_msg=True)
     @return_reply(Int(min=0))
     def request_req(self, msg):
         return "ok", 3
 
 
-class ExampleDevice(TxDeviceServer):
+class ExampleDevice(DeviceServer):
     protocol = ExampleProtocol
     
     def setup_sensors(self):
@@ -58,7 +57,7 @@ class ExampleProxy(ProxyKatCP):
             self.on_device_ready = None
         ProxyKatCP.device_ready(self, device)
         
-class TestTxProxyBase(TestCase):
+class TestProxyBase(TestCase):
     def base_test(self, request, callback):
         def devices_scan_complete(_):
             if request is None:
@@ -222,7 +221,7 @@ class RogueSensor(object):
             client.transport._closeSocket() # force a connection drop
         return 1, 2, 3
 
-class RogueDevice(TxDeviceServer):
+class RogueDevice(DeviceServer):
     def setup_sensors(self):
         self.add_sensor(RogueSensor('rogue', self))
 
