@@ -4,7 +4,7 @@ which will connect to both
 """
 
 import sys, os
-from katcp.txbase import ProxyKatCP, DeviceHandler, TxProxyProtocol
+from katcp.tx import ProxyKatCP, DeviceHandler, ProxyProtocol
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
 from twisted.python import log
@@ -15,7 +15,7 @@ class DemoDeviceHandler(DeviceHandler):
         DeviceHandler.connectionMade(self)
         print self.name, "connected"
 
-class DemoProxyProtocol(TxProxyProtocol):
+class DemoProxyProtocol(ProxyProtocol):
     def request_drop_connection(self, msg):
         """ drops connection to specified device, for demo purposes
         only

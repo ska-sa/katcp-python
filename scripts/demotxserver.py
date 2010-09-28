@@ -1,17 +1,17 @@
 
 from twisted.internet import reactor
-from katcp.txprotocol import TxDeviceServer
+from katcp.tx import DeviceServer
 from katcp import Sensor
 from twisted.internet.protocol import Factory
 from twisted.python import log
 from katcp import Message
-from katcp.test.testserver import IntSensor, FloatSensor
+from katcp.tx.test.testserver import IntSensor, FloatSensor
 
 PORT = 1235 # or 0
 
 import sys
 
-class DemoServerFactory(TxDeviceServer):
+class DemoServerFactory(DeviceServer):
     production = True
     
     def setup_sensors(self):
