@@ -41,7 +41,8 @@ class KatCP(LineReceiver):
     """
     
     delimiter = '\n'
-    
+    MAX_LENGTH = 64*(2**20) # 64 MB should be fine
+
     def __init__(self):
         self.parser = MessageParser()
         self.queries = []
@@ -54,8 +55,13 @@ class KatCP(LineReceiver):
         self.queries.append((name, d, []))
         return d
 
+    def dataReceived(self, data):
+        # translate '\r' into '\n'
+        return LineReceiver.dataReceived(self, data.replace('\r', '\n'))
+
     def lineReceived(self, line):
-        line = line.rstrip("\r")
+        if not line:
+            return
         msg = self.parser.parse(line)
         if msg.mtype == msg.INFORM:
             self.handle_inform(msg)
@@ -68,10 +74,12 @@ class KatCP(LineReceiver):
 
     # some default informs
     def inform_version(self, msg):
-        self.version = msg.arguments[0]
+        if msg.arguments:
+            self.version = msg.arguments[0]
 
     def inform_build_state(self, msg):
-        self.build_state = msg.arguments[0]
+        if msg.arguments:
+            self.build_state = msg.arguments[0]
 
     def inform_disconnect(self, args):
         pass # unnecessary, we have a callback on loseConnection
@@ -134,16 +142,11 @@ class KatCP(LineReceiver):
         self.queries = []
 
 class ClientKatCP(KatCP):
-    def inform_sensor_status(self, msg):
-        self.update_sensor_status(msg)
-
     def inform_log(self, msg):
-        """ Default inform when logging even happens. Ignore by default,
+        """ Default inform when logging event happens. Ignore by default,
         can be overriden
         """
-
-    def update_sensor_status(self, msg):
-        raise NotImplementedError("Override update_sensor_status")
+        pass
 
 class ServerFactory(Factory):
     def __init__(self):

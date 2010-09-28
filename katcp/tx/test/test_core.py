@@ -97,7 +97,7 @@ class TestClientKatCP(ClientKatCP):
         ClientKatCP.__init__(self, *args, **kwds)
         self.status_updates = []
 
-    def update_sensor_status(self, msg):
+    def inform_sensor_status(self, msg):
         self.status_updates.append(msg)
 
 class TestDeviceServer(TestCase):
