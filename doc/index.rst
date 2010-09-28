@@ -19,6 +19,7 @@ Contents
    :maxdepth: 2
 
    api
+   txkatcp
    kattypes
    sampling
    tutorial
