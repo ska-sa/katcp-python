@@ -14,8 +14,6 @@ import test_kattypes
 import test_sampling
 import test_sensortree
 import test_server
-import test_txprotocol
-import test_txbase
 
 try:
     # BNF tests reply on PLY (Python Lexx/Yacc)

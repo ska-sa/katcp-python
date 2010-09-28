@@ -5,7 +5,7 @@ import os, re, sys
 sys.path.insert(0, '.') # not sure why python adds '.' or not depending on
 # obscure details how you run it
 from katcp.server import DeviceServer
-from katcp.txprotocol import run_client
+from katcp.tx.core import run_client
 from katcp import Sensor
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet import reactor

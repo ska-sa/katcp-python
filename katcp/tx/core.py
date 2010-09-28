@@ -8,7 +8,7 @@ from twisted.python import log
 from katcp import MessageParser, Message
 from katcp.core import FailReply
 from katcp.server import DeviceLogger
-from katcp.txsampling import (DifferentialStrategy, AutoStrategy,
+from katcp.tx.sampling import (DifferentialStrategy, AutoStrategy,
     EventStrategy, NoStrategy, PeriodicStrategy)
 import sys, traceback
 import time

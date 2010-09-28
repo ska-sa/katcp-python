@@ -1,6 +1,6 @@
 
-from katcp.txprotocol import TxDeviceServer, ClientKatCP
-from katcp.txbase import (ProxyKatCP, DeviceHandler, TxDeviceProtocol,
+from katcp.tx.core import TxDeviceServer, ClientKatCP
+from katcp.tx.proxy import (ProxyKatCP, DeviceHandler, TxDeviceProtocol,
                           )
 from twisted.trial.unittest import TestCase
 from twisted.internet.protocol import ClientCreator

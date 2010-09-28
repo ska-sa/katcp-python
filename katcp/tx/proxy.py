@@ -1,5 +1,5 @@
 
-from katcp.txprotocol import TxDeviceServer, ClientKatCP, TxDeviceProtocol
+from katcp.tx.core import TxDeviceServer, ClientKatCP, TxDeviceProtocol
 from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientFactory

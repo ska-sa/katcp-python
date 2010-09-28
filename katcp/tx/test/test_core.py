@@ -1,8 +1,9 @@
 
-from katcp.txprotocol import (ClientKatCP, TxDeviceServer, TxDeviceProtocol,
+from katcp.tx.core import (ClientKatCP, TxDeviceServer, TxDeviceProtocol,
                               run_client)
 from katcp import Message, Sensor
-from katcp.test.testserver import run_subprocess, PORT, IntSensor, FloatSensor
+from katcp.tx.test.testserver import (run_subprocess, PORT, IntSensor,
+     FloatSensor)
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, DeferredList
