@@ -160,6 +160,9 @@ class ServerFactory(Factory):
         pass # override to provide some sensors
 
 class DeviceProtocol(KatCP):
+    VERSION = ("1.0",)
+    BUILD_STATE = ("txdeviceserver", "0.1")
+    
     SAMPLING_STRATEGIES = {'period'       : PeriodicStrategy,
                            'none'         : NoStrategy,
                            'auto'         : AutoStrategy,
@@ -174,7 +177,9 @@ class DeviceProtocol(KatCP):
         """ Called when connection is made. Send default informs - version
         and build data
         """
-        self.send_message(Message.inform("version", "txdeviceserver", "0.1"))
+        self.send_message(Message.inform("version", *self.VERSION))
+        self.send_message(Message.inform("build-state", *self.BUILD_STATE))
+        
 
     def connectionLost(self, _):
         self.factory.deregister_client(self.transport.client)
