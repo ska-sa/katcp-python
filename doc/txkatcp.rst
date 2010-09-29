@@ -38,7 +38,14 @@ object.
 Using TxKatCP, device servers
 """""""""""""""""""""""""""""
 
+The :class:`DeviceServer <katcp.tx.DeviceServer>` is very similar to
+:class:`DeviceServer <katcp.DeviceServer>`. You overload ``request_xxx`` methods
+where ``xxx`` is a name of katcp request. A request method either returns
+a :class:`Message <katcp.Message>` reply instance, possibly sending informs
+along the way (using ``self.send_message`` interface). Device server must
+overload ``setup_sensors`` method, which should register sensors by calling
+``self.add_sensor``.
+
 .. note:: general information how to `write servers using Twisted`_.
 
 .. _`write servers using Twisted`: http://twistedmatrix.com/documents/current/core/howto/servers.html
-
