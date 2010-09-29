@@ -243,6 +243,13 @@ class TestDeviceServer(TestCase):
 
         return self._base_test(('sensor-sampling', 'int_sensor', 'xuz'), reply)
 
+    def test_sensor_sampling_no_argument(self):
+        def reply((informs, reply), protocol):
+            self.assertEquals(reply, Message.reply('sensor-sampling',
+                                                   'ok', 'int_sensor', 'none'))
+
+        return self._base_test(('sensor-sampling', 'int_sensor'), reply)
+
     def test_sensor_sampling_period(self):
         def called_later(protocol):
             assert 20 <= len(self.client.status_updates) <= 30

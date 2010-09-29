@@ -462,9 +462,12 @@ class DeviceProtocol(KatCP):
         sensor = self.factory.sensors.get(msg.arguments[0], None)
         if sensor is None:
             return Message.reply(msg.name, "fail", "Unknown sensor name.")
-        StrategyClass = self.SAMPLING_STRATEGIES.get(msg.arguments[1], None)
-        if StrategyClass is None:
-            return Message.reply(msg.name, "fail", "Unknown strategy name.")
+        if len(msg.arguments) == 1:
+            StrategyClass = NoStrategy
+        else:
+            StrategyClass = self.SAMPLING_STRATEGIES.get(msg.arguments[1], None)
+            if StrategyClass is None:
+                return Message.reply(msg.name, "fail", "Unknown strategy name.")
         # stop the previous strategy
         try:
             self.strategies[sensor.name].cancel()
@@ -473,6 +476,8 @@ class DeviceProtocol(KatCP):
         strategy = StrategyClass(self, sensor)
         strategy.run(*msg.arguments[2:])
         self.strategies[sensor.name] = strategy
+        if len(msg.arguments) == 1:
+            msg.arguments.append('none')
         return Message.reply(msg.name, "ok", *msg.arguments)
 
     def request_halt(self, msg):
