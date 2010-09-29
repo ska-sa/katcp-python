@@ -27,7 +27,7 @@ class DeviceNotConnected(Exception):
 
 TB_LIMIT = 20
 
-def run_client((host, port), ClientClass, connection_made):
+def run_client((host, port), ClientClass, connection_made=None):
     cc = ClientCreator(reactor, ClientClass)
     d = cc.connectTCP(host, port)
     if connection_made is not None:

@@ -317,6 +317,21 @@ class ProxyProtocol(DeviceProtocol):
         else:
             return DeviceProtocol.request_sensor_value(self, msg)
 
+    def request_halt(self, msg):
+        """ drops connection to specified device
+        """
+        if not msg.arguments:
+            return Message.reply('drop-connection', 'fail',
+                                 'Argument required')
+        try:
+            dev_name = msg.arguments[0]
+            self.factory.devices[dev_name].transport.loseConnection()
+            print dev_name, "disconnected"
+            return Message.reply('drop-connection', 'ok')
+        except KeyError:
+            return Message.reply('drop-connection', 'fail',
+                                 'Unknown device %s' % dev_name)
+
     def __getattr__(self, attr):
         def request_returned((informs, reply)):
             assert informs == [] # for now
