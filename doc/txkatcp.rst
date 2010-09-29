@@ -35,6 +35,10 @@ object.
 
 .. note:: an example client is in ``scripts/demotxclient.py``.
 
+.. literalinclude:: ../scripts/demotxclient.py
+   :language: python
+   :linenos:
+
 .. _`write clients using Twisted`: http://twistedmatrix.com/documents/current/core/howto/clients.html
 
 Using TxKatCP, device servers
@@ -53,5 +57,9 @@ overload ``setup_sensors`` method, which should register sensors by calling
 :class:`DeviceProtocol <katcp.tx.DeviceProtocol>` subclass.
 
 .. note:: an example server is in ``scripts/demotxserver.py``.
+
+.. literalinclude:: ../scripts/demotxserver.py
+   :language: python
+   :linenos:
 
 .. _`write servers using Twisted`: http://twistedmatrix.com/documents/current/core/howto/servers.html
