@@ -58,7 +58,7 @@ class ExampleProxy(ProxyKatCP):
         ProxyKatCP.device_ready(self, device)
         
 class TestProxyBase(TestCase):
-    def base_test(self, request, callback):
+    def _base_test(self, request, callback):
         def devices_scan_complete(_):
             if request is None:
                 # we don't want to send any requests, simply call callback and
@@ -104,20 +104,20 @@ class TestProxyBase(TestCase):
             assert 'sensor_list' in device.requests
             assert 'sensor1' in device.sensors
 
-        return self.base_test(None, callback)
+        return self._base_test(None, callback)
 
     def test_forwarding_commands(self):
         def callback((informs, reply)):
             self.assertEquals(reply, Message.reply("device-req", "ok", "3"))
         
-        return self.base_test(('device-req',), callback)
+        return self._base_test(('device-req',), callback)
 
     def test_forwarding_unsynced(self):
         def callback((informs, reply)):
             self.assertEquals(reply, Message.reply('device2-req', 'fail',
                                                    'Device not synced'))
 
-        return self.base_test(('device2-req',), callback)
+        return self._base_test(('device2-req',), callback)
 
     def test_forwarding_sensors(self):
         def callback((informs, reply)):
@@ -126,7 +126,7 @@ class TestProxyBase(TestCase):
                                     'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
                                                        
-        return self.base_test(('sensor-value', 'device.sensor1'), callback)
+        return self._base_test(('sensor-value', 'device.sensor1'), callback)
 
     def test_all_forwarded_sensors(self):
         def callback((informs, reply)):
@@ -137,7 +137,7 @@ class TestProxyBase(TestCase):
                                   'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '4'))
 
-        return self.base_test(('sensor-value',), callback)
+        return self._base_test(('sensor-value',), callback)
 
     def test_all_forwarded_sensors_regex(self):
         def callback((informs, reply)):
@@ -146,7 +146,7 @@ class TestProxyBase(TestCase):
                                   'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
 
-        return self.base_test(('sensor-value', '/device\.sensor1/'),
+        return self._base_test(('sensor-value', '/device\.sensor1/'),
                               callback)
 
     def test_device_list(self):
@@ -154,28 +154,28 @@ class TestProxyBase(TestCase):
             assert len(informs) == 2
             self.assertEquals(reply, Message.reply("device-list", "ok", "2"))
         
-        return self.base_test(('device-list',), callback)
+        return self._base_test(('device-list',), callback)
 
     def test_state_sensor(self):
         def callback((informs, reply)):
             assert len(informs) == 1
             assert informs[0].arguments[3:] == ['ok', 'synced']
         
-        return self.base_test(('sensor-value', 'device-state',), callback)
+        return self._base_test(('sensor-value', 'device-state',), callback)
 
     def test_sensor_list(self):
         def callback((informs, reply)):
             assert len(informs) == 4
             assert reply == Message.reply('sensor-list', 'ok', '4')
         
-        return self.base_test(('sensor-list',), callback)
+        return self._base_test(('sensor-list',), callback)
 
     def test_sensor_list_regex(self):
         def callback((informs, reply)):
             assert len(informs) == 2
             self.assertEquals(reply, Message.reply('sensor-list', 'ok', '2'))
 
-        return self.base_test(('sensor-list', '/state/'), callback)
+        return self._base_test(('sensor-list', '/state/'), callback)
 
     def test_reconnect_base(self):
         def works((informs, reply)):
@@ -203,7 +203,7 @@ class TestProxyBase(TestCase):
             self.client.send_request('device-watchdog').addCallback(failed)
             return True
         
-        return self.base_test(('watchdog',), callback)
+        return self._base_test(('watchdog',), callback)
 
 
 class RogueSensor(object):
