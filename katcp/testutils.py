@@ -400,7 +400,7 @@ class BlockingTestClient(client.BlockingClient):
             time.sleep(pollfreq)
 
         if not success:
-            self.fail("Timed out while waiting %ss for %s sensor to become %s. Last value was %s." % (timeout, sensorname, value, lastval))
+            self.test.fail("Timed out while waiting %ss for %s sensor to become %s. Last value was %s." % (timeout, sensorname, value, lastval))
 
     # REQUEST PARAMETERS
 
