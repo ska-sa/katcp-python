@@ -160,8 +160,8 @@ class ServerFactory(Factory):
         pass # override to provide some sensors
 
 class DeviceProtocol(KatCP):
-    VERSION = ("1.0",)
-    BUILD_STATE = ("txdeviceserver", "0.1")
+    VERSION = ("device_stub", 0, 1)
+    BUILD_STATE = ("name", 0, 1, "")
     
     SAMPLING_STRATEGIES = {'period'       : PeriodicStrategy,
                            'none'         : NoStrategy,
