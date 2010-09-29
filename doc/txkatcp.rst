@@ -44,11 +44,13 @@ Using TxKatCP, device servers
 
 The :class:`DeviceServer <katcp.tx.DeviceServer>` is very similar to
 :class:`DeviceServer <katcp.DeviceServer>`. You overload ``request_xxx`` methods
+on a protocol (like :class:`DeviceProtocol <katcp.tx.DeviceProtocol>`)
 where ``xxx`` is a name of katcp request. A request method either returns
 a :class:`Message <katcp.Message>` reply instance, possibly sending informs
 along the way (using ``self.send_message`` interface). Device server must
 overload ``setup_sensors`` method, which should register sensors by calling
-``self.add_sensor``.
+``self.add_sensor`` and must provide a ``protocol`` member pointing to a correct
+:class:`DeviceProtocol <katcp.tx.DeviceProtocol>` subclass.
 
 .. note:: an example server is in ``scripts/demotxserver.py``.
 
