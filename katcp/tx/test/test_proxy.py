@@ -205,6 +205,13 @@ class TestProxyBase(TestCase):
         
         return self._base_test(('watchdog',), callback)
 
+    def test_halt(self):
+        def callback((informs, reply)):
+            self.assertEquals(reply, Message.reply('halt', 'device', 'ok'))
+            assert self.proxy.devices.keys() == ['device2']
+        
+        return self._base_test(('halt', 'device'), callback)
+
 
 class RogueSensor(object):
     description = 'descr'

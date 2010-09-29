@@ -320,17 +320,20 @@ class ProxyProtocol(DeviceProtocol):
     def request_halt(self, msg):
         """ drops connection to specified device
         """
+        def got_halt((informs, reply)):
+            self.send_message(Message.reply('halt', dev_name, 'ok'))
+        
         if not msg.arguments:
-            return Message.reply('drop-connection', 'fail',
-                                 'Argument required')
+            return DeviceProtocol.halt(self, msg)
         try:
             dev_name = msg.arguments[0]
-            self.factory.devices[dev_name].transport.loseConnection()
-            print dev_name, "disconnected"
-            return Message.reply('drop-connection', 'ok')
+            device = self.factory.devices[dev_name]
         except KeyError:
-            return Message.reply('drop-connection', 'fail',
+            return Message.reply('halt', 'fail',
                                  'Unknown device %s' % dev_name)
+        else:
+            self.factory.unregister_device(dev_name)
+            device.send_request('halt').addCallback(got_halt)
 
     def __getattr__(self, attr):
         def request_returned((informs, reply)):
@@ -451,3 +454,12 @@ class ProxyKatCP(DeviceServer):
                 device.stop()
                 device.transport.loseConnection(None)
         DeviceServer.stop(self)
+
+    def unregister_device(self, dev_name):
+        device = self.devices[dev_name]
+        device.stopping = True
+        for name in self.sensors.keys():
+            if (name.startswith(dev_name + '.') or
+                name.startswith(dev_name + '-')):
+                del self.sensors[name]
+        del self.devices[dev_name]
