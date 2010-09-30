@@ -209,8 +209,8 @@ class DeviceProtocol(KatCP):
                                              sensor.name, status, value))
 
         def fail(_, sensor):
-            self.send_message(Message.inform('sensor-status',
-                                             'Connection lost'))
+            self.send_message(Message.inform('log',
+                                             'Connection lost.'))
 
         self.read_formatted_from_sensor(sensor, callback, fail)
 
