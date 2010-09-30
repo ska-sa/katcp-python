@@ -5,7 +5,7 @@ from twisted.internet import reactor
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.protocol import Factory
 from twisted.python import log
-from katcp import MessageParser, Message
+from katcp import MessageParser, Message, AsyncReply
 from katcp.core import FailReply
 from katcp.server import DeviceLogger
 from katcp.tx.sampling import (DifferentialStrategy, AutoStrategy,
@@ -23,6 +23,9 @@ class UnknownType(Exception):
     pass
 
 class DeviceNotConnected(Exception):
+    pass
+
+class ShouldReturnMessage(Exception):
     pass
 
 TB_LIMIT = 20
@@ -106,12 +109,15 @@ class KatCP(LineReceiver):
         name = name.replace('-', '_')
         try:
             rep_msg = getattr(self, 'request_' + name, self._request_unknown)(msg)
-            if rep_msg is not None:
-                assert isinstance(rep_msg, Message)
-                self.send_message(rep_msg)
-            # otherwise reply will come at some later point
+            if not isinstance(rep_msg, Message):
+                raise ShouldReturnMessage('request_' + name + ' should return a'
+                                          'message or raise AsyncReply, instead'
+                                          'it returned %r' % rep_msg)
+            self.send_message(rep_msg)
         except FailReply, fr:
             self.send_message(Message.reply(name, "fail", str(fr)))
+        except AsyncReply:
+            return
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             log.err()
@@ -285,13 +291,14 @@ class DeviceProtocol(KatCP):
                 self.read_formatted_from_sensor(sensor, one_ok, one_fail,
                                                 lst)
             DeferredList(lst).addCallback(all_finished)
-            return
+            raise AsyncReply()
         try:
             sensor = self.factory.sensors[msg.arguments[0]]
         except KeyError:
             return Message.reply(msg.name, "fail", "Unknown sensor name")
         else:
             self.read_formatted_from_sensor(sensor, only_one_ok, one_wrong)
+            raise AsyncReply()
 
     def request_sensor_list(self, msg):
         """Request the list of sensors.
@@ -497,6 +504,7 @@ class DeviceProtocol(KatCP):
         """
         self.send_message(Message.reply("halt", "ok"))
         self.factory.stop()
+        raise AsyncReply()
 
     def request_watchdog(self, msg):
         """Check that the server is still alive.

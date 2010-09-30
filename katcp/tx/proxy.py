@@ -3,7 +3,7 @@ from katcp.tx.core import DeviceServer, ClientKatCP, DeviceProtocol
 from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientFactory
-from katcp import Message
+from katcp import Message, AsyncReply
 from katcp.kattypes import request, return_reply, Int
 
 import re, time
@@ -309,11 +309,12 @@ class ProxyProtocol(DeviceProtocol):
         """
         if not msg.arguments:
             self._send_all_sensors()
-            return
+            raise AsyncReply()
         name = msg.arguments[0]
         if len(name) >= 2 and name.startswith("/") and name.endswith("/"):
             # regex case
             self._send_all_sensors(name[1:-1])
+            raise AsyncReply()
         else:
             return DeviceProtocol.request_sensor_value(self, msg)
 
@@ -334,6 +335,7 @@ class ProxyProtocol(DeviceProtocol):
         else:
             self.factory.unregister_device(dev_name)
             device.send_request('halt').addCallback(got_halt)
+            raise AsyncReply()
 
     def __getattr__(self, attr):
         def request_returned((informs, reply)):
@@ -353,6 +355,7 @@ class ProxyProtocol(DeviceProtocol):
                                      "Device not synced")
             d = device.send_request(req_name, *msg.arguments)
             d.addCallbacks(request_returned, request_failed)
+            raise AsyncReply()
                 
         if not attr.startswith('request_'):
             return object.__getattribute__(self, attr)
