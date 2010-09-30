@@ -345,7 +345,7 @@ class ProxyProtocol(DeviceProtocol):
 
         def request_failed(failure):
             self.send_message(Message.reply(dev_name + '-' + req_name,
-                                            "fail", "Device not synced"))
+                                            "fail", failure.getErrorMessage()))
 
         def callback(msg):
             if device.state is device.UNSYNCED:
