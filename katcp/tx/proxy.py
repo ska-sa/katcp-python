@@ -8,16 +8,14 @@ from katcp.kattypes import request, return_reply, Int
 
 import re, time
 
-def value_only_formatted():
+def value_only_formatted(func):
     """ A decorator that changes a value-only read into read_formatted
     format (using time.time and 'ok')
     """
-    def decorator(func):
-        def new_func(self):
-            return time.time(), "ok", func(self)
-        new_func.func_name = func.func_name
-        return new_func
-    return decorator
+    def new_func(self):
+        return time.time(), "ok", func(self)
+    new_func.func_name = func.func_name
+    return new_func
 
 class ProxiedSensor(object):
     """ A sensor which is a proxy for other sensor on the remote device.
@@ -41,14 +39,14 @@ class StateSensor(object):
     """
     description = 'connection state'
     stype = 'discrete'
-    formatted_params = ()
-    units = 'unsynced syncing synced'
+    formatted_params = ('unsynced', 'syncing', 'synced')
+    units = ''
     
     def __init__(self, name, device):
         self.device = device
         self.name = name
 
-    @value_only_formatted()
+    @value_only_formatted
     def read_formatted(self):
         return DeviceHandler.STATE_NAMES[self.device.state]
 
@@ -359,14 +357,13 @@ class ProxyProtocol(DeviceProtocol):
                 
         if not attr.startswith('request_'):
             return object.__getattribute__(self, attr)
-        lst = attr.split('_')
+        lst = attr.split('_', 2)
         if len(lst) < 3:
             return object.__getattribute__(self, attr)
-        dev_name = lst[1]
+        dev_name, req_name = lst[1], lst[2]
         device = self.factory.devices.get(dev_name, None)
         if device is None:
             return object.__getattribute__(self, attr)
-        req_name = "_".join(lst[2:])
         return callback
 
 class ClientDeviceFactory(ClientFactory):
