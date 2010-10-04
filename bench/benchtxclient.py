@@ -14,6 +14,10 @@ class DemoClient(ClientKatCP):
     no_of_sensors = 0
     last = 0
 
+    def __init__(self, *args, **kwds):
+        ClientKatCP.__init__(self, *args, **kwds)
+        self.avg = []
+
     def inform_sensor_status(self, msg):
         self.last = int(msg.arguments[0])
         self.counter += 1
@@ -24,6 +28,10 @@ class DemoClient(ClientKatCP):
         self.send_request('sensor-sampling', name, 'period', 1)
 
     def periodic_check(self):
+        self.avg.append(self.counter)
+        if len(self.avg) > 10:
+            self.avg.pop(0)
+        print sum(self.avg)/len(self.avg)
         print int(time.time() * 1000) - self.last
         print self.counter, self.no_of_sensors
         if (abs(self.counter - self.no_of_sensors * 200) <
