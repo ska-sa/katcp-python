@@ -336,6 +336,11 @@ class ProxyProtocol(DeviceProtocol):
             raise AsyncReply()
 
     def __getattr__(self, attr):
+        # TODO: It would be cleaner if a new request method / callback
+        # wasn't created for every proxied request.
+        # TODO: These proxied methods should appear in the ?help for the proxy
+        # but currently don't.
+
         def request_returned((informs, reply)):
             assert informs == [] # for now
             # we *could* in theory just change message name, but let's copy
