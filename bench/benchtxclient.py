@@ -51,10 +51,19 @@ class DemoClient(ClientKatCP):
         self.counter = 0
         reactor.callLater(TIMEOUT, self.periodic_check)
 
+    def connectionLost(self, failure):
+        print >>sys.stderr, "Connection lost, exiting"
+        reactor.stop()
+
 def connected(protocol, options):
     protocol.options = options
     reactor.callLater(TIMEOUT, protocol.periodic_check)
     protocol.sample_next_sensor()
+
+def not_connected(failure):
+    print >>sys.stderr, failure
+    print >>sys.stderr, "Exiting"
+    reactor.stop()
 
 if __name__ == '__main__':
     parser = standard_parser()
@@ -62,5 +71,5 @@ if __name__ == '__main__':
                       default=False, action='store_true')
     options, args = parser.parse_args()
     run_client(('localhost', options.port), DemoClient, connected,
-               (options,))
+               (options,), not_connected)
     reactor.run()
