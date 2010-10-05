@@ -8,6 +8,7 @@ from optparse import OptionParser
 from katcp.tx.core import run_client, ClientKatCP
 from twisted.internet import reactor
 from util import standard_parser
+from twisted.python import log
 
 TIMEOUT = 0.2
 
@@ -45,15 +46,18 @@ class DemoClient(ClientKatCP):
             self.avg.pop(0)
         print "AVG: %d, LAST: %d, SENSORS: %d" % (
             sum(self.avg)/len(self.avg), self.counter, self.no_of_sensors)
-        if (abs(self.counter - self.no_of_sensors * 200) <
-            (self.no_of_sensors * 100)):
+        sys.stdout.flush()
+        if (not self.options.allow_sensor_creation or
+            (abs(self.counter - self.no_of_sensors * 200) <=
+            (self.no_of_sensors * 100))):
             self.sample_next_sensor()
         self.counter = 0
         reactor.callLater(TIMEOUT, self.periodic_check)
 
     def connectionLost(self, failure):
         print >>sys.stderr, "Connection lost, exiting"
-        reactor.stop()
+        if reactor.running:
+            reactor.stop()
 
 def connected(protocol, options):
     protocol.options = options
