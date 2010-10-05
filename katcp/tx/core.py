@@ -30,11 +30,14 @@ class ShouldReturnMessage(Exception):
 
 TB_LIMIT = 20
 
-def run_client((host, port), ClientClass, connection_made=None):
+def run_client((host, port), ClientClass, connection_made=None,
+               args=(), errback=None, errback_args=()):
     cc = ClientCreator(reactor, ClientClass)
     d = cc.connectTCP(host, port)
     if connection_made is not None:
-        d.addCallback(connection_made)
+        d.addCallback(connection_made, *args)
+    if errback is not None:
+        d.addErrback(errback, *errback_args)
     return d
 
 class KatCP(LineReceiver):
