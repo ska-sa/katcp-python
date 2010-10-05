@@ -11,3 +11,12 @@ Note: as learned on #twisted there is a producer API which is designed for
 high throughput data (there is no caching in between but instead it's designed
 for writing when there is more data available). I don't think sensor-sampling
 is a good example, but should be considered.
+
+Testing scenario 2
+==================
+
+We measure the throuhput of sensor-value requests (or something larger),
+provided that a new request can only be issued once previous request is
+completed. This is a latency measurment (how much time it'll take
+for one request to complete). Measurments shall be taken with growing
+number of participating clients within four to ten clients.
