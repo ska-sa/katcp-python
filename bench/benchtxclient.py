@@ -9,9 +9,11 @@ from katcp.tx.core import run_client, ClientKatCP
 from twisted.internet import reactor
 from util import standard_parser
 
+TIMEOUT = 0.2
+
 class DemoClient(ClientKatCP):
     counter = 0
-    no_of_sensors = 0
+    no_of_sensors = 0 # number of sensors sampled
     last = 0
 
     def __init__(self, *args, **kwds):
@@ -27,25 +29,38 @@ class DemoClient(ClientKatCP):
         self.no_of_sensors += 1
         self.send_request('sensor-sampling', name, 'period', 1)
 
+    def sample_next_sensor(self):
+        self.send_request('sensor-list').addCallback(self.check_sensor_list)
+
+    def check_sensor_list(self, ((informs, reply))):
+        sensor_no = len(informs)
+        if self.no_of_sensors < len(informs):
+            self.start_sampling(None)
+        elif self.options.allow_sensor_creation:
+            self.send_request('add-sensor').addCallback(self.start_sampling)
+
     def periodic_check(self):
         self.avg.append(self.counter)
         if len(self.avg) > 10:
             self.avg.pop(0)
-        print sum(self.avg)/len(self.avg)
-        print int(time.time() * 1000) - self.last
-        print self.counter, self.no_of_sensors
+        print "AVG: %d, LAST: %d, SENSORS: %d" % (
+            sum(self.avg)/len(self.avg), self.counter, self.no_of_sensors)
         if (abs(self.counter - self.no_of_sensors * 200) <
             (self.no_of_sensors * 100)):
-            self.send_request('add-sensor').addCallback(self.start_sampling)
+            self.sample_next_sensor()
         self.counter = 0
-        reactor.callLater(.2, self.periodic_check)
+        reactor.callLater(TIMEOUT, self.periodic_check)
 
-def connected(protocol):
-    reactor.callLater(.2, protocol.periodic_check)
-    protocol.send_request('add-sensor').addCallback(protocol.start_sampling)
+def connected(protocol, options):
+    protocol.options = options
+    reactor.callLater(TIMEOUT, protocol.periodic_check)
+    protocol.sample_next_sensor()
 
 if __name__ == '__main__':
     parser = standard_parser()
+    parser.add_option('--allow-sensor-creation', dest='allow_sensor_creation',
+                      default=False, action='store_true')
     options, args = parser.parse_args()
-    run_client(('localhost', options.port), DemoClient, connected)
+    run_client(('localhost', options.port), DemoClient, connected,
+               (options,))
     reactor.run()
