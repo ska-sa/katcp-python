@@ -462,7 +462,7 @@ class DeviceClient(object):
         Returns
         -------
         running : bool
-            Whether the server is running.
+            Whether the client is running.
         """
         return self._running.isSet()
 
@@ -475,6 +475,22 @@ class DeviceClient(object):
             Whether the client is connected.
         """
         return self._sock is not None
+
+    def wait_connected(self, timeout=None):
+        """Wait until the client is connected.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for the client to connect.
+
+        Returns
+        -------
+        connected : bool
+            Whether the client is connected.
+        """
+        self._connected.wait(timeout)
+        return self._connected.isSet()
 
     def notify_connected(self, connected):
         """Event handler that is called wheneved the connection status changes.

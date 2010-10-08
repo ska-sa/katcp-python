@@ -69,6 +69,26 @@ class TestDeviceClient(unittest.TestCase, TestUtilMixin):
         self.assertFalse(self.client._running.isSet())
         self.client.start(timeout=0.1)
 
+    def test_is_connected(self):
+        """Test is_connected method."""
+        self.assertTrue(self.client.is_connected())
+        self.server.stop(timeout=0.1)
+        # timeout needs to be longer than select sleep.
+        self.server.join(timeout=1.5)
+        self.assertFalse(self.client.is_connected())
+
+    def test_wait_connected(self):
+        """Test wait_connected method."""
+        start = time.time()
+        self.assertTrue(self.client.wait_connected(1.0))
+        self.assertTrue(time.time() - start < 1.0)
+        self.server.stop(timeout=0.1)
+        # timeout needs to be longer than select sleep.
+        self.server.join(timeout=1.5)
+        start = time.time()
+        self.assertFalse(self.client.wait_connected(0.2))
+        self.assertTrue(0.15 < time.time() - start < 0.25)
+
     def test_bad_socket(self):
         """Test what happens when select is called on a dead socket."""
         # wait for client to connect
