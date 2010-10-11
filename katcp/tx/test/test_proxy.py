@@ -253,8 +253,8 @@ class TestReconnect(TestCase):
         def worked((informs, reply)):
             self.flushLoggedErrors() # clean up error about conn lost
             self.proxy.on_device_ready = Deferred().addCallback(back)
-            self.assertEquals(reply, Message.reply("sensor-value", "fail",
-                                                   "Sensor reading failed."))
+            self.assertEquals(informs, [Message.inform("sensor-value", "device.rogue",
+                                                   "Sensor reading failed.")])
 
         def back(_):
             self.port.stopListening()

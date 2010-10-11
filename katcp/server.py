@@ -23,6 +23,33 @@ from .sampling import SampleReactor, SampleStrategy, SampleNone
 log = logging.getLogger("katcp")
 
 
+def construct_name_filter(pattern):
+    """Return a funciton for filtering sensor names based on a pattern.
+
+    Parameters
+    ----------
+    pattern : None or str
+        If None, returned function matches all names.
+        If pattern starts and ends with '/' the text between the slashes
+        is used a regular expression to search the names.
+        Otherwise the pattern must match the name of the sensor exactly.
+
+    Return
+    ------
+    exact : bool
+        Return True if pattern is expected to matche exactly. Used
+        to determine whether no matching sensors constitutes an error.
+    filter_func : f(str) -> bool
+        Function for determining whether a name matches the pattern.
+    """
+    if pattern is None:
+        return False, lambda name: True
+    if pattern.startswith('/') and pattern.endswith('/'):
+        name_re = re.compile(msg.arguments[0][1:-1])
+        return False, lambda name: name_re.search(name) is not None
+    return True, lambda name: name == pattern
+
+
 class DeviceServerBase(object):
     """Base class for device servers.
 
@@ -983,6 +1010,8 @@ class DeviceServer(DeviceServerBase):
         ----------
         name : str, optional
             Name of the sensor to list (the default is to list all sensors).
+            If name starts and ends with '/' it is treated as a regular expression and
+            all sensors whose names contain the regular expression are returned.
 
         Informs
         -------
@@ -1021,24 +1050,19 @@ class DeviceServer(DeviceServerBase):
             #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
             !sensor-list ok 1
         """
-        if not msg.arguments:
-            for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
-                self.reply_inform(sock, Message.inform("sensor-list",
-                    name, sensor.description, sensor.units, sensor.stype,
-                    *sensor.formatted_params), msg)
-            return Message.reply("sensor-list",
-                    "ok", str(len(self._sensors)))
-        else:
-            name = msg.arguments[0]
-            if name in self._sensors:
-                sensor = self._sensors[name]
-                self.reply_inform(sock, Message.inform("sensor-list",
-                    name, sensor.description, sensor.units, sensor.stype,
-                    *sensor.formatted_params), msg)
-                return Message.reply("sensor-list", "ok", "1")
-            else:
-                return Message.reply("sensor-list", "fail",
-                                                    "Unknown sensor name.")
+        exact, name_filter = construct_name_filter(msg.arguments[0]
+                    if msg.arguments else None)
+        sensors = [(name, sensor) for name, sensor in
+                    sorted(self._sensors.iteritems()) if name_filter(name)]
+
+        if exact and not sensors:
+            return Message.reply("sensor-list", "fail", "Unknown sensor name.")
+
+        for name, sensor in sensors:
+            self.reply_inform(sock, Message.inform("sensor-list",
+                name, sensor.description, sensor.units, sensor.stype,
+                *sensor.formatted_params), msg)
+        return Message.reply("sensor-list", "ok", str(len(sensors)))
 
     def request_sensor_value(self, sock, msg):
         """Request the value of a sensor or sensors.
@@ -1049,6 +1073,8 @@ class DeviceServer(DeviceServerBase):
         ----------
         name : str, optional
             Name of the sensor to poll (the default is to send values for all sensors).
+            If name starts and ends with '/' it is treated as a regular expression and
+            all sensors whose names contain the regular expression are returned.
 
         Informs
         -------
@@ -1083,24 +1109,19 @@ class DeviceServer(DeviceServerBase):
             #sensor-value 1244631611415.231 1 cpu.power.on 0
             !sensor-value ok 1
         """
-        if not msg.arguments:
-            for name, sensor in sorted(self._sensors.iteritems(), key=lambda x: x[0]):
-                timestamp_ms, status, value = sensor.read_formatted()
-                self.reply_inform(sock, Message.inform("sensor-value",
+        exact, name_filter = construct_name_filter(msg.arguments[0]
+                    if msg.arguments else None)
+        sensors = [(name, sensor) for name, sensor in
+                    sorted(self._sensors.iteritems()) if name_filter(name)]
+
+        if exact and not sensors:
+            return Message.reply("sensor-value", "fail", "Unknown sensor name.")
+
+        for name, sensor in sensors:
+            timestamp_ms, status, value = sensor.read_formatted()
+            self.reply_inform(sock, Message.inform("sensor-value",
                     timestamp_ms, "1", name, status, value), msg)
-            return Message.reply("sensor-value",
-                    "ok", str(len(self._sensors)))
-        else:
-            name = msg.arguments[0]
-            if name in self._sensors:
-                sensor = self._sensors[name]
-                timestamp_ms, status, value = sensor.read_formatted()
-                self.reply_inform(sock, Message.inform("sensor-value",
-                    timestamp_ms, "1", name, status, value), msg)
-                return Message.reply("sensor-value", "ok", "1")
-            else:
-                return Message.reply("sensor-value", "fail",
-                                                    "Unknown sensor name.")
+        return Message.reply("sensor-value", "ok", str(len(sensors)))
 
     def request_sensor_sampling(self, sock, msg):
         """Configure or query the way a sensor is sampled.

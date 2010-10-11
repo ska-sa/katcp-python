@@ -179,7 +179,7 @@ class TestDeviceServer(TestCase):
             self.assertEquals(informs, [])
             self.assertEquals(reply, Message.reply('sensor-value',
                                                    'fail',
-                                                   'Unknown sensor name'))
+                                                   'Unknown sensor name.'))
 
         return self._base_test(('sensor-value', 'xxx'),
                               reply)

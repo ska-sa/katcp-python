@@ -7,7 +7,7 @@ from twisted.internet.protocol import Factory
 from twisted.python import log
 from katcp import MessageParser, Message, AsyncReply
 from katcp.core import FailReply
-from katcp.server import DeviceLogger
+from katcp.server import DeviceLogger, construct_name_filter
 from katcp.tx.sampling import (DifferentialStrategy, AutoStrategy,
     EventStrategy, NoStrategy, PeriodicStrategy)
 import sys, traceback
@@ -232,6 +232,8 @@ class DeviceProtocol(KatCP):
         ----------
         name : str, optional
             Name of the sensor to poll (the default is to send values for all sensors).
+            If name starts and ends with '/' it is treated as a regular expression and
+            all sensors whose names contain the regular expression are returned.
 
         Informs
         -------
@@ -266,6 +268,14 @@ class DeviceProtocol(KatCP):
             #sensor-value 1244631611415.231 1 cpu.power.on 0
             !sensor-value ok 1
         """
+        exact, name_filter = construct_name_filter(msg.arguments[0]
+                    if msg.arguments else None)
+        sensors = [(name, sensor) for name, sensor in
+                    sorted(self.factory.sensors.iteritems()) if name_filter(name)]
+
+        if exact and not sensors:
+            return Message.reply(msg.name, "fail", "Unknown sensor name.")
+
         def one_ok(sensor, timestamp_ms, status, value):
             self.send_message(Message.inform(msg.name, timestamp_ms, "1",
                                              sensor.name, status, value))
@@ -277,31 +287,13 @@ class DeviceProtocol(KatCP):
         def all_finished(lst):
             # XXX write a test where lst is not-empty so we can fail
             self.send_message(Message.reply(msg.name, "ok",
-                                            len(self.factory.sensors)))
+                                            len(sensors)))
 
-        def only_one_ok(sensor, timestamp_ms, status, value):
-            self.send_message(Message.inform(msg.name, timestamp_ms, "1",
-                                             sensor.name, status, value))
-            self.send_message(Message.reply(msg.name, "ok", "1"))
-
-        def one_wrong(failure, sensor):
-            self.send_message(Message.reply(msg.name, "fail",
-                                            "Sensor reading failed."))
-        
-        if not msg.arguments:
-            lst = []
-            for name, sensor in sorted(self.factory.sensors.iteritems()):
-                self.read_formatted_from_sensor(sensor, one_ok, one_fail,
-                                                lst)
-            DeferredList(lst).addCallback(all_finished)
-            raise AsyncReply()
-        try:
-            sensor = self.factory.sensors[msg.arguments[0]]
-        except KeyError:
-            return Message.reply(msg.name, "fail", "Unknown sensor name")
-        else:
-            self.read_formatted_from_sensor(sensor, only_one_ok, one_wrong)
-            raise AsyncReply()
+        lst = []
+        for name, sensor in sensors:
+            self.read_formatted_from_sensor(sensor, one_ok, one_fail, lst)
+        DeferredList(lst).addCallback(all_finished)
+        raise AsyncReply()
 
     def request_sensor_list(self, msg):
         """Request the list of sensors.
@@ -312,6 +304,8 @@ class DeviceProtocol(KatCP):
         ----------
         name : str, optional
             Name of the sensor to list (the default is to list all sensors).
+            If name starts and ends with '/' it is treated as a regular expression and
+            all sensors whose names contain the regular expression are returned.
 
         Informs
         -------
@@ -350,20 +344,19 @@ class DeviceProtocol(KatCP):
             #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
             !sensor-list ok 1
         """
-        if msg.arguments:
-            name = msg.arguments[0]
-            sensor = self.factory.sensors.get(name, None)
-            if sensor is None:
-                return Message.reply(msg.name, 'fail', 'Unknown sensor name.')
+        exact, name_filter = construct_name_filter(msg.arguments[0]
+                    if msg.arguments else None)
+        sensors = [(name, sensor) for name, sensor in
+                    sorted(self.factory.sensors.iteritems()) if name_filter(name)]
+
+        if exact and not sensors:
+            return Message.reply(msg.name, "fail", "Unknown sensor name.")
+
+        for name, sensor in sensors:
             self.send_message(Message.inform(msg.name, name, sensor.description,
                                              sensor.units, sensor.stype,
                                              *sensor.formatted_params))
-            return Message.reply(msg.name, 'ok', '1')
-        for name, sensor in sorted(self.factory.sensors.iteritems()):
-            self.send_message(Message.inform(msg.name, name, sensor.description,
-                                             sensor.units, sensor.stype,
-                                             *sensor.formatted_params))
-        return Message.reply(msg.name, "ok", len(self.factory.sensors))
+        return Message.reply(msg.name, "ok", len(sensors))
 
     def request_help(self, msg):
         """Return help on the available requests.
