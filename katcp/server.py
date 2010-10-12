@@ -14,6 +14,7 @@ import threading
 import traceback
 import logging
 import sys
+import re
 import time
 from .core import DeviceMetaclass, ExcepthookThread, Message, MessageParser, \
                    FailReply, AsyncReply
@@ -45,7 +46,7 @@ def construct_name_filter(pattern):
     if pattern is None:
         return False, lambda name: True
     if pattern.startswith('/') and pattern.endswith('/'):
-        name_re = re.compile(msg.arguments[0][1:-1])
+        name_re = re.compile(pattern[1:-1])
         return False, lambda name: name_re.search(name) is not None
     return True, lambda name: name == pattern
 

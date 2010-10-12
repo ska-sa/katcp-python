@@ -266,6 +266,43 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#log fatal", r"root fatal-msg"),
         ])
 
+    def test_sensor_list_regex(self):
+        reply, informs = self.client.blocking_request(katcp.Message.request("sensor-list", "/a.*/"))
+        self._assert_msgs_equal(informs + [reply], [
+            r"#sensor-list an.int An\_Integer. count integer -5 5",
+            r"!sensor-list ok 1",
+        ])
+
+        reply, informs = self.client.blocking_request(katcp.Message.request("sensor-list", "//"))
+        self._assert_msgs_equal(informs + [reply], [
+            r"#sensor-list an.int An\_Integer. count integer -5 5",
+            r"!sensor-list ok 1",
+        ])
+
+        reply, informs = self.client.blocking_request(katcp.Message.request("sensor-list", "/^int/"))
+        self._assert_msgs_equal(informs + [reply], [
+            r"!sensor-list ok 0",
+        ])
+
+    def test_sensor_value_regex(self):
+        reply, informs = self.client.blocking_request(katcp.Message.request("sensor-value", "/a.*/"))
+        self._assert_msgs_equal(informs + [reply], [
+            r"#sensor-value 12345000 1 an.int nominal 3",
+            r"!sensor-value ok 1",
+        ])
+
+        reply, informs = self.client.blocking_request(katcp.Message.request("sensor-value", "//"))
+        self._assert_msgs_equal(informs + [reply], [
+            r"#sensor-value 12345000 1 an.int nominal 3",
+            r"!sensor-value ok 1",
+        ])
+
+        reply, informs = self.client.blocking_request(katcp.Message.request("sensor-value", "/^int/"))
+        self._assert_msgs_equal(informs + [reply], [
+            r"!sensor-value ok 0",
+        ])
+
+
     def test_halt_request(self):
         """Test halt request."""
         self.client.request(katcp.Message.request("halt"))
