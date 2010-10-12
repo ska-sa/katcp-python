@@ -195,13 +195,31 @@ class TestDeviceServer(TestCase):
 
         return self._base_test(('sensor-value',), reply)
 
+    def test_sensor_value_regex(self):
+        def reply((informs, reply), protocol):
+            msg1 = Message.inform('sensor-value', '1000', '1', 'float_sensor',
+                                  'unknown', '0')
+            msg2 = Message.inform('sensor-value', '0', '1', 'int_sensor',
+                                  'unknown', '0')
+            self.assertEquals(informs, [msg1, msg2])
+            self.assertEquals(reply, Message.reply('sensor-value', 'ok', '2'))
+
+        return self._base_test(('sensor-value', '/_sensor/'), reply)
+
+    def test_sensor_value_regex_no_match(self):
+        def reply((informs, reply), protocol):
+            self.assertEquals(informs, [])
+            self.assertEquals(reply, Message.reply('sensor-value', 'ok', '0'))
+
+        return self._base_test(('sensor-value', '/^noname/'), reply)
+
     def test_sensor_list(self):
         def reply((informs, reply), protocol):
-            msg1 = Message.inform('sensor-list', 'int_sensor', 'descr', 'unit',
-                                  'integer', '-10', '10')
-            msg2 = Message.inform('sensor-list', 'float_sensor', 'descr',
+            msg1 = Message.inform('sensor-list', 'float_sensor', 'descr',
                                   'unit', 'float', '-3.5', '3.5')
-            self.assertEquals(informs, [msg2, msg1])
+            msg2 = Message.inform('sensor-list', 'int_sensor', 'descr', 'unit',
+                                  'integer', '-10', '10')
+            self.assertEquals(informs, [msg1, msg2])
             self.assertEquals(reply, Message.reply('sensor-list', 'ok', '2'))
 
         return self._base_test(('sensor-list',), reply)
@@ -221,6 +239,24 @@ class TestDeviceServer(TestCase):
             self.assertEquals(reply, Message.reply('sensor-list', 'ok', '1'))
 
         return self._base_test(('sensor-list', 'int_sensor'), reply)
+
+    def test_sensor_list_regex(self):
+        def reply((informs, reply), protocol):
+            msg1 = Message.inform('sensor-list', 'float_sensor', 'descr',
+                                  'unit', 'float', '-3.5', '3.5')
+            msg2 = Message.inform('sensor-list', 'int_sensor', 'descr', 'unit',
+                                  'integer', '-10', '10')
+            self.assertEquals(informs, [msg1, msg2])
+            self.assertEquals(reply, Message.reply('sensor-list', 'ok', '2'))
+
+        return self._base_test(('sensor-list', '/_sensor/'), reply)
+
+    def test_sensor_list_regex_no_match(self):
+        def reply((informs, reply), protocol):
+            self.assertEquals(informs, [])
+            self.assertEquals(reply, Message.reply('sensor-list', 'ok', '0'))
+
+        return self._base_test(('sensor-list', '/^noname/'), reply)
 
     def test_sensor_sampling_no_sensor_name(self):
         def reply((informs, reply), protocol):
