@@ -7,6 +7,17 @@
 """Root of katcp package.
    """
 
+import logging
+
+class NullHandler(logging.Handler):
+    def emit(self, record):
+        pass
+
+logging.getLogger("katcp").addHandler(NullHandler())
+
+del logging, NullHandler
+
+
 from .core import Message, KatcpSyntaxError, MessageParser, \
                   DeviceMetaclass, ExcepthookThread, FailReply, \
                   AsyncReply, KatcpDeviceError, KatcpClientError, \
