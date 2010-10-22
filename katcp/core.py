@@ -181,7 +181,7 @@ class Message(object):
             args = "(" + ", ".join(escaped_args) + ")"
         else:
             args = ""
-        return "<Message %(tp)s %(name)s %(args)s>" % locals()
+        return "<Message %s %s %s>" % (tp, name, args)
 
     def __eq__(self, other):
         if not isinstance(other, Message):
