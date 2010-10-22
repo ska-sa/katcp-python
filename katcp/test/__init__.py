@@ -8,6 +8,7 @@
    """
 
 import unittest
+from katcp.tx import test as tx
 import test_katcp
 import test_client
 import test_kattypes
@@ -25,14 +26,14 @@ except ImportError:
 def suite():
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
+    suite.addTest(tx.suite())
     suite.addTests(loader.loadTestsFromModule(test_katcp))
     suite.addTests(loader.loadTestsFromModule(test_client))
     suite.addTests(loader.loadTestsFromModule(test_kattypes))
     suite.addTests(loader.loadTestsFromModule(test_sampling))
     suite.addTests(loader.loadTestsFromModule(test_sensortree))
     suite.addTests(loader.loadTestsFromModule(test_server))
-    # disabled because we need trial
-#    suite.addTests(loader.loadTestsFromModule(test_txkatcp))
+    suite.addTests(loader.loadTestsFromModule(test_txkatcp))
     if ply is not None:
         suite.addTests(loader.loadTestsFromModule(test_katcp_bnf))
     return suite
