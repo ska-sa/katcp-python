@@ -456,10 +456,8 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
     def test_sampling(self):
         """Test sensor sampling."""
         self.client.request(katcp.Message.request("sensor-sampling", "an.int", "period", 100))
-        start = time.time()
         time.sleep(1.0)
         self.client.request(katcp.Message.request("sensor-sampling", "an.int", "none"))
-        end = time.time()
         time.sleep(0.5)
 
         msgs = self.client.messages()
