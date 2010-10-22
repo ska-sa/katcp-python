@@ -996,7 +996,7 @@ class DeviceServer(DeviceServerBase):
         for client in clients:
             try:
                 addr = ":".join(str(part) for part in client.getpeername())
-            except socket.error, e:
+            except socket.error:
                 # client may be gone, in which case just send a description
                 addr = repr(client)
             self.reply_inform(sock, Message.inform("client-list", addr), msg)
