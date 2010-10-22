@@ -33,7 +33,6 @@ def suite():
     suite.addTests(loader.loadTestsFromModule(test_sampling))
     suite.addTests(loader.loadTestsFromModule(test_sensortree))
     suite.addTests(loader.loadTestsFromModule(test_server))
-    suite.addTests(loader.loadTestsFromModule(test_txkatcp))
     if ply is not None:
         suite.addTests(loader.loadTestsFromModule(test_katcp_bnf))
     return suite
