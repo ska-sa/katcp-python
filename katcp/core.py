@@ -4,9 +4,6 @@
 # Copyright 2009 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
 
-# XXX note: this file's name prevents it from importing katcp from this
-# directory, can we rename it?
-
 """Utilities for dealing with KAT device control
 language messages.
 """
