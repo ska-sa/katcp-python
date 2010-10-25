@@ -31,12 +31,12 @@ class Master(object):
 
 class BenchmarkClient(ProcessProtocol):
     id = 0
-    
+
     def __init__(self, master):
         self.master = master
         self.id = BenchmarkClient.id
         BenchmarkClient.id += 1
-    
+
     def outReceived(self, out):
         sys.stdout.write('[%d] ' % self.id + out)
         m = re.match('AVG: (\d+), LAST: (\d+), SENSORS: (\d+)', out)
@@ -65,7 +65,7 @@ class BenchmarkServer(ProcessProtocol):
         self.options = options
         self.python  = python
         self.master  = master
-    
+
     def outReceived(self, out):
         reactor.spawnProcess(BenchmarkClient(self.master), self.python,
                              args=[self.python, 'benchtxclient.py',

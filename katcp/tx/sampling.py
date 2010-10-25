@@ -7,7 +7,7 @@ class SamplingStrategy(object):
     def __init__(self, protocol, sensor):
         self.protocol = protocol
         self.sensor = sensor
-    
+
     def run(self):
         """ Run the strategy. Override in subclasses.
         """
@@ -64,7 +64,7 @@ class EventStrategy(ObserverStrategy):
             self.status = newstatus
             self.value = newval
             self.protocol.send_sensor_status(sensor)
-            
+
 class DifferentialStrategy(ObserverStrategy):
     def __init__(self, protocol, sensor):
         ObserverStrategy.__init__(self, protocol, sensor)

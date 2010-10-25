@@ -41,7 +41,7 @@ class StateSensor(object):
     stype = 'discrete'
     formatted_params = ('unsynced', 'syncing', 'synced')
     units = ''
-    
+
     def __init__(self, name, device):
         self.device = device
         self.name = name
@@ -59,7 +59,7 @@ class DeviceHandler(ClientKatCP):
     stopping = False
 
     _conn_counter = 0
-    
+
     def __init__(self, name, host, port):
         self.name = name
         self.host = host
@@ -68,7 +68,7 @@ class DeviceHandler(ClientKatCP):
         self.requests = []
         self.sensors = {}
         self.state = self.UNSYNCED
-    
+
     def connectionMade(self):
         """ This is called after connection has been made. Introspect server
         about it's capabilities
@@ -222,7 +222,7 @@ class ProxyProtocol(DeviceProtocol):
         counter = [0] # this has to be a list or an object, thanks to
         # python lexical scoping rules (we could not write count += 1
         # in a function)
-        
+
         def device_ok((informs, reply), device):
             for inform in informs:
                 inform.arguments[2] = device.name + '.' + \
@@ -321,7 +321,7 @@ class ProxyProtocol(DeviceProtocol):
         """
         def got_halt((informs, reply)):
             self.send_message(Message.reply('halt', dev_name, 'ok'))
-        
+
         if not msg.arguments:
             return DeviceProtocol.halt(self, msg)
         try:
@@ -359,7 +359,7 @@ class ProxyProtocol(DeviceProtocol):
             d = device.send_request(req_name, *msg.arguments)
             d.addCallbacks(request_returned, request_failed)
             raise AsyncReply()
-                
+
         if not attr.startswith('request_'):
             return object.__getattribute__(self, attr)
         lst = attr.split('_', 2)
@@ -414,7 +414,7 @@ class ProxyKatCP(DeviceServer):
         self.devices = {}
         self.setup_devices()
         self.scan_called = False
-    
+
     def device_ready(self, device):
         self.ready_devices += 1
         if self.ready_devices == len(self.devices) and not self.scan_called:

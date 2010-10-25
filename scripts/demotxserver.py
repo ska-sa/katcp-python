@@ -35,7 +35,7 @@ class DemoServerFactory(DeviceServer):
     # (and hence the whole process)
 
     protocol = DemoProtocol # meaning we're using custom protocol
-    
+
     def setup_sensors(self):
         """ This is a method that overloaded provides a way to add sensors
         to the device
@@ -44,7 +44,7 @@ class DemoServerFactory(DeviceServer):
                                     "milithaum", params=[-1.0, 1.0]))
         self.add_sensor(IntSensor(Sensor.INTEGER, "int_sensor", "descr2",
                                "cows", params=[-100, 100]))
-    
+
 
 def main():
     factory = DemoServerFactory(PORT, '')

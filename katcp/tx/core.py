@@ -45,7 +45,7 @@ class KatCP(LineReceiver):
     infrastructure. Specific subclasses provide client and server parts
     (which are not shared).
     """
-    
+
     delimiter = '\n'
     MAX_LENGTH = 64*(2**20) # 64 MB should be fine
 
@@ -127,7 +127,7 @@ class KatCP(LineReceiver):
             reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, TB_LIMIT
                 ))
-            
+
             self.send_message(Message.reply(msg.name, "fail", reason))
 
     def handle_reply(self, msg):
@@ -164,20 +164,20 @@ class ServerFactory(Factory):
 
     def add_sensor(self, sensor):
         self.sensors[sensor.name] = sensor
-    
+
     def setup_sensors(self):
         pass # override to provide some sensors
 
 class DeviceProtocol(KatCP):
     VERSION = ("device_stub", 0, 1)
     BUILD_STATE = ("name", 0, 1, "")
-    
+
     SAMPLING_STRATEGIES = {'period'       : PeriodicStrategy,
                            'none'         : NoStrategy,
                            'auto'         : AutoStrategy,
                            'event'        : EventStrategy,
                            'differential' : DifferentialStrategy}
-    
+
     def __init__(self, *args, **kwds):
         KatCP.__init__(self, *args, **kwds)
         self.strategies = {}
@@ -188,7 +188,7 @@ class DeviceProtocol(KatCP):
         """
         self.send_message(Message.inform("version", *self.VERSION))
         self.send_message(Message.inform("build-state", *self.BUILD_STATE))
-        
+
 
     def connectionLost(self, _):
         self.factory.deregister_client(self.transport.client)

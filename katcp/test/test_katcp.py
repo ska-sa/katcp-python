@@ -47,7 +47,7 @@ class TestMessage(unittest.TestCase):
         class AlwaysEqual(object):
             def __eq__(self, other):
                 return True
-        
+
         msg = katcp.Message.inform("foo", "a", "b")
         assert msg == katcp.Message.inform("foo", "a", "b")
         assert msg != katcp.Message.request("foo", "a", "b")

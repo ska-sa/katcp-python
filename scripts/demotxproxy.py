@@ -35,10 +35,10 @@ class DemoProxyProtocol(ProxyProtocol):
 class DemoProxy(ProxyKatCP):
     protocol = DemoProxyProtocol
     production = True
-    
+
     def devices_scan_complete(self):
         print "Devices successfully scanned"
-    
+
     def setup_devices(self):
         self.add_device(DemoDeviceHandler('ant1', 'localhost', 1221))
         self.add_device(DemoDeviceHandler('ant2', 'localhost', 1223))
@@ -48,7 +48,7 @@ PORT = 1236 # or 0
 class KatLaunchProtocol(ProcessProtocol):
     def __init__(self, name):
         self.name = name
-    
+
     def connectionMade(self):
         pass
 

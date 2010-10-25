@@ -20,7 +20,7 @@ class ExampleProtocol(DeviceProtocol):
 
 class ExampleDevice(DeviceServer):
     protocol = ExampleProtocol
-    
+
     def setup_sensors(self):
         sensor = Sensor(int, "sensor1", "Test sensor 1", "count",
                         [0,10])
@@ -34,12 +34,12 @@ class ExampleDevice(DeviceServer):
 class ExampleProxy(ProxyKatCP):
     on_device_ready = None
     CONN_DELAY_TIMEOUT = 0.05
-    
+
     def __init__(self, port, finish):
         self.connect_to = port
         ProxyKatCP.__init__(self, 0, 'localhost')
         self.finish = finish
-    
+
     def setup_devices(self):
         dev2 = DeviceHandler('device2', 'localhost', 6)
         dev2.connectionMade = lambda *args: None
@@ -56,7 +56,7 @@ class ExampleProxy(ProxyKatCP):
             self.on_device_ready.callback(device)
             self.on_device_ready = None
         ProxyKatCP.device_ready(self, device)
-        
+
 class TestProxyBase(TestCase):
     def _base_test(self, request, callback):
         def devices_scan_complete(_):
@@ -94,7 +94,7 @@ class TestProxyBase(TestCase):
         d.addCallback(devices_scan_complete)
         self.finish = finish
         return finish
-    
+
     def test_simplest_proxy(self):
         def callback(_):
             devices = [i for i in self.proxy.devices.values() if
@@ -109,7 +109,7 @@ class TestProxyBase(TestCase):
     def test_forwarding_commands(self):
         def callback((informs, reply)):
             self.assertEquals(reply, Message.reply("device-req", "ok", "3"))
-        
+
         return self._base_test(('device-req',), callback)
 
     def test_forwarding_unsynced(self):
@@ -125,7 +125,7 @@ class TestProxyBase(TestCase):
                     [Message.inform('sensor-value', '1000', '1', 'device.sensor1',
                                     'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
-                                                       
+
         return self._base_test(('sensor-value', 'device.sensor1'), callback)
 
     def test_all_forwarded_sensors(self):
@@ -153,21 +153,21 @@ class TestProxyBase(TestCase):
         def callback((informs, reply)):
             assert len(informs) == 2
             self.assertEquals(reply, Message.reply("device-list", "ok", "2"))
-        
+
         return self._base_test(('device-list',), callback)
 
     def test_state_sensor(self):
         def callback((informs, reply)):
             assert len(informs) == 1
             assert informs[0].arguments[3:] == ['ok', 'synced']
-        
+
         return self._base_test(('sensor-value', 'device-state',), callback)
 
     def test_sensor_list(self):
         def callback((informs, reply)):
             assert len(informs) == 4
             assert reply == Message.reply('sensor-list', 'ok', '4')
-        
+
         return self._base_test(('sensor-list',), callback)
 
     def test_sensor_list_regex(self):
@@ -184,12 +184,12 @@ class TestProxyBase(TestCase):
             self.proxy.stop()
             self.client.transport.loseConnection()
             self.finish.callback(None)
-        
+
         def ready(device):
             assert device.state == device.SYNCED
             # check if it's working
             self.client.send_request('device-watchdog').addCallback(works)
-        
+
         def failed((informs, reply)):
             self.assertEquals((reply.mtype, reply.name, reply.arguments[0]),
                 (Message.REPLY, 'device-watchdog', 'fail'))
@@ -198,21 +198,21 @@ class TestProxyBase(TestCase):
                 'Device not synced',
                 ))
             self.proxy.on_device_ready = Deferred().addCallback(ready)
-        
+
         def callback(_):
             device = self.proxy.devices['device']
             assert device.state == DeviceHandler.SYNCED
             self.example_device.clients.values()[0].transport.loseConnection()
             self.client.send_request('device-watchdog').addCallback(failed)
             return True
-        
+
         return self._base_test(('watchdog',), callback)
 
     def test_halt(self):
         def callback((informs, reply)):
             self.assertEquals(reply, Message.reply('halt', 'device', 'ok'))
             assert self.proxy.devices.keys() == ['device2']
-        
+
         return self._base_test(('halt', 'device'), callback)
 
 
@@ -221,7 +221,7 @@ class RogueSensor(object):
     units = 'some'
     stype = 'integer'
     formatted_params = ()
-    
+
     def __init__(self, name, device):
         self.device = device
         self.name = name
@@ -237,7 +237,7 @@ class RogueDevice(DeviceServer):
 
 class HandlingProxy(ExampleProxy):
     on_device_scan_failed = None
-    
+
     def setup_devices(self):
         self.add_device(DeviceHandler('device', 'localhost',
                                       self.connect_to))
@@ -268,7 +268,7 @@ class TestReconnect(TestCase):
         def connected(protocol):
             self.client = protocol
             protocol.send_request('sensor-value', 'device.rogue').addCallbacks(worked)
-        
+
         d = Deferred()
         self.example_device = RogueDevice(0, '')
         self.port = self.example_device.start()
@@ -282,7 +282,7 @@ class TestReconnect(TestCase):
         # port number is of tcp itself, should not have a server
         def failed(_):
             finish.callback(None)
-        
+
         d = Deferred().addCallback(failed)
         self.proxy = HandlingProxy(6, None)
         self.proxy.on_device_scan_failed = d

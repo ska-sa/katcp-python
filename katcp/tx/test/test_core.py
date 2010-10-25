@@ -19,9 +19,9 @@ class TestKatCP(TestCase):
 
     Also note - don't forget to open a log file:
     tail -F --max-unchanged-stats=0 _trial_temp/test.log
-    
+
     """
-    
+
     def test_server_infrastructure(self):
         def connected(protocol):
             protocol.send_request('halt')
@@ -44,7 +44,7 @@ class TestKatCP(TestCase):
         def received_help((msgs, reply_msg), protocol):
             assert len(msgs) == 9
             protocol.send_request('halt')
-            
+
         def connected(protocol):
             d = protocol.send_request('help')
             d.addCallback(received_help, protocol)
@@ -56,7 +56,7 @@ class TestKatCP(TestCase):
         def check(protocol):
             self.assertEquals(len(protocol.status_updates), 30)
             protocol.send_request('halt')
-        
+
         def connected(protocol):
             protocol.send_request('sensor-sampling', 'int_sensor', 'period', 10)
             reactor.callLater(0.3, check, protocol)
@@ -74,7 +74,7 @@ class TestProtocol(DeviceProtocol):
 
 class TestFactory(DeviceServer):
     protocol = TestProtocol
-    
+
     def setup_sensors(self):
         sensor = Sensor(int, 'int_sensor', 'descr', 'unit',
                         params=[-10, 10])
@@ -104,7 +104,7 @@ class TestDeviceServer(TestCase):
             res = callback(arg, protocol)
             if not res:
                 protocol.send_request('halt').addCallback(self._end_test)
-        
+
         def connected(protocol):
             self.client = protocol
             d = protocol.send_request(*req)
@@ -118,14 +118,14 @@ class TestDeviceServer(TestCase):
         d.addCallback(connected)
         self.finish = Deferred()
         return self.finish
-    
+
     def test_help(self):
         # check how many we really want
         count = 0
         for i in dir(DeviceProtocol):
             if i.startswith('request_'):
                 count += 1
-        
+
         def help((informs, reply), protocol):
             self.assertEquals(len(informs), count)
             assert 'request' not in informs[0].arguments[0]
@@ -139,14 +139,14 @@ class TestDeviceServer(TestCase):
             expected = DeviceProtocol.request_sensor_list.__doc__.strip()
             assert informs[0].arguments[1] == expected
             self.assertEquals(reply, Message.reply('help', 'ok', '1'))
-        
+
         return self._base_test(('help', 'sensor-list'), reply)
 
     def test_help_arg_no_meth(self):
         def reply((informs, reply), protocol):
             self.assertEquals(reply, Message.reply('help', 'fail',
                                                    'Unknown request method.'))
-        
+
         return self._base_test(('help', 'xxxxxxxxxxxxx'), reply)
 
     def test_unknown_request(self):
@@ -156,7 +156,7 @@ class TestDeviceServer(TestCase):
             assert reply.arguments[1] == 'Unknown request.'
 
         return self._base_test(('unknown-request',), got_unknown)
-        
+
     def test_run_basic_sensors(self):
         def sensor_value_replied((informs, reply), protocol):
             self.assertEquals(informs, [Message.inform('sensor-value', '0', '1',
@@ -221,7 +221,7 @@ class TestDeviceServer(TestCase):
         def reply((informs, reply), protocol):
             self.assertEquals(reply, Message.reply('sensor-list', 'fail',
                                                    'Unknown sensor name.'))
-        
+
         return self._base_test(('sensor-list', 'dummy'), reply)
 
     def test_sensor_list_arg(self):
@@ -290,7 +290,7 @@ class TestDeviceServer(TestCase):
 
         def send_halt(_, protocol):
             protocol.send_request('halt').addCallback(self._end_test)
-        
+
         def reply((informs, reply), protocol):
             self.assertEquals(informs, [])
             self.assertEquals(reply, Message.reply('sensor-sampling', 'ok',
@@ -298,7 +298,7 @@ class TestDeviceServer(TestCase):
                                                    '10'))
             reactor.callLater(0.3, called_later, protocol)
             return True
-        
+
         return self._base_test(('sensor-sampling', 'int_sensor', 'period', '10'),
                               reply)
 
@@ -309,7 +309,7 @@ class TestDeviceServer(TestCase):
                                                        '1', 'int_sensor',
                                                        'nominal', '5')])
             protocol.send_request('halt').addCallback(self._end_test)
-        
+
         def more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
             self.assertEquals(informs, [Message.inform('sensor-value', '0',
@@ -325,13 +325,13 @@ class TestDeviceServer(TestCase):
             self.assertEquals(reply, Message.reply('sensor-sampling', 'ok',
                                                    'int_sensor', 'auto'))
             self.assertEquals(len(self.client.status_updates), 0)
-            
+
             self.factory.sensors['int_sensor'].set_value(3)
             self.factory.sensors['int_sensor']._timestamp = 0
             protocol.send_request('sensor-value',
                                   'int_sensor').addCallback(more, protocol)
             return True
-        
+
         return self._base_test(('sensor-sampling', 'int_sensor', 'auto'), reply)
 
 
@@ -342,7 +342,7 @@ class TestDeviceServer(TestCase):
                                                        '1', 'int_sensor',
                                                        'nominal', '3')])
             protocol.send_request('halt').addCallback(self._end_test)
-        
+
         def more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
             self.assertEquals(informs, [Message.inform('sensor-value', '0',
@@ -358,13 +358,13 @@ class TestDeviceServer(TestCase):
             self.assertEquals(reply, Message.reply('sensor-sampling', 'ok',
                                                    'int_sensor', 'event'))
             self.assertEquals(len(self.client.status_updates), 0)
-            
+
             self.factory.sensors['int_sensor'].set_value(3)
             self.factory.sensors['int_sensor']._timestamp = 0
             protocol.send_request('sensor-value',
                                   'int_sensor').addCallback(more, protocol)
             return True
-        
+
         return self._base_test(('sensor-sampling', 'int_sensor', 'event'), reply)
 
     def test_sensor_sampling_differential(self):
@@ -401,13 +401,13 @@ class TestDeviceServer(TestCase):
                                                    'int_sensor',
                                                    'differential', '3'))
             self.assertEquals(len(self.client.status_updates), 0)
-            
+
             self.factory.sensors['int_sensor'].set_value(2)
             self.factory.sensors['int_sensor']._timestamp = 0
             protocol.send_request('sensor-value',
                                   'int_sensor').addCallback(first, protocol)
             return True
-        
+
         return self._base_test(('sensor-sampling', 'int_sensor',
                                'differential', '3'), reply)
 
@@ -415,7 +415,7 @@ class TestDeviceServer(TestCase):
         class FaultyProtocol(DeviceProtocol):
             def request_foobar(self, msg):
                 raise KeyError
-        
+
         class FaultyFactory(TestFactory):
             protocol = FaultyProtocol
 
@@ -430,14 +430,14 @@ class TestDeviceServer(TestCase):
     def test_watchdog(self):
         def reply((informs, reply), protocol):
             self.assertEquals(reply, Message.reply('watchdog', 'ok'))
-        
+
         return self._base_test(('watchdog',), reply)
 
     def test_fail(self):
         class FaultyProtocol(DeviceProtocol):
             def request_foobar(self, msg):
                 raise FailReply("failed")
-        
+
         class FaultyFactory(TestFactory):
             protocol = FaultyProtocol
 
@@ -471,7 +471,7 @@ class TestDeviceServer(TestCase):
             self.assertEquals(reply, Message.reply('client-list', 'ok', '1'))
             self.factory.stop()
             finish.callback(None)
-        
+
         def connected(values):
             l = []
             protocols = []
@@ -481,7 +481,7 @@ class TestDeviceServer(TestCase):
                 protocols.append(value)
             DeferredList(l).addCallback(got_client_list,
                                         protocols)
-        
+
         self.factory = TestFactory(0, '127.0.0.1')
         self.factory.start()
         cc = ClientCreator(reactor, TestClientKatCP)
@@ -502,10 +502,10 @@ class TestDeviceServer(TestCase):
                                                   "a warning"))
             self.factory.stop()
             finish.callback(None)
-        
+
         def connected(protocol):
             self.factory.log.warn('a warning', timestamp=0)
-        
+
         self.factory = TestFactory(0, '127.0.0.1')
         self.factory.start()
         cc = ClientCreator(reactor, TestProtocol)
@@ -522,12 +522,12 @@ class TestDeviceServer(TestCase):
             #assert failure.type is ConnectionDone
             self.factory.stop()
             self.finish.callback(None)
-        
+
         def callback((informs, reply), protocol):
             self.factory.clients.values()[0].transport.loseConnection()
             protocol.send_request('watchdog').addErrback(failed)
             return True
-        
+
         return self._base_test(('watchdog',), callback)
 
     def test_log_level(self):
@@ -535,7 +535,7 @@ class TestDeviceServer(TestCase):
             def __init__(self, *args, **kwds):
                 ClientKatCP.__init__(self, *args, **kwds)
                 self.msgs = []
-            
+
             def inform_log(self, msg):
                 self.msgs.append(msg)
 
@@ -558,7 +558,7 @@ class TestDeviceServer(TestCase):
                                                              "foo")])
             self.factory.stop()
             self.finish.callback(None)
-            
+
         return self._base_test(('log-level',), log_level1,
                               client_cls=TestProtocol)
 

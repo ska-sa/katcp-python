@@ -23,7 +23,7 @@ class BenchmarkProtocol(DeviceProtocol):
 
 class BenchmarkServer(DeviceServer):
     protocol = BenchmarkProtocol
-    
+
     def setup_sensors(self):
         pass
 
