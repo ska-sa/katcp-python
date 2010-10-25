@@ -215,8 +215,8 @@ class BooleanSensorTree(GenericSensorTree):
     --------
     >>> from katcp import Sensor, BooleanSensorTree
     >>> tree = BooleanSensorTree()
-    >>> sensor1 = Sensor(Sensor.BOOLEAN, ...)
-    >>> sensor2 = Sensor(Sensor.BOOLEAN, ...)
+    >>> sensor1 = Sensor(Sensor.BOOLEAN, "sensor1", "First sensor", "")
+    >>> sensor2 = Sensor(Sensor.BOOLEAN, "sensor2", "Second sensor", "")
     >>> tree.add(sensor1, sensor2)
     >>> sensor2.set_value(True)
     >>> sensor1.value()
@@ -225,7 +225,6 @@ class BooleanSensorTree(GenericSensorTree):
     >>> tree.remove(sensor1, sensor2)
     >>> sensor1.value()
     """
-    # TODO: check example above
 
     def __init__(self):
         super(BooleanSensorTree, self).__init__()
@@ -298,14 +297,17 @@ class AggregateSensorTree(GenericSensorTree):
 
     Examples
     --------
+
+    Example where sensors are available when rules are added::
+
     >>> from katcp import Sensor, AggregateSensorTree
     >>> tree = AggregateSensorTree()
     >>> def add_rule(parent, children):
     >>>     parent.set_value(sum(child.value() for child in children))
-    >>> sensor1 = Sensor(Sensor.INTEGER, ...)
-    >>> sensor2 = Sensor(Sensor.INTEGER, ...)
-    >>> agg = Sensor(Sensor.INTEGER, ...)
-    >>> tree.add(add_rule, agg, (sensor1, sensor2))
+    >>> sensor1 = Sensor(Sensor.INTEGER, "sensor1", "First sensor", "", [-1000, 1000])
+    >>> sensor2 = Sensor(Sensor.INTEGER, "sensor2", "Second sensor", "", [-1000, 1000])
+    >>> agg = Sensor(Sensor.INTEGER, "sum", "The total", "", [-2000, 2000])
+    >>> tree.add(agg, add_rule, (sensor1, sensor2))
     >>> agg.value()
     >>> sensor1.set_value(1)
     >>> agg.value()
@@ -313,11 +315,25 @@ class AggregateSensorTree(GenericSensorTree):
     >>> agg.value()
     >>> tree.remove(agg)
     >>> agg.value()
+
+    Example where rules need to be added before dependent sensors are available::
+
+    >>> from katcp import Sensor, AggregateSensorTree
+    >>> tree = AggregateSensorTree()
+    >>> def add_rule(parent, children):
+    >>>     parent.set_value(sum(child.value() for child in children))
+    >>> agg = Sensor(Sensor.INTEGER, "sum", "The total", "", [-2000, 2000])
+    >>> tree.add_delayed(agg, add_rule, ("sensor1", "sensor2"))
+    >>> agg.value()
+    >>> sensor1 = Sensor(Sensor.INTEGER, "sensor1", "First sensor", "", [-1000, 1000])
+    >>> sensor1.set_value(5)
+    >>> tree.register_sensor(sensor1)
+    >>> agg.value() # still 0
+    >>> sensor2 = Sensor(Sensor.INTEGER, "sensor2", "Second sensor", "", [-1000, 1000])
+    >>> sensor2.set_value(3)
+    >>> tree.register_sensor(sensor2)
+    >>> agg.value() # now 8
     """
-    # TODO: check example
-    # TODO: add_delayed example
-    # TODO: perhaps parent sensors should be registered in known sensors
-    #       automatically?
 
     def __init__(self):
         super(AggregateSensorTree, self).__init__()
