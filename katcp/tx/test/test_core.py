@@ -1,23 +1,16 @@
 
-from katcp.tx.core import (ClientKatCP, DeviceServer, DeviceProtocol,
-                              run_client)
+from katcp.tx.core import ClientKatCP, DeviceServer, DeviceProtocol
 from katcp import Message, Sensor
-from katcp.tx.test.testserver import (run_subprocess, PORT, IntSensor,
-     FloatSensor)
+from katcp.tx.test.testserver import run_subprocess
 from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, DeferredList
-from twisted.internet.protocol import Factory
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.base import DelayedCall
-from twisted.internet.error import ConnectionDone
 from katcp.core import FailReply
 
 DelayedCall.debug = True
 Deferred.debug = True
-
-import time
-import sys, os, re
 
 timeout = 5
 
