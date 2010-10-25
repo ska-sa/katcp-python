@@ -157,4 +157,5 @@ class TestReactor(unittest.TestCase):
         expected = int(round((end-start) / 0.01))
         emax, emin = expected + 1, expected - 1
 
-        self.assertTrue(emin <= len(self.calls) <= emax, "Expect %d to %d informs, got:\n  %s" % (emin, emax, "\n  ".join(str(x) for x in self.calls)))
+        self.assertTrue(emin <= len(self.calls) <= emax, "Expect %d to %d informs, got:\n  %s"
+            % (emin, emax, "\n  ".join(str(x) for x in self.calls)))
