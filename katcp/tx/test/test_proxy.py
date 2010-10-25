@@ -197,7 +197,6 @@ class TestProxyBase(TestCase):
                 'Connection was closed cleanly.',
                 'Device not synced',
                 ))
-            d = Deferred()
             self.proxy.on_device_ready = Deferred().addCallback(ready)
         
         def callback(_):
