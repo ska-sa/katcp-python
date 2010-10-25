@@ -191,8 +191,12 @@ class TestProxyBase(TestCase):
             self.client.send_request('device-watchdog').addCallback(works)
         
         def failed((informs, reply)):
-            self.assertEquals(reply, Message.reply('device-watchdog', 'fail',
-                                                   'Connection was closed cleanly.'))
+            self.assertEquals((reply.mtype, reply.name, reply.arguments[0]),
+                (Message.REPLY, 'device-watchdog', 'fail'))
+            self.assertTrue(reply.arguments[1] in (
+                'Connection was closed cleanly.',
+                'Device not synced',
+                ))
             d = Deferred()
             self.proxy.on_device_ready = Deferred().addCallback(ready)
         
