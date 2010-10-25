@@ -9,8 +9,8 @@
 
 import unittest
 from katcp.tx import test as tx
-import test_katcp
 import test_client
+import test_core
 import test_kattypes
 import test_sampling
 import test_sensortree
@@ -27,8 +27,8 @@ def suite():
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     suite.addTest(tx.suite())
-    suite.addTests(loader.loadTestsFromModule(test_katcp))
     suite.addTests(loader.loadTestsFromModule(test_client))
+    suite.addTests(loader.loadTestsFromModule(test_core))
     suite.addTests(loader.loadTestsFromModule(test_kattypes))
     suite.addTests(loader.loadTestsFromModule(test_sampling))
     suite.addTests(loader.loadTestsFromModule(test_sensortree))
