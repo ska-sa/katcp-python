@@ -1,3 +1,51 @@
+22 Oct 2010:
+ * Add a NullHandler for katcp library logging as recommended by Python logging 
+   documentation.
+
+12 Oct 2010:
+ * Add regular expression pattern support to ?sensor-list and ?sensor-value
+   requests.
+
+8 Oct 2010:
+ * Add .wait_connected() method to KATCP client.
+
+4 Oct 2010:
+ * Start of KATCP benchmarking effort.
+
+28 Sep 2010:
+ * Refactor Twisted KATCP into katcp.tx sub-package.
+ * Update and flesh out example KATCP server.
+
+27 Sep 2010:
+ * Implementation of Twisted KATCP proxy. A proxy mutliplexes queries and
+   sensor sampling from a single client to multiple KATCP servers.
+
+17 Sep 2010:
+ * Completion of Twisted KATCP DeviceServer.
+
+16 Aug 2010:
+ * Implementation of __eq__ and __ne__ for katcp.Message.
+
+30 Jul 2010
+ * katcp.katcp renamed to katcp.core to avoid module name clashing with
+   package name.
+ * Allow Python types to be used in addition to katcp.Sensor object types
+   when constructing sensors.
+
+27 Jul 2010
+ * Custom __repr__ for katcp.Message added.
+
+22 Jul 2010
+ * Initial sensor tree implementation. A sensor tree is a directed acyclic
+   graph of sensor dependencies. The tree triggers updates of dependent
+   sensors when dependee sensors change.
+
+15 Jul 2010
+ * Start of work on Twisted katcp client and server implementations.
+
+13 Jul 2010
+ * Major rework of katcp.testutils.
+
 11 Mar 2010
  * Add check to client to bail out of re-trying sends if the client
    has disconnected.
