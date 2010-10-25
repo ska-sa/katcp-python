@@ -19,9 +19,48 @@ class BaseTreeTest(unittest.TestCase):
         return sensors
 
 
+class RecordingTree(katcp.GenericSensorTree):
+
+    def __init__(self):
+        super(RecordingTree, self).__init__()
+        self.calls = []
+
+    def recalculate(self, parent, updates):
+        self.calls.append((parent, updates))
+
+
 class TestGenericSensorTree(BaseTreeTest):
-    # TODO: write tests
-    pass
+
+    def setUp(self):
+        self.tree = RecordingTree()
+        self.calls = self.tree.calls
+        self.sensor1 = katcp.Sensor(int, "sensor1", "First sensor", "", [0, 100])
+        self.sensor2 = katcp.Sensor(int, "sensor2", "Second sensor", "", [0, 100])
+        self.sensor3 = katcp.Sensor(int, "sensor3", "Third sensor", "", [0, 100])
+
+    def test_add_links(self):
+        self.tree.add_links(self.sensor1, [self.sensor2])
+        self.assertEqual(self.calls, [(self.sensor1, [self.sensor2])])
+        self.assertEqual(self.sensor1._observers, set([self.tree]))
+        self.assertEqual(self.sensor2._observers, set([self.tree]))
+        self.assertEqual(self.tree.children(self.sensor1), set([self.sensor2]))
+        self.assertEqual(self.tree.children(self.sensor2), set())
+        self.assertEqual(self.tree.parents(self.sensor1), set())
+        self.assertEqual(self.tree.parents(self.sensor2), set([self.sensor1]))
+
+    def test_remove_links(self):
+        self.tree.add_links(self.sensor1, [self.sensor2])
+        self.tree.remove_links(self.sensor1, [self.sensor2])
+        self.assertEqual(self.calls, [
+            (self.sensor1, [self.sensor2]),
+            (self.sensor1, [self.sensor2]),
+        ])
+        self.assertEqual(self.sensor1._observers, set())
+        self.assertEqual(self.sensor2._observers, set())
+        self.assertRaises(ValueError, self.tree.children, self.sensor1)
+        self.assertRaises(ValueError, self.tree.children, self.sensor2)
+        self.assertRaises(ValueError, self.tree.parents, self.sensor1)
+        self.assertRaises(ValueError, self.tree.parents, self.sensor2)
 
 
 class TestBooleanSensorTree(BaseTreeTest):
