@@ -87,10 +87,10 @@ def run_subprocess(connected, ClientClass):
 
     dname = os.path.dirname
     protocol = ServerSubprocess(server_running, server_ended, failed_to_run)
-    process = reactor.spawnProcess(protocol, sys.executable,
-                                   [sys.executable, __file__], {},
-                                   dname(dname(dname(dname(__file__)))),
-                                   usePTY=True)
+    reactor.spawnProcess(protocol, sys.executable,
+                               [sys.executable, __file__], {},
+                               dname(dname(dname(dname(__file__)))),
+                               usePTY=True)
     d = Deferred()
     d.addErrback(failed_to_run)
     return d, protocol
