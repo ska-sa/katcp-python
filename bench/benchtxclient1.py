@@ -1,5 +1,6 @@
 
-""" This is a benchmark client, which cooperate with demotxserver
+""" This is a benchmark client for scenario 1, which cooperate with demotxserver
+of demoserver
 """
 
 import time
