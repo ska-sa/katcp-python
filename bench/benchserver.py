@@ -1,8 +1,16 @@
 
+import sys
 from katcp import DeviceServer, Message, Sensor
 from util import standard_parser
 
 class BenchmarkServer(DeviceServer):
+    # an ugly hack
+    def _bind(self, *args):
+        res = DeviceServer._bind(self, *args)
+        print "RUNNING"
+        sys.stdout.flush()
+        return res
+    
     def setup_sensors(self):
         pass
 
