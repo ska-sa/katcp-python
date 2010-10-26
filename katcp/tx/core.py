@@ -90,6 +90,9 @@ class KatCP(LineReceiver):
     def inform_disconnect(self, args):
         pass # unnecessary, we have a callback on loseConnection
 
+    def inform_client_connected(self, args):
+        pass # ignored by default
+
     def handle_inform(self, msg):
         # if we have a request being processed, store all the informs
         # in a list of stuff to process
