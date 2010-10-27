@@ -105,7 +105,8 @@ class BenchmarkServer(ProcessProtocol):
             reactor.spawnProcess(BenchmarkClient(self.master),
                                  self.python,
                                  args=[self.python, 'benchtxclient1.py',
-                                       '--port', self.port])
+                                       '--port', self.port],
+                                 env=os.environ)
 
     def processEnded(self, status):
         self.master.notify_server_lost()
