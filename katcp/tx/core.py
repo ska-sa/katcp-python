@@ -476,10 +476,12 @@ class DeviceProtocol(KatCP):
                 return Message.reply(msg.name, "fail", "Unknown strategy name.")
         # stop the previous strategy
         try:
-            self.strategies[sensor.name].cancel()
+            strategy = self.strategies[sensor.name].cancel()
         except KeyError:
             pass
+        self.transport.unregisterProducer()
         strategy = StrategyClass(self, sensor)
+        self.transport.registerProducer(strategy, True)
         strategy.run(*msg.arguments[2:])
         self.strategies[sensor.name] = strategy
         if len(msg.arguments) == 1:

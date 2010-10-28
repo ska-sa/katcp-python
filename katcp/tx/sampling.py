@@ -1,9 +1,15 @@
 
+from zope.interface import implements
+
 from twisted.internet import reactor
+from twisted.internet.interfaces import IConsumer, IPushProducer
 
 class SamplingStrategy(object):
     """ Base class for all sampling strategies
     """
+    implements(IPushProducer)
+    producing = True
+    
     def __init__(self, protocol, sensor):
         self.protocol = protocol
         self.sensor = sensor
@@ -18,11 +24,21 @@ class SamplingStrategy(object):
         """
         pass
 
+    # IPushProducer interface
+
+    def pauseProducing(self):
+        self.producing = False
+    stopProducing = pauseProducing
+
+    def resumeProducing(self):
+        self.producing = True
+
 class PeriodicStrategy(SamplingStrategy):
     next = None
 
     def _run_once(self):
-        self.protocol.send_sensor_status(self.sensor)
+        if self.producing:
+            self.protocol.send_sensor_status(self.sensor)
         self.next = reactor.callLater(self.period, self._run_once)
 
     def cancel(self):
@@ -49,7 +65,8 @@ class ObserverStrategy(SamplingStrategy):
 
 class AutoStrategy(ObserverStrategy):
     def update(self, sensor):
-        self.protocol.send_sensor_status(sensor)
+        if self.producing:
+            self.protocol.send_sensor_status(sensor)
 
 class EventStrategy(ObserverStrategy):
     def __init__(self, protocol, sensor):
@@ -61,9 +78,10 @@ class EventStrategy(ObserverStrategy):
         newval = sensor.value()
         newstatus = sensor._status
         if self.status != newstatus or self.value != newval:
-            self.status = newstatus
-            self.value = newval
-            self.protocol.send_sensor_status(sensor)
+            if self.producing:
+                self.status = newstatus
+                self.value = newval
+                self.protocol.send_sensor_status(sensor)
 
 class DifferentialStrategy(ObserverStrategy):
     def __init__(self, protocol, sensor):
@@ -80,6 +98,7 @@ class DifferentialStrategy(ObserverStrategy):
         newstatus = sensor._status
         if (self.status != newstatus or
             abs(self.value - newval) > self.threshold):
-            self.protocol.send_sensor_status(sensor)
-            self.status = newstatus
-            self.value = newval
+            if self.producing:
+                self.protocol.send_sensor_status(sensor)
+                self.status = newstatus
+                self.value = newval
