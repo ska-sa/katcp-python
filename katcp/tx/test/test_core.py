@@ -9,8 +9,8 @@ from twisted.internet.protocol import ClientCreator
 from twisted.internet.base import DelayedCall
 from katcp.core import FailReply
 
-DelayedCall.debug = True
-Deferred.debug = True
+#DelayedCall.debug = True
+#Deferred.debug = True
 
 timeout = 5
 
