@@ -7,11 +7,10 @@
 """Tests for the katcp.tx package.
    """
 
-import unittest
-import test_core
-import test_proxy
-
 def suite():
+    import unittest
+    import test_core
+    import test_proxy
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     suite.addTests(loader.loadTestsFromModule(test_core))
