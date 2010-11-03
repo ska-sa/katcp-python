@@ -32,9 +32,9 @@ def compute_all(all):
             df = math.sqrt(sum([(s - i)*(s - i) for i in v]) / (len(v) - 1))
             res[clients - 1] = s
             errors[clients - 1] = df
-        left = [i + ii*0.25 for i in range(1, max_clients + 1)]
+        left = [i + ii*0.2 for i in range(1, max_clients + 1)]
         pylab.bar(left, res, yerr=errors, color=colors[ii],
-                  width=0.25)
+                  width=0.2)
     pylab.legend(["%s, %s" % (result.lib, result.interpreter)
                   for result in all])
     pylab.show()

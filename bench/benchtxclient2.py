@@ -23,6 +23,7 @@ class DemoClient(ClientKatCP):
 
     def periodic_check(self):
         print self.counter
+        sys.stdout.flush()
         reactor.callLater(TIMEOUT, self.periodic_check)
         self.counter = 0
 

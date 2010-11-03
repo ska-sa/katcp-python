@@ -9,7 +9,7 @@ import re, os, sys, signal
 BASE_PORT = 1235
 
 class Master(object):
-    def __init__(self, no_of_clients, python, servname):
+    def __init__(self, no_of_clients, python, servname, scenario):
         self.current_iteration = 1
         self.python = python
         self.servname = servname
@@ -19,6 +19,7 @@ class Master(object):
         self.totals = []
         self.current_runs = 0
         self.max_current_runs = 5
+        self.scenario = scenario
 
     def notify_server_lost(self):
         if self.current_iteration != self.max_clients:
@@ -67,6 +68,9 @@ class BenchmarkClient(ProcessProtocol):
         BenchmarkClient.id += 1
 
     def outReceived(self, out):
+        getattr(self, 'process_output_' + self.master.scenario)(out)
+
+    def process_output_1(self, out):
         sys.stdout.write('[%d] ' % self.id + out)
         m = re.match('AVG: (\d+), LAST: (\d+), SENSORS: (\d+)', out)
         self.info = int(m.group(1))
@@ -78,6 +82,20 @@ class BenchmarkClient(ProcessProtocol):
                     break
             else:
                 self.master.stop()
+
+    def process_output_2(self, out):
+        val = int(out.strip())
+        self.sensors.append(val)
+        sys.stdout.write('[%d] ' % self.id + out)
+        if len(self.sensors) > 30:
+            self.sensors.pop(0)
+            diff = (max(self.sensors) - min(self.sensors))
+            avg = float(sum(self.sensors))/len(self.sensors)
+            self.info = avg
+            if diff < 0.15*avg:
+                self.master.stop()
+            else:
+                print diff/avg
 
     def errReceived(self, err):
         sys.stdout.write("ERR: " + err)
@@ -97,16 +115,26 @@ class BenchmarkServer(ProcessProtocol):
         self.port          = port
 
     def outReceived(self, out):
-        reactor.spawnProcess(BenchmarkClient(self.master), self.python,
-                             args=[self.python, 'benchtxclient1.py',
-                                   '--port', self.port, '--allow-sensor-creation'],
-                             env=os.environ)
-        for i in range(self.no_of_clients - 1):
-            reactor.spawnProcess(BenchmarkClient(self.master),
-                                 self.python,
-                                 args=[self.python, 'benchtxclient1.py',
-                                       '--port', self.port],
+        if self.master.scenario == '1':
+            reactor.spawnProcess(BenchmarkClient(self.master), self.python,
+                                 args=[self.python, 'benchtxclient1.py'
+                                       '--port', self.port, '--allow-sensor-creation'],
                                  env=os.environ)
+            for i in range(self.no_of_clients - 1):
+                reactor.spawnProcess(BenchmarkClient(self.master),
+                                     self.python,
+                                     args=[self.python, 'benchtxclient1.py',
+                                           '--port', self.port],
+                                     env=os.environ)
+        elif self.master.scenario == '2':
+            for i in range(self.no_of_clients):
+                reactor.spawnProcess(BenchmarkClient(self.master),
+                                     self.python,
+                                     args=[self.python, 'benchtxclient2.py',
+                                           '--port', self.port],
+                                     env=os.environ)
+        else:
+            raise Exception("Unknown scenario %s" % self.master.scenario)
 
     def processEnded(self, status):
         self.master.notify_server_lost()
@@ -121,19 +149,14 @@ def main(python=sys.executable):
     parser.add_option('--tx', dest='twisted',
                       default=False, action='store_true',
                       help='use twisted server')
-    parser.add_option('--scenarios', default='all',
-                      help=('coma separated list of scenarios, supported'
-                            ' values are 1, 2 or all (default)'))
+    parser.add_option('--scenario', default='1',
+                      help=('scenario number, 1 or 2'))
     options, args = parser.parse_args()
-    if options.scenarios == 'all':
-        options.scenarios = [1, 2]
-    else:
-        options.scenarios = [int(i) for i in options.scenarios.split(',')]
     if options.twisted:
         servname = 'benchtxserver.py'
     else:
         servname = 'benchserver.py'
-    master = Master(options.no_of_clients, python, servname)
+    master = Master(options.no_of_clients, python, servname, options.scenario)
     master.run()
     reactor.run()
 
