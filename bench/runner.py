@@ -87,12 +87,12 @@ class BenchmarkClient(ProcessProtocol):
         val = int(out.strip())
         self.sensors.append(val)
         sys.stdout.write('[%d] ' % self.id + out)
+        avg = float(sum(self.sensors))/len(self.sensors)
+        self.info = avg
         if len(self.sensors) > 30:
             self.sensors.pop(0)
             diff = (max(self.sensors) - min(self.sensors))
-            avg = float(sum(self.sensors))/len(self.sensors)
-            self.info = avg
-            if diff < 0.15*avg:
+            if diff < 0.30*avg:
                 self.master.stop()
             else:
                 print diff/avg
