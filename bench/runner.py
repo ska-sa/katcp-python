@@ -6,6 +6,8 @@ from optparse import OptionParser
 from twisted.python import log
 import re, os, sys, signal
 
+log.startLogging(open("log", "w"), setStdout=False)
+
 BASE_PORT = 1235
 
 class Master(object):
