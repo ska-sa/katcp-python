@@ -17,6 +17,7 @@ class DemoClient(ClientKatCP):
     counter = 0
     no_of_sensors = 0 # number of sensors sampled
     last = 0
+    sampling = False
 
     def __init__(self, *args, **kwds):
         ClientKatCP.__init__(self, *args, **kwds)
@@ -30,9 +31,12 @@ class DemoClient(ClientKatCP):
         name = 'int_sensor%d' % self.no_of_sensors
         self.no_of_sensors += 1
         self.send_request('sensor-sampling', name, 'period', 1)
+        self.sampling = False
 
     def sample_next_sensor(self):
-        self.send_request('sensor-list').addCallback(self.check_sensor_list)
+        if not self.sampling:
+            self.sampling = True
+            self.send_request('sensor-list').addCallback(self.check_sensor_list)
 
     def check_sensor_list(self, ((informs, reply))):
         sensor_no = len(informs)
