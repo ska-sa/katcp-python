@@ -211,6 +211,8 @@ class DeviceProtocol(KatCP):
 
     def connectionLost(self, _):
         self.factory.deregister_client(self.transport.client)
+        for strat in self.strategies.values():
+            strat.cancel()
 
     def read_formatted_from_sensor(self, sensor, callback, fail,
                                    lst_of_deferreds=None):
