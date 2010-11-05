@@ -119,7 +119,7 @@ class BenchmarkServer(ProcessProtocol):
     def outReceived(self, out):
         if self.master.scenario == '1':
             reactor.spawnProcess(BenchmarkClient(self.master), self.python,
-                                 args=[self.python, 'benchtxclient1.py'
+                                 args=[self.python, 'benchtxclient1.py',
                                        '--port', self.port, '--allow-sensor-creation'],
                                  env=os.environ)
             for i in range(self.no_of_clients - 1):
