@@ -1,10 +1,12 @@
 
+from zope.interface import implements
 from twisted.protocols.basic import LineReceiver
 from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.protocol import Factory
 from twisted.python import log
+from twisted.internet.interfaces import IConsumer, IPushProducer
 from katcp import MessageParser, Message, AsyncReply
 from katcp.core import FailReply
 from katcp.server import DeviceLogger, construct_name_filter
@@ -48,6 +50,7 @@ class KatCP(LineReceiver):
 
     delimiter = '\n'
     MAX_LENGTH = 64*(2**20) # 64 MB should be fine
+    producing = True
 
     def __init__(self):
         self.parser = MessageParser()
@@ -142,9 +145,21 @@ class KatCP(LineReceiver):
         self.queries.pop(0) # hopefully it's not large
         d.callback((queue, msg))
 
+    # IPushProducer interface
+    implements(IPushProducer)
+        
+    def pauseProducing(self):
+        self.producing = False
+    stopProducing = pauseProducing
+
+    def resumeProducing(self):
+        self.producing = True
+
     def send_message(self, msg):
         # just serialize a message
-        self.transport.write(str(msg) + self.delimiter)
+        if self.producing:
+            self.transport.write(str(msg) + self.delimiter)
+        # otherwise we're unable to carry it, drop on the floor
 
     def connectionLost(self, failure):
         # errback all waiting queries
@@ -189,6 +204,7 @@ class DeviceProtocol(KatCP):
         """ Called when connection is made. Send default informs - version
         and build data
         """
+        self.transport.registerProducer(self, True)
         self.send_message(Message.inform("version", *self.VERSION))
         self.send_message(Message.inform("build-state", *self.BUILD_STATE))
 
@@ -479,9 +495,7 @@ class DeviceProtocol(KatCP):
             strategy = self.strategies[sensor.name].cancel()
         except KeyError:
             pass
-        self.transport.unregisterProducer()
         strategy = StrategyClass(self, sensor)
-        self.transport.registerProducer(strategy, True)
         strategy.run(*msg.arguments[2:])
         self.strategies[sensor.name] = strategy
         if len(msg.arguments) == 1:
