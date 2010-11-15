@@ -175,16 +175,39 @@ class ClientKatCP(KatCP):
         """
         pass
 
-class ServerFactory(Factory):
-    def __init__(self):
-        self.sensors = {}
-        self.setup_sensors()
+class KatCPServer(Factory):
+    def __init__(self, port, host):
+        self.clients = {}
+        self.listen_port = port
+        self.host = host
+        self.clients = {}
+    
+    def start(self):
+        self.port = reactor.listenTCP(self.listen_port, self,
+                                      interface=self.host)
+        return self.port
 
-    def add_sensor(self, sensor):
-        self.sensors[sensor.name] = sensor
+    def register_client(self, addr, protocol):
+        self.clients[addr] = protocol
 
-    def setup_sensors(self):
-        pass # override to provide some sensors
+    def deregister_client(self, addr):
+        del self.clients[addr]
+
+    def stop(self):
+        for client in self.clients.values():
+            client.transport.loseConnection()
+        self.port.stopListening()
+        if getattr(self, 'production', None):
+            reactor.stop()
+
+    def buildProtocol(self, addr):
+        protocol = Factory.buildProtocol(self, addr)
+        self.register_client((addr.host, addr.port), protocol)
+        return protocol
+
+    def mass_inform(self, msg):
+        for client in self.clients.itervalues():
+            client.send_message(msg)
 
 class DeviceProtocol(KatCP):
     VERSION = ("device_stub", 0, 1)
@@ -623,40 +646,22 @@ class DeviceProtocol(KatCP):
     def _request_unknown(self, msg):
         return Message.reply(msg.name, "invalid", "Unknown request.")
 
-class DeviceServer(ServerFactory):
+class DeviceServer(KatCPServer):
     """ This is a device server listening on a given port and address
     """
     protocol = DeviceProtocol
 
+    def add_sensor(self, sensor):
+        self.sensors[sensor.name] = sensor
+
+    def setup_sensors(self):
+        pass # override to provide some sensors
+
     def __init__(self, port, host):
         self.log = DeviceLogger(self) # python logger is None
-        ServerFactory.__init__(self)
-        self.listen_port = port
-        self.host = host
-        self.clients = {}
-
-    def start(self):
-        self.port = reactor.listenTCP(self.listen_port, self,
-                                      interface=self.host)
-        return self.port
-
-    def register_client(self, addr, protocol):
-        self.clients[addr] = protocol
-
-    def deregister_client(self, addr):
-        del self.clients[addr]
-
-    def buildProtocol(self, addr):
-        protocol = ServerFactory.buildProtocol(self, addr)
-        self.register_client((addr.host, addr.port), protocol)
-        return protocol
-
-    def stop(self):
-        for client in self.clients.values():
-            client.transport.loseConnection()
-        self.port.stopListening()
-        if getattr(self, 'production', None):
-            reactor.stop()
+        KatCPServer.__init__(self, port, host)
+        self.sensors = {}
+        self.setup_sensors()
 
     def _log_msg(self, level_name, msg, name, timestamp=None):
         """Create a katcp logging inform message.
@@ -673,7 +678,3 @@ class DeviceServer(ServerFactory):
                 name,
                 msg,
         )
-
-    def mass_inform(self, msg):
-        for client in self.clients.itervalues():
-            client.send_message(msg)
