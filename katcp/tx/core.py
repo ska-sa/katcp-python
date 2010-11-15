@@ -168,6 +168,9 @@ class KatCP(LineReceiver):
             d.errback(failure)
         self.queries = []
 
+    def _request_unknown(self, msg):
+        return Message.reply(msg.name, "invalid", "Unknown request.")
+
 class ClientKatCP(KatCP):
     def inform_log(self, msg):
         """ Default inform when logging event happens. Ignore by default,
@@ -642,9 +645,6 @@ class DeviceProtocol(KatCP):
             except ValueError, e:
                 raise FailReply(str(e))
         return Message.reply("log-level", "ok", self.factory.log.level_name())
-
-    def _request_unknown(self, msg):
-        return Message.reply(msg.name, "invalid", "Unknown request.")
 
 class DeviceServer(KatCPServer):
     """ This is a device server listening on a given port and address
