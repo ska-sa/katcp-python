@@ -515,11 +515,11 @@ class BlockingTestClient(client.BlockingClient):
             Keyword parameter.  Assert that the reply arguments after 'ok' equal
             the request parameters.  Takes precedence over args_equal, args_in
             and args_length. Default False.
-        args_equal : tuple, optional
+        args_equal : list of strings, optional
             Keyword parameter.  Assert that the reply arguments after 'ok' equal
-            this tuple.  Ignored if args_echo is present; takes precedence over
+            this list.  Ignored if args_echo is present; takes precedence over
             args_echo, args_in and args_length.
-        args_in : list of tuples, optional
+        args_in : list of lists, optional
             Keyword parameter.  Assert that the reply arguments after 'ok' equal
             one of these tuples.  Ignored if args_equal or args_echo is present;
             takes precedence over args_length.
