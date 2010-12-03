@@ -48,9 +48,6 @@ class KatCP(LineReceiver):
     (which are not shared).
     """
 
-    VERSION = ("device_stub", 0, 1)
-    BUILD_STATE = ("name", 0, 1, "")
-
     delimiter = '\n'
     MAX_LENGTH = 64*(2**20) # 64 MB should be fine
     producing = True
@@ -58,14 +55,6 @@ class KatCP(LineReceiver):
     def __init__(self):
         self.parser = MessageParser()
         self.queries = []
-
-    def connectionMade(self):
-        """ Called when connection is made. Send default informs - version
-        and build data
-        """
-        self.transport.registerProducer(self, True)
-        self.send_message(Message.inform("version", *self.VERSION))
-        self.send_message(Message.inform("build-state", *self.BUILD_STATE))
 
     def send_request(self, name, *args):
         if not self.transport.connected:
@@ -189,7 +178,21 @@ class ClientKatCP(KatCP):
         """
         pass
 
+class ServerKatCP(KatCP):
+    VERSION = ("device_stub", 0, 1)
+    BUILD_STATE = ("name", 0, 1, "")
+    
+    def connectionMade(self):
+        """ Called when connection is made. Send default informs - version
+        and build data
+        """
+        self.transport.registerProducer(self, True)
+        self.send_message(Message.inform("version", *self.VERSION))
+        self.send_message(Message.inform("build-state", *self.BUILD_STATE))
+
 class KatCPServer(Factory):
+    protocol = ServerKatCP
+    
     def __init__(self, port, host):
         self.clients = {}
         self.listen_port = port
@@ -223,7 +226,7 @@ class KatCPServer(Factory):
         for client in self.clients.itervalues():
             client.send_message(msg)
 
-class DeviceProtocol(KatCP):
+class DeviceProtocol(ServerKatCP):
 
     SAMPLING_STRATEGIES = {'period'       : PeriodicStrategy,
                            'none'         : NoStrategy,
