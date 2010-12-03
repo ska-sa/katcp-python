@@ -48,6 +48,9 @@ class KatCP(LineReceiver):
     (which are not shared).
     """
 
+    VERSION = ("device_stub", 0, 1)
+    BUILD_STATE = ("name", 0, 1, "")
+
     delimiter = '\n'
     MAX_LENGTH = 64*(2**20) # 64 MB should be fine
     producing = True
@@ -55,6 +58,14 @@ class KatCP(LineReceiver):
     def __init__(self):
         self.parser = MessageParser()
         self.queries = []
+
+    def connectionMade(self):
+        """ Called when connection is made. Send default informs - version
+        and build data
+        """
+        self.transport.registerProducer(self, True)
+        self.send_message(Message.inform("version", *self.VERSION))
+        self.send_message(Message.inform("build-state", *self.BUILD_STATE))
 
     def send_request(self, name, *args):
         if not self.transport.connected:
@@ -213,8 +224,6 @@ class KatCPServer(Factory):
             client.send_message(msg)
 
 class DeviceProtocol(KatCP):
-    VERSION = ("device_stub", 0, 1)
-    BUILD_STATE = ("name", 0, 1, "")
 
     SAMPLING_STRATEGIES = {'period'       : PeriodicStrategy,
                            'none'         : NoStrategy,
@@ -225,15 +234,6 @@ class DeviceProtocol(KatCP):
     def __init__(self, *args, **kwds):
         KatCP.__init__(self, *args, **kwds)
         self.strategies = {}
-
-    def connectionMade(self):
-        """ Called when connection is made. Send default informs - version
-        and build data
-        """
-        self.transport.registerProducer(self, True)
-        self.send_message(Message.inform("version", *self.VERSION))
-        self.send_message(Message.inform("build-state", *self.BUILD_STATE))
-
 
     def connectionLost(self, _):
         self.factory.deregister_client(self.transport.client)
