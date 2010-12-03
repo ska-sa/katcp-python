@@ -190,6 +190,66 @@ class ServerKatCPProtocol(KatCP):
         self.send_message(Message.inform("version", *self.VERSION))
         self.send_message(Message.inform("build-state", *self.BUILD_STATE))
 
+    def request_help(self, msg):
+        """Return help on the available requests.
+
+        Return a description of the available requests using a seqeunce of #help informs.
+
+        Parameters
+        ----------
+        request : str, optional
+            The name of the request to return help for (the default is to return help for all requests).
+
+        Informs
+        -------
+        request : str
+            The name of a request.
+        description : str
+            Documentation for the named request.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the help succeeded.
+        informs : int
+            Number of #help inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?help
+            #help halt ...description...
+            #help help ...description...
+            ...
+            !help ok 5
+
+            ?help halt
+            #help halt ...description...
+            !help ok 1
+        """
+        if msg.arguments:
+            name = msg.arguments[0]
+            meth = getattr(self, 'request_' + name.replace('-', '_'), None)
+            if meth is None:
+                return Message.reply('help', 'fail', 'Unknown request method.')
+            doc = meth.__doc__
+            if doc is not None:
+                doc = doc.strip()
+            self.send_message(Message.inform('help', name, doc))
+            return Message.reply('help', 'ok', '1')
+        count = 0
+        for name in dir(self.__class__):
+            item = getattr(self, name)
+            if name.startswith('request_') and callable(item):
+                sname = name[len('request_'):]
+                doc = item.__doc__
+                if doc is not None:
+                    doc = doc.strip()
+                self.send_message(Message.inform('help', sname, doc))
+                count += 1
+        return Message.reply(msg.name, "ok", str(count))
+
 class KatCPServer(Factory):
     protocol = ServerKatCPProtocol
     
@@ -407,66 +467,6 @@ class DeviceProtocol(ServerKatCPProtocol):
                                              sensor.units, sensor.stype,
                                              *sensor.formatted_params))
         return Message.reply(msg.name, "ok", len(sensors))
-
-    def request_help(self, msg):
-        """Return help on the available requests.
-
-        Return a description of the available requests using a seqeunce of #help informs.
-
-        Parameters
-        ----------
-        request : str, optional
-            The name of the request to return help for (the default is to return help for all requests).
-
-        Informs
-        -------
-        request : str
-            The name of a request.
-        description : str
-            Documentation for the named request.
-
-        Returns
-        -------
-        success : {'ok', 'fail'}
-            Whether sending the help succeeded.
-        informs : int
-            Number of #help inform messages sent.
-
-        Examples
-        --------
-        ::
-
-            ?help
-            #help halt ...description...
-            #help help ...description...
-            ...
-            !help ok 5
-
-            ?help halt
-            #help halt ...description...
-            !help ok 1
-        """
-        if msg.arguments:
-            name = msg.arguments[0]
-            meth = getattr(self, 'request_' + name.replace('-', '_'), None)
-            if meth is None:
-                return Message.reply('help', 'fail', 'Unknown request method.')
-            doc = meth.__doc__
-            if doc is not None:
-                doc = doc.strip()
-            self.send_message(Message.inform('help', name, doc))
-            return Message.reply('help', 'ok', '1')
-        count = 0
-        for name in dir(self.__class__):
-            item = getattr(self, name)
-            if name.startswith('request_') and callable(item):
-                sname = name[len('request_'):]
-                doc = item.__doc__
-                if doc is not None:
-                    doc = doc.strip()
-                self.send_message(Message.inform('help', sname, doc))
-                count += 1
-        return Message.reply(msg.name, "ok", str(count))
 
     def request_sensor_sampling(self, msg):
         """Configure or query the way a sensor is sampled.
