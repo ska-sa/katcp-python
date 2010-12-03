@@ -171,14 +171,14 @@ class KatCP(LineReceiver):
     def _request_unknown(self, msg):
         return Message.reply(msg.name, "invalid", "Unknown request.")
 
-class ClientKatCP(KatCP):
+class ClientKatCPProtocol(KatCP):
     def inform_log(self, msg):
         """ Default inform when logging event happens. Ignore by default,
         can be overriden
         """
         pass
 
-class ServerKatCP(KatCP):
+class ServerKatCPProtocol(KatCP):
     VERSION = ("device_stub", 0, 1)
     BUILD_STATE = ("name", 0, 1, "")
     
@@ -191,7 +191,7 @@ class ServerKatCP(KatCP):
         self.send_message(Message.inform("build-state", *self.BUILD_STATE))
 
 class KatCPServer(Factory):
-    protocol = ServerKatCP
+    protocol = ServerKatCPProtocol
     
     def __init__(self, port, host):
         self.clients = {}
@@ -226,7 +226,7 @@ class KatCPServer(Factory):
         for client in self.clients.itervalues():
             client.send_message(msg)
 
-class DeviceProtocol(ServerKatCP):
+class DeviceProtocol(ServerKatCPProtocol):
 
     SAMPLING_STRATEGIES = {'period'       : PeriodicStrategy,
                            'none'         : NoStrategy,

@@ -3,7 +3,7 @@
 API
 """
 
-from katcp.tx.core import (DeviceServer, DeviceProtocol, ClientKatCP,
-                           KatCPServer, KatCP)
+from katcp.tx.core import (DeviceServer, DeviceProtocol, ClientKatCPProtocol,
+                           KatCPServer, KatCP, ServerKatCPProtocol)
 from katcp.tx.proxy import DeviceHandler, ProxyProtocol, ProxyKatCP
 

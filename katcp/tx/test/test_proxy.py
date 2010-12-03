@@ -1,5 +1,5 @@
 
-from katcp.tx.core import DeviceServer, ClientKatCP
+from katcp.tx.core import DeviceServer, ClientKatCPProtocol
 from katcp.tx.proxy import ProxyKatCP, DeviceHandler, DeviceProtocol
 from twisted.trial.unittest import TestCase
 from twisted.internet.protocol import ClientCreator
@@ -69,7 +69,7 @@ class TestProxyBase(TestCase):
                 self.proxy.stop()
                 finish.callback(None)
                 return
-            cc = ClientCreator(reactor, ClientKatCP)
+            cc = ClientCreator(reactor, ClientKatCPProtocol)
             host = self.proxy.port.getHost()
             cc.connectTCP('localhost', host.port).addCallback(connected)
 
@@ -249,7 +249,7 @@ class HandlingProxy(ExampleProxy):
 class TestReconnect(TestCase):
     def test_rogue_device(self):
         def devices_scan_complete(_):
-            cc = ClientCreator(reactor, ClientKatCP)
+            cc = ClientCreator(reactor, ClientKatCPProtocol)
             host = self.proxy.port.getHost()
             cc.connectTCP('localhost', host.port).addCallback(connected)
 

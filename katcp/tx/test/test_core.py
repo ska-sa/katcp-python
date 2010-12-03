@@ -1,5 +1,5 @@
 
-from katcp.tx.core import ClientKatCP, DeviceServer, DeviceProtocol
+from katcp.tx.core import ClientKatCPProtocol, DeviceServer, DeviceProtocol
 from katcp import Message, Sensor
 from katcp.tx.test.testserver import run_subprocess
 from twisted.trial.unittest import TestCase
@@ -26,13 +26,13 @@ class TestKatCP(TestCase):
         def connected(protocol):
             protocol.send_request('halt')
 
-        d, process = run_subprocess(connected, ClientKatCP)
+        d, process = run_subprocess(connected, ClientKatCPProtocol)
         return d
 
     def test_version_check(self):
-        class TestKatCP(ClientKatCP):
+        class TestKatCP(ClientKatCPProtocol):
             def inform_build_state(self, args):
-                ClientKatCP.inform_build_state(self, args)
+                ClientKatCPProtocol.inform_build_state(self, args)
                 # check that version is already set
                 assert self.version == 'device_stub-0.1'
                 self.send_request('halt')
@@ -49,7 +49,7 @@ class TestKatCP(TestCase):
             d = protocol.send_request('help')
             d.addCallback(received_help, protocol)
 
-        d, process = run_subprocess(connected, ClientKatCP)
+        d, process = run_subprocess(connected, ClientKatCPProtocol)
         return d
 
     def test_callback_sensor_sampling(self):
@@ -85,9 +85,9 @@ class TestFactory(DeviceServer):
         sensor._timestamp = 1
         self.add_sensor(sensor)
 
-class TestClientKatCP(ClientKatCP):
+class TestClientKatCP(ClientKatCPProtocol):
     def __init__(self, *args, **kwds):
-        ClientKatCP.__init__(self, *args, **kwds)
+        ClientKatCPProtocol.__init__(self, *args, **kwds)
         self.status_updates = []
 
     def inform_sensor_status(self, msg):
@@ -493,7 +493,7 @@ class TestDeviceServer(TestCase):
         return finish
 
     def test_log_basic(self):
-        class TestProtocol(ClientKatCP):
+        class TestProtocol(ClientKatCPProtocol):
             def inform_log(self, msg):
                 got_log.callback(msg)
 
@@ -531,9 +531,9 @@ class TestDeviceServer(TestCase):
         return self._base_test(('watchdog',), callback)
 
     def test_log_level(self):
-        class TestProtocol(ClientKatCP):
+        class TestProtocol(ClientKatCPProtocol):
             def __init__(self, *args, **kwds):
-                ClientKatCP.__init__(self, *args, **kwds)
+                ClientKatCPProtocol.__init__(self, *args, **kwds)
                 self.msgs = []
 
             def inform_log(self, msg):

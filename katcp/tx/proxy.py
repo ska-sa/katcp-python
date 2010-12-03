@@ -1,5 +1,5 @@
 
-from katcp.tx.core import DeviceServer, ClientKatCP, DeviceProtocol
+from katcp.tx.core import DeviceServer, ClientKatCPProtocol, DeviceProtocol
 from twisted.internet.defer import DeferredList
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientFactory
@@ -50,7 +50,7 @@ class StateSensor(object):
     def read_formatted(self):
         return DeviceHandler.STATE_NAMES[self.device.state]
 
-class DeviceHandler(ClientKatCP):
+class DeviceHandler(ClientKatCPProtocol):
     SYNCING, SYNCED, UNSYNCED = range(3)
     STATE_NAMES = ['syncing', 'synced', 'unsynced']
 
@@ -64,7 +64,7 @@ class DeviceHandler(ClientKatCP):
         self.name = name
         self.host = host
         self.port = port
-        ClientKatCP.__init__(self)
+        ClientKatCPProtocol.__init__(self)
         self.requests = []
         self.sensors = {}
         self.state = self.UNSYNCED
@@ -103,7 +103,7 @@ class DeviceHandler(ClientKatCP):
 
     def connectionLost(self, failure):
         self.state = self.UNSYNCED
-        ClientKatCP.connectionLost(self, failure)
+        ClientKatCPProtocol.connectionLost(self, failure)
         if not self.stopping:
             reactor.callLater(self.proxy.CONN_DELAY_TIMEOUT,
                               self.schedule_resyncing)
