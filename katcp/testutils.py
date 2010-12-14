@@ -45,7 +45,6 @@ class DeviceTestSensor(Sensor):
 
 class BlockingTestClient(client.BlockingClient):
     """Test blocking client."""
-    #__metaclass__ = TestClientMetaclass
 
     def __init__(self, test, *args, **kwargs):
         """Takes a TestCase class as an additional parameter."""
