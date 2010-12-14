@@ -49,6 +49,7 @@ class BlockingTestClient(client.BlockingClient):
     def __init__(self, test, *args, **kwargs):
         """Takes a TestCase class as an additional parameter."""
         self.test = test
+        self._message_recorders = {}
         super(BlockingTestClient, self).__init__(*args, **kwargs)
 
     def raw_send(self, chunk):
@@ -59,7 +60,19 @@ class BlockingTestClient(client.BlockingClient):
         """The expected lag before device changes are applied."""
         return getattr(self.test, "sensor_lag", 0)
 
-    def record_messages(self, whitelist=(), blacklist=(), informs=True, replies=False):
+    def handle_inform(self, msg):
+        """Pass unhandled informs to message recorders."""
+        for append_msg in self._message_recorders.itervalues():
+            append_msg(msg)
+        return super(BlockingTestClient, self).handle_inform(msg)
+
+    def handle_reply(self, msg):
+        """Pass unhandled replies to message recorders."""
+        for append_msg in self._message_recorders.itervalues():
+            append_msg(msg)
+        return super(BlockingTestClient, self).handle_reply(msg)
+
+    def message_recorder(self, whitelist=(), blacklist=(), informs=True, replies=False):
         """Helper method for attaching a hook to selected received messages.
 
         Parameters
@@ -75,38 +88,40 @@ class BlockingTestClient(client.BlockingClient):
             Whether to record informs.  Default: True.
         replies : boolean
             Whether to record replies.  Default: False.
+
+        Return
+        ------
+        get_msgs : function
+            Function that returns a list of messages that have matched so far.
         """
-        msg_types = []
+        msg_types = set()
         if informs:
-            msg_types.append("inform")
+            msg_types.add(Message.INFORM)
         if replies:
-            msg_types.append("reply")
+            msg_types.add(Message.REPLY)
+        whitelist = set(whitelist)
+        blacklist = set(blacklist)
 
         msgs = []
 
-        for msg_type in msg_types:
+        def get_msgs():
+            """Return the messages recorded so far."""
+            return msgs
+
+        def append_msg(msg):
+            """Append a message if it matches the criteria."""
+            if msg.mtype not in msg_types:
+                return
             if whitelist:
-                def handle_msg(client, msg):
+                if msg in whitelist:
+                    msgs.append(msg)
+            else:
+                if msg.name not in blacklist:
                     msgs.append(msg)
 
-                handler_dict = getattr(self, "_%s_handlers" % msg_type)
+        self._message_recorders[id(get_msgs)] = append_msg
 
-                for name in whitelist:
-                    handler_dict[name] = handle_msg
-
-            else:
-                handler = getattr(self, "handle_%s" % msg_type)
-
-                def handle_msg(client, msg):
-                    if msg.name not in blacklist:
-                        msgs.append(msg)
-                    return handler(msg)
-
-                newhandler = types.MethodType(handle_msg, self, self.__class__)
-
-                setattr(self, "handle_%s" % msg_type, newhandler)
-
-        return msgs
+        return get_msgs
 
     @staticmethod
     def expected_sensor_value_tuple(sensorname, value, sensortype=str, places=7):

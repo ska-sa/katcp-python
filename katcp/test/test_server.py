@@ -39,7 +39,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
     def test_simple_connect(self):
         """Test a simple server setup and teardown with client connect."""
-        msgs = self.client.record_messages(blacklist=("version", "build-state"), replies=True)
+        get_msgs = self.client.message_recorder(blacklist=("version", "build-state"), replies=True)
         # basic send
         self.client.request(katcp.Message.request("foo"))
 
@@ -53,7 +53,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
         time.sleep(0.1)
 
-        self._assert_msgs_equal(msgs, [
+        self._assert_msgs_equal(get_msgs(), [
             r"!foo invalid Unknown\_request.",
             r"!bar-boom invalid Unknown\_request.",
             r"!baz invalid Unknown\_request.",
@@ -62,29 +62,29 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
     def test_bad_requests(self):
         """Test request failure paths in device server."""
-        msgs = self.client.record_messages(blacklist=("version", "build-state"), replies=True)
+        get_msgs = self.client.message_recorder(blacklist=("version", "build-state"), replies=True)
         self.client.raw_send("bad msg\n")
         # wait for reply
         self.client.blocking_request(katcp.Message.request("watchdog"))
 
-        self._assert_msgs_like(msgs, [
+        self._assert_msgs_like(get_msgs(), [
             (r"#log error", "KatcpSyntaxError:\_Bad\_type\_character\_'b'.\\n"),
             (r"!watchdog ok", ""),
         ])
 
     def test_server_ignores_informs_and_replies(self):
         """Test server ignores informs and replies."""
-        msgs = self.client.record_messages(blacklist=("version", "build-state"), replies=True)
+        get_msgs = self.client.message_recorder(blacklist=("version", "build-state"), replies=True)
         self.client.raw_send("#some inform\n")
         self.client.raw_send("!some reply\n")
 
         time.sleep(0.1)
 
-        self.assertFalse(msgs)
+        self.assertFalse(get_msgs())
 
     def test_standard_requests(self):
         """Test standard request and replies."""
-        msgs = self.client.record_messages(blacklist=("version", "build-state"), replies=True)
+        get_msgs = self.client.message_recorder(blacklist=("version", "build-state"), replies=True)
         self.client.request(katcp.Message.request("watchdog"))
         self.client.request(katcp.Message.request("restart"))
         self.client.request(katcp.Message.request("log-level"))
@@ -118,7 +118,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         time.sleep(0.1)
 
         self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
-        self._assert_msgs_like(msgs, [
+        self._assert_msgs_like(get_msgs(), [
             (r"!watchdog ok", ""),
             (r"!restart ok", ""),
             (r"!log-level ok warn", ""),
@@ -169,7 +169,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
     def test_standard_requests_with_ids(self):
         """Test standard request and replies with message ids."""
-        msgs = self.client.record_messages(blacklist=("version", "build-state"), replies=True)
+        get_msgs = self.client.message_recorder(blacklist=("version", "build-state"), replies=True)
 
         current_id = [0]
         def mid():
@@ -207,7 +207,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         time.sleep(0.1)
 
         self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
-        self._assert_msgs_like(msgs, [
+        self._assert_msgs_like(get_msgs(), [
             (r"!watchdog[1] ok", ""),
             (r"!restart[2] ok", ""),
             (r"!log-level[3] ok warn", ""),
@@ -294,14 +294,14 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
     def test_halt_request(self):
         """Test halt request."""
-        msgs = self.client.record_messages(blacklist=("version", "build-state"), replies=True)
+        get_msgs = self.client.message_recorder(blacklist=("version", "build-state"), replies=True)
         self.client.request(katcp.Message.request("halt"))
         # hack to hide re-connect exception
         self.client.connect = lambda: None
         self.server.join()
         time.sleep(0.1)
 
-        self._assert_msgs_equal(msgs, [
+        self._assert_msgs_equal(get_msgs(), [
             r"!halt ok",
             r"#disconnect Device\_server\_shutting\_down.",
         ])
@@ -335,14 +335,14 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
     def test_handler_exceptions(self):
         """Test handling of failure replies and other exceptions."""
-        msgs = self.client.record_messages(blacklist=("version", "build-state"), replies=True)
+        get_msgs = self.client.message_recorder(blacklist=("version", "build-state"), replies=True)
 
         self.client.request(katcp.Message.request("raise-exception"))
         self.client.request(katcp.Message.request("raise-fail"))
 
         time.sleep(0.1)
 
-        self._assert_msgs_like(msgs, [
+        self._assert_msgs_like(get_msgs(), [
             (r"!raise-exception fail Traceback", ""),
             (r"!raise-fail fail There\_was\_a\_problem\_with\_your\_request.", ""),
         ])
@@ -440,12 +440,13 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
     def test_sampling(self):
         """Test sensor sampling."""
-        msgs = self.client.record_messages(blacklist=("version", "build-state"), replies=True)
+        get_msgs = self.client.message_recorder(blacklist=("version", "build-state"), replies=True)
         self.client.request(katcp.Message.request("sensor-sampling", "an.int", "period", 100))
         time.sleep(1.0)
         self.client.request(katcp.Message.request("sensor-sampling", "an.int", "none"))
         time.sleep(0.5)
 
+        msgs = get_msgs()
         updates = [x for x in msgs if x.name == "sensor-status"]
         others = [x for x in msgs if x.name != "sensor-status"]
         self.assertTrue(abs(len(updates) - 12) < 2, "Expected 12 informs, saw %d." % len(updates))
