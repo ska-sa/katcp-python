@@ -93,6 +93,7 @@ class BlockingTestClient(client.BlockingClient):
         ------
         get_msgs : function
             Function that returns a list of messages that have matched so far.
+            Each call returns the list of message since the previous call.
         """
         msg_types = set()
         if informs:
@@ -106,7 +107,10 @@ class BlockingTestClient(client.BlockingClient):
 
         def get_msgs():
             """Return the messages recorded so far."""
-            return msgs
+            msg_count = len(msgs)
+            msgs_copy = msgs[:msg_count]
+            del msgs[:msg_count]
+            return msgs_copy
 
         def append_msg(msg):
             """Append a message if it matches the criteria."""
