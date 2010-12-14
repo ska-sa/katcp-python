@@ -117,7 +117,7 @@ class BlockingTestClient(client.BlockingClient):
             if msg.mtype not in msg_types:
                 return
             if whitelist:
-                if msg in whitelist:
+                if msg.name in whitelist:
                     msgs.append(msg)
             else:
                 if msg.name not in blacklist:
