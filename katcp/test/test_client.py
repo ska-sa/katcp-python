@@ -12,9 +12,7 @@ import time
 import logging
 import threading
 import katcp
-from katcp.testutils import TestLogHandler, \
-    DeviceTestClient, CallbackTestClient, DeviceTestServer, \
-    TestUtilMixin
+from katcp.testutils import TestLogHandler, DeviceTestServer, TestUtilMixin
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -27,7 +25,7 @@ class TestDeviceClient(unittest.TestCase, TestUtilMixin):
 
         host, port = self.server._sock.getsockname()
 
-        self.client = DeviceTestClient(host, port)
+        self.client = katcp.DeviceClient(host, port)
         self.client.start(timeout=0.1)
 
     def tearDown(self):
@@ -189,7 +187,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         host, port = self.server._sock.getsockname()
 
-        self.client = CallbackTestClient(host, port)
+        self.client = katcp.CallbackClient(host, port)
         self.client.start(timeout=0.1)
 
     def tearDown(self):
@@ -245,16 +243,21 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
     def test_no_callback(self):
         """Test request without callback."""
 
+        help_messages = []
+
+        def handle_help_message(client, msg):
+            help_messages.append(msg)
+
+        self.client._inform_handlers["help"] = handle_help_message
+        self.client._reply_handlers["help"] = handle_help_message
+
         self.client.request(
             katcp.Message.request("help")
         )
 
         time.sleep(0.1)
-        msgs = self.client.messages()
 
-        self._assert_msgs_like(msgs,
-            [("#version ", "")] +
-            [("#build-state ", "")] +
+        self._assert_msgs_like(help_messages,
             [("#help ", "")]*13 +
             [("!help ok 13", "")]
         )

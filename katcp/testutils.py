@@ -12,6 +12,7 @@ import logging
 import re
 import time
 import Queue
+import types
 from .core import Sensor, Message, DeviceMetaclass
 from .server import DeviceServer, FailReply
 
@@ -42,87 +43,71 @@ class DeviceTestSensor(Sensor):
         self.set(timestamp, status, value)
 
 
-class TestClientMetaclass(DeviceMetaclass):
-    """Metaclass for test client classes.
-
-       Adds a raw send method and methods for collecting all inform and
-       reply messages received by the client.
-       """
-    def __init__(mcs, name, bases, dct):
-        """Constructor for TestClientMetaclass.  Should not be used
-           directly.
-
-           @param mcs The metaclass instance
-           @param name The metaclass name
-           @param bases List of base classes
-           @param dct Class dict
-        """
-        super(TestClientMetaclass, mcs).__init__(name, bases, dct)
-
-        orig_init = mcs.__init__
-        orig_handle_reply = mcs.handle_reply
-        orig_handle_inform = mcs.handle_inform
-
-        def __init__(self, *args, **kwargs):
-            orig_init(self, *args, **kwargs)
-            self.clear_messages()
-
-        def handle_reply(self, msg):
-            self._replies.append(msg)
-            self._msgs.append(msg)
-            return orig_handle_reply(self, msg)
-
-        def handle_inform(self, msg):
-            self._informs.append(msg)
-            self._msgs.append(msg)
-            return orig_handle_inform(self, msg)
-
-        def raw_send(self, chunk):
-            """Send a raw chunk of data to the server."""
-            self._sock.send(chunk)
-
-        def replies_and_informs(self):
-            return self._replies, self._informs
-
-        def messages(self):
-            return self._msgs
-
-        def clear_messages(self):
-            self._replies = []
-            self._informs = []
-            self._msgs = []
-
-        mcs.__init__ = __init__
-        mcs.handle_reply = handle_reply
-        mcs.handle_inform = handle_inform
-        mcs.raw_send = raw_send
-        mcs.replies_and_informs = replies_and_informs
-        mcs.messages = messages
-        mcs.clear_messages = clear_messages
-
-
-class DeviceTestClient(client.DeviceClient):
-    """Test client."""
-    __metaclass__ = TestClientMetaclass
-
-
-class CallbackTestClient(client.CallbackClient):
-    """Test callback client."""
-    __metaclass__ = TestClientMetaclass
-
-
 class BlockingTestClient(client.BlockingClient):
     """Test blocking client."""
-    __metaclass__ = TestClientMetaclass
+    #__metaclass__ = TestClientMetaclass
 
     def __init__(self, test, *args, **kwargs):
         """Takes a TestCase class as an additional parameter."""
         self.test = test
         super(BlockingTestClient, self).__init__(*args, **kwargs)
 
+    def raw_send(self, chunk):
+        """Send a raw chunk of data to the server."""
+        self._sock.send(chunk)
+
     def _sensor_lag(self):
         """The expected lag before device changes are applied."""
         return getattr(self.test, "sensor_lag", 0)
+
+    def record_messages(self, whitelist=(), blacklist=(), informs=True, replies=False):
+        """Helper method for attaching a hook to selected received messages.
+
+        Parameters
+        ----------
+        whitelist : list or tuple
+            Record only messages matching these names.  If the list is empty,
+            all received messages will be saved except any specified in the
+            blacklist.
+        blacklist : list or tuple
+            Ignore messages matching these names.  If any names appear both in
+            the whitelist and the blacklist, the whitelist will take precedence.
+        informs : boolean
+            Whether to record informs.  Default: True.
+        replies : boolean
+            Whether to record replies.  Default: False.
+        """
+        msg_types = []
+        if informs:
+            msg_types.append("inform")
+        if replies:
+            msg_types.append("reply")
+
+        msgs = []
+
+        for msg_type in msg_types:
+            if whitelist:
+                def handle_msg(client, msg):
+                    msgs.append(msg)
+
+                handler_dict = getattr(self, "_%s_handlers" % msg_type)
+
+                for name in whitelist:
+                    handler_dict[name] = handle_msg
+
+            else:
+                handler = getattr(self, "handle_%s" % msg_type)
+
+                def handle_msg(client, msg):
+                    if msg.name not in blacklist:
+                        msgs.append(msg)
+                    return handler(msg)
+
+                newhandler = types.MethodType(handle_msg, self, self.__class__)
+
+                setattr(self, "handle_%s" % msg_type, newhandler)
+
+        return msgs
 
     @staticmethod
     def expected_sensor_value_tuple(sensorname, value, sensortype=str, places=7):
@@ -145,13 +130,15 @@ class BlockingTestClient(client.BlockingClient):
 
     # SENSOR VALUES
 
-    def _get_sensor(self, sensorname):
-        """Helper method for retrieving a sensor.
+    def get_sensor(self, sensorname, sensortype=str):
+        """Retrieve the value, status and timestamp of a sensor.
 
         Parameters
         ----------
         sensorname : str
             The name of the sensor.
+        sensortype : type, optional
+            The type to use to convert the sensor value. Default: str.
         """
 
         reply, informs = self.blocking_request(Message.request("sensor-value", sensorname))
@@ -172,21 +159,7 @@ class BlockingTestClient(client.BlockingClient):
             % (sensorname, len(inform.arguments))
         )
 
-        timestamp, num, name, status, value = inform.arguments
-        return value, status, timestamp
-
-    def get_sensor_value(self, sensorname, sensortype=str):
-        """Retrieve the value of a sensor.
-
-        Parameters
-        ----------
-        sensorname : str
-            The name of the sensor.
-        sensortype : type, optional
-            The type to use to convert the sensor value. Default: str.
-        """
-
-        value, status, timestamp = self._get_sensor(sensorname)
+        timestamp, _num, _name, status, value = inform.arguments
 
         try:
             if sensortype == bool:
@@ -200,6 +173,31 @@ class BlockingTestClient(client.BlockingClient):
                 % (value, sensorname, typestr, e)
             )
 
+        self.test.assertTrue(status in Sensor.STATUSES.values(),
+            "Got invalid status value %r for sensor '%s'." % (status, sensorname)
+        )
+
+        try:
+            timestamp =  int(timestamp)
+        except ValueError, e:
+            self.test.fail("Could not convert timestamp %r of sensor '%s' to type %r: %s"
+                % (timestamp, sensorname, int, e)
+            )
+
+        return value, status, timestamp
+
+    def get_sensor_value(self, sensorname, sensortype=str):
+        """Retrieve the value of a sensor.
+
+        Parameters
+        ----------
+        sensorname : str
+            The name of the sensor.
+        sensortype : type, optional
+            The type to use to convert the sensor value. Default: str.
+        """
+
+        value, _, _ = self.get_sensor(sensorname, sensortype)
         return value
 
     def get_sensor_status(self, sensorname):
@@ -211,12 +209,7 @@ class BlockingTestClient(client.BlockingClient):
             The name of the sensor.
         """
 
-        value, status, timestamp = self._get_sensor(sensorname)
-
-        self.test.assertTrue(status in Sensor.STATUSES.values(),
-            "Got invalid status value %r for sensor '%s'." % (status, sensorname)
-        )
-
+        _, status, _ = self.get_sensor(sensorname)
         return status
 
     def get_sensor_timestamp(self, sensorname):
@@ -228,18 +221,10 @@ class BlockingTestClient(client.BlockingClient):
             The name of the sensor.
         """
 
-        value, status, timestamp = self._get_sensor(sensorname)
-
-        try:
-            timestamp =  int(timestamp)
-        except ValueError, e:
-            self.test.fail("Could not convert timestamp %r of sensor '%s' to type %r: %s"
-                % (timestamp, sensorname, int, e)
-            )
-
+        _, _, timestamp = self.get_sensor(sensorname)
         return timestamp
 
-    def assert_sensor_equals(self, sensorname, expected, sensortype=str, msg=None, places=7):
+    def assert_sensor_equals(self, sensorname, expected, sensortype=str, msg=None, places=7, status=None):
         """Assert that a sensor's value is equal to the given value.
 
         Parameters
@@ -257,13 +242,15 @@ class BlockingTestClient(client.BlockingClient):
         places : int, optional
             The number of places to use in a float comparison.  Has no effect if
             sensortype is not float. Default: 7.
+        status : str, optional
+            The expected status of the sensor.
         """
 
         if msg is None:
             places_msg = " (within %d decimal places)" % places if sensortype == float else ""
             msg = "Value of sensor '%s' is %%r. Expected %r%s." % (sensorname, expected, places_msg)
 
-        got = self.get_sensor_value(sensorname, sensortype)
+        got, got_status, _timestamp = self.get_sensor(sensorname, sensortype)
         if '%r' in msg:
             msg = msg % got
 
@@ -271,6 +258,9 @@ class BlockingTestClient(client.BlockingClient):
             self.test.assertAlmostEqual(got, expected, places, msg)
         else:
             self.test.assertEqual(got, expected, msg)
+
+        if status is not None:
+            self.test.assertEqual(got_status, status, "Status of sensor '%s' is %r. Expected %r." % (sensorname, got_status, status))
 
     def assert_sensor_status_equals(self, sensorname, expected_status, msg=None):
         """Assert that a sensor's status is equal to the given status.
@@ -291,6 +281,7 @@ class BlockingTestClient(client.BlockingClient):
             msg = "Status of sensor '%s' is %%r. Expected %r." % (sensorname, expected_status)
 
         got_status = self.get_sensor_status(sensorname)
+
         if '%r' in msg:
             msg = msg % got_status
 
@@ -527,6 +518,9 @@ class BlockingTestClient(client.BlockingClient):
             Keyword parameter.  Assert that the length of the reply arguments
             after 'ok' matches this number. Ignored if args_equal, args_echo or
             args_in is present.
+        informs_count : int, optional
+            Keyword parameter.  Assert that the number of informs received
+            matches this number.
         """
 
         reply, informs = self.blocking_request(Message.request(requestname, *params))
@@ -544,9 +538,10 @@ class BlockingTestClient(client.BlockingClient):
         args_equal = kwargs.get("args_equal")
         args_in = kwargs.get("args_in")
         args_length = kwargs.get("args_length")
+        informs_count = kwargs.get("informs_count")
 
         if args_echo:
-            args_equal = list(params)
+            args_equal = [str(p) for p in params]
 
         if args_equal is not None:
             self.test.assertEqual(args, args_equal,
@@ -562,6 +557,12 @@ class BlockingTestClient(client.BlockingClient):
             self.test.assertEqual(len(args), args_length,
                 "Expected reply to request '%s' called with parameters %r to have %d arguments, but received %d: %s."
                 % (requestname, params, args_length, len(args), args)
+            )
+
+        if informs_count is not None:
+            self.test.assertEqual(len(informs), informs_count,
+                "Expected %d informs in reply to request '%s' called with parameters %r, but received %d."
+                % (informs_count, requestname, params, len(informs))
             )
 
         return args
@@ -801,31 +802,3 @@ class TestUtilMixin(object):
                     % (str_msg, suffix)
                 )
         self._assert_msgs_length(actual_msgs, len(expected))
-
-
-# TODO: this is obsolete; remove it once all the tests that use it have been refactored
-def device_wrapper(device):
-    outgoing_informs = []
-
-    def reply_inform(sock, msg, orig_msg):
-        outgoing_informs.append(msg)
-
-    def inform(sock, msg):
-        outgoing_informs.append(msg)
-
-    def mass_inform(msg):
-        outgoing_informs.append(msg)
-
-    def informs():
-        return outgoing_informs
-
-    def clear_informs():
-        del outgoing_informs[:]
-
-    device.inform = inform
-    device.reply_inform = reply_inform
-    device.mass_inform = mass_inform
-    device.informs = informs
-    device.clear_informs = clear_informs
-
-    return device
