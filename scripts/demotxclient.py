@@ -3,10 +3,10 @@
 """
 
 import sys
-from katcp.tx.core import run_client, ClientKatCP
+from katcp.tx import run_client, ClientKatCPProtocol
 from twisted.internet import reactor
 
-class DemoClient(ClientKatCP):
+class DemoClient(ClientKatCPProtocol):
     def inform_out_of_band(self, msg):
         print "out of band", msg
 
