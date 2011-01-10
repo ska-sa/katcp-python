@@ -435,7 +435,7 @@ class TestDeviceServer(TestCase):
 
     def test_fail(self):
         class FaultyProtocol(DeviceProtocol):
-            def request_foobar(self, msg):
+            def request_foo_bar(self, msg):
                 raise FailReply("failed")
 
         class FaultyFactory(TestFactory):
@@ -443,9 +443,9 @@ class TestDeviceServer(TestCase):
 
         def reply((informs, reply), protocol):
             self.assertEquals(informs, [])
-            self.assertEquals(reply, Message.reply("foobar", "fail", "failed"))
+            self.assertEquals(reply, Message.reply("foo-bar", "fail", "failed"))
 
-        return self._base_test(('foobar',), reply, cls=FaultyFactory)
+        return self._base_test(('foo-bar',), reply, cls=FaultyFactory)
 
     def test_client_list(self):
         def got_client_list(values, protocols):

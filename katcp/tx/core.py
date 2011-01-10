@@ -115,9 +115,8 @@ class KatCP(LineReceiver):
 
     def handle_request(self, msg):
         name = msg.name
-        name = name.replace('-', '_')
         try:
-            rep_msg = getattr(self, 'request_' + name, self._request_unknown)(msg)
+            rep_msg = getattr(self, 'request_' + name.replace('-', '_'), self._request_unknown)(msg)
             if not isinstance(rep_msg, Message):
                 raise ShouldReturnMessage('request_' + name + ' should return a'
                                           'message or raise AsyncReply, instead'
