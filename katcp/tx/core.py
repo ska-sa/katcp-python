@@ -163,7 +163,7 @@ class KatCP(LineReceiver):
         if self.producing:
             self.transport.write(str(msg) + self.delimiter)
         else:
-            self.queue.apppend(msg)
+            self.queue.append(msg)
         # otherwise we're unable to carry it, drop on the floor
 
     def connectionLost(self, failure):
