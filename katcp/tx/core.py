@@ -153,7 +153,7 @@ class KatCP(LineReceiver):
     stopProducing = pauseProducing
 
     def resumeProducing(self):
-        for elem in self.queue:
+        for msg in self.queue:
             self.transport.write(str(msg) + self.delimiter)
         self.queue = []
         self.producing = True
