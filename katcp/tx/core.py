@@ -55,6 +55,7 @@ class KatCP(LineReceiver):
     def __init__(self):
         self.parser = MessageParser()
         self.queries = []
+        self.queue = []
 
     def send_request(self, name, *args):
         if not self.transport.connected:
@@ -152,12 +153,17 @@ class KatCP(LineReceiver):
     stopProducing = pauseProducing
 
     def resumeProducing(self):
+        for elem in self.queue:
+            self.transport.write(str(msg) + self.delimiter)
+        self.queue = []
         self.producing = True
 
     def send_message(self, msg):
         # just serialize a message
         if self.producing:
             self.transport.write(str(msg) + self.delimiter)
+        else:
+            self.queue.apppend(msg)
         # otherwise we're unable to carry it, drop on the floor
 
     def connectionLost(self, failure):
