@@ -247,7 +247,7 @@ class ServerKatCPProtocol(KatCP):
         for name in dir(self.__class__):
             item = getattr(self, name)
             if name.startswith('request_') and callable(item):
-                sname = name[len('request_'):]
+                sname = name[len('request_'):].replace('_', '-')
                 doc = item.__doc__
                 if doc is not None:
                     doc = doc.strip()

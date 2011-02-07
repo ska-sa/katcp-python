@@ -43,6 +43,9 @@ class TestKatCP(TestCase):
     def test_help(self):
         def received_help((msgs, reply_msg), protocol):
             assert len(msgs) == 9
+            requests = set(msg.arguments[0] for msg in msgs)
+            assert 'help' in requests
+            assert 'sensor-list' in requests
             protocol.send_request('halt')
 
         def connected(protocol):
@@ -129,6 +132,9 @@ class TestDeviceServer(TestCase):
         def help((informs, reply), protocol):
             self.assertEquals(len(informs), count)
             assert 'request' not in informs[0].arguments[0]
+            requests = set(m.arguments[0] for m in informs)
+            assert 'help' in requests
+            assert 'sensor-list' in requests
             self.assertEquals(reply, Message.reply('help', "ok", str(count)))
 
         return self._base_test(('help',), help)
