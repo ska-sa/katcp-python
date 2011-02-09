@@ -101,7 +101,7 @@ class TestProxyBase(TestCase):
                        i.state == i.SYNCED]
             assert len(devices) == 1
             device = devices[0]
-            assert 'sensor_list' in device.requests
+            assert 'sensor-list' in device.requests
             assert 'sensor1' in device.sensors
 
         return self._base_test(None, callback)
