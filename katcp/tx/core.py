@@ -275,11 +275,14 @@ class KatCPServer(Factory):
     def deregister_client(self, addr):
         del self.clients[addr]
 
-    def stop(self):
+    def stopFactory(self):
         for client in self.clients.values():
             client.transport.loseConnection()
+
+    def stop(self):
         self.port.stopListening()
         if getattr(self, 'production', None):
+            # XXX maybe do it somewhere else???
             reactor.stop()
 
     def buildProtocol(self, addr):
