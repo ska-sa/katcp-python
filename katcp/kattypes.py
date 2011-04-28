@@ -532,7 +532,7 @@ def request(*types, **options):
             all_argnames = inspect.getargspec(handler)[0]
 
         # Slightly hacky way of determining whether there is a sock
-        has_sock = all_argnames[1] == "sock"
+        has_sock = len(all_argnames) > 1 and all_argnames[1] == "sock"
 
         params_start = 1
         if has_sock: params_start += 1
