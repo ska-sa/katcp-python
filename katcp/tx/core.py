@@ -7,6 +7,9 @@ from twisted.internet.protocol import ClientCreator
 from twisted.internet.protocol import Factory
 from twisted.python import log
 from twisted.internet.interfaces import IConsumer, IPushProducer
+from twisted.internet.error import ConnectionRefusedError
+from twisted.python import log
+
 from katcp import MessageParser, Message, AsyncReply
 from katcp.core import FailReply
 from katcp.server import DeviceLogger, construct_name_filter
@@ -35,9 +38,14 @@ TB_LIMIT = 20
 def run_client((host, port), ClientClass, connection_made=None,
                args=(), errback=None, errback_args=(), auto_connect=False):
     def connect_later(failure):
-        reactor.callLater(1, run_client, (host, port), ClientClass,
-                          connection_made=connection_made, args=args,
-                          auto_connect=True)
+        if failure is not None:
+            if failure.type is ConnectionRefusedError:
+                reactor.callLater(1, run_client, (host, port), ClientClass,
+                                  connection_made=connection_made, args=args,
+                                  auto_connect=True)
+            else:
+                log.msg("error while connecting")
+                log.err(failure)
 
     cc = ClientCreator(reactor, ClientClass)
     d = cc.connectTCP(host, port)
