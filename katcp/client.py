@@ -529,7 +529,7 @@ class BlockingClient(DeviceClient):
         Whether to automatically reconnect if the connection dies.
     timeout : float in seconds
         Default number of seconds to wait before a blocking request times
-        out. Can be overriden in individual calls to bocking_request.
+        out. Can be overriden in individual calls to blocking_request.
 
     Examples
     --------
