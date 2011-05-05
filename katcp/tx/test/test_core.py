@@ -10,10 +10,10 @@ from twisted.internet.protocol import ClientCreator
 from twisted.internet.base import DelayedCall
 from katcp.core import FailReply
 
-DelayedCall.debug = True
+#DelayedCall.debug = True
 #Deferred.debug = True
 
-#timeout = 5
+timeout = 5
 
 class TestKatCP(TestCase):
     """ A tesited test case, run with trial testing
