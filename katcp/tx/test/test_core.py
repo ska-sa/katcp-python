@@ -1,6 +1,6 @@
 
-from katcp.tx.core import ClientKatCPProtocol, DeviceServer, DeviceProtocol,\
-     run_client
+from katcp.tx.core import (ClientKatCPProtocol, DeviceServer, DeviceProtocol,
+                           KatCPClientFactory)
 from katcp import Message, Sensor
 from katcp.tx.test.testserver import run_subprocess
 from twisted.trial.unittest import TestCase
@@ -8,10 +8,12 @@ from twisted.internet import reactor
 from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet.protocol import ClientCreator
 from twisted.internet.base import DelayedCall
+from twisted.internet.defer import inlineCallbacks
+
 from katcp.core import FailReply
 
-#DelayedCall.debug = True
-#Deferred.debug = True
+DelayedCall.debug = True
+Deferred.debug = True
 
 timeout = 5
 
@@ -575,17 +577,20 @@ class TestClient(TestCase):
             self.f = TestFactory(12345, 'localhost')
             self.f.start()
 
-        def cleanup(_):
-            d = self.f.port.stopListening()
-            d.addCallback(lambda _: res.callback(None))
-        
         res = Deferred()
-        run_client(('localhost', 12345), ClientKatCPProtocol,
-                   auto_connect=True,
-                   connection_made=cleanup)
+        class Protocol(ClientKatCPProtocol):
+            def connectionMade(_):
+                d = self.f.port.stopListening()
+                client_fac.stopTrying()
+                d.addCallback(lambda _: res.callback(None))
+                
+        class ClientFactory(KatCPClientFactory):
+            protocol = Protocol
+
+        client_fac = ClientFactory()
+        reactor.connectTCP('localhost', 12345, client_fac)
         reactor.callLater(0.3, f)
         return res
-        
 
 class TestMisc(TestCase):
     def test_requests(self):

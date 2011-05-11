@@ -3,7 +3,8 @@ from zope.interface import implements
 from twisted.protocols.basic import LineReceiver
 from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet import reactor
-from twisted.internet.protocol import ClientCreator
+from twisted.internet.protocol import ClientCreator, ReconnectingClientFactory,\
+     ClientCreator
 from twisted.internet.protocol import Factory
 from twisted.python import log
 from twisted.internet.interfaces import IConsumer, IPushProducer
@@ -35,28 +36,28 @@ class ShouldReturnMessage(Exception):
 
 TB_LIMIT = 20
 
-def run_client((host, port), ClientClass, connection_made=None,
-               args=(), errback=None, errback_args=(), auto_connect=False):
-    def connect_later(failure):
-        if failure is not None:
-            if failure.type is ConnectionRefusedError:
-                reactor.callLater(1, run_client, (host, port), ClientClass,
-                                  connection_made=connection_made, args=args,
-                                  auto_connect=True)
-            else:
-                log.msg("error while connecting")
-                log.err(failure)
+class KatCPClientFactory(ReconnectingClientFactory):
+    initialDelay = 0.1
+    maxDelay = 10.0
+    factor = 2
+    jitter = 0
+    delay = initialDelay
 
+    def buildProtocol(self, addr):
+        self.resetDelay()
+        return ReconnectingClientFactory.buildProtocol(self, addr)
+
+def run_client((host, port), ClientClass, connection_made=None,
+               args=(), errback=None, errback_args=()):
+    # XXX legacy interface, use the KatCPClientFactory instead
     cc = ClientCreator(reactor, ClientClass)
     d = cc.connectTCP(host, port)
     if connection_made is not None:
         d.addCallback(connection_made, *args)
     if errback is not None:
-        assert not auto_connect
         d.addErrback(errback, *errback_args)
-    elif auto_connect:
-        d.addErrback(connect_later)
     return d
+
 
 class KatCP(LineReceiver):
     """ A base class for protocol implementation of KatCP on top of twisted

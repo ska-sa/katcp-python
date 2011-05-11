@@ -5,8 +5,8 @@ import os, re, sys
 sys.path.insert(0, '.') # not sure why python adds '.' or not depending on
 # obscure details how you run it
 from katcp.server import DeviceServer
-from katcp.tx.core import run_client
 from katcp import Sensor
+from katcp.tx import KatCPClientFactory
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
@@ -73,17 +73,31 @@ class ServerSubprocess(ProcessProtocol):
 
 PORT = 0
 
+class Factory(KatCPClientFactory):
+    def __init__(self, callback):
+        self.callback = callback
+    
+    def buildProtocol(self, addr):
+        result = KatCPClientFactory.buildProtocol(self, addr)
+        if self.callback is not None:
+            reactor.callLater(0, self.callback, result)
+        return result
+
 def run_subprocess(connected, ClientClass):
+    factory = Factory(connected)
+    
     def failed_to_run(error):
         print error
         reactor.stop()
 
     def server_ended(status):
+        factory.stopTrying()
         assert status.type is ProcessDone
         d.callback(None)
 
     def server_running(port):
-        run_client(('localhost', port), ClientClass, connected)
+        factory.protocol = ClientClass
+        reactor.connectTCP('localhost', port, factory)
 
     dname = os.path.dirname
     protocol = ServerSubprocess(server_running, server_ended, failed_to_run)
