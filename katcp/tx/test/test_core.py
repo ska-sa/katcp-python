@@ -12,8 +12,8 @@ from twisted.internet.defer import inlineCallbacks
 
 from katcp.core import FailReply
 
-DelayedCall.debug = True
-Deferred.debug = True
+#DelayedCall.debug = True
+#Deferred.debug = True
 
 timeout = 5
 
