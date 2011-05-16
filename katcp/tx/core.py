@@ -297,10 +297,11 @@ class KatCPServer(Factory):
             client.transport.loseConnection()
 
     def stop(self):
-        self.port.stopListening()
+        result = self.port.stopListening()
         if getattr(self, 'production', None):
             # XXX maybe do it somewhere else???
             reactor.stop()
+        return result
 
     def buildProtocol(self, addr):
         protocol = Factory.buildProtocol(self, addr)
