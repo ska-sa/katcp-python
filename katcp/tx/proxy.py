@@ -432,7 +432,6 @@ class ProxyKatCP(DeviceServer):
             device.add_proxy(self)
 
         reactor.resolve(device.host).addCallback(really_add_device)
-        self.sensors
 
     def add_proxied_sensor(self, device, sensor):
         self.sensors[sensor.name] = sensor
