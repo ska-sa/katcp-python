@@ -3,7 +3,7 @@ from katcp.tx.core import DeviceServer, ClientKatCPProtocol
 from katcp.tx.proxy import ProxyKatCP, DeviceHandler, DeviceProtocol
 from twisted.trial.unittest import TestCase
 from twisted.internet.protocol import ClientCreator
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred, inlineCallbacks
 from katcp import Sensor, Message
 from katcp.kattypes import request, return_reply, Int
 from twisted.internet import reactor
@@ -177,6 +177,24 @@ class TestProxyBase(TestCase):
 
         return self._base_test(('sensor-list', '/state/'), callback)
 
+    def test_sensor_sampling(self):
+        def check_value():
+            assert self.proxy.sensors['device.sensor1'].value() == 10
+            self.port.stopListening()
+            self.proxy.stop()
+            self.finish.callback(None)
+
+        def sampling_done((informs, reply)):
+            self.example_device.sensors['sensor1'].set_value(10)
+            reactor.callLater(0.1, check_value)
+        
+        def callback(arg):
+            d = self.proxy.devices['device'].send_request(
+                'sensor-sampling', 'sensor1', 'period', '10')
+            d.addCallback(sampling_done)
+            return True
+        return self._base_test(None, callback)
+
     def test_reconnect_base(self):
         def works((informs, reply)):
             self.assertEquals(reply, Message.reply('device-watchdog', 'ok'))
@@ -220,7 +238,7 @@ class RogueSensor(object):
     description = 'descr'
     units = 'some'
     stype = 'integer'
-    formatted_params = ()
+    formatted_params = (0, 10)
 
     def __init__(self, name, device):
         self.device = device

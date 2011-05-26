@@ -3,7 +3,7 @@ from katcp.tx.core import DeviceServer, ClientKatCPProtocol, DeviceProtocol
 from twisted.internet.defer import DeferredList
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientFactory
-from katcp import Message, AsyncReply
+from katcp import Message, AsyncReply, Sensor
 from katcp.kattypes import request, return_reply, Int
 
 import re, time
@@ -17,19 +17,18 @@ def value_only_formatted(func):
     new_func.func_name = func.func_name
     return new_func
 
-class ProxiedSensor(object):
+class ProxiedSensor(Sensor):
     """ A sensor which is a proxy for other sensor on the remote device.
     Returns a deferred on read
     """
     def __init__(self, name, description, units, stype, device, proxy,
                  *formatted_params):
         self.basename = name
-        self.name = device.name + '.' + name
         self.device = device
-        self.description = description
-        self.units = units
-        self.stype = stype
-        self.formatted_params = formatted_params
+        stype = Sensor.parse_type(stype)
+        params = Sensor.parse_params(stype, formatted_params)
+        Sensor.__init__(self, stype, device.name + '.' + name, description,
+                        units, params=params)
 
     def read_formatted(self):
         return self.device.send_request('sensor-value', self.basename)
@@ -113,6 +112,11 @@ class DeviceHandler(ClientKatCPProtocol):
         by default
         """
         pass
+
+    def inform_sensor_status(self, msg):
+        sensor = self.sensors[msg.arguments[2]]
+        sensor.set_formatted(msg.arguments[0], msg.arguments[3],
+                             msg.arguments[4])
 
 class ProxyProtocol(DeviceProtocol):
     @request(include_msg=True)
