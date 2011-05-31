@@ -27,6 +27,8 @@ class RecordingTree(katcp.GenericSensorTree):
 
     def recalculate(self, parent, updates):
         self.calls.append((parent, updates))
+        # dummy update of the parent sensor value
+        parent.set_value(parent.value())
 
 
 class TestGenericSensorTree(BaseTreeTest):
@@ -61,6 +63,22 @@ class TestGenericSensorTree(BaseTreeTest):
         self.assertRaises(ValueError, self.tree.children, self.sensor2)
         self.assertRaises(ValueError, self.tree.parents, self.sensor1)
         self.assertRaises(ValueError, self.tree.parents, self.sensor2)
+
+    def test_concurrent_update(self):
+        # this test adds a new parent to a sensor while the sensor
+        # is being updated. If it fails the call to set_value at the
+        # end will raise 'RuntimeError: Set changed size during iteration'.
+        self.tree.add_links(self.sensor1, [self.sensor2])
+
+        class LinkOnUpdate(object):
+            def update(linker, sensor):
+                self.tree.add_links(self.sensor3, [self.sensor2])
+
+        linker = LinkOnUpdate()
+        self.sensor1.attach(linker)
+        self.sensor2.set_value(3)
+        self.assertEqual(self.tree.parents(self.sensor2),
+                         set([self.sensor1, self.sensor3]))
 
 
 class TestBooleanSensorTree(BaseTreeTest):
