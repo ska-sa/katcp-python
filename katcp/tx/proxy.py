@@ -59,6 +59,8 @@ class DeviceHandler(ClientKatCPProtocol):
 
     _conn_counter = 0
 
+    SensorClass = ProxiedSensor
+
     def __init__(self, name, host, port):
         self.name = name
         self.host = host
@@ -78,9 +80,9 @@ class DeviceHandler(ClientKatCPProtocol):
         for inform in informs:
             name, description, units, stype = inform.arguments[:4]
             formatted_arguments = inform.arguments[4:]
-            sensor = ProxiedSensor(name, description,
-                                   units, stype,
-                                   self, self.proxy, *formatted_arguments)
+            sensor = self.SensorClass(name, description,
+                                      units, stype,
+                                      self, self.proxy, *formatted_arguments)
             self.sensors[name] = sensor
             self.proxy.add_proxied_sensor(self, sensor)
         self.proxy.device_ready(self)
