@@ -3,6 +3,7 @@ from katcp.tx.core import DeviceServer, ClientKatCPProtocol, DeviceProtocol
 from twisted.internet.defer import DeferredList
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientFactory
+from twisted.python import log
 from katcp import Message, AsyncReply, Sensor
 from katcp.kattypes import request, return_reply, Int
 
@@ -123,9 +124,12 @@ class DeviceHandler(ClientKatCPProtocol):
         pass
 
     def inform_sensor_status(self, msg):
-        sensor = self.sensors[msg.arguments[2]]
-        sensor.set_formatted(msg.arguments[0], msg.arguments[3],
-                             msg.arguments[4])
+        try:
+            sensor = self.sensors[msg.arguments[2]]
+            sensor.set_formatted(msg.arguments[0], msg.arguments[3],
+                                 msg.arguments[4])
+        except:
+            log.err()
 
 class ProxyProtocol(DeviceProtocol):
     @request(include_msg=True)
