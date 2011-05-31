@@ -159,6 +159,7 @@ class KatCP(LineReceiver):
         name, d, queue = self.queries[0]
         if name != msg.name:
             d.errback("Wrong request order")
+            return
         self.queries.pop(0) # hopefully it's not large
         d.callback((queue, msg))
 
