@@ -99,7 +99,7 @@ class GenericSensorTree(object):
     def add_links(self, parent, children):
         """Create dependency links from parent to child.
 
-        Any sensor not in the tree are added. After all dependency links have
+        Any sensors not in the tree are added. After all dependency links have
         been created, the parent is recalculated and the tree attaches to any
         sensors it was not yet attached to. Links that already exist are
         ignored.
