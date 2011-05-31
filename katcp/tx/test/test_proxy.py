@@ -31,6 +31,12 @@ class ExampleDevice(DeviceServer):
         sensor2._timestamp = 0
         self.add_sensor(sensor2)
 
+class MyDeviceHandler(DeviceHandler):
+    ready = False
+    
+    def device_ready(self):
+        self.ready = True
+
 class ExampleProxy(ProxyKatCP):
     on_device_ready = None
     CONN_DELAY_TIMEOUT = 0.05
@@ -41,12 +47,12 @@ class ExampleProxy(ProxyKatCP):
         self.finish = finish
 
     def setup_devices(self):
-        dev2 = DeviceHandler('device2', 'localhost', 6)
+        dev2 = MyDeviceHandler('device2', 'localhost', 6)
         dev2.connectionMade = lambda *args: None
         dev2._conn_counter = 100
         self.add_device(dev2)
         self.ready_devices = 1
-        self.add_device(DeviceHandler('device', 'localhost', self.connect_to))
+        self.add_device(MyDeviceHandler('device', 'localhost', self.connect_to))
 
     def devices_scan_complete(self):
         self.finish.callback(None)
@@ -225,6 +231,13 @@ class TestProxyBase(TestCase):
             return True
 
         return self._base_test(('watchdog',), callback)
+
+    def test_device_ready(self):
+        def callback(_):
+            device = self.proxy.devices['device']
+            assert device.ready == True
+        
+        return self._base_test(None, callback)
 
     def test_halt(self):
         def callback((informs, reply)):

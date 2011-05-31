@@ -85,7 +85,14 @@ class DeviceHandler(ClientKatCPProtocol):
                                       self, self.proxy, *formatted_arguments)
             self.sensors[name] = sensor
             self.proxy.add_proxied_sensor(self, sensor)
+        self.device_ready()
         self.proxy.device_ready(self)
+
+    def device_ready(self):
+        """ Another hook that can be overloaded if you want to execute
+        code just after device has been synced
+        """
+        pass
 
     def connectionMade(self):
         """ This is called after connection has been made. Introspect server
