@@ -210,8 +210,16 @@ class ServerKatCPProtocol(KatCP):
         and build data
         """
         self.transport.registerProducer(self, True)
-        self.send_message(Message.inform("version", *self.VERSION))
-        self.send_message(Message.inform("build-state", *self.BUILD_STATE))
+        self.send_message(Message.inform("version", self.version()))
+        self.send_message(Message.inform("build-state", self.build_state()))
+
+    def build_state(self):
+        """Return a build state string in the form name-major.minor[(a|b|rc)n]"""
+        return "%s-%s.%s%s" % self.BUILD_STATE
+
+    def version(self):
+        """Return a version string of the form type-major.minor."""
+        return "%s-%s.%s" % self.VERSION
 
     def request_help(self, msg):
         """Return help on the available requests.

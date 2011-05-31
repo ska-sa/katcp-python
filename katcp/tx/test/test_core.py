@@ -158,6 +158,13 @@ class TestDeviceServer(TestCase):
 
         return self._base_test(('help', 'xxxxxxxxxxxxx'), reply)
 
+    def test_version_and_build_state(self):
+        def callback((informs, reply), protocol):
+            assert protocol.version == 'device_stub-0.1'
+            assert protocol.build_state == 'name-0.1'
+        
+        return self._base_test('watchdog', callback)
+
     def test_unknown_request(self):
         def got_unknown((args, reply), protocol):
             assert len(args) == 0
