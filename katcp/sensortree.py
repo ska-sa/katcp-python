@@ -50,7 +50,7 @@ class GenericSensorTree(object):
         sensor : :class:`katcp.Sensor`
             The sensor whose value has changed.
         """
-        parents = self._child_to_parents[sensor]
+        parents = list(self._child_to_parents[sensor])
         for parent in parents:
             self.recalculate(parent, (sensor,))
 
