@@ -68,29 +68,29 @@ class DeviceHandler(ClientKatCPProtocol):
         self.sensors = {}
         self.state = self.UNSYNCED
 
+    def _got_help(self, (informs, reply)):
+        for inform in informs:
+            self.requests.append(inform.arguments[0])
+        self.send_request('sensor-list').addCallback(self._got_sensor_list)
+
+    def _got_sensor_list(self, (informs, reply)):
+        self.state = self.SYNCED
+        for inform in informs:
+            name, description, units, stype = inform.arguments[:4]
+            formatted_arguments = inform.arguments[4:]
+            sensor = ProxiedSensor(name, description,
+                                   units, stype,
+                                   self, self.proxy, *formatted_arguments)
+            self.sensors[name] = sensor
+            self.proxy.add_proxied_sensor(self, sensor)
+        self.proxy.device_ready(self)
+
     def connectionMade(self):
         """ This is called after connection has been made. Introspect server
         about it's capabilities
         """
-        def got_help((informs, reply)):
-            for inform in informs:
-                self.requests.append(inform.arguments[0])
-            self.send_request('sensor-list').addCallback(got_sensor_list)
-
-        def got_sensor_list((informs, reply)):
-            self.state = self.SYNCED
-            for inform in informs:
-                name, description, units, stype = inform.arguments[:4]
-                formatted_arguments = inform.arguments[4:]
-                sensor = ProxiedSensor(name, description,
-                                       units, stype,
-                                       self, self.proxy, *formatted_arguments)
-                self.sensors[name] = sensor
-                self.proxy.add_proxied_sensor(self, sensor)
-            self.proxy.device_ready(self)
-
         self.state = self.SYNCING
-        self.send_request('help').addCallback(got_help)
+        self.send_request('help').addCallback(self._got_help)
         self._conn_counter = 0
 
     def add_proxy(self, proxy):
