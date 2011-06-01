@@ -30,3 +30,5 @@ from .client import DeviceClient, BlockingClient, CallbackClient
 from .sensortree import GenericSensorTree, BooleanSensorTree, AggregateSensorTree
 
 from .version import VERSION, VERSION_STR
+
+__version__ = VERSION_STR
