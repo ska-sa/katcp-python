@@ -60,7 +60,7 @@ class TestKatCP(TestCase):
 
     def test_callback_sensor_sampling(self):
         def check(protocol):
-            self.assertEquals(len(protocol.status_updates), 30)
+            self.assertTrue(len(protocol.status_updates) in (30, 31))
             protocol.send_request('halt')
 
         def connected(protocol):
