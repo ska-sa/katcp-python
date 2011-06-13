@@ -473,7 +473,7 @@ class ProxyKatCP(DeviceServer):
             if device.state != device.UNSYNCED:
                 device.stopping = True
                 device.stop()
-                device.transport.loseConnection(None)
+                device.transport.loseConnection()
         DeviceServer.stop(self)
 
     def unregister_device(self, dev_name):

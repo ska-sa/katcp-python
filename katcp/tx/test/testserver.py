@@ -11,6 +11,7 @@ from twisted.internet.protocol import ProcessProtocol
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
 from twisted.internet.error import ProcessDone
+from twisted.python import log
 
 class FloatSensor(Sensor):
     def get_value(self):
@@ -69,7 +70,12 @@ class ServerSubprocess(ProcessProtocol):
             print "RECEIVED: " + data
 
     def processExited(self, status):
-        self.server_ended(status)
+        try:
+            self.server_ended(status)
+        except Exception:
+            # raising exceptions from processExited triggers Twisted bug #5151
+            # so log the exception instead
+            log.err()
 
 PORT = 0
 
