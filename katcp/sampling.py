@@ -206,9 +206,10 @@ class SampleEvent(SampleStrategy):
         if self._nextTime is not None and (self._nextTime > now):
             return
 
-        if sensor._status != self._lastStatus or sensor._value != self._lastValue:
-            self._lastStatus = sensor._status
-            self._lastValue = sensor._value
+        _timestamp, status, value = sensor.read()
+        if status != self._lastStatus or value != self._lastValue:
+            self._lastStatus = status
+            self._lastValue = value
             if self._minTimeSep:
                 self._nextTime = now + self._minTimeSep
             self.inform()
@@ -282,9 +283,10 @@ class SampleDifferential(SampleStrategy):
         self._lastValue = None
 
     def update(self, sensor):
-        if sensor._status != self._lastStatus or abs(sensor._value - self._lastValue) > self._threshold:
-            self._lastStatus = sensor._status
-            self._lastValue = sensor._value
+        _timestamp, status, value = sensor.read()
+        if status != self._lastStatus or abs(value - self._lastValue) > self._threshold:
+            self._lastStatus = status
+            self._lastValue = value
             self.inform()
 
     def get_sampling(self):
@@ -312,8 +314,6 @@ class SamplePeriod(SampleStrategy):
         if period_ms <= 0:
             raise ValueError("The period must be a positive integer in ms.")
         self._period = period_ms / SamplePeriod.MILLISECOND
-        self._status = sensor._status
-        self._value = sensor._value
 
     def periodic(self, timestamp):
         self.inform()

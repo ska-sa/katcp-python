@@ -84,11 +84,11 @@ class TestFactory(DeviceServer):
     def setup_sensors(self):
         sensor = Sensor(int, 'int_sensor', 'descr', 'unit',
                         params=[-10, 10])
-        sensor._timestamp = 0
+        sensor.set_value(sensor.value(), status=Sensor.UNKNOWN, timestamp=0)
         self.add_sensor(sensor)
         sensor = Sensor(float, 'float_sensor', 'descr', 'unit',
                         params=[-3.5, 3.5])
-        sensor._timestamp = 1
+        sensor.set_value(sensor.value(), status=Sensor.UNKNOWN, timestamp=1)
         self.add_sensor(sensor)
 
 class TestClientKatCP(ClientKatCPProtocol):
@@ -331,8 +331,7 @@ class TestDeviceServer(TestCase):
             self.assertEquals(informs, [Message.inform('sensor-value', '0',
                                                        '1', 'int_sensor',
                                                        'nominal', '3')])
-            self.factory.sensors['int_sensor'].set_value(5)
-            self.factory.sensors['int_sensor']._timestamp = 0
+            self.factory.sensors['int_sensor'].set(0, Sensor.NOMINAL, 5)
             protocol.send_request('sensor-value',
                                   'int_sensor').addCallback(even_more, protocol)
 
@@ -342,8 +341,7 @@ class TestDeviceServer(TestCase):
                                                    'int_sensor', 'auto'))
             self.assertEquals(len(self.client.status_updates), 0)
 
-            self.factory.sensors['int_sensor'].set_value(3)
-            self.factory.sensors['int_sensor']._timestamp = 0
+            self.factory.sensors['int_sensor'].set(0, Sensor.NOMINAL, 3)
             protocol.send_request('sensor-value',
                                   'int_sensor').addCallback(more, protocol)
             return True
@@ -364,8 +362,7 @@ class TestDeviceServer(TestCase):
             self.assertEquals(informs, [Message.inform('sensor-value', '0',
                                                        '1', 'int_sensor',
                                                        'nominal', '3')])
-            self.factory.sensors['int_sensor'].set_value(3)
-            self.factory.sensors['int_sensor']._timestamp = 0
+            self.factory.sensors['int_sensor'].set_value(3, timestamp=0)
             protocol.send_request('sensor-value',
                                   'int_sensor').addCallback(even_more, protocol)
 
@@ -375,8 +372,7 @@ class TestDeviceServer(TestCase):
                                                    'int_sensor', 'event'))
             self.assertEquals(len(self.client.status_updates), 0)
 
-            self.factory.sensors['int_sensor'].set_value(3)
-            self.factory.sensors['int_sensor']._timestamp = 0
+            self.factory.sensors['int_sensor'].set_value(3, timestamp=0)
             protocol.send_request('sensor-value',
                                   'int_sensor').addCallback(more, protocol)
             return True
@@ -389,8 +385,7 @@ class TestDeviceServer(TestCase):
             self.assertEquals(informs, [Message.inform('sensor-value', '0',
                                                        '1', 'int_sensor',
                                                        'nominal', '2')])
-            self.factory.sensors['int_sensor'].set_value(5)
-            self.factory.sensors['int_sensor']._timestamp = 0
+            self.factory.sensors['int_sensor'].set_value(5, timestamp=0)
             protocol.send_request('sensor-value',
                                   'int_sensor').addCallback(second, protocol)
 
@@ -399,8 +394,7 @@ class TestDeviceServer(TestCase):
             self.assertEquals(informs, [Message.inform('sensor-value', '0',
                                                        '1', 'int_sensor',
                                                        'nominal', '5')])
-            self.factory.sensors['int_sensor'].set_value(10)
-            self.factory.sensors['int_sensor']._timestamp = 0
+            self.factory.sensors['int_sensor'].set_value(10, timestamp=0)
             protocol.send_request('sensor-value',
                                   'int_sensor').addCallback(third, protocol)
 
@@ -418,8 +412,7 @@ class TestDeviceServer(TestCase):
                                                    'differential', '3'))
             self.assertEquals(len(self.client.status_updates), 0)
 
-            self.factory.sensors['int_sensor'].set_value(2)
-            self.factory.sensors['int_sensor']._timestamp = 0
+            self.factory.sensors['int_sensor'].set_value(2, timestamp=0)
             protocol.send_request('sensor-value',
                                   'int_sensor').addCallback(first, protocol)
             return True

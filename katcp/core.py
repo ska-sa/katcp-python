@@ -606,21 +606,23 @@ class Sensor(object):
 
         self._sensor_type = sensor_type
         self._observers = set()
-        self._timestamp = time.time()
-        self._status = Sensor.UNKNOWN
 
-        typeclass, self._value = self.SENSOR_TYPES[sensor_type]
+        typeclass, default_value = self.SENSOR_TYPES[sensor_type]
 
         if self._sensor_type in [Sensor.INTEGER, Sensor.FLOAT]:
-            if not params[0] <= self._value <= params[1]:
-                self._value = params[0]
+            if not params[0] <= default_value <= params[1]:
+                default_value = params[0]
             self._kattype = typeclass(params[0], params[1])
         elif self._sensor_type == Sensor.DISCRETE:
-            self._value = params[0]
+            default_value = params[0]
             self._kattype = typeclass(params)
         else:
             self._kattype = typeclass()
 
+        if default is not None:
+            default_value = default
+
+        self._value_tuple = (time.time(), Sensor.UNKNOWN, default_value)
         self._formatter = self._kattype.pack
         self._parser = self._kattype.unpack
         self.stype = self._kattype.name
@@ -630,9 +632,6 @@ class Sensor(object):
         self.units = units
         self.params = params
         self.formatted_params = [self._formatter(p, True) for p in params]
-
-        if default is not None:
-            self._value = default
 
     def __repr__(self):
         cls = self.__class__
@@ -698,7 +697,7 @@ class Sensor(object):
             The value of the sensor (the type should be appropriate to the
             sensor's type).
         """
-        self._timestamp, self._status, self._value = timestamp, status, value
+        self._value_tuple = (timestamp, status, value)
         self.notify()
 
     def set_formatted(self, raw_timestamp, raw_status, raw_value):
@@ -751,7 +750,7 @@ class Sensor(object):
             The value of the sensor (the type will be appropriate to the
             sensor's type).
         """
-        return (self._timestamp, self._status, self._value)
+        return self._value_tuple
 
     def set_value(self, value, status=NOMINAL, timestamp=None):
         """Check and then set the value of the sensor.
