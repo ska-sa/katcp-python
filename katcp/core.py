@@ -633,6 +633,13 @@ class Sensor(object):
         self.params = params
         self.formatted_params = [self._formatter(p, True) for p in params]
 
+    # support for legacy KATCP users that relied on being able to
+    # read _timestamp, _status and _value. Such usage will be
+    # deprecated in a future version of KATCP.
+    _timestamp = property(lambda self: self._value_tuple[0])
+    _status = property(lambda self: self._value_tuple[1])
+    _value = property(lambda self: self._value_tuple[2])
+
     def __repr__(self):
         cls = self.__class__
         return "<%s.%s object name=%r at 0x%x>" % \
