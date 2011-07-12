@@ -12,6 +12,7 @@ import threading
 import sys
 import re
 import time
+import warnings
 
 class Message(object):
     """Represents a KAT device control language message.
@@ -622,6 +623,11 @@ class Sensor(object):
         if default is not None:
             default_value = default
 
+        # self._value_tuple should also be set and read in a single
+        # bytecode to avoid situations were an update in one thread
+        # causes another thread to read the timestamp from one update
+        # and the value and/or status from a different update.
+
         self._value_tuple = (time.time(), Sensor.UNKNOWN, default_value)
         self._formatter = self._kattype.pack
         self._parser = self._kattype.unpack
@@ -636,9 +642,18 @@ class Sensor(object):
     # support for legacy KATCP users that relied on being able to
     # read _timestamp, _status and _value. Such usage will be
     # deprecated in a future version of KATCP.
-    _timestamp = property(lambda self: self._value_tuple[0])
-    _status = property(lambda self: self._value_tuple[1])
-    _value = property(lambda self: self._value_tuple[2])
+
+    def _value_tuple_getter(i, name):
+        def getter(self):
+            warnings.warn("Use of katcp.Sensor.%s attribute is deprecated"
+                          % name, DeprecationWarning)
+            return self._value_tuple[i]
+        return getter
+    #_value_tuple_getter = staticmethod(_value_tuple_getter)
+
+    _timestamp = property(_value_tuple_getter(0, "_timestamp"))
+    _status = property(_value_tuple_getter(1, "_status"))
+    _value = property(_value_tuple_getter(2, "_value"))
 
     def __repr__(self):
         cls = self.__class__
