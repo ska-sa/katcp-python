@@ -623,10 +623,12 @@ class Sensor(object):
         if default is not None:
             default_value = default
 
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # self._value_tuple should also be set and read in a single
         # bytecode to avoid situations were an update in one thread
         # causes another thread to read the timestamp from one update
         # and the value and/or status from a different update.
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
         self._value_tuple = (time.time(), Sensor.UNKNOWN, default_value)
         self._formatter = self._kattype.pack
@@ -649,11 +651,12 @@ class Sensor(object):
                           % name, DeprecationWarning)
             return self._value_tuple[i]
         return getter
-    #_value_tuple_getter = staticmethod(_value_tuple_getter)
 
     _timestamp = property(_value_tuple_getter(0, "_timestamp"))
     _status = property(_value_tuple_getter(1, "_status"))
     _value = property(_value_tuple_getter(2, "_value"))
+
+    del _value_tuple_getter
 
     def __repr__(self):
         cls = self.__class__
