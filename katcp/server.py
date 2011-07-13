@@ -96,9 +96,9 @@ class DeviceServerBase(object):
 
         # sockets and data
         self._data_lock = threading.Lock()
-        self._socks = [] # list of client sockets
-        self._waiting_chunks = {} # map from client sockets to partial messages
-        self._sock_locks = {} # map from client sockets to socket sending locks
+        self._socks = []  # list of client sockets
+        self._waiting_chunks = {}  # map from client sockets to messages pieces
+        self._sock_locks = {}  # map from client sockets to sending locks
 
     def _log_msg(self, level_name, msg, name, timestamp=None):
         """Create a katcp logging inform message.
@@ -111,7 +111,7 @@ class DeviceServerBase(object):
             timestamp = time.time()
         return Message.inform("log",
                 level_name,
-                str(int(timestamp * 1000.0)), # time since epoch in ms
+                str(int(timestamp * 1000.0)),  # time since epoch in ms
                 name,
                 msg,
         )
@@ -181,8 +181,7 @@ class DeviceServerBase(object):
                 except Exception:
                     e_type, e_value, trace = sys.exc_info()
                     reason = "\n".join(traceback.format_exception(
-                        e_type, e_value, trace, self._tb_limit
-                    ))
+                        e_type, e_value, trace, self._tb_limit))
                     self._logger.error("BAD COMMAND: %s" % (reason,))
                     self.inform(sock, self._log_msg("error", reason, "root"))
                 else:
@@ -248,8 +247,7 @@ class DeviceServerBase(object):
             except Exception:
                 e_type, e_value, trace = sys.exc_info()
                 reason = "\n".join(traceback.format_exception(
-                    e_type, e_value, trace, self._tb_limit
-                ))
+                    e_type, e_value, trace, self._tb_limit))
                 self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
                 reply = Message.reply(msg.name, "fail", reason)
         else:
@@ -275,8 +273,7 @@ class DeviceServerBase(object):
             except Exception:
                 e_type, e_value, trace = sys.exc_info()
                 reason = "\n".join(traceback.format_exception(
-                    e_type, e_value, trace, self._tb_limit
-                ))
+                    e_type, e_value, trace, self._tb_limit))
                 self._logger.error("Inform %s FAIL: %s" % (msg.name, reason))
         else:
             self._logger.warn("%s INVALID: Unknown inform." % (msg.name,))
@@ -297,8 +294,7 @@ class DeviceServerBase(object):
             except Exception:
                 e_type, e_value, trace = sys.exc_info()
                 reason = "\n".join(traceback.format_exception(
-                    e_type, e_value, trace, self._tb_limit
-                ))
+                    e_type, e_value, trace, self._tb_limit))
                 self._logger.error("Reply %s FAIL: %s" % (msg.name, reason))
         else:
             self._logger.warn("%s INVALID: Unknown reply." % (msg.name,))
@@ -316,8 +312,9 @@ class DeviceServerBase(object):
         msg : Message object
             The message to send.
         """
-        # TODO: should probably implement this as a queue of sockets and messages to send.
-        #       and have the queue processed in the main loop
+        # TODO: should probably implement this as a queue of sockets and
+        #       messages to send and have the queue processed in the main
+        #       loop.
         data = str(msg) + "\n"
         datalen = len(data)
         totalsent = 0
@@ -325,14 +322,16 @@ class DeviceServerBase(object):
         # Log all sent messages here so no one else has to.
         self._logger.debug(data)
 
-        # sends are locked per-socket -- i.e. only one send per socket at a time
+        # sends are locked per-socket -- i.e. only one send per socket at
+        # a time
         lock = self._sock_locks.get(sock)
         if lock is None:
             try:
                 client_name = sock.getpeername()
             except socket.error:
                 client_name = "<disconnected client>"
-            msg = "Attempt to send to a socket %s which is no longer a client." % (client_name,)
+            msg = "Attempt to send to a socket %s which is no longer a" \
+                " client." % (client_name,)
             self._logger.warn(msg)
             return
 
@@ -441,7 +440,7 @@ class DeviceServerBase(object):
 
     def run(self):
         """Listen for clients and process their requests."""
-        timeout = 0.5 # s
+        timeout = 0.5  # s
 
         # save globals so that the thread can run cleanly
         # even while Python is setting module globals to
@@ -459,8 +458,7 @@ class DeviceServerBase(object):
             all_socks = self._socks + [self._sock]
             try:
                 readers, _writers, errors = _select(
-                    all_socks, [], all_socks, timeout
-                )
+                    all_socks, [], all_socks, timeout)
             except Exception, e:
                 # catch Exception because class of exception thrown
                 # varies drastically between Mac and Linux
@@ -469,15 +467,20 @@ class DeviceServerBase(object):
                 # search for broken socket
                 for sock in list(self._socks):
                     try:
-                        _readers, _writers, _errors = _select([sock], [], [], 0)
+                        _readers, _writers, _errors = _select([sock], [], [],
+                                                              0)
                     except Exception, e:
                         self._remove_socket(sock)
-                        self.on_client_disconnect(sock, "Client socket died with error %s" % (e,), False)
+                        self.on_client_disconnect(sock, "Client socket died"
+                                                  " with error %s" % (e,),
+                                                  False)
                 # check server socket
                 try:
-                    _readers, _writers, _errors = _select([self._sock], [], [], 0)
+                    _readers, _writers, _errors = _select([self._sock], [], [],
+                                                          0)
                 except:
-                    self._logger.warn("Server socket died, attempting to restart it.")
+                    self._logger.warn("Server socket died, attempting to"
+                                      " restart it.")
                     self._sock = self._bind(self._bindaddr)
                 # try select again
                 continue
@@ -489,7 +492,8 @@ class DeviceServerBase(object):
                 else:
                     # client socket died, remove it
                     self._remove_socket(sock)
-                    self.on_client_disconnect(sock, "Client socket died", False)
+                    self.on_client_disconnect(sock, "Client socket died",
+                                              False)
 
             for sock in readers:
                 if sock is self._sock:
@@ -514,7 +518,8 @@ class DeviceServerBase(object):
                         self.on_client_disconnect(sock, "Socket EOF", False)
 
         for sock in list(self._socks):
-            self.on_client_disconnect(sock, "Device server shutting down.", True)
+            self.on_client_disconnect(sock, "Device server shutting down.",
+                                      True)
             self._remove_socket(sock)
 
         self._sock.close()
@@ -676,8 +681,8 @@ class DeviceServer(DeviceServerBase):
         super(DeviceServer, self).__init__(*args, **kwargs)
         self.log = DeviceLogger(self, python_logger=self._logger)
         self._restart_queue = None
-        self._sensors = {} # map names to sensor objects
-        self._reactor = None # created in run
+        self._sensors = {}  # map names to sensor objects
+        self._reactor = None  # created in run
         # map client sockets to map of sensors -> sampling strategies
         self._strategies = {}
         # strat lock (should be held for updates to _strategies)
@@ -696,7 +701,7 @@ class DeviceServer(DeviceServerBase):
         """
         self._strat_lock.acquire()
         try:
-            self._strategies[sock] = {} # map of sensors -> sampling strategies
+            self._strategies[sock] = {}  # map sensors -> sampling strategies
         finally:
             self._strat_lock.release()
         self.inform(sock, Message.inform("version", self.version()))
@@ -729,7 +734,9 @@ class DeviceServer(DeviceServerBase):
             self.inform(sock, Message.inform("disconnect", msg))
 
     def build_state(self):
-        """Return a build state string in the form name-major.minor[(a|b|rc)n]"""
+        """Return a build state string in the form
+        name-major.minor[(a|b|rc)n]
+        """
         return "%s-%s.%s%s" % self.BUILD_INFO
 
     def version(self):
@@ -739,7 +746,8 @@ class DeviceServer(DeviceServerBase):
     def add_sensor(self, sensor):
         """Add a sensor to the device.
 
-        Usually called inside .setup_sensors() but may be called from elsewhere.
+        Usually called inside .setup_sensors() but may be called from
+        elsewhere.
 
         Parameters
         ----------
@@ -801,7 +809,8 @@ class DeviceServer(DeviceServerBase):
     def set_restart_queue(self, restart_queue):
         """Set the restart queue.
 
-        When the device server should be restarted, it will be added to the queue.
+        When the device server should be restarted, it will be added to the
+        queue.
 
         Parameters
         ----------
@@ -857,12 +866,14 @@ class DeviceServer(DeviceServerBase):
     def request_help(self, sock, msg):
         """Return help on the available requests.
 
-        Return a description of the available requests using a seqeunce of #help informs.
+        Return a description of the available requests using a seqeunce of
+        #help informs.
 
         Parameters
         ----------
         request : str, optional
-            The name of the request to return help for (the default is to return help for all requests).
+            The name of the request to return help for (the default is to
+            return help for all requests).
 
         Informs
         -------
@@ -912,14 +923,17 @@ class DeviceServer(DeviceServerBase):
 
         Parameters
         ----------
-        level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', 'off'}, optional
-            Name of the logging level to set the device server to (the default is to leave the log level unchanged).
+        level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', \
+                 'off'}, optional
+            Name of the logging level to set the device server to (the default
+            is to leave the log level unchanged).
 
         Returns
         -------
         success : {'ok', 'fail'}
             Whether the request succeeded.
-        level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', 'off'}
+        level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', \
+                 'off'}
             The log level after processing the request.
 
         Examples
@@ -1011,8 +1025,9 @@ class DeviceServer(DeviceServerBase):
         ----------
         name : str, optional
             Name of the sensor to list (the default is to list all sensors).
-            If name starts and ends with '/' it is treated as a regular expression and
-            all sensors whose names contain the regular expression are returned.
+            If name starts and ends with '/' it is treated as a regular
+            expression and all sensors whose names contain the regular
+            expression are returned.
 
         Informs
         -------
@@ -1025,10 +1040,11 @@ class DeviceServer(DeviceServerBase):
         type : str
             Type of the named sensor.
         params : list of str, optional
-            Additional sensor parameters (type dependent). For integer and float
-            sensors the additional parameters are the minimum and maximum sensor
-            value. For discrete sensors the additional parameters are the allowed
-            values. For all other types no additional parameters are sent.
+            Additional sensor parameters (type dependent). For integer and
+            float sensors the additional parameters are the minimum and maximum
+            sensor value. For discrete sensors the additional parameters are
+            the allowed values. For all other types no additional parameters
+            are sent.
 
         Returns
         -------
@@ -1073,17 +1089,20 @@ class DeviceServer(DeviceServerBase):
         Parameters
         ----------
         name : str, optional
-            Name of the sensor to poll (the default is to send values for all sensors).
-            If name starts and ends with '/' it is treated as a regular expression and
-            all sensors whose names contain the regular expression are returned.
+            Name of the sensor to poll (the default is to send values for all
+            sensors). If name starts and ends with '/' it is treated as a
+            regular expression and all sensors whose names contain the regular
+            expression are returned.
 
         Informs
         -------
         timestamp : float
-            Timestamp of the sensor reading in milliseconds since the Unix epoch.
+            Timestamp of the sensor reading in milliseconds since the Unix
+            epoch.
         count : {1}
-            Number of sensors described in this #sensor-value inform. Will always
-            be one. It exists to keep this inform compatible with #sensor-status.
+            Number of sensors described in this #sensor-value inform. Will
+            always be one. It exists to keep this inform compatible with
+            #sensor-status.
         name : str
             Name of the sensor whose value is being reported.
         value : object
@@ -1116,7 +1135,8 @@ class DeviceServer(DeviceServerBase):
                     sorted(self._sensors.iteritems()) if name_filter(name)]
 
         if exact and not sensors:
-            return Message.reply("sensor-value", "fail", "Unknown sensor name.")
+            return Message.reply("sensor-value", "fail",
+                                 "Unknown sensor name.")
 
         for name, sensor in sensors:
             timestamp_ms, status, value = sensor.read_formatted()
@@ -1134,15 +1154,17 @@ class DeviceServer(DeviceServerBase):
         ----------
         name : str
             Name of the sensor whose sampling strategy to query or configure.
-        strategy : {'none', 'auto', 'event', 'differential', 'period'}, optional
-            Type of strategy to use to report the sensor value. The differential
-            strategy type may only be used with integer or float sensors.
+        strategy : {'none', 'auto', 'event', 'differential', \
+                    'period'}, optional
+            Type of strategy to use to report the sensor value. The
+            differential strategy type may only be used with integer or float
+            sensors.
         params : list of str, optional
             Additional strategy parameters (dependent on the strategy type).
             For the differential strategy, the parameter is an integer or float
             giving the amount by which the sensor value may change before an
-            updated value is sent. For the period strategy, the parameter is the
-            period to sample at in milliseconds. For the event strategy, an
+            updated value is sent. For the period strategy, the parameter is
+            the period to sample at in milliseconds. For the event strategy, an
             optional minimum time between updates in milliseconds may be given.
 
         Returns
@@ -1211,11 +1233,12 @@ class DeviceServer(DeviceServerBase):
 
         current_strategy = self._strategies[sock].get(sensor, None)
         if not current_strategy:
-            current_strategy = SampleStrategy.get_strategy("none", lambda msg: None, sensor)
+            current_strategy = SampleStrategy.get_strategy("none",
+                                                           lambda msg: None,
+                                                           sensor)
 
         strategy, params = current_strategy.get_sampling_formatted()
         return Message.reply("sensor-sampling", "ok", name, strategy, *params)
-
 
     def request_watchdog(self, sock, msg):
         """Check that the server is still alive.
@@ -1271,8 +1294,8 @@ class DeviceLogger(object):
     ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF = range(8)
 
     ## @brief List of logging level names.
-    LEVELS = [ "all", "trace", "debug", "info", "warn",
-               "error", "fatal", "off" ]
+    LEVELS = ["all", "trace", "debug", "info", "warn",
+              "error", "fatal", "off"]
 
     ## @brief Map of Python logging level to corresponding to KATCP levels
     PYTHON_LEVEL = {
@@ -1363,9 +1386,10 @@ class DeviceLogger(object):
             Arguments to pass to log format string. Final message text is
             created using: msg % args.
         kwargs : additional keyword parameters
-            Allowed keywords are 'name' and 'timestamp'. The name is the name of the logger to
-            log the message to. If not given the name defaults to the root logger. The timestamp
-            is a float in seconds. If not given the timestamp defaults to the current time.
+            Allowed keywords are 'name' and 'timestamp'. The name is the name
+            of the logger to log the message to. If not given the name defaults
+            to the root logger. The timestamp is a float in seconds. If not
+            given the timestamp defaults to the current time.
         """
         if self._python_logger is not None:
             self._python_logger.log(self.PYTHON_LEVEL[level], msg, *args)
@@ -1375,10 +1399,9 @@ class DeviceLogger(object):
             if name is None:
                 name = self._root_logger_name
             self._device_server.mass_inform(
-                self._device_server._log_msg(self.level_name(level), msg % args,
-                    name, timestamp=timestamp
-                )
-            )
+                self._device_server._log_msg(self.level_name(level),
+                                             msg % args, name,
+                                             timestamp=timestamp))
 
     def trace(self, msg, *args, **kwargs):
         """Log a trace message."""
@@ -1416,12 +1439,10 @@ class DeviceLogger(object):
             The #log message to create a log entry from.
         """
         (level, timestamp, name, message) = tuple(msg.arguments)
-        #created = float(timestamp) * 1e-6
-        #msecs = int(timestamp) % 1000
         log_string = "%s %s: %s" % (timestamp, name, message)
         logger.log({"trace": 0,
                     "debug": logging.DEBUG,
                     "info": logging.INFO,
                     "warn": logging.WARN,
                     "error": logging.ERROR,
-                    "fatal": logging.FATAL}[level], log_string)#, extra={"created": created})
+                    "fatal": logging.FATAL}[level], log_string)

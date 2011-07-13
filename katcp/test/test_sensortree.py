@@ -3,11 +3,13 @@
 import unittest
 import katcp
 
+
 class BaseTreeTest(unittest.TestCase):
 
     def assertSensorValues(self, sensors, values):
         for sensor, value in zip(sensors, values):
-            self.assertEqual(sensor.value(), value, "Expected %r to equal %s" % (sensor, value))
+            self.assertEqual(sensor.value(), value, "Expected %r to equal %s" %
+                             (sensor, value))
 
     @staticmethod
     def make_sensors(number, stype, params=None):
@@ -36,9 +38,12 @@ class TestGenericSensorTree(BaseTreeTest):
     def setUp(self):
         self.tree = RecordingTree()
         self.calls = self.tree.calls
-        self.sensor1 = katcp.Sensor(int, "sensor1", "First sensor", "", [0, 100])
-        self.sensor2 = katcp.Sensor(int, "sensor2", "Second sensor", "", [0, 100])
-        self.sensor3 = katcp.Sensor(int, "sensor3", "Third sensor", "", [0, 100])
+        self.sensor1 = katcp.Sensor(int, "sensor1", "First sensor", "",
+                                    [0, 100])
+        self.sensor2 = katcp.Sensor(int, "sensor2", "Second sensor", "",
+                                    [0, 100])
+        self.sensor3 = katcp.Sensor(int, "sensor3", "Third sensor", "",
+                                    [0, 100])
 
     def test_add_links(self):
         self.tree.add_links(self.sensor1, [self.sensor2])
@@ -122,7 +127,8 @@ class TestAggregateSensorTree(BaseTreeTest):
 
     def test_basic(self):
         tree = katcp.AggregateSensorTree()
-        s0, s1, s2, s3 = sensors = self.make_sensors(4, katcp.Sensor.INTEGER, params=[-100, 100])
+        s0, s1, s2, s3 = sensors = self.make_sensors(4, katcp.Sensor.INTEGER,
+                                                     params=[-100, 100])
         tree.add(s0, self._add_rule, (s1,))
         tree.add(s1, self._add_rule, (s2, s3))
         self.assertSensorValues(sensors, (0, 0, 0, 0))
@@ -160,7 +166,8 @@ class TestAggregateSensorTree(BaseTreeTest):
 
     def test_delayed(self):
         tree = katcp.AggregateSensorTree()
-        s0, s1, s2, s3 = sensors = self.make_sensors(4, katcp.Sensor.INTEGER, params=[-100, 100])
+        s0, s1, s2, s3 = sensors = self.make_sensors(4, katcp.Sensor.INTEGER,
+                                                     params=[-100, 100])
         tree.add_delayed(s0, self._add_rule, (s1.name,))
         tree.add_delayed(s1, self._add_rule, (s2.name, s3.name))
         self.assertSensorValues(sensors, (0, 0, 0, 0))

@@ -12,9 +12,9 @@ import logging
 import re
 import time
 import Queue
-import types
-from .core import Sensor, Message, DeviceMetaclass
+from .core import Sensor, Message
 from .server import DeviceServer, FailReply
+
 
 class TestLogHandler(logging.Handler):
     """A logger for KATCP tests."""
@@ -72,7 +72,8 @@ class BlockingTestClient(client.BlockingClient):
             append_msg(msg)
         return super(BlockingTestClient, self).handle_reply(msg)
 
-    def message_recorder(self, whitelist=(), blacklist=(), informs=True, replies=False):
+    def message_recorder(self, whitelist=(), blacklist=(), informs=True,
+                         replies=False):
         """Helper method for attaching a hook to selected received messages.
 
         Parameters
@@ -83,7 +84,8 @@ class BlockingTestClient(client.BlockingClient):
             blacklist.
         blacklist : list or tuple
             Ignore messages matching these names.  If any names appear both in
-            the whitelist and the blacklist, the whitelist will take precedence.
+            the whitelist and the blacklist, the whitelist will take
+            precedence.
         informs : boolean
             Whether to record informs.  Default: True.
         replies : boolean
@@ -128,8 +130,10 @@ class BlockingTestClient(client.BlockingClient):
         return get_msgs
 
     @staticmethod
-    def expected_sensor_value_tuple(sensorname, value, sensortype=str, places=7):
-        """Helper method for completing optional values in expected sensor value tuples.
+    def expected_sensor_value_tuple(sensorname, value, sensortype=str,
+                                    places=7):
+        """Helper method for completing optional values in expected sensor
+        value tuples.
 
         Parameters
         ----------
@@ -140,8 +144,8 @@ class BlockingTestClient(client.BlockingClient):
         sensortype : type, optional
             The type to use to convert the sensor value. Default: str.
         places : int, optional
-            The number of places to use in a float comparison.  Has no effect if
-            sensortype is not float. Default: 7.
+            The number of places to use in a float comparison.  Has no effect
+            if sensortype is not float. Default: 7.
         """
 
         return (sensorname, value, sensortype, places)
@@ -159,48 +163,46 @@ class BlockingTestClient(client.BlockingClient):
             The type to use to convert the sensor value. Default: str.
         """
 
-        reply, informs = self.blocking_request(Message.request("sensor-value", sensorname))
+        reply, informs = self.blocking_request(Message.request("sensor-value",
+                                                               sensorname))
         self.test.assertTrue(reply.reply_ok(),
             "Could not retrieve sensor '%s': %s"
-            % (sensorname, (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
-        )
+            % (sensorname, (reply.arguments[1] if len(reply.arguments) >= 2
+                            else "")))
 
         self.test.assertEqual(len(informs), 1,
-            "Expected one sensor value inform for sensor '%s', but received %d."
-            % (sensorname, len(informs))
-        )
+            "Expected one sensor value inform for sensor '%s', but"
+            " received %d." % (sensorname, len(informs)))
 
         inform = informs[0]
 
         self.test.assertEqual(len(inform.arguments), 5,
-            "Expected sensor value inform for sensor '%s' to have five arguments, but received %d."
-            % (sensorname, len(inform.arguments))
-        )
+            "Expected sensor value inform for sensor '%s' to have five"
+            " arguments, but received %d." %
+            (sensorname, len(inform.arguments)))
 
         timestamp, _num, _name, status, value = inform.arguments
 
         try:
             if sensortype == bool:
                 typestr = "%r and then %r" % (int, bool)
-                value =  bool(int(value))
+                value = bool(int(value))
             else:
                 typestr = "%r" % sensortype
                 value = sensortype(value)
         except ValueError, e:
-            self.test.fail("Could not convert value %r of sensor '%s' to type %s: %s"
-                % (value, sensorname, typestr, e)
-            )
+            self.test.fail("Could not convert value %r of sensor '%s' to type"
+                           " %s: %s" % (value, sensorname, typestr, e))
 
         self.test.assertTrue(status in Sensor.STATUSES.values(),
-            "Got invalid status value %r for sensor '%s'." % (status, sensorname)
-        )
+                "Got invalid status value %r for sensor '%s'." %
+                (status, sensorname))
 
         try:
-            timestamp =  int(timestamp)
+            timestamp = int(timestamp)
         except ValueError, e:
-            self.test.fail("Could not convert timestamp %r of sensor '%s' to type %r: %s"
-                % (timestamp, sensorname, int, e)
-            )
+            self.test.fail("Could not convert timestamp %r of sensor '%s' to"
+                           " type %r: %s" % (timestamp, sensorname, int, e))
 
         return value, status, timestamp
 
@@ -242,7 +244,8 @@ class BlockingTestClient(client.BlockingClient):
         _, _, timestamp = self.get_sensor(sensorname)
         return timestamp
 
-    def assert_sensor_equals(self, sensorname, expected, sensortype=str, msg=None, places=7, status=None):
+    def assert_sensor_equals(self, sensorname, expected, sensortype=str,
+                             msg=None, places=7, status=None):
         """Assert that a sensor's value is equal to the given value.
 
         Parameters
@@ -258,15 +261,17 @@ class BlockingTestClient(client.BlockingClient):
             contains %r, it will be replaced with the sensor's value. A default
             message is defined in this method.
         places : int, optional
-            The number of places to use in a float comparison.  Has no effect if
-            sensortype is not float. Default: 7.
+            The number of places to use in a float comparison.  Has no effect
+            if sensortype is not float. Default: 7.
         status : str, optional
             The expected status of the sensor.
         """
 
         if msg is None:
-            places_msg = " (within %d decimal places)" % places if sensortype == float else ""
-            msg = "Value of sensor '%s' is %%r. Expected %r%s." % (sensorname, expected, places_msg)
+            places_msg = " (within %d decimal places)" % \
+                         places if sensortype == float else ""
+            msg = "Value of sensor '%s' is %%r. Expected %r%s." % \
+                  (sensorname, expected, places_msg)
 
         got, got_status, _timestamp = self.get_sensor(sensorname, sensortype)
         if '%r' in msg:
@@ -278,9 +283,13 @@ class BlockingTestClient(client.BlockingClient):
             self.test.assertEqual(got, expected, msg)
 
         if status is not None:
-            self.test.assertEqual(got_status, status, "Status of sensor '%s' is %r. Expected %r." % (sensorname, got_status, status))
+            self.test.assertEqual(got_status, status, "Status of sensor '%s'"
+                                  " is %r. Expected %r." % (sensorname,
+                                                            got_status,
+                                                            status))
 
-    def assert_sensor_status_equals(self, sensorname, expected_status, msg=None):
+    def assert_sensor_status_equals(self, sensorname, expected_status,
+                                    msg=None):
         """Assert that a sensor's status is equal to the given status.
 
         Parameters
@@ -296,7 +305,8 @@ class BlockingTestClient(client.BlockingClient):
         """
 
         if msg is None:
-            msg = "Status of sensor '%s' is %%r. Expected %r." % (sensorname, expected_status)
+            msg = "Status of sensor '%s' is %%r. Expected %r." % \
+                  (sensorname, expected_status)
 
         got_status = self.get_sensor_status(sensorname)
 
@@ -305,7 +315,8 @@ class BlockingTestClient(client.BlockingClient):
 
         self.test.assertEqual(got_status, expected_status, msg)
 
-    def assert_sensor_not_equal(self, sensorname, expected, sensortype=str, msg=None, places=7):
+    def assert_sensor_not_equal(self, sensorname, expected, sensortype=str,
+                                msg=None, places=7):
         """Assert that a sensor's value is not equal to the given value.
 
         Parameters
@@ -321,13 +332,15 @@ class BlockingTestClient(client.BlockingClient):
             contains %r, it will be replaced with the sensor's value. A default
             message is defined in this method.
         places : int, optional
-            The number of places to use in a float comparison.  Has no effect if
-            sensortype is not float. Default: 7.
+            The number of places to use in a float comparison.  Has no effect
+            if sensortype is not float. Default: 7.
         """
 
         if msg is None:
-            places_msg = " (within %d decimal places)" % places if sensortype == float else ""
-            msg = "Value of sensor '%s' is %%r. Expected a different value%s." % (sensorname, places_msg)
+            places_msg = " (within %d decimal places)" % \
+                         places if sensortype == float else ""
+            msg = "Value of sensor '%s' is %%r. Expected a different" \
+                  " value%s." % (sensorname, places_msg)
 
         got = self.get_sensor_value(sensorname, sensortype)
         if '%r' in msg:
@@ -339,41 +352,51 @@ class BlockingTestClient(client.BlockingClient):
             self.test.assertNotEqual(got, expected, msg)
 
     def assert_sensors_equal(self, sensor_tuples, msg=None):
-        """Assert that the values of several sensors are equal to the given values.
+        """Assert that the values of several sensors are equal to the given
+        values.
 
         Parameters
         ----------
         sensor_tuples : list of tuples
-            A list of tuples specifying the sensor values to be checked.  See :meth:`expected_sensor_value_tuple`.
+            A list of tuples specifying the sensor values to be checked.  See
+            :meth:`expected_sensor_value_tuple`.
         msg : str, optional
             A custom message to print if the assertion fails.  If the string
             contains %r, it will be replaced with the sensor's value. A default
             message is defined in this method.
         """
 
-        sensor_tuples = [self.expected_sensor_value_tuple(*t) for t in sensor_tuples]
+        sensor_tuples = [self.expected_sensor_value_tuple(*t)
+                         for t in sensor_tuples]
         for sensorname, expected, sensortype, places in sensor_tuples:
-            self.assert_sensor_equals(sensorname, expected, sensortype, msg=msg, places=places)
+            self.assert_sensor_equals(sensorname, expected, sensortype,
+                                      msg=msg, places=places)
 
     def assert_sensors_not_equal(self, sensor_tuples, msg=None):
-        """Assert that the values of several sensors are not equal to the given values.
+        """Assert that the values of several sensors are not equal to the given
+        values.
 
         Parameters
         ----------
         sensor_tuples : list of tuples
-            A list of tuples specifying the sensor values to be checked.  See :meth:`expected_sensor_value_tuple`.
+            A list of tuples specifying the sensor values to be checked.  See
+            :meth:`expected_sensor_value_tuple`.
         msg : str, optional
             A custom message to print if the assertion fails.  If the string
             contains %r, it will be replaced with the sensor's value. A default
             message is defined in this method.
         """
 
-        sensor_tuples = [self.expected_sensor_value_tuple(*t) for t in sensor_tuples]
+        sensor_tuples = [self.expected_sensor_value_tuple(*t)
+                         for t in sensor_tuples]
         for sensorname, expected, sensortype, places in sensor_tuples:
-            self.assert_sensor_not_equal(sensorname, expected, sensortype, msg=msg, places=places)
+            self.assert_sensor_not_equal(sensorname, expected, sensortype,
+                                         msg=msg, places=places)
 
-    def wait_until_sensor_equals(self, timeout, sensorname, value, sensortype=str, places=7, pollfreq=0.1):
-        """Wait until a sensor's value is equal to the given value, or time out.
+    def wait_until_sensor_equals(self, timeout, sensorname, value,
+                                 sensortype=str, places=7, pollfreq=0.1):
+        """Wait until a sensor's value is equal to the given value, or time
+        out.
 
         Parameters
         ----------
@@ -386,8 +409,8 @@ class BlockingTestClient(client.BlockingClient):
         sensortype : type, optional
             The type to use to convert the sensor value. Default: str.
         places : int, optional
-            The number of places to use in a float comparison.  Has no effect if
-            sensortype is not float. Default: 7.
+            The number of places to use in a float comparison.  Has no effect
+            if sensortype is not float. Default: 7.
         pollfreq : float, optional
             How frequently to poll for the sensor value. Default: 0.1.
         """
@@ -396,7 +419,7 @@ class BlockingTestClient(client.BlockingClient):
         success = False
 
         if sensortype == float:
-            cmpfun = lambda got, exp: abs(got-exp) < 10**-places
+            cmpfun = lambda got, exp: abs(got - exp) < 10 ** -places
         else:
             cmpfun = lambda got, exp: got == exp
 
@@ -409,12 +432,15 @@ class BlockingTestClient(client.BlockingClient):
             time.sleep(pollfreq)
 
         if not success:
-            self.test.fail("Timed out while waiting %ss for %s sensor to become %s. Last value was %s." % (timeout, sensorname, value, lastval))
+            self.test.fail("Timed out while waiting %ss for %s sensor to"
+                           " become %s. Last value was %s." %
+                           (timeout, sensorname, value, lastval))
 
     # REQUEST PARAMETERS
 
     def test_sensor_list(self, expected_sensors, ignore_descriptions=False):
-        """Test that the list of sensors on the device equals the provided list.
+        """Test that the list of sensors on the device equals the provided
+        list.
 
         Parameters
         ----------
@@ -436,8 +462,7 @@ class BlockingTestClient(client.BlockingClient):
 
         self.test.assertTrue(reply.reply_ok(),
             "Could not retrieve sensor list: %s"
-            % (reply.arguments[1] if len(reply.arguments) >= 2 else "")
-        )
+            % (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
 
         expected_sensors = [sensortuple(*t) for t in expected_sensors]
         got_sensors = [sensortuple(*m.arguments) for m in informs]
@@ -445,19 +470,22 @@ class BlockingTestClient(client.BlockingClient):
         #print ",\n".join([str(t) for t in got_sensors])
 
         if ignore_descriptions:
-            expected_sensors = [s[:1]+s[2:] for s in expected_sensors]
-            got_sensors = [s[:1]+s[2:] for s in got_sensors]
+            expected_sensors = [s[:1] + s[2:] for s in expected_sensors]
+            got_sensors = [s[:1] + s[2:] for s in got_sensors]
 
         expected_set = set(expected_sensors)
         got_set = set(got_sensors)
 
         self.test.assertEqual(got_set, expected_set,
-            "Sensor list differs from expected list.\nThese sensors are missing:\n%s\nFound these unexpected sensors:\n%s"
-            % ("\n".join(sorted([str(t) for t in expected_set - got_set])), "\n".join(sorted([str(t) for t in got_set - expected_set])))
-        )
+            "Sensor list differs from expected list.\nThese sensors are"
+            " missing:\n%s\nFound these unexpected sensors:\n%s"
+            % ("\n".join(sorted([str(t) for t in expected_set - got_set])),
+               "\n".join(sorted([str(t) for t in got_set - expected_set]))))
 
-    def test_help(self, expected_requests, full_descriptions=False, exclude_defaults=True):
-        """Test that the list of requests on the device equals the provided list.
+    def test_help(self, expected_requests, full_descriptions=False,
+                  exclude_defaults=True):
+        """Test that the list of requests on the device equals the provided
+        list.
 
         Parameters
         ----------
@@ -472,8 +500,9 @@ class BlockingTestClient(client.BlockingClient):
             otherwise only text up to the first newline is compared.  Has no
             effect if expected_requests is a list of strings.  Default: False.
         exclude_defaults : boolean, optional
-            If this is true, exclude requests on the device which match requests
-            found on :class:`katcp.DeviceServer` by name.  Default: True.
+            If this is true, exclude requests on the device which match
+            requests found on :class:`katcp.DeviceServer` by name.
+            Default: True.
         """
 
         descriptions = True
@@ -483,15 +512,16 @@ class BlockingTestClient(client.BlockingClient):
         reply, informs = self.blocking_request(Message.request("help"))
         self.test.assertTrue(reply.reply_ok(),
             "Could not retrieve help list: %s"
-            % (reply.arguments[1] if len(reply.arguments) >= 2 else "")
-        )
+            % (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
 
         got_requests = [tuple(m.arguments) for m in informs]
 
         if descriptions:
             if not full_descriptions:
-                got_requests = [(name, desc.split('\n')[0]) for (name, desc) in got_requests]
-                expected_requests = [(name, desc.split('\n')[0]) for (name, desc) in expected_requests]
+                got_requests = [(name, desc.split('\n')[0])
+                                for (name, desc) in got_requests]
+                expected_requests = [(name, desc.split('\n')[0])
+                                     for (name, desc) in expected_requests]
         else:
             got_requests = [name for (name, desc) in got_requests]
 
@@ -504,15 +534,18 @@ class BlockingTestClient(client.BlockingClient):
             if not descriptions:
                 got_set = got_set - default_request_names
             else:
-                got_set = set([(name, desc) for (name, desc) in got_set if name not in default_request_names])
+                got_set = set([(name, desc) for (name, desc) in got_set
+                               if name not in default_request_names])
 
         self.test.assertEqual(got_set, expected_set,
-            "Help list differs from expected list.\nThese requests are missing:\n%s\nFound these unexpected requests:\n%s"
-            % ("\n".join(sorted([str(t) for t in expected_set - got_set])), "\n".join(sorted([str(t) for t in got_set - expected_set])))
-        )
+            "Help list differs from expected list.\nThese requests are"
+            " missing:\n%s\nFound these unexpected requests:\n%s"
+            % ("\n".join(sorted([str(t) for t in expected_set - got_set])),
+               "\n".join(sorted([str(t) for t in got_set - expected_set]))))
 
     def assert_request_succeeds(self, requestname, *params, **kwargs):
-        """Assert that the given request completes successfully when called with the given parameters, and optionally check the arguments.
+        """Assert that the given request completes successfully when called
+        with the given parameters, and optionally check the arguments.
 
         Parameters
         ----------
@@ -521,17 +554,17 @@ class BlockingTestClient(client.BlockingClient):
         params : list of objects
             The parameters with which to call the request.
         args_echo : boolean, optional
-            Keyword parameter.  Assert that the reply arguments after 'ok' equal
-            the request parameters.  Takes precedence over args_equal, args_in
-            and args_length. Default False.
+            Keyword parameter.  Assert that the reply arguments after 'ok'
+            equal the request parameters.  Takes precedence over args_equal,
+            args_in and args_length. Default False.
         args_equal : list of strings, optional
-            Keyword parameter.  Assert that the reply arguments after 'ok' equal
-            this list.  Ignored if args_echo is present; takes precedence over
-            args_echo, args_in and args_length.
+            Keyword parameter.  Assert that the reply arguments after 'ok'
+            equal this list.  Ignored if args_echo is present; takes precedence
+            over args_echo, args_in and args_length.
         args_in : list of lists, optional
-            Keyword parameter.  Assert that the reply arguments after 'ok' equal
-            one of these tuples.  Ignored if args_equal or args_echo is present;
-            takes precedence over args_length.
+            Keyword parameter.  Assert that the reply arguments after 'ok'
+            equal one of these tuples.  Ignored if args_equal or args_echo is
+            present; takes precedence over args_length.
         args_length : int, optional
             Keyword parameter.  Assert that the length of the reply arguments
             after 'ok' matches this number. Ignored if args_equal, args_echo or
@@ -541,14 +574,18 @@ class BlockingTestClient(client.BlockingClient):
             matches this number.
         """
 
-        reply, informs = self.blocking_request(Message.request(requestname, *params))
+        reply, informs = self.blocking_request(Message.request(requestname,
+                                                               *params))
 
-        self.test.assertEqual(reply.name, requestname, "Reply to request '%s' has name '%s'." % (requestname, reply.name))
+        self.test.assertEqual(reply.name, requestname, "Reply to request '%s'"
+                              " has name '%s'." % (requestname, reply.name))
 
         self.test.assertTrue(reply.reply_ok(),
-            "Expected request '%s' called with parameters %r to succeed, but it failed %s."
-            % (requestname, params, ("with error '%s'" % reply.arguments[1] if len(reply.arguments) >= 2 else "(with no error message)"))
-        )
+            "Expected request '%s' called with parameters %r to succeed, but"
+            " it failed %s." %
+            (requestname, params, ("with error '%s'" % reply.arguments[1]
+                                   if len(reply.arguments) >= 2
+                                   else "(with no error message)")))
 
         args = reply.arguments[1:]
 
@@ -563,30 +600,31 @@ class BlockingTestClient(client.BlockingClient):
 
         if args_equal is not None:
             self.test.assertEqual(args, args_equal,
-                "Expected reply to request '%s' called with parameters %r to have arguments %s, but received %s."
-                % (requestname, params, args_equal, args)
-            )
+                "Expected reply to request '%s' called with parameters %r to"
+                " have arguments %s, but received %s."
+                % (requestname, params, args_equal, args))
         elif args_in is not None:
             self.test.assertTrue(args in args_in,
-                "Expected reply to request '%s' called with parameters %r to have arguments in %s, but received %s."
-                % (requestname, params, args_in, args)
-            )
+                "Expected reply to request '%s' called with parameters %r to"
+                " have arguments in %s, but received %s."
+                % (requestname, params, args_in, args))
         elif args_length is not None:
             self.test.assertEqual(len(args), args_length,
-                "Expected reply to request '%s' called with parameters %r to have %d arguments, but received %d: %s."
-                % (requestname, params, args_length, len(args), args)
-            )
+                "Expected reply to request '%s' called with parameters %r to"
+                " have %d arguments, but received %d: %s."
+                % (requestname, params, args_length, len(args), args))
 
         if informs_count is not None:
             self.test.assertEqual(len(informs), informs_count,
-                "Expected %d informs in reply to request '%s' called with parameters %r, but received %d."
-                % (informs_count, requestname, params, len(informs))
-            )
+                "Expected %d informs in reply to request '%s' called with"
+                " parameters %r, but received %d."
+                % (informs_count, requestname, params, len(informs)))
 
         return args
 
     def assert_request_fails(self, requestname, *params, **kwargs):
-        """Assert that the given request fails when called with the given parameters.
+        """Assert that the given request fails when called with the given
+        parameters.
 
         Parameters
         ----------
@@ -595,20 +633,23 @@ class BlockingTestClient(client.BlockingClient):
         params : list of objects
             The parameters with which to call the request.
         status_equals : string, optional
-            Keyword parameter.  Assert that the reply status equals this string.
+            Keyword parameter.  Assert that the reply status equals this
+            string.
         error_equals : string, optional
             Keyword parameter.  Assert that the error message equals this
             string.
         """
 
-        reply, informs = self.blocking_request(Message.request(requestname, *params))
+        reply, informs = self.blocking_request(Message.request(requestname,
+                                                               *params))
 
-        self.test.assertEqual(reply.name, requestname, "Reply to request '%s' has name '%s'." % (requestname, reply.name))
+        self.test.assertEqual(reply.name, requestname,
+                              "Reply to request '%s' has name '%s'." %
+                              (requestname, reply.name))
 
-        self.test.assertFalse(reply.reply_ok(),
-            "Expected request '%s' called with parameters %r to fail, but it was successful."
-            % (requestname, params)
-        )
+        self.test.assertFalse(reply.reply_ok(), "Expected request '%s' called"
+                              " with parameters %r to fail, but it was"
+                              " successful." % (requestname, params))
 
         status = reply.arguments[0]
         error = reply.arguments[1] if len(reply.arguments) > 1 else None
@@ -618,19 +659,20 @@ class BlockingTestClient(client.BlockingClient):
 
         if status_equals is not None:
             self.test.assertTrue(status == status_equals,
-                "Expected request '%s' called with parameters %r to return status %s, but the status was %r."
-                % (requestname, params, status_equals, status)
-            )
+                "Expected request '%s' called with parameters %r to return"
+                " status %s, but the status was %r."
+                % (requestname, params, status_equals, status))
 
         if error_equals is not None:
             self.test.assertTrue(error is not None and error == error_equals,
-                "Expected request '%s' called with parameters %r to fail with error %s, but the error was %r."
-                % (requestname, params, error_equals, error)
-            )
+                "Expected request '%s' called with parameters %r to fail with"
+                " error %s, but the error was %r."
+                % (requestname, params, error_equals, error))
 
         return status, error
 
-    def test_setter_request(self, requestname, sensorname, sensortype=str, good=(), bad=(), places=7, args_echo=False):
+    def test_setter_request(self, requestname, sensorname, sensortype=str,
+                            good=(), bad=(), places=7, args_echo=False):
         """Test a request which simply sets the value of a sensor.
 
         Parameters
@@ -648,23 +690,24 @@ class BlockingTestClient(client.BlockingClient):
             A list of values to which this request cannot successfully set the
             sensor.  The object type should match sensortype.
         places : int, optional
-            The number of places to use in a float comparison.  Has no effect if
-            sensortype is not float. Default: 7.
+            The number of places to use in a float comparison.  Has no effect
+            if sensortype is not float. Default: 7.
         args_echo : boolean, optional
             Check that the value is echoed as an argument by the reply to the
             request.  Default: False.
         """
 
         for value in good:
-            self.assert_request_succeeds(requestname, value, args_echo=args_echo)
+            self.assert_request_succeeds(requestname, value,
+                                         args_echo=args_echo)
             time.sleep(self._sensor_lag())
 
-            self.assert_sensor_equals(
-                sensorname, value, sensortype,
-                "After request '%s' was called with parameter %r, value of sensor '%s' is %%r. Expected %r%s."
-                % (requestname, value, sensorname, value, (" (within %d decimal places)" % places if sensortype == float else "")),
-                places
-            )
+            self.assert_sensor_equals(sensorname, value, sensortype,
+                "After request '%s' was called with parameter %r, value of"
+                " sensor '%s' is %%r. Expected %r%s."
+                % (requestname, value, sensorname, value,
+                   (" (within %d decimal places)" % places
+                    if sensortype == float else "")), places)
 
         for value in bad:
             self.assert_request_fails(requestname, value)
@@ -678,13 +721,14 @@ class BlockingTestClient(client.BlockingClient):
             The name of the request.
         good : list of tuples
             Each tuple contains a tuple of successful parameters, a tuple of
-            expected sensor values (see :meth:`expected_sensor_value_tuple`), and
-            optionally a dict of options. Permitted options are: "statuses" and
-            a list of status tuples to check, or "delay" and a float in seconds
-            specifying an additional delay before the sensors are expected to
-            change.
+            expected sensor values (see :meth:`expected_sensor_value_tuple`),
+            and optionally a dict of options. Permitted options are: "statuses"
+            and a list of status tuples to check, or "delay" and a float in
+            seconds specifying an additional delay before the sensors are
+            expected to change.
         bad : list of tuples
-            Each tuple is set of parameters which should cause the request to fail.
+            Each tuple is set of parameters which should cause the request to
+            fail.
         """
 
         def testtuple(params, expected_values, options={}):
@@ -699,22 +743,22 @@ class BlockingTestClient(client.BlockingClient):
             self.assert_request_succeeds(requestname, *params)
             time.sleep(self._sensor_lag() + delay)
 
-            expected_values = [self.expected_sensor_value_tuple(*t) for t in expected_values]
+            expected_values = [self.expected_sensor_value_tuple(*t)
+                               for t in expected_values]
 
             for sensorname, value, sensortype, places in expected_values:
-                self.assert_sensor_equals(
-                    sensorname, value, sensortype,
-                    "After request '%s' was called with parameters %r, value of sensor '%s' is %%r. Expected %r%s."
-                    % (requestname, params, sensorname, value, (" (within %d decimal places)" % places if sensortype == float else "")),
-                    places
-                )
+                self.assert_sensor_equals(sensorname, value, sensortype,
+                    "After request '%s' was called with parameters %r, value"
+                    " of sensor '%s' is %%r. Expected %r%s."
+                    % (requestname, params, sensorname, value,
+                       (" (within %d decimal places)" % places
+                        if sensortype == float else "")), places)
 
             for sensorname, status in expected_statuses:
-                self.assert_sensor_status_equals(
-                    sensorname, status,
-                    "After request '%s' was called with parameters %r, status of sensor '%s' is %%r. Expected %r."
-                    % (requestname, params, sensorname, status)
-                )
+                self.assert_sensor_status_equals(sensorname, status,
+                    "After request '%s' was called with parameters %r, status"
+                    " of sensor '%s' is %%r. Expected %r."
+                    % (requestname, params, sensorname, status))
 
         for params in bad:
             self.assert_request_fails(requestname, *params)
@@ -734,8 +778,7 @@ class DeviceTestServer(DeviceServer):
         self.add_sensor(DeviceTestSensor(
             Sensor.INTEGER, "an.int", "An Integer.", "count",
             [-5, 5],
-            timestamp=12345, status=Sensor.NOMINAL, value=3
-        ))
+            timestamp=12345, status=Sensor.NOMINAL, value=3))
 
     def request_new_command(self, sock, msg):
         """A new command."""
@@ -795,7 +838,9 @@ class TestUtilMixin(object):
            expected: expected patterns
            """
         for msg, pattern in zip(actual_msgs, expected):
-            self.assertTrue(re.match(pattern, str(msg)), "Message did match pattern %r: %s" % (pattern, msg))
+            self.assertTrue(re.match(pattern, str(msg)),
+                            "Message did match pattern %r: %s" %
+                            (pattern, msg))
         self._assert_msgs_length(actual_msgs, len(expected))
 
     def _assert_msgs_like(self, actual_msgs, expected):
@@ -811,12 +856,10 @@ class TestUtilMixin(object):
             if prefix and not str_msg.startswith(prefix):
                 self.assertEqual(str_msg, prefix,
                     msg="Message '%s' does not start with '%s'."
-                    % (str_msg, prefix)
-                )
+                    % (str_msg, prefix))
 
             if suffix and not str_msg.endswith(suffix):
                 self.assertEqual(str_msg, suffix,
                     msg="Message '%s' does not end with '%s'."
-                    % (str_msg, suffix)
-                )
+                    % (str_msg, suffix))
         self._assert_msgs_length(actual_msgs, len(expected))

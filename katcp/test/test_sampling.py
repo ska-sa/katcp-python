@@ -26,8 +26,7 @@ class TestSampling(unittest.TestCase):
         self.sensor = DeviceTestSensor(
                 katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
-                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
-        )
+                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
 
         # test callback
         def inform(msg):
@@ -52,17 +51,22 @@ class TestSampling(unittest.TestCase):
         self.assertRaises(ValueError, sampling.SamplePeriod, None, s, "-1")
         self.assertRaises(ValueError, sampling.SampleEvent, None, s, "foo")
         self.assertRaises(ValueError, sampling.SampleDifferential, None, s)
-        self.assertRaises(ValueError, sampling.SampleDifferential, None, s, "-1")
-        self.assertRaises(ValueError, sampling.SampleDifferential, None, s, "1.5")
+        self.assertRaises(ValueError, sampling.SampleDifferential,
+                          None, s, "-1")
+        self.assertRaises(ValueError, sampling.SampleDifferential,
+                          None, s, "1.5")
 
         sampling.SampleStrategy.get_strategy("none", None, s)
         sampling.SampleStrategy.get_strategy("auto", None, s)
         sampling.SampleStrategy.get_strategy("period", None, s, "15")
         sampling.SampleStrategy.get_strategy("event", None, s)
         sampling.SampleStrategy.get_strategy("differential", None, s, "2")
-        self.assertRaises(ValueError, sampling.SampleStrategy.get_strategy, "random", None, s)
-        self.assertRaises(ValueError, sampling.SampleStrategy.get_strategy, "period", None, s, "foo")
-        self.assertRaises(ValueError, sampling.SampleStrategy.get_strategy, "differential", None, s, "bar")
+        self.assertRaises(ValueError, sampling.SampleStrategy.get_strategy,
+                          "random", None, s)
+        self.assertRaises(ValueError, sampling.SampleStrategy.get_strategy,
+                          "period", None, s, "foo")
+        self.assertRaises(ValueError, sampling.SampleStrategy.get_strategy,
+                          "differential", None, s, "bar")
 
     def test_event(self):
         """Test SampleEvent strategy."""
@@ -126,8 +130,7 @@ class TestReactor(unittest.TestCase):
         self.sensor = DeviceTestSensor(
                 katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
-                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3
-        )
+                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
 
         # test callback
         def inform(msg):
@@ -154,8 +157,9 @@ class TestReactor(unittest.TestCase):
         self.reactor.remove_strategy(period)
         end = time.time()
 
-        expected = int(round((end-start) / 0.01))
+        expected = int(round((end - start) / 0.01))
         emax, emin = expected + 1, expected - 1
 
-        self.assertTrue(emin <= len(self.calls) <= emax, "Expect %d to %d informs, got:\n  %s"
-            % (emin, emax, "\n  ".join(str(x) for x in self.calls)))
+        self.assertTrue(emin <= len(self.calls) <= emax,
+                        "Expect %d to %d informs, got:\n  %s" %
+                        (emin, emax, "\n  ".join(str(x) for x in self.calls)))

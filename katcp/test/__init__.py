@@ -23,6 +23,7 @@ try:
 except ImportError:
     ply = None
 
+
 def suite():
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
@@ -36,4 +37,3 @@ def suite():
     if ply is not None:
         suite.addTests(loader.loadTestsFromModule(test_katcp_bnf))
     return suite
-

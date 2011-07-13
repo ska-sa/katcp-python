@@ -9,6 +9,7 @@
 
 import logging
 
+
 class NullHandler(logging.Handler):
     def emit(self, record):
         pass
@@ -16,7 +17,6 @@ class NullHandler(logging.Handler):
 logging.getLogger("katcp").addHandler(NullHandler())
 
 del logging, NullHandler
-
 
 from .core import Message, KatcpSyntaxError, MessageParser, \
                   DeviceMetaclass, ExcepthookThread, FailReply, \
@@ -27,7 +27,8 @@ from .server import DeviceServerBase, DeviceServer, DeviceLogger
 
 from .client import DeviceClient, BlockingClient, CallbackClient
 
-from .sensortree import GenericSensorTree, BooleanSensorTree, AggregateSensorTree
+from .sensortree import GenericSensorTree, BooleanSensorTree, \
+                        AggregateSensorTree
 
 from .version import VERSION, VERSION_STR
 

@@ -18,6 +18,7 @@ log = logging.getLogger("katcp.sampling")
 
 # pylint: disable-msg=W0142
 
+
 class SampleStrategy(object):
     """Base class for strategies for sampling sensors.
 
@@ -191,7 +192,8 @@ class SampleEvent(SampleStrategy):
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) > 1:
-            raise ValueError("The 'event' strategy takes one or zero parameters.")
+            raise ValueError("The 'event' strategy takes one or"
+                             " zero parameters.")
         elif len(params) == 1:
             self._minTimeSep = float(params[0]) / 1000.0
         else:
@@ -263,9 +265,12 @@ class SampleDifferential(SampleStrategy):
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
-            raise ValueError("The 'differential' strategy takes one parameter.")
-        if sensor._sensor_type not in (Sensor.INTEGER, Sensor.FLOAT, Sensor.TIMESTAMP):
-            raise ValueError("The 'differential' strategy is only valid for float, integer and timestamp sensors.")
+            raise ValueError("The 'differential' strategy takes"
+                             " one parameter.")
+        if sensor._sensor_type not in (Sensor.INTEGER, Sensor.FLOAT,
+                                       Sensor.TIMESTAMP):
+            raise ValueError("The 'differential' strategy is only valid for"
+                             " float, integer and timestamp sensors.")
         if sensor._sensor_type == Sensor.INTEGER:
             self._threshold = int(params[0])
             if self._threshold <= 0:
@@ -276,15 +281,17 @@ class SampleDifferential(SampleStrategy):
                 raise ValueError("The diff amount must be a positive float.")
         else:
             # _sensor_type must be Sensor.TIMESTAMP
-            self._threshold = int(params[0]) / 1000.0 # convert threshold in ms to s
+            self._threshold = int(params[0]) / 1000.0  # convert threshold to s
             if self._threshold <= 0:
-                raise ValueError("The diff amount must be a positive number of milliseconds.")
+                raise ValueError("The diff amount must be a positive number"
+                                 " of milliseconds.")
         self._lastStatus = None
         self._lastValue = None
 
     def update(self, sensor):
         _timestamp, status, value = sensor.read()
-        if status != self._lastStatus or abs(value - self._lastValue) > self._threshold:
+        if status != self._lastStatus or \
+                abs(value - self._lastValue) > self._threshold:
             self._lastStatus = status
             self._lastValue = value
             self.inform()
@@ -342,7 +349,8 @@ class SampleReactor(ExcepthookThread):
         self._wakeEvent = threading.Event()
         self._heap = []
         self._logger = logger
-        # set daemon True so that the app can stop even if the thread is running
+        # set daemon True so that the app can stop even if the thread
+        # is running
         self.setDaemon(True)
 
     def add_strategy(self, strategy):
@@ -386,7 +394,8 @@ class SampleReactor(ExcepthookThread):
 
     def run(self):
         """Run the sample reactor."""
-        self._logger.debug("Starting thread %s" % (threading.currentThread().getName()))
+        self._logger.debug("Starting thread %s" %
+                           (threading.currentThread().getName()))
         heap = self._heap
         wake = self._wakeEvent
 
@@ -415,8 +424,8 @@ class SampleReactor(ExcepthookThread):
                     _push(heap, (next_time, strategy))
                 except Exception, e:
                     self._logger.exception(e)
-                    # push ten seconds into the future and hope whatever was wrong
-                    # sorts itself out
+                    # push ten seconds into the future and hope whatever was
+                    # wrong sorts itself out
                     _push(heap, (next_time + 10.0, strategy))
             else:
                 wake.wait()

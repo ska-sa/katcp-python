@@ -14,6 +14,7 @@ import re
 import time
 import warnings
 
+
 class Message(object):
     """Represents a KAT device control language message.
 
@@ -62,7 +63,7 @@ class Message(object):
 
     ## @brief Mapping from escape character to corresponding unescaped string.
     ESCAPE_LOOKUP = {
-        "\\" : "\\",
+        "\\": "\\",
         "_": " ",
         "0": "\0",
         "n": "\n",
@@ -107,7 +108,8 @@ class Message(object):
         if arguments is None:
             self.arguments = []
         else:
-            self.arguments = [type(x) is float and repr(x) or str(x) for x in arguments]
+            self.arguments = [type(x) is float and repr(x) or str(x)
+                              for x in arguments]
 
         # check message type
 
@@ -123,7 +125,7 @@ class Message(object):
 
         if not name:
             raise KatcpSyntaxError("Command missing command name.")
-        if not name.replace("-","").isalnum():
+        if not name.replace("-", "").isalnum():
             raise KatcpSyntaxError("Command name should consist only of"
                                 " alphanumeric characters and dashes (got %r)."
                                 % (name,))
@@ -163,7 +165,8 @@ class Message(object):
         else:
             mid_str = ""
 
-        return "%s%s%s%s" % (self.TYPE_SYMBOLS[self.mtype], self.name, mid_str, arg_str)
+        return "%s%s%s%s" % (self.TYPE_SYMBOLS[self.mtype], self.name,
+                             mid_str, arg_str)
 
     def __repr__(self):
         """ Return message displayed in a readable form
@@ -197,8 +200,9 @@ class Message(object):
         return "\\" + self.REVERSE_ESCAPE_LOOKUP[match.group()]
 
     def reply_ok(self):
-        """Return True if the message is a reply and its first argument is 'ok'."""
-        return self.mtype == self.REPLY and self.arguments and self.arguments[0] == self.OK
+        """Return True if this is a reply and its first argument is 'ok'."""
+        return (self.mtype == self.REPLY and self.arguments and
+                self.arguments[0] == self.OK)
 
     # * and ** magic useful here
     # pylint: disable-msg = W0142
@@ -272,7 +276,8 @@ class MessageParser(object):
     WHITESPACE_RE = re.compile(r"[ \t]+")
 
     ## @brief Regular expression matching name and ID
-    NAME_RE = re.compile(r"^(?P<name>[a-zA-Z][a-zA-Z0-9\-]*)(\[(?P<id>[0-9]+)\])?$")
+    NAME_RE = re.compile(
+        r"^(?P<name>[a-zA-Z][a-zA-Z0-9\-]*)(\[(?P<id>[0-9]+)\])?$")
 
     def _unescape_match(self, match):
         """Given an re.Match, unescape the escape code it represents."""
@@ -316,7 +321,8 @@ class MessageParser(object):
         mtype = self.TYPE_SYMBOL_LOOKUP[type_char]
 
         # find command and arguments name
-        # (removing possible empty argument resulting from whitespace at end of command)
+        # (removing possible empty argument resulting from whitespace at end
+        #  of command)
         parts = self.WHITESPACE_RE.split(line)
         if not parts[-1]:
             del parts[-1]
@@ -330,7 +336,8 @@ class MessageParser(object):
             name = match.group('name')
             mid = match.group('id')
         else:
-            raise KatcpSyntaxError("Bad message name (and possibly id) %r." % (name,))
+            raise KatcpSyntaxError("Bad message name (and possibly id) %r." %
+                                   (name,))
 
         return Message(mtype, name, arguments, mid)
 
@@ -363,9 +370,11 @@ class DeviceMetaclass(type):
         mcs._request_handlers = {}
         mcs._inform_handlers = {}
         mcs._reply_handlers = {}
+
         def convert(prefix, name):
             """Convert a method name to the corresponding command name."""
-            return name[len(prefix):].replace("_","-")
+            return name[len(prefix):].replace("_", "-")
+
         for name in dir(mcs):
             if not callable(getattr(mcs, name)):
                 continue
@@ -457,7 +466,8 @@ class ExcepthookThread(threading.Thread):
     """
     def __init__(self, excepthook=None, *args, **kwargs):
         if excepthook is None:
-            excepthook = getattr(threading.currentThread(), "_excepthook", None)
+            excepthook = getattr(threading.currentThread(), "_excepthook",
+                                 None)
         self._excepthook = excepthook
         # evil hack to support subclasses that override run
         self._old_run = self.run
@@ -475,6 +485,7 @@ class ExcepthookThread(threading.Thread):
 
 
 from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp
+
 
 class Sensor(object):
     """Instantiate a new sensor object.
@@ -596,10 +607,11 @@ class Sensor(object):
     # @brief String contain the units for the sensor value.
 
     ## @var params
-    # @brief List of strings containing the additional parameters (length and interpretation
-    # are specific to the sensor type)
+    # @brief List of strings containing the additional parameters (length and
+    #        interpretation are specific to the sensor type)
 
-    def __init__(self, sensor_type, name, description, units, params=None, default=None):
+    def __init__(self, sensor_type, name, description, units, params=None,
+                 default=None):
         if params is None:
             params = []
 
@@ -822,7 +834,8 @@ class Sensor(object):
         if type_string in cls.SENSOR_TYPE_LOOKUP:
             return cls.SENSOR_TYPE_LOOKUP[type_string]
         else:
-            raise KatcpSyntaxError("Invalid sensor type string %s" % type_string)
+            raise KatcpSyntaxError("Invalid sensor type string %s" %
+                                   type_string)
 
     @classmethod
     def parse_params(cls, sensor_type, formatted_params):

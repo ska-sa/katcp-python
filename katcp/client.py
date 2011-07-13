@@ -97,8 +97,8 @@ class DeviceClient(object):
         msg : Message object
             The message to send.
         """
-        # TODO: should probably implement this as a queue of sockets and messages to send.
-        #       and have the queue processed in the main loop
+        # TODO: should probably implement this as a queue of sockets and
+        #       messages to send and have the queue processed in the main loop
         data = str(msg) + "\n"
         datalen = len(data)
         totalsent = 0
@@ -118,7 +118,8 @@ class DeviceClient(object):
                 try:
                     sent = sock.send(data[totalsent:])
                 except socket.error, e:
-                    if len(e.args) == 2 and e.args[0] == errno.EAGAIN and sock is self._sock:
+                    if len(e.args) == 2 and e.args[0] == errno.EAGAIN and \
+                            sock is self._sock:
                         continue
                     else:
                         send_failed = True
@@ -157,9 +158,11 @@ class DeviceClient(object):
             self._connect_failures += 1
             if self._connect_failures % 5 == 0:
                 # warn on every fifth failure
-                self._logger.warn("Failed to connect to %r: %s" % (self._bindaddr, e))
+                self._logger.warn("Failed to connect to %r: %s" %
+                                  (self._bindaddr, e))
             else:
-                self._logger.debug("Failed to connect to %r: %s" % (self._bindaddr, e))
+                self._logger.debug("Failed to connect to %r: %s" %
+                                   (self._bindaddr, e))
             sock.close()
             sock = None
 
@@ -210,8 +213,7 @@ class DeviceClient(object):
                 except Exception:
                     e_type, e_value, trace = sys.exc_info()
                     reason = "\n".join(traceback.format_exception(
-                        e_type, e_value, trace, self._tb_limit
-                    ))
+                        e_type, e_value, trace, self._tb_limit))
                     self._logger.error("BAD COMMAND: %s" % (reason,))
                 else:
                     self.handle_message(msg)
@@ -256,8 +258,7 @@ class DeviceClient(object):
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
-                e_type, e_value, trace, self._tb_limit
-            ))
+                e_type, e_value, trace, self._tb_limit))
             self._logger.error("Inform %s FAIL: %s" % (msg.name, reason))
 
     def handle_reply(self, msg):
@@ -277,8 +278,7 @@ class DeviceClient(object):
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
-                e_type, e_value, trace, self._tb_limit
-            ))
+                e_type, e_value, trace, self._tb_limit))
             self._logger.error("Reply %s FAIL: %s" % (msg.name, reason))
 
     def handle_request(self, msg):
@@ -305,8 +305,7 @@ class DeviceClient(object):
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
-                e_type, e_value, trace, self._tb_limit
-            ))
+                e_type, e_value, trace, self._tb_limit))
             self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
 
     def unhandled_inform(self, msg):
@@ -341,8 +340,9 @@ class DeviceClient(object):
 
     def run(self):
         """Process reply and inform messages from the server."""
-        self._logger.debug("Starting thread %s" % (threading.currentThread().getName()))
-        timeout = 0.5 # s
+        self._logger.debug("Starting thread %s" % (
+                threading.currentThread().getName()))
+        timeout = 0.5  # s
 
         # save globals so that the thread can run cleanly
         # even while Python is setting module globals to
@@ -354,7 +354,8 @@ class DeviceClient(object):
         if not self._auto_reconnect:
             self._connect()
             if not self.is_connected():
-                raise KatcpClientError("Failed to connect to %r" % (self._bindaddr,))
+                raise KatcpClientError("Failed to connect to %r" %
+                                       (self._bindaddr,))
 
         self._running.set()
         while self._running.isSet():
@@ -364,9 +365,8 @@ class DeviceClient(object):
             sock = self._sock
             if sock is not None:
                 try:
-                    readers, _writers, errors = _select(
-                        [sock], [], [sock], timeout
-                    )
+                    readers, _writers, errors = _select([sock], [], [sock],
+                                                        timeout)
                 except Exception, e:
                     # catch Exception because class of exception thrown
                     # various drastically between Mac and Linux
@@ -400,7 +400,8 @@ class DeviceClient(object):
                         _sleep(timeout)
 
         self._disconnect()
-        self._logger.debug("Stopping thread %s" % (threading.currentThread().getName()))
+        self._logger.debug("Stopping thread %s" % (
+                threading.currentThread().getName()))
 
     def start(self, timeout=None, daemon=None, excepthook=None):
         """Start the client in a new thread.
@@ -545,7 +546,8 @@ class BlockingClient(DeviceClient):
     def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
                  auto_reconnect=True):
         super(BlockingClient, self).__init__(host, port, tb_limit=tb_limit,
-            logger=logger,auto_reconnect=auto_reconnect)
+                                             logger=logger,
+                                             auto_reconnect=auto_reconnect)
         self._request_timeout = timeout
 
         self._request_end = threading.Event()
@@ -717,7 +719,8 @@ class CallbackClient(DeviceClient):
     def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
                  auto_reconnect=True, use_ids=False):
         super(CallbackClient, self).__init__(host, port, tb_limit=tb_limit,
-            logger=logger,auto_reconnect=auto_reconnect)
+                                             logger=logger,
+                                             auto_reconnect=auto_reconnect)
 
         self._request_timeout = timeout
         self._use_ids = use_ids
@@ -730,20 +733,23 @@ class CallbackClient(DeviceClient):
         self._async_lock = threading.Lock()
 
         # pending requests
-        # msg_id -> (request_name, reply_cb, inform_cb, user_data, timer) callback tuples
+        # msg_id -> (request_name, reply_cb, inform_cb, user_data, timer)
+        #           callback tuples
         self._async_queue = {}
 
         # stack mapping request names to a stack of message ids
         # msg_name -> [ list of msg_ids ]
         self._async_id_stack = {}
 
-    def _push_async_request(self, msg_id, request_name, reply_cb, inform_cb, user_data, timer):
+    def _push_async_request(self, msg_id, request_name, reply_cb, inform_cb,
+                            user_data, timer):
         """Store the callbacks for a request we've sent so we
            can forward any replies and informs to them.
            """
         self._async_lock.acquire()
         try:
-            self._async_queue[msg_id] = (request_name, reply_cb, inform_cb, user_data, timer)
+            self._async_queue[msg_id] = (request_name, reply_cb, inform_cb,
+                                         user_data, timer)
             if request_name in self._async_id_stack:
                 self._async_id_stack[request_name].append(msg_id)
             else:
@@ -805,7 +811,8 @@ class CallbackClient(DeviceClient):
         finally:
             self._msg_id_lock.release()
 
-    def request(self, msg, reply_cb=None, inform_cb=None, user_data=None, timeout=None):
+    def request(self, msg, reply_cb=None, inform_cb=None, user_data=None,
+                timeout=None):
         """Send a request messsage.
 
         Parameters
@@ -831,7 +838,8 @@ class CallbackClient(DeviceClient):
         msg_id = self._next_id()
         timer = threading.Timer(timeout, self._handle_timeout, (msg_id,))
 
-        self._push_async_request(msg_id, msg.name, reply_cb, inform_cb, user_data, timer)
+        self._push_async_request(msg_id, msg.name, reply_cb, inform_cb,
+                                 user_data, timer)
         if self._use_ids:
             msg.mid = msg_id
         timer.start()
@@ -875,7 +883,8 @@ class CallbackClient(DeviceClient):
         def inform_cb(msg):
             informs.append(msg)
 
-        self.request(msg, reply_cb=reply_cb, inform_cb=inform_cb, timeout=timeout)
+        self.request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
+                     timeout=timeout)
         done.wait()
         reply = replies[0]
 
@@ -896,11 +905,13 @@ class CallbackClient(DeviceClient):
         # inform_cb was passed to the request method.
         if self._use_ids:
             if msg.mid is not None:
-                _msg_name, _reply_cb, inform_cb, user_data, _timer = self._peek_async_request(msg.mid, None)
+                _msg_name, _reply_cb, inform_cb, user_data, _timer = \
+                    self._peek_async_request(msg.mid, None)
             else:
                 inform_cb, user_data = None, None
         else:
-            _msg_name, _reply_cb, inform_cb, user_data, _timer = self._peek_async_request(None, msg.name)
+            _msg_name, _reply_cb, inform_cb, user_data, _timer = \
+                self._peek_async_request(None, msg.name)
 
         if inform_cb is None:
             inform_cb = super(CallbackClient, self).handle_inform
@@ -915,9 +926,9 @@ class CallbackClient(DeviceClient):
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
-                e_type, e_value, trace, self._tb_limit
-            ))
-            self._logger.error("Callback inform %s FAIL: %s" % (msg.name, reason))
+                e_type, e_value, trace, self._tb_limit))
+            self._logger.error("Callback inform %s FAIL: %s" %
+                               (msg.name, reason))
 
     def _handle_timeout(self, msg_id):
         """Handle a timed out callback request.
@@ -929,13 +940,16 @@ class CallbackClient(DeviceClient):
         """
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
-        msg_name, reply_cb, _inform_cb, user_data, timer = self._pop_async_request(msg_id, None)
+        msg_name, reply_cb, _inform_cb, user_data, timer = \
+            self._pop_async_request(msg_id, None)
 
         if reply_cb is None:
             # this happens if no reply_cb was passed in to the request or
             return
 
-        timeout_msg = Message.reply(msg_name, "fail", "Timed out after %f seconds" % timer.interval)
+        timeout_msg = Message.reply(msg_name, "fail",
+                                    "Timed out after %f seconds" %
+                                    timer.interval)
 
         try:
             if user_data is None:
@@ -945,9 +959,9 @@ class CallbackClient(DeviceClient):
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
-                e_type, e_value, trace, self._tb_limit
-            ))
-            self._logger.error("Callback reply during timeout %s FAIL: %s" % (msg_name, reason))
+                e_type, e_value, trace, self._tb_limit))
+            self._logger.error("Callback reply during timeout %s FAIL: %s" %
+                               (msg_name, reason))
 
     def handle_reply(self, msg):
         """Handle a reply message related to the current request.
@@ -964,11 +978,13 @@ class CallbackClient(DeviceClient):
         # reply_cb was passed to the request method
         if self._use_ids:
             if msg.mid is not None:
-                _msg_name, reply_cb, _inform_cb, user_data, timer = self._pop_async_request(msg.mid, None)
+                _msg_name, reply_cb, _inform_cb, user_data, timer = \
+                    self._pop_async_request(msg.mid, None)
             else:
                 reply_cb, user_data, timer = None, None, None
         else:
-            _msg_name, reply_cb, _inform_cb, user_data, timer = self._pop_async_request(None, msg.name)
+            _msg_name, reply_cb, _inform_cb, user_data, timer = \
+                self._pop_async_request(None, msg.name)
 
         if timer is not None:
             timer.cancel()
@@ -986,6 +1002,6 @@ class CallbackClient(DeviceClient):
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
-                e_type, e_value, trace, self._tb_limit
-            ))
-            self._logger.error("Callback reply %s FAIL: %s" % (msg.name, reason))
+                e_type, e_value, trace, self._tb_limit))
+            self._logger.error("Callback reply %s FAIL: %s" %
+                               (msg.name, reason))

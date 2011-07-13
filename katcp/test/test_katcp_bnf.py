@@ -23,11 +23,13 @@
                <id> ::= "" | "[" digit+ "]"
        <whitespace> ::= (space | tab) [<whitespace>]
               <eol> ::= newline | carriage-return
-        <arguments> ::= (<whitespace> <argument> <arguments>) | <whitespace> | ""
+        <arguments> ::= (<whitespace> <argument> <arguments>) | <whitespace> |
+                        ""
          <argument> ::= (<plain> | <escape>)+
            <escape> ::= "\" <escapecode>
        <escapecode> ::= "\" | "_" | zero | "n" | "r" | "e" | "t" | "@"
-          <special> ::= backslash | space | null | newline | carriage-return | escape | tab
+          <special> ::= backslash | space | null | newline | carriage-return |
+                        escape | tab
             <plain> ::= character / <special>
 
     Uses the ply library from http://www.dabeaz.com/ply/.
@@ -37,6 +39,7 @@ import ply.lex as lex
 import ply.yacc as yacc
 import katcp
 import unittest
+
 
 class DclLexer(object):
     """Lexer definition for the DCL."""
@@ -95,8 +98,8 @@ class DclLexer(object):
         if t is None:
             raise katcp.KatcpSyntaxError("Argument syntax error.")
         else:
-            raise katcp.KatcpSyntaxError("Invalid argument token: %s " % t.value)
-
+            raise katcp.KatcpSyntaxError("Invalid argument token: %s " %
+                                         t.value)
 
 
 class DclGrammar(object):
@@ -170,8 +173,8 @@ class Parser(object):
     """Wraps Lexer and Grammar Objects"""
 
     def __init__(self):
-        self._lexer = lex.lex(object = DclLexer(), debug=0)
-        self._parser = yacc.yacc(module = DclGrammar(), debug=0, write_tables=0)
+        self._lexer = lex.lex(object=DclLexer(), debug=0)
+        self._parser = yacc.yacc(module=DclGrammar(), debug=0, write_tables=0)
 
     def parse(self, line):
         """Parse a line, return a Message."""
@@ -218,24 +221,25 @@ class TestBnf(unittest.TestCase):
         """Test errors which should be raised by the lexer."""
         self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "")
         self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "^foo")
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "!foo tab\0arg")
+        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse,
+                          "!foo tab\0arg")
 
     def test_empty_params(self):
         """Test parsing messages with empty parameters."""
-        m = self.p.parse("!foo \@") # 1 empty parameter
+        m = self.p.parse("!foo \@")  # 1 empty parameter
         self.assertEqual(m.arguments, [""])
-        m = self.p.parse("!foo \@ \@") # 2 empty parameter
+        m = self.p.parse("!foo \@ \@")  # 2 empty parameter
         self.assertEqual(m.arguments, ["", ""])
-        m = self.p.parse("!foo \_  \_  \@") # space, space, empty
+        m = self.p.parse("!foo \_  \_  \@")  # space, space, \@
         self.assertEqual(m.arguments, [" ", " ", ""])
 
     def test_extra_whitespace(self):
         """Test extra whitespace around parameters."""
-        m = self.p.parse("!foo \t\@  ") # 1 empty parameter
+        m = self.p.parse("!foo \t\@  ")  # 1 empty parameter
         self.assertEqual(m.arguments, [""])
-        m = self.p.parse("!foo   \@    \@") # 2 empty parameter
+        m = self.p.parse("!foo   \@    \@")  # 2 empty parameter
         self.assertEqual(m.arguments, ["", ""])
-        m = self.p.parse("!foo \_  \t\t\_\t  \@\t") # space, space, empty
+        m = self.p.parse("!foo \_  \t\t\_\t  \@\t")  # space, space, \@
         self.assertEqual(m.arguments, [" ", " ", ""])
 
     def test_formfeed(self):

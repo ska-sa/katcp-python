@@ -100,7 +100,8 @@ class TestDeviceClient(unittest.TestCase, TestUtilMixin):
         time.sleep(1.25)
 
         # check that client reconnected
-        self.assertTrue(sock is not self.client._sock, "Expected %r to not be %r" % (sock, self.client._sock))
+        self.assertTrue(sock is not self.client._sock,
+                        "Expected %r to not be %r" % (sock, self.client._sock))
         self.assertEqual(sockname, self.client._sock.getpeername())
 
     def test_daemon_value(self):
@@ -116,6 +117,7 @@ class TestDeviceClient(unittest.TestCase, TestUtilMixin):
         """Test passing in an excepthook to client start method."""
         exceptions = []
         except_event = threading.Event()
+
         def excepthook(etype, value, traceback):
             """Keep track of exceptions."""
             exceptions.append(etype)
@@ -175,7 +177,8 @@ class TestBlockingClient(unittest.TestCase):
                 katcp.Message.request("slow-command", "0.5"),
                 timeout=0.001)
         except RuntimeError, e:
-            self.assertEqual(str(e), "Request slow-command timed out after 0.001 seconds.")
+            self.assertEqual(str(e), "Request slow-command timed out after"
+                             " 0.001 seconds.")
         else:
             self.assertFalse("Expected timeout on request")
 
@@ -251,16 +254,13 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.client._inform_handlers["help"] = handle_help_message
         self.client._reply_handlers["help"] = handle_help_message
 
-        self.client.request(
-            katcp.Message.request("help")
-        )
+        self.client.request(katcp.Message.request("help"))
 
         time.sleep(0.1)
 
         self._assert_msgs_like(help_messages,
-            [("#help ", "")]*13 +
-            [("!help ok 13", "")]
-        )
+            [("#help ", "")] * 13 +
+            [("!help ok 13", "")])
 
     def test_timeout(self):
         """Test requests that timeout."""
@@ -286,7 +286,8 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(len(replies), 1)
         self.assertEqual(len(informs), 0)
         self.assertEqual([msg.name for msg in replies], ["slow-command"])
-        self.assertEqual([msg.arguments for msg in replies], [["fail", "Timed out after %f seconds" % timeout]])
+        self.assertEqual([msg.arguments for msg in replies], [
+                ["fail", "Timed out after %f seconds" % timeout]])
 
         del replies[:]
         del informs[:]
@@ -301,7 +302,8 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         time.sleep(0.2)
         self.assertEqual(len(replies), 1)
         self.assertEqual(len(informs), 0)
-        self.assertEqual([msg.name for msg in replies + informs], ["slow-command"]*len(replies+informs))
+        self.assertEqual([msg.name for msg in replies + informs],
+                         ["slow-command"] * len(replies + informs))
         self.assertEqual([msg.arguments for msg in replies], [["ok"]])
 
     def test_user_data(self):
@@ -325,8 +327,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             katcp.Message.request("help"),
             reply_cb=help_reply,
             inform_cb=help_inform,
-            user_data=(5, "foo")
-        )
+            user_data=(5, "foo"))
 
         time.sleep(0.1)
         self.assertEqual(len(help_replies), 1)
@@ -392,8 +393,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         reply, informs = self.client.blocking_request(
             katcp.Message.request("slow-command", "0.5"),
-            timeout = 0.001,
-        )
+            timeout=0.001)
 
         self.assertEqual(reply.name, "slow-command")
         self.assertEqual(reply.arguments[0], "fail")
@@ -450,6 +450,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.client.send_message = raise_error
 
         replies = []
+
         def reply_cb(msg):
             replies.append(msg)
 

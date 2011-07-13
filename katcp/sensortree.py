@@ -131,8 +131,8 @@ class GenericSensorTree(object):
 
         Any sensors that have no dependency links are removed from the tree and
         the tree detaches from each sensor removed. After all dependency links
-        have been removed the parent is recalculated. Links that don't exist are
-        ignored.
+        have been removed the parent is recalculated. Links that don't exist
+        are ignored.
 
         Parameters
         ----------
@@ -148,10 +148,12 @@ class GenericSensorTree(object):
                     continue
                 self._parent_to_children[parent].discard(child)
                 self._child_to_parents[child].discard(parent)
-                if not self._child_to_parents[child] and not self._parent_to_children[child]:
+                if not self._child_to_parents[child] and \
+                        not self._parent_to_children[child]:
                     self._remove_sensor(child)
                     old_sensors.append(child)
-            if not self._child_to_parents[parent] and not self._parent_to_children[parent]:
+            if not self._child_to_parents[parent] and \
+                    not self._parent_to_children[parent]:
                 self._remove_sensor(parent)
                 old_sensors.append(parent)
 
@@ -304,8 +306,10 @@ class AggregateSensorTree(GenericSensorTree):
     >>> tree = AggregateSensorTree()
     >>> def add_rule(parent, children):
     >>>     parent.set_value(sum(child.value() for child in children))
-    >>> sensor1 = Sensor(Sensor.INTEGER, "sensor1", "First sensor", "", [-1000, 1000])
-    >>> sensor2 = Sensor(Sensor.INTEGER, "sensor2", "Second sensor", "", [-1000, 1000])
+    >>> sensor1 = Sensor(Sensor.INTEGER, "sensor1", "First sensor", "",
+    ...                  [-1000, 1000])
+    >>> sensor2 = Sensor(Sensor.INTEGER, "sensor2", "Second sensor", "",
+    ...                  [-1000, 1000])
     >>> agg = Sensor(Sensor.INTEGER, "sum", "The total", "", [-2000, 2000])
     >>> tree.add(agg, add_rule, (sensor1, sensor2))
     >>> agg.value()
@@ -316,7 +320,8 @@ class AggregateSensorTree(GenericSensorTree):
     >>> tree.remove(agg)
     >>> agg.value()
 
-    Example where rules need to be added before dependent sensors are available::
+    Example where rules need to be added before dependent sensors are
+    available::
 
     >>> from katcp import Sensor, AggregateSensorTree
     >>> tree = AggregateSensorTree()
@@ -325,11 +330,13 @@ class AggregateSensorTree(GenericSensorTree):
     >>> agg = Sensor(Sensor.INTEGER, "sum", "The total", "", [-2000, 2000])
     >>> tree.add_delayed(agg, add_rule, ("sensor1", "sensor2"))
     >>> agg.value()
-    >>> sensor1 = Sensor(Sensor.INTEGER, "sensor1", "First sensor", "", [-1000, 1000])
+    >>> sensor1 = Sensor(Sensor.INTEGER, "sensor1", "First sensor", "",
+    ...                  [-1000, 1000])
     >>> sensor1.set_value(5)
     >>> tree.register_sensor(sensor1)
     >>> agg.value() # still 0
-    >>> sensor2 = Sensor(Sensor.INTEGER, "sensor2", "Second sensor", "", [-1000, 1000])
+    >>> sensor2 = Sensor(Sensor.INTEGER, "sensor2", "Second sensor", "",
+    ...                  [-1000, 1000])
     >>> sensor2.set_value(3)
     >>> tree.register_sensor(sensor2)
     >>> agg.value() # now 8
@@ -358,7 +365,8 @@ class AggregateSensorTree(GenericSensorTree):
             The sensors the aggregate sensor depends on.
         """
         if parent in self._aggregates or parent in self._incomplete_aggregates:
-            raise ValueError("Sensor %r already has an aggregate rule associated" % parent)
+            raise ValueError("Sensor %r already has an aggregate rule"
+                             " associated" % parent)
         self._aggregates[parent] = (rule_function, children)
         self.add_links(parent, children)
 
@@ -372,21 +380,25 @@ class AggregateSensorTree(GenericSensorTree):
         rule_function : f(parent, children)
             Function to update the parent sensor value.
         child_names : sequence of str
-            The names of the sensors the aggregate sensor depends on. These sensor
-            must be registered using :meth:`register_sensor` to become active.
+            The names of the sensors the aggregate sensor depends on. These
+            sensor must be registered using :meth:`register_sensor` to become
+            active.
         """
         if parent in self._aggregates or parent in self._incomplete_aggregates:
-            raise ValueError("Sensor %r already has an aggregate rule associated" % parent)
+            raise ValueError("Sensor %r already has an aggregate rule"
+                             " associated" % parent)
         reg = self._registered_sensors
         names = set(name for name in child_names if name not in reg)
         sensors = set(reg[name] for name in child_names if name in reg)
         if names:
-            self._incomplete_aggregates[parent] = (rule_function, names, sensors)
+            self._incomplete_aggregates[parent] = (rule_function, names,
+                                                   sensors)
         else:
             self.add(parent, rule_function, sensors)
 
     def register_sensor(self, child):
-        """Register a sensor required by an aggregate sensor registered with add_delayed.
+        """Register a sensor required by an aggregate sensor registered with
+        add_delayed.
 
         Parameters
         ----------
@@ -394,18 +406,21 @@ class AggregateSensorTree(GenericSensorTree):
             A child sensor required by one or more delayed aggregate sensors.
         """
         if child.name in self._registered_sensors:
-            raise ValueError("Sensor %r already registered with aggregate tree" % child)
+            raise ValueError("Sensor %r already registered with aggregate"
+                             " tree" % child)
         child_name = child.name
         self._registered_sensors[child_name] = child
         completed = []
-        for parent, (_rule, names, sensors) in self._incomplete_aggregates.iteritems():
+        for parent, (_rule, names, sensors) in \
+                self._incomplete_aggregates.iteritems():
             if child_name in names:
                 names.remove(child_name)
                 sensors.add(child)
                 if not names:
                     completed.append(parent)
         for parent in completed:
-            rule_function, _names, sensors = self._incomplete_aggregates[parent]
+            rule_function, _names, sensors = \
+                self._incomplete_aggregates[parent]
             del self._incomplete_aggregates[parent]
             self.add(parent, rule_function, sensors)
 
@@ -418,7 +433,8 @@ class AggregateSensorTree(GenericSensorTree):
             The aggregate sensor to remove.
         """
         if parent not in self._aggregates:
-            raise ValueError("Sensor %r does not have an aggregate rule associated" % parent)
+            raise ValueError("Sensor %r does not have an aggregate rule"
+                             " associated" % parent)
         children = self.children(parent)
         self.remove_links(parent, children)
         del self._aggregates[parent]

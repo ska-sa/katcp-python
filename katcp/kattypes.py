@@ -18,6 +18,7 @@ from .core import Message, FailReply
 # XXX how about a mapping from python types -> kattypes, so creating
 #     a sensor would not require importing kattypes
 
+
 class KatcpType(object):
     """Class representing a KATCP type.
 
@@ -226,10 +227,11 @@ class Discrete(Str):
     def __init__(self, values, case_insensitive=False, **kwargs):
         super(Discrete, self).__init__(**kwargs)
         self._case_insensitive = case_insensitive
-        self._values = list(values) # just to preserve ordering
+        self._values = list(values)  # just to preserve ordering
         self._valid_values = set(values)
         if self._case_insensitive:
-            self._valid_values_lower = set([val.lower() for val in self._values])
+            self._valid_values_lower = set([val.lower()
+                                            for val in self._values])
 
     def check(self, value):
         """Check whether the value in the set of allowed values.
@@ -284,20 +286,23 @@ class Timestamp(KatcpType):
 
     name = "timestamp"
 
-    encode = lambda self, value: "%i" % (int(float(value)*1000),)
+    encode = lambda self, value: "%i" % (int(float(value) * 1000),)
 
     def decode(self, value):
         try:
-            return float(value)/1000
+            return float(value) / 1000
         except:
-            raise ValueError("Could not parse value '%s' as timestamp." % value)
+            raise ValueError("Could not parse value '%s' as timestamp." %
+                             value)
 
 
 class TimestampOrNow(Timestamp):
-    """KatcpType representing either a Timestamp or the special value :const:`katcp.kattypes.TimestampOrNow.NOW`.
+    """KatcpType representing either a Timestamp or the special value
+       :const:`katcp.kattypes.TimestampOrNow.NOW`.
 
-       Floats are encoded as for :class:`katcp.kattypes.Timestamp`. :const:`katcp.kattypes.TimestampOrNow.NOW`
-       is encoded as the string "now".
+       Floats are encoded as for :class:`katcp.kattypes.Timestamp`.
+       :const:`katcp.kattypes.TimestampOrNow.NOW` is encoded as the string
+       "now".
        """
 
     name = "timestamp_or_now"
@@ -325,7 +330,8 @@ class StrictTimestamp(KatcpType):
         try:
             return "%.15g" % (value * 1000.0)
         except:
-            raise ValueError("Could not encode value %r as strict timestamp." % value)
+            raise ValueError("Could not encode value %r as strict timestamp." %
+                             value)
 
     def decode(self, value):
         try:
@@ -333,7 +339,8 @@ class StrictTimestamp(KatcpType):
             _int_parts = [int(x) for x in parts]
             return float(value) / 1000.0
         except:
-            raise ValueError("Could not parse value '%s' as strict timestamp." % value)
+            raise ValueError("Could not parse value '%s' as strict timestamp."
+                             % value)
 
     def check(self, value):
         """Check whether the value is positive.
@@ -364,13 +371,15 @@ class Struct(KatcpType):
         try:
             return struct.pack(self._fmt, *value)
         except struct.error, e:
-            raise ValueError("Could not pack %s into struct with format %s: %s" % (value, self._fmt, e))
+            raise ValueError("Could not pack %s into struct with format "
+                             "%s: %s" % (value, self._fmt, e))
 
     def decode(self, value):
         try:
             return struct.unpack(self._fmt, value)
         except struct.error, e:
-            raise ValueError("Could not unpack %s from struct with format %s: %s" % (value, self._fmt, e))
+            raise ValueError("Could not unpack %s from struct with format "
+                             "%s: %s" % (value, self._fmt, e))
 
 
 class Regex(Str):
@@ -386,7 +395,7 @@ class Regex(Str):
 
     _re_flags = [
         ('I', re.I), ('L', re.L), ('M', re.M),
-        ('S', re.S), ('U', re.U), ('X', re.X)
+        ('S', re.S), ('U', re.U), ('X', re.X),
     ]
 
     def __init__(self, regex, **kwargs):
@@ -402,8 +411,8 @@ class Regex(Str):
 
     def check(self, value):
         if not self._compiled.match(value):
-            raise ValueError("Value '%s' does not match regex '%s' with flags '%s'."
-                % (value, self._pattern, self._flags))
+            raise ValueError("Value '%s' does not match regex '%s' with flags"
+                             " '%s'." % (value, self._pattern, self._flags))
 
 
 class DiscreteMulti(Discrete):
@@ -429,7 +438,8 @@ class DiscreteMulti(Discrete):
     def decode(self, value):
         if self.all_keyword and value == self.all_keyword:
             return sorted(list(self._valid_values), key=str.lower)
-        return sorted([v.strip() for v in value.split(self.separator)], key=str.lower)
+        return sorted([v.strip() for v in value.split(self.separator)],
+                      key=str.lower)
 
     def __init__(self, values, all_keyword="all", separator=",", **kwargs):
         self.all_keyword = all_keyword
@@ -492,7 +502,8 @@ class Parameter(object):
         try:
             return self._kattype.unpack(value)
         except ValueError, message:
-            raise FailReply("Error in parameter %s (%s): %s" % (self.position, self.name, message))
+            raise FailReply("Error in parameter %s (%s): %s" %
+                            (self.position, self.name, message))
 
 
 ## request, return_reply and inform method decorators
@@ -524,7 +535,8 @@ def request(*types, **options):
     def decorator(handler):
         argnames = []
 
-        # If this decorator is on the outside, get the parameter names which have been preserved by the other decorator
+        # If this decorator is on the outside, get the parameter names which
+        # have been preserved by the other decorator
         all_argnames = getattr(handler, "_orig_argnames", None)
 
         if all_argnames is None:
@@ -535,8 +547,10 @@ def request(*types, **options):
         has_sock = len(all_argnames) > 1 and all_argnames[1] == "sock"
 
         params_start = 1
-        if has_sock: params_start += 1
-        if include_msg: params_start += 1
+        if has_sock:
+            params_start += 1
+        if include_msg:
+            params_start += 1
         # Get other parameter names
         argnames = all_argnames[params_start:]
 
@@ -558,7 +572,8 @@ def request(*types, **options):
 
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
-        # explicitly note that this decorator has been run, so that return_reply can know if it's on the outside.
+        # explicitly note that this decorator has been run, so that
+        # return_reply can know if it's on the outside.
         raw_handler._request_decorated = True
         return raw_handler
 
@@ -570,6 +585,7 @@ inform.__doc__ = """Decorator for inform handler methods.
        This is currently identical to the request decorator, and is
        thus an alias.
        """
+
 
 def return_reply(*types):
     """Decorator for returning replies from request handler methods
@@ -598,8 +614,10 @@ def return_reply(*types):
     """
     def decorator(handler):
         if not handler.__name__.startswith("request_"):
-            raise ValueError("This decorator can only be used on a katcp request handler.")
-        msgname = handler.__name__[8:].replace("_","-")
+            raise ValueError("This decorator can only be used on a katcp"
+                             " request handler.")
+        msgname = handler.__name__[8:].replace("_", "-")
+
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
             return make_reply(msgname, types, reply_args)
@@ -608,12 +626,14 @@ def return_reply(*types):
 
         if not getattr(handler, "_request_decorated", False):
             # We are on the inside.
-            # We must preserve the original function parameter names for the request decorator
+            # We must preserve the original function parameter names for the
+            # request decorator
             raw_handler._orig_argnames = inspect.getargspec(handler)[0]
 
         return raw_handler
 
     return decorator
+
 
 def send_reply(*types):
     """Decorator for sending replies from request callback methods
@@ -652,6 +672,7 @@ def send_reply(*types):
 
     return decorator
 
+
 def make_reply(msgname, types, arguments):
     """Helper method for constructing a reply message from a list or tuple
 
@@ -670,6 +691,7 @@ def make_reply(msgname, types, arguments):
     if status == "ok":
         return Message.reply(msgname, *pack_types((Str(),) + types, arguments))
     raise ValueError("First returned value must be 'ok' or 'fail'.")
+
 
 def unpack_types(types, args, argnames):
     """Parse arguments according to types list.
@@ -692,10 +714,11 @@ def unpack_types(types, args, argnames):
         name = ""
         if i < len(argnames):
             name = argnames[i]
-        params.append(Parameter(i+1, name, kattype))
+        params.append(Parameter(i + 1, name, kattype))
 
     # if len(args) < len(types) this passes in None for missing args
     return map(lambda param, arg: param.unpack(arg), params, args)
+
 
 def pack_types(types, args):
     """Pack arguments according the the types list.
