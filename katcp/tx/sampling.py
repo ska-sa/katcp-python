@@ -54,12 +54,10 @@ class AutoStrategy(ObserverStrategy):
 class EventStrategy(ObserverStrategy):
     def __init__(self, protocol, sensor):
         ObserverStrategy.__init__(self, protocol, sensor)
-        self.value = sensor.value()
-        self.status = sensor._status
+        _timestamp, self.status, self.value = sensor.read()
 
     def update(self, sensor):
-        newval = sensor.value()
-        newstatus = sensor._status
+        _timestamp, newval, newstatus = sensor.read()
         if self.status != newstatus or self.value != newval:
             self.status = newstatus
             self.value = newval
@@ -68,16 +66,14 @@ class EventStrategy(ObserverStrategy):
 class DifferentialStrategy(ObserverStrategy):
     def __init__(self, protocol, sensor):
         ObserverStrategy.__init__(self, protocol, sensor)
-        self.value = sensor.value()
-        self.status = sensor._status
+        _timestamp, self.status, self.value = sensor.read()
 
     def run(self, threshold):
         self.threshold = float(threshold)
         ObserverStrategy.run(self)
 
     def update(self, sensor):
-        newval = sensor.value()
-        newstatus = sensor._status
+        _timestamp, newstatus, newval = sensor.read()
         if (self.status != newstatus or
             abs(self.value - newval) > self.threshold):
             self.protocol.send_sensor_status(sensor)

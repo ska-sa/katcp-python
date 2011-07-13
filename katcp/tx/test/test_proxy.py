@@ -24,11 +24,11 @@ class ExampleDevice(DeviceServer):
     def setup_sensors(self):
         sensor = Sensor(int, "sensor1", "Test sensor 1", "count",
                         [0,10])
-        sensor._timestamp = 1
+        sensor.set_value(sensor.value(), status=Sensor.UNKNOWN, timestamp=1)
         self.add_sensor(sensor)
         sensor2 = Sensor(int, "sensor2", "Test sensor 2", "count",
                          [0, 10])
-        sensor2._timestamp = 0
+        sensor2.set_value(sensor.value(), status=Sensor.UNKNOWN, timestamp=0)
         self.add_sensor(sensor2)
 
 class MyDeviceHandler(DeviceHandler):
