@@ -7,7 +7,9 @@ from twisted.python import log
 from katcp import Message, AsyncReply, Sensor
 from katcp.kattypes import request, return_reply, Int
 
-import re, time
+import re
+import time
+
 
 def value_only_formatted(func):
     """ A decorator that changes a value-only read into read_formatted
@@ -17,6 +19,7 @@ def value_only_formatted(func):
         return time.time(), "ok", func(self)
     new_func.func_name = func.func_name
     return new_func
+
 
 class ProxiedSensor(Sensor):
     """ A sensor which is a proxy for other sensor on the remote device.
@@ -34,6 +37,7 @@ class ProxiedSensor(Sensor):
     def read_formatted(self):
         return self.device.send_request('sensor-value', self.basename)
 
+
 class StateSensor(object):
     """ A device state sensor
     """
@@ -49,6 +53,7 @@ class StateSensor(object):
     @value_only_formatted
     def read_formatted(self):
         return DeviceHandler.STATE_NAMES[self.device.state]
+
 
 class DeviceHandler(ClientKatCPProtocol):
     SYNCING, SYNCED, UNSYNCED = range(3)
@@ -131,6 +136,7 @@ class DeviceHandler(ClientKatCPProtocol):
         except:
             log.err()
 
+
 class ProxyProtocol(DeviceProtocol):
     @request(include_msg=True)
     @return_reply(Int(min=0))
@@ -171,10 +177,11 @@ class ProxyProtocol(DeviceProtocol):
         Parameters
         ----------
         name : str or pattern, optional
-            If the name is not a pattern, list just the sensor with the given name.
-            A pattern starts and ends with a slash ('/') and uses the Python re
-            module's regular expression syntax. All sensors whose names contain the
-            pattern are listed.  The default is to list all sensors.
+            If the name is not a pattern, list just the sensor with the given
+            name. A pattern starts and ends with a slash ('/') and uses the
+            Python re module's regular expression syntax. All sensors whose
+            names contain the pattern are listed.  The default is to list all
+            sensors.
 
         Inform Arguments
         ----------------
@@ -187,10 +194,11 @@ class ProxyProtocol(DeviceProtocol):
         type : str
             Type of the named sensor.
         params : list of str, optional
-            Additional sensor parameters (type dependent). For integer and float
-            sensors the additional parameters are the minimum and maximum sensor
-            value. For discrete sensors the additional parameters are the allowed
-            values. For all other types no additional parameters are sent.
+            Additional sensor parameters (type dependent). For integer and
+            float sensors the additional parameters are the minimum and maximum
+            sensor value. For discrete sensors the additional parameters are
+            the allowed values. For all other types no additional parameters
+            are sent.
 
         Returns
         -------
@@ -236,7 +244,7 @@ class ProxyProtocol(DeviceProtocol):
     def _send_all_sensors(self, filter=None):
         """ Sends all sensor values with given filter (None = all)
         """
-        counter = [0] # this has to be a list or an object, thanks to
+        counter = [0]  # this has to be a list or an object, thanks to
         # python lexical scoping rules (we could not write count += 1
         # in a function)
 
@@ -271,7 +279,6 @@ class ProxyProtocol(DeviceProtocol):
                                                      name, status,
                                                      value))
 
-
     def request_sensor_value(self, msg):
         """Poll a sensor value or value(s).
 
@@ -280,19 +287,21 @@ class ProxyProtocol(DeviceProtocol):
         Parameters
         ----------
         name : str or pattern, optional
-            If the name is not a pattern, list just the values of sensors with the
-            given name.  A pattern starts and ends with a slash ('/') and uses the
-            Python re module's regular expression syntax. The values of all sensors
-            whose names contain the pattern are listed.  The default is to list the
-            values of all sensors.
+            If the name is not a pattern, list just the values of sensors with
+            the given name.  A pattern starts and ends with a slash ('/') and
+            uses the Python re module's regular expression syntax. The values
+            of all sensors whose names contain the pattern are listed.  The
+            default is to list the values of all sensors.
 
         Inform Arguments
         ----------------
         timestamp : float
-            Timestamp of the sensor reading in milliseconds since the Unix epoch.
+            Timestamp of the sensor reading in milliseconds since the Unix
+            epoch.
         count : {1}
-            Number of sensors described in this #sensor-value inform. Will always
-            be one. It exists to keep this inform compatible with #sensor-status.
+            Number of sensors described in this #sensor-value inform. Will
+            always be one. It exists to keep this inform compatible with
+            #sensor-status.
         name : str
             Name of the sensor whose value is being reported.
         value : object
@@ -359,7 +368,7 @@ class ProxyProtocol(DeviceProtocol):
         # but currently don't.
 
         def request_returned((informs, reply)):
-            assert informs == [] # for now
+            assert informs == []  # for now
             # we *could* in theory just change message name, but let's copy
             # just in case
             self.send_message(Message.reply(dev_name + "-" + req_name,
@@ -388,12 +397,13 @@ class ProxyProtocol(DeviceProtocol):
             return object.__getattribute__(self, attr)
         return callback
 
+
 class ClientDeviceFactory(ClientFactory):
     """ A factory that does uses prebuilt device handler objects
     """
     def __init__(self, addr_mapping, max_reconnects, conn_delay_timeout,
                  proxy):
-        self.addr_mapping = addr_mapping # shared dict with proxy
+        self.addr_mapping = addr_mapping  # shared dict with proxy
         self.max_reconnects = max_reconnects
         self.conn_delay_timeout = conn_delay_timeout
         self.proxy = proxy
@@ -410,6 +420,7 @@ class ClientDeviceFactory(ClientFactory):
 
     def buildProtocol(self, addr):
         return self.addr_mapping[(addr.host, addr.port)]
+
 
 class ProxyKatCP(DeviceServer):
     """ This is a proxy class that will listen on a given host and port
@@ -435,7 +446,7 @@ class ProxyKatCP(DeviceServer):
     def device_ready(self, device):
         self.ready_devices += 1
         if self.ready_devices == len(self.devices) and not self.scan_called:
-            self.scan_called = True # one shot only
+            self.scan_called = True  # one shot only
             self.devices_scan_complete()
 
     def add_device(self, device):

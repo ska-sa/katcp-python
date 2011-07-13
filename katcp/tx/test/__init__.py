@@ -7,6 +7,7 @@
 """Tests for the katcp.tx package.
    """
 
+
 def suite():
     import unittest
     import test_core

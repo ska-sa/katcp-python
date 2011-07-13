@@ -1,6 +1,7 @@
 
 from twisted.internet import reactor
 
+
 class SamplingStrategy(object):
     """ Base class for all sampling strategies
     """
@@ -18,6 +19,7 @@ class SamplingStrategy(object):
         """
         pass
 
+
 class PeriodicStrategy(SamplingStrategy):
     next = None
 
@@ -32,9 +34,11 @@ class PeriodicStrategy(SamplingStrategy):
         self.period = float(period) / 1000
         self._run_once()
 
+
 class NoStrategy(SamplingStrategy):
     def run(self):
         pass
+
 
 class ObserverStrategy(SamplingStrategy):
     """ A common superclass for strategies that watch sensors and take
@@ -51,6 +55,7 @@ class AutoStrategy(ObserverStrategy):
     def update(self, sensor):
         self.protocol.send_sensor_status(sensor)
 
+
 class EventStrategy(ObserverStrategy):
     def __init__(self, protocol, sensor):
         ObserverStrategy.__init__(self, protocol, sensor)
@@ -62,6 +67,7 @@ class EventStrategy(ObserverStrategy):
             self.status = newstatus
             self.value = newval
             self.protocol.send_sensor_status(sensor)
+
 
 class DifferentialStrategy(ObserverStrategy):
     def __init__(self, protocol, sensor):

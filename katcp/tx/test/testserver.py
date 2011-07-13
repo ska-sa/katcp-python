@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
-import os, re, sys
+import os
+import re
+import sys
 
-sys.path.insert(0, '.') # not sure why python adds '.' or not depending on
+sys.path.insert(0, '.')  # not sure why python adds '.' or not depending on
 # obscure details how you run it
 from katcp.server import DeviceServer
 from katcp import Sensor
@@ -12,6 +14,7 @@ from twisted.internet import reactor
 from twisted.internet.defer import Deferred
 from twisted.internet.error import ProcessDone
 from twisted.python import log
+
 
 class FloatSensor(Sensor):
     def get_value(self):
@@ -25,6 +28,7 @@ class FloatSensor(Sensor):
 
     _value = property(get_value, set_value)
 
+
 class IntSensor(Sensor):
     def get_value(self):
         self.__value += 1
@@ -37,6 +41,7 @@ class IntSensor(Sensor):
 
     _value = property(get_value, set_value)
 
+
 class TestServer(DeviceServer):
     def setup_sensors(self):
         self.add_sensor(FloatSensor(Sensor.FLOAT, "float_sensor", "descr",
@@ -48,6 +53,7 @@ class TestServer(DeviceServer):
         sock = DeviceServer._bind(self, *args)
         print "PORT: %d" % sock.getsockname()[1]
         return sock
+
 
 class ServerSubprocess(ProcessProtocol):
     initiated = False
@@ -79,19 +85,21 @@ class ServerSubprocess(ProcessProtocol):
 
 PORT = 0
 
+
 class Factory(KatCPClientFactory):
     def __init__(self, callback):
         self.callback = callback
-    
+
     def buildProtocol(self, addr):
         result = KatCPClientFactory.buildProtocol(self, addr)
         if self.callback is not None:
             reactor.callLater(0, self.callback, result)
         return result
 
+
 def run_subprocess(connected, ClientClass):
     factory = Factory(connected)
-    
+
     def failed_to_run(error):
         print error
         reactor.stop()
