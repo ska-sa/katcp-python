@@ -147,9 +147,9 @@ class KatCP(LineReceiver):
                 raise ShouldReturnMessage('request_' + name + ' should return'
                                           ' a message or raise AsyncReply,'
                                           ' instead it returned %r' % rep_msg)
-            self.send_message(rep_msg)
+            self.send_reply(rep_msg, msg)
         except FailReply, fr:
-            self.send_message(Message.reply(name, "fail", str(fr)))
+            self.send_reply(Message.reply(name, "fail", str(fr)), msg)
         except AsyncReply:
             return
         except Exception:
@@ -158,7 +158,7 @@ class KatCP(LineReceiver):
             reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, TB_LIMIT))
 
-            self.send_message(Message.reply(msg.name, "fail", reason))
+            self.send_reply(Message.reply(msg.name, "fail", reason), msg)
 
     def handle_reply(self, msg):
         if not self.queries:
@@ -182,6 +182,18 @@ class KatCP(LineReceiver):
             self.transport.write(str(msg) + self.delimiter)
         self.queue = []
         self.producing = True
+
+    def send_reply(self, reply, orig_req):
+        """Send a reply, setting the message id from the original request."""
+        assert (reply.mtype == Message.REPLY)
+        reply.mid = orig_req.mid
+        self.send_message(reply)
+
+    def send_reply_inform(self, inform, orig_req):
+        """Send a reply inform, setting the message if from the request."""
+        assert (inform.mtype == Message.INFORM)
+        inform.mid = orig_req.mid
+        self.send_message(inform)
 
     def send_message(self, msg):
         # just serialize a message
@@ -280,7 +292,7 @@ class ServerKatCPProtocol(KatCP):
             doc = meth.__doc__
             if doc is not None:
                 doc = doc.strip()
-            self.send_message(Message.inform('help', name, doc))
+            self.send_reply_inform(Message.inform('help', name, doc), msg)
             return Message.reply('help', 'ok', '1')
         count = 0
         for name in dir(self.__class__):
@@ -290,7 +302,7 @@ class ServerKatCPProtocol(KatCP):
                 doc = item.__doc__
                 if doc is not None:
                     doc = doc.strip()
-                self.send_message(Message.inform('help', sname, doc))
+                self.send_reply_inform(Message.inform('help', sname, doc), msg)
                 count += 1
         return Message.reply(msg.name, "ok", str(count))
 
@@ -441,17 +453,19 @@ class DeviceProtocol(ServerKatCPProtocol):
             return Message.reply(msg.name, "fail", "Unknown sensor name.")
 
         def one_ok(sensor, timestamp_ms, status, value):
-            self.send_message(Message.inform(msg.name, timestamp_ms, "1",
-                                             sensor.name, status, value))
+            self.send_reply_inform(Message.inform(msg.name, timestamp_ms, "1",
+                                                  sensor.name, status, value),
+                                   msg)
 
         def one_fail(failure, sensor):
-            self.send_message(Message.inform(msg.name, sensor.name,
-                                             "Sensor reading failed."))
+            self.send_reply_inform(Message.inform(msg.name, sensor.name,
+                                                  "Sensor reading failed."),
+                                   msg)
 
         def all_finished(lst):
             # XXX write a test where lst is not-empty so we can fail
-            self.send_message(Message.reply(msg.name, "ok",
-                                            len(sensors)))
+            self.send_reply(Message.reply(msg.name, "ok",
+                                          len(sensors)), msg)
 
         lst = []
         for name, sensor in sensors:
@@ -520,10 +534,10 @@ class DeviceProtocol(ServerKatCPProtocol):
             return Message.reply(msg.name, "fail", "Unknown sensor name.")
 
         for name, sensor in sensors:
-            self.send_message(Message.inform(msg.name, name,
+            self.send_reply_inform(Message.inform(msg.name, name,
                                              sensor.description, sensor.units,
                                              sensor.stype,
-                                             *sensor.formatted_params))
+                                             *sensor.formatted_params), msg)
         return Message.reply(msg.name, "ok", len(sensors))
 
     def request_sensor_sampling(self, msg):
@@ -610,7 +624,7 @@ class DeviceProtocol(ServerKatCPProtocol):
             ?halt
             !halt ok
         """
-        self.send_message(Message.reply("halt", "ok"))
+        self.send_reply(Message.reply("halt", "ok"), msg)
         self.factory.stop()
         raise AsyncReply()
 
@@ -676,7 +690,9 @@ class DeviceProtocol(ServerKatCPProtocol):
             !client-list ok 1
         """
         for ip, port in self.factory.clients:
-            self.send_message(Message.inform(msg.name, "%s:%s" % (ip, port)))
+            self.send_reply_inform(Message.inform(msg.name,
+                                                  "%s:%s" % (ip, port)),
+                                   msg)
         return Message.reply(msg.name, "ok", len(self.factory.clients))
 
     def request_log_level(self, msg):
