@@ -342,6 +342,80 @@ class MessageParser(object):
         return Message(mtype, name, arguments, mid)
 
 
+class ProtocolFlags(object):
+    """Utility class for handling KATCP protocol flags.
+
+    This class was introduced in katcp version 0.4.
+
+    Currently understood flags are:
+
+    * M - server supports multiple clients
+    * I - server supports message identifiers
+
+    Parameters
+    ----------
+    major : int
+        Major version number.
+    minor : int
+        Minor version number.
+    flags : set
+        Set of supported flags.
+
+    Attributes
+    ----------
+    multi_client : bool
+        Whether the server the version string came from supports
+        multiple clients.
+    message_ids : bool
+        Whether the server the version string came from supports
+        message ids.
+    """
+
+    VERSION_RE = re.compile(r"^(?P<major>\d+)\.(?P<minor>\d+)"
+                            r"(-(?P<flags>.*))?$")
+
+    # flags
+
+    MULTI_CLIENT = 'M'
+    MESSAGE_IDS = 'I'
+
+    def __init__(self, major, minor, flags):
+        self.major = major
+        self.minor = minor
+        self.flags = flags
+        self.multi_client = self.MULTI_CLIENT in self.flags
+        self.message_ids = self.MESSAGE_IDS in self.flags
+
+    def __eq__(self, other):
+        if not isinstance(other, ProtocolFlags):
+            return NotImplemented
+        return (self.major == other.major and self.minor == other.minor
+                and self.flags == other.flags)
+
+    def __str__(self):
+        flag_str = self.flags and ("-" + "".join(sorted(self.flags))) or ""
+        return "%d.%d%s" % (self.major, self.minor, flag_str)
+
+    @classmethod
+    def parse_version(cls, version_str):
+        """Create a :class:`ProtocolFlags` object from a version string.
+
+        Parameters
+        ----------
+        version_str : str
+            The version string from a #version-connect katcp-protocol
+            message.
+        """
+        match = cls.VERSION_RE.match(version_str)
+        if match:
+            major = int(match.group('major'))
+            minor = int(match.group('minor'))
+            flags = set(match.group('flags') or '')
+        else:
+            major, minor, flags = None, None, set()
+        return cls(major, minor, flags)
+
+
 class DeviceMetaclass(type):
     """Metaclass for DeviceServer and DeviceClient classes.
 
