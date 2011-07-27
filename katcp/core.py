@@ -345,7 +345,9 @@ class MessageParser(object):
 class ProtocolFlags(object):
     """Utility class for handling KATCP protocol flags.
 
-    This class was introduced in katcp version 0.4.
+    .. note::
+
+       This class was introduced in katcp version 0.4.
 
     Currently understood flags are:
 
@@ -558,7 +560,7 @@ class ExcepthookThread(threading.Thread):
                 raise
 
 
-from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp
+from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp, Address
 
 
 class Sensor(object):
@@ -568,6 +570,14 @@ class Sensor(object):
     be one of the sensor type constants. The list params if set will
     have its values formatter by the type formatter for the given
     sensor type.
+
+    .. note::
+
+       The LRU sensor type was deprecated in katcp 0.4.
+
+    .. note::
+
+       The ADDRESS sensor type was added in katcp 0.4.
 
     Parameters
     ----------
@@ -608,7 +618,8 @@ class Sensor(object):
     # parse as arguments
     #
     # type -> (name, formatter, parser)
-    INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE, STRING, TIMESTAMP = range(7)
+    (INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE, STRING, TIMESTAMP,
+     ADDRESS) = range(8)
 
     ## @brief Mapping from sensor type to tuple containing the type name,
     #  a kattype with functions to format and parse a value and a
@@ -621,6 +632,7 @@ class Sensor(object):
         DISCRETE: (Discrete, "unknown"),
         STRING: (Str, ""),
         TIMESTAMP: (Timestamp, 0.0),
+        ADDRESS: (Address, Address.NULL),
     }
 
     SENSOR_SHORTCUTS = {
