@@ -115,6 +115,9 @@ class KatCP(LineReceiver):
         if msg.arguments:
             self.build_state = msg.arguments[0]
 
+    def inform_version_connect(self, msg):
+        pass  # TODO: should probably save this somewhere
+
     def inform_disconnect(self, args):
         pass  # unnecessary, we have a callback on loseConnection
 
@@ -694,6 +697,41 @@ class DeviceProtocol(ServerKatCPProtocol):
                                                   "%s:%s" % (ip, port)),
                                    msg)
         return Message.reply(msg.name, "ok", len(self.factory.clients))
+
+    def request_version_list(self, msg):
+        """Request the list of versions of roles and subcomponents.
+
+        Informs
+        -------
+        name : str
+            Name of the role or component.
+        version : str
+            A string identifying the version of the component. Individual
+            components may define the structure of this argument as they
+            choose. In the absence of other information clients should
+            treat it as an opaque string.
+        build_state_or_serial_number : str
+            A unique identifier for a particular instance of a component.
+            This should change whenever the component is replaced or updated.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the version list succeeded.
+        informs : int
+            Number of #version-list inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?version-list
+            #version-list katcp-protocol 5.0-MI
+            #version-list katcp-library katcp-python-0.4 katcp-python-0.4.1-py2
+            #version-list katcp-device foodevice-1.0 foodevice-1.0.0rc1
+            !version-list ok 3
+        """
+        return Message.reply(msg.name, "fail", "TODO: Implement ?version-list")
 
     def request_log_level(self, msg):
         """Query or set the current logging level.

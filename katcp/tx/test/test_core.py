@@ -44,7 +44,7 @@ class TestKatCP(TestCase):
 
     def test_help(self):
         def received_help((msgs, reply_msg), protocol):
-            assert len(msgs) == 9
+            assert len(msgs) == 10
             requests = set(msg.arguments[0] for msg in msgs)
             assert 'help' in requests
             assert 'sensor-list' in requests
