@@ -646,7 +646,7 @@ class Sensor(object):
     SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
 
     # Sensor status constants
-    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE = range(5)
+    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE = range(6)
 
     ## @brief Mapping from sensor status to status name.
     STATUSES = {
@@ -655,6 +655,7 @@ class Sensor(object):
         WARN: 'warn',
         ERROR: 'error',
         FAILURE: 'failure',
+        UNREACHABLE: 'unreachable',
     }
 
     ## @brief Mapping from status name to sensor status.
