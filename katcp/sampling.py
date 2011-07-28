@@ -34,7 +34,7 @@ class SampleStrategy(object):
     """
 
     # Sampling strategy constants
-    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL = range(5)
+    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL, EVENT_RATE = range(6)
 
     ## @brief Mapping from strategy constant to strategy name.
     SAMPLING_LOOKUP = {
@@ -43,6 +43,7 @@ class SampleStrategy(object):
         PERIOD: "period",
         EVENT: "event",
         DIFFERENTIAL: "differential",
+        EVENT_RATE: "event-rate",
     }
 
     # SAMPLING_LOOKUP not found by pylint
@@ -94,6 +95,8 @@ class SampleStrategy(object):
             return SampleDifferential(inform_callback, sensor, *params)
         elif strategyType == cls.PERIOD:
             return SamplePeriod(inform_callback, sensor, *params)
+        elif strategyType == cls.EVENT_RATE:
+            return SampleEventRate(inform_callback, sensor, *params)
 
     def update(self, sensor):
         """Callback used by the sensor's notify method.
@@ -328,6 +331,57 @@ class SamplePeriod(SampleStrategy):
 
     def get_sampling(self):
         return SampleStrategy.PERIOD
+
+
+class SampleEventRate(SampleStrategy):
+    """Event rate sampling strategy.
+
+    Report the sensor value whenever it changes or if more than
+    longest_period milliseconds have passed since the last reported
+    update. However, do not report the value if less than
+    shortest_period milliseconds have passed since the last reported
+    update.
+    """
+
+    MILLISECOND = 1e3
+
+    def __init__(self, inform_callback, sensor, *params):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+        if len(params) != 2:
+            raise ValueError("The 'event-rate' strategy takes two parameters.")
+        shortest_period_ms = int(params[0])
+        longest_period_ms = int(params[1])
+        if not 0 <= shortest_period_ms <= longest_period_ms:
+            raise ValueError("The longest and shortest periods must"
+                             " satisfy 0 <= shorest_period <= longest_period")
+        self._shortest_period = (shortest_period_ms /
+                                 SampleEventRate.MILLISECOND)
+        self._longest_period = longest_period_ms / SampleEventRate.MILLISECOND
+        # don't send updates before _last_plus_shortest
+        self._last_plus_shortest = 0
+        # time between _last_plus_shortest and next required update
+        self._longest_minus_shortest = (self._longest_period -
+                                        self._shortest_period)
+        self._time = time.time
+
+    def update(self, sensor, now=None):
+        if now is None:
+            now = self._time()
+        if now < self._last_plus_shortest:
+            return
+        self._last_plus_shortest = now + self._shortest_period
+        self.inform()
+
+    def periodic(self, timestamp):
+        self.update(self._sensor, now=timestamp)
+        return self._last_plus_shortest + self._longest_minus_shortest
+
+    def get_sampling(self):
+        return SampleStrategy.EVENT_RATE
+
+    def attach(self):
+        self.update(self._sensor)
+        super(SampleEventRate, self).attach()
 
 
 class SampleReactor(ExcepthookThread):
