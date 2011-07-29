@@ -259,8 +259,8 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         time.sleep(0.1)
 
         self._assert_msgs_like(help_messages,
-            [("#help ", "")] * 14 +
-            [("!help ok 14", "")])
+            [("#help[1] ", "")] * 14 +
+            [("!help[1] ok 14", "")])
 
     def test_timeout(self):
         """Test requests that timeout."""
@@ -350,7 +350,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def worker(thread_id, request):
             self.client.request(
-                request,
+                request.copy(),
                 reply_cb=reply_cb,
                 inform_cb=inform_cb,
                 user_data=(thread_id,),
@@ -374,6 +374,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         for thread_id in range(num_threads):
             replies, informs, done = results[thread_id]
             done.wait(1.0)
+            self.assertTrue(done.isSet())
             self.assertEqual(len(replies), 1)
             self.assertEqual(replies[0].arguments[0], "ok")
             if len(informs) != 14:
