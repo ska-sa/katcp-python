@@ -398,6 +398,9 @@ class ProtocolFlags(object):
         flag_str = self.flags and ("-" + "".join(sorted(self.flags))) or ""
         return "%d.%d%s" % (self.major, self.minor, flag_str)
 
+    def supports(self, flag):
+        return flag in self.flags
+
     @classmethod
     def parse_version(cls, version_str):
         """Create a :class:`ProtocolFlags` object from a version string.

@@ -16,7 +16,7 @@ import time
 import logging
 import errno
 from .core import DeviceMetaclass, MessageParser, Message, ExcepthookThread, \
-                   KatcpClientError
+                   KatcpClientError, ProtocolFlags
 
 #logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp")
@@ -77,6 +77,18 @@ class DeviceClient(object):
         self._logger = logger
         self._auto_reconnect = auto_reconnect
         self._connect_failures = 0
+        self._server_supports_ids = False
+        self._protocol_flags = None
+
+    def inform_version_connect(self, msg):
+        """Process a #version-connect message."""
+        if len(msg.arguments) < 2:
+            return
+        if msg.arguments[0] == "katcp-protocol":
+            self._protocol_info = ProtocolFlags.parse_version(
+                msg.arguments[1])
+            self._server_supports_ids = self._protocol_info.supports(
+                ProtocolFlags.MESSAGE_IDS)
 
     def request(self, msg):
         """Send a request messsage.
