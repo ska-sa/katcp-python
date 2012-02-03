@@ -1,3 +1,59 @@
+01 June 2011:
+ * Merge r9501,9706,9764,9769,9771,9776,9780:
+   * Numerous improvements to katcp.tx.proxy to add hooks that proxy
+     subclasses can connect functionality to (for example, arrival of
+     devices) and improve the behaviour of proxied sensors.
+ * Merge r9783,9784,9785:
+   * Fix bug in sensortree that was triggered by sensor updates
+     occurring while sensors were being added to the tree.
+ * Merge r9791:
+   * Fix katcp.tx build state and API version sending.
+ * Version 0.3.4 released.
+
+16 May 2011:
+ * Merge r9447,9448,9491:
+   * Add a better reconnecting interface to katcp.tx clients.
+ * Version 0.3.3 released.
+
+05 May 2011:
+ * Merge r9321,9357,9370,9371,9373,9397 from trunk:
+   * Fix kattypes decorator bug that caused it to break on request
+     methods with no arguments.
+   * Simplify disconnecting clients in katcp.tx.
+   * Allow katcp.tx clients to wait to connect.
+   * Report connections failures better inside katcp.tx.
+   * Minor docstring fix.
+ * Version 0.3.2 released.
+
+09 Feb 2011:
+ * Merge r7520,7522,7546,7578-7580,7588-7591,7635,7637-7638,7674-7678,
+   7701-7702,7707,7726-7729 from trunk
+   * Fix unbounded memory usage issue in katcp.tx.
+   * Fix katcp.tx so it doesn't send sensor-list twice.
+   * Fix katcp.tx to clear running strategies when a connection is lost.
+   * Minor improvements to katcp.tx.
+   * Benchmark suite improvements.
+ * Merge r7806-7807,7812,7818,8081-8083,8085,8404,8420,8432-8434,8660
+   from trunk
+   * Refactor katcp.tx interface (breaks code that uses katcp.tx but Twisted
+     support was experimental in 0.3.0).
+   * Fix lack of build and api version reporting by katcp.tx server.
+   * Fix katcp.tx bug in reporting methods with names containing
+     underscores (affects ?help).
+   * Fix katcp.tx bug which causes messages to be lost if socket buffer
+     filled up.
+   * Change katcp.tx demo client to only use official katcp.tx API.
+ * Merge r8703 from trunk
+   * Fix check in test (sensor_list should have been sensor-list).
+ * Version 0.3.1 released.
+
+14 Dec 2010:
+ * Merge r8034,8234-8235,8238,8260,8265 from trunk
+   * Cleanup of testutils.
+
+25 Oct 2010:
+ * Created 0.3.x branch.
+
 22 Oct 2010:
  * Add a NullHandler for katcp library logging as recommended by Python logging 
    documentation.
