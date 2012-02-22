@@ -373,7 +373,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         for thread_id in range(num_threads):
             replies, informs, done = results[thread_id]
-            done.wait(1.0)
+            done.wait(2.0)
             self.assertEqual(len(replies), 1)
             self.assertEqual(replies[0].arguments[0], "ok")
             if len(informs) != 13:
