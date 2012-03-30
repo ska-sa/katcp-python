@@ -1391,11 +1391,16 @@ class DeviceLogger(object):
             to the root logger. The timestamp is a float in seconds. If not
             given the timestamp defaults to the current time.
         """
+        timestamp = kwargs.get("timestamp")
+        python_msg = msg
         if self._python_logger is not None:
-            self._python_logger.log(self.PYTHON_LEVEL[level], msg, *args)
+            if not timestamp is None:
+                python_msg = ' '.join((
+                    'katcp timestamp: %r' % timestamp,
+                    python_msg))
+            self._python_logger.log(self.PYTHON_LEVEL[level], python_msg, *args)
         if level >= self._log_level:
             name = kwargs.get("name")
-            timestamp = kwargs.get("timestamp")
             if name is None:
                 name = self._root_logger_name
             self._device_server.mass_inform(
