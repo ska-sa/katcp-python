@@ -7,7 +7,8 @@
 """Tests for client module.
    """
 
-import unittest
+import unittest2 as unittest
+import mock
 import time
 import logging
 import threading
@@ -461,3 +462,23 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(len(replies), 1)
         self.assertEqual(replies[0].name, "foo")
         self.assertEqual(replies[0].arguments, ["fail", "Error foo"])
+
+    def test_stop_join(self):
+        # Set up a slow command to ensure that there is something in
+        # the async queue
+        with mock.patch('katcp.client.threading.Timer') as MockTimer:
+            instance = MockTimer.return_value
+            self.client.request(
+                    katcp.Message.request("slow-command", "10000"),
+                    timeout=10000.1)
+        # Exactly one instance of MockTimer should have been instantiated
+        self.assertEqual(MockTimer.call_count, 1)
+        self.client.stop(timeout=0.5)
+        # Check that the timer's cancel() method has been called
+        instance.cancel.assert_called_once_with()
+        self.client.join(timeout=0.45)
+        instance.join.assert_called_once_with(timeout=0.45)
+        # It's OK not to have this in teardown since the client will
+        # itself cancel the slow_command when it is stop()ed
+        self.client.blocking_request(katcp.Message.request("cancel-slow-command"))
+

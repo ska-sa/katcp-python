@@ -1,0 +1,19 @@
+
+# /
+/build
+/dist
+/*.egg-info
+*.pyc
+*~
+.ropeproject
+# /docs/
+/docs/_build
+
+# /katcore/
+/katcore/*.pyc
+
+# /scripts/
+/scripts/build
+/scripts/   dist
+/scripts/   *.egg-info
+/scripts/   *.pyc

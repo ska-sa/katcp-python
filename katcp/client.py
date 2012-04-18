@@ -3,6 +3,7 @@
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
 # Copyright 2009 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
+from __future__ import with_statement
 
 """Clients for the KAT device control language.
    """
@@ -836,7 +837,10 @@ class CallbackClient(DeviceClient):
             timeout = self._request_timeout
 
         msg_id = self._next_id()
-        timer = threading.Timer(timeout, self._handle_timeout, (msg_id,))
+        if timeout is None: # deal with 'no timeout', i.e. None
+            timer = None
+        else:
+            timer = threading.Timer(timeout, self._handle_timeout, (msg_id,))
 
         self._push_async_request(msg_id, msg.name, reply_cb, inform_cb,
                                  user_data, timer)
@@ -1005,3 +1009,18 @@ class CallbackClient(DeviceClient):
                 e_type, e_value, trace, self._tb_limit))
             self._logger.error("Callback reply %s FAIL: %s" %
                                (msg.name, reason))
+
+    def stop(self, *args, **kwargs):
+        super(CallbackClient, self).stop(*args, **kwargs)
+        # Stop all async timeout handlers
+        with self._async_lock:
+            for (_, _, _, _, timer) in self._async_queue.values():
+                if timer is not None:
+                    timer.cancel()
+
+    def join(self, timeout=None):
+        with self._async_lock:
+            for (_, _, _, _, timer) in self._async_queue.values():
+                if timer is not None:
+                    timer.join(timeout=timeout)
+        super(CallbackClient, self).join(timeout=timeout)

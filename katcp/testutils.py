@@ -12,6 +12,7 @@ import logging
 import re
 import time
 import Queue
+import threading
 from .core import Sensor, Message
 from .server import DeviceServer, FailReply
 
@@ -772,6 +773,8 @@ class DeviceTestServer(DeviceServer):
         self.__msgs = []
         self.restart_queue = Queue.Queue()
         self.set_restart_queue(self.restart_queue)
+        self._cancel_slow_command = threading.Event()
+        self.slow_waiting = False
 
     def setup_sensors(self):
         self.restarted = False
@@ -793,8 +796,15 @@ class DeviceTestServer(DeviceServer):
         raise FailReply("There was a problem with your request.")
 
     def request_slow_command(self, sock, msg):
-        """A slow command, sleeps for msg.arguments[0]"""
-        time.sleep(float(msg.arguments[0]))
+        """A slow command, waits for msg.arguments[0] seconds"""
+        self.slow_waiting = True
+        self._cancel_slow_command.wait(float(msg.arguments[0]))
+        self.slow_waiting = False
+        return Message.reply(msg.name, "ok", msgid=msg.mid)
+
+    def request_cancel_slow_command(self, sock, msg):
+        """Cancel slow command request, resulting in it replying immedietely"""
+        self._cancel_slow_command.set()
         return Message.reply(msg.name, "ok", msgid=msg.mid)
 
     def handle_message(self, sock, msg):
@@ -804,6 +814,12 @@ class DeviceTestServer(DeviceServer):
     def messages(self):
         return self.__msgs
 
+    def stop(self, *args, **kwargs):
+        # Make sure a slow command with long timeout does not hold us
+        # up.
+        self._cancel_slow_command.set()
+        super(DeviceTestServer, self).stop(*args, **kwargs)
+
 
 class TestUtilMixin(object):
     """Mixin class implementing test helper methods for making
@@ -811,7 +827,7 @@ class TestUtilMixin(object):
        """
 
     def _assert_msgs_length(self, actual_msgs, expected_number):
-        """Assert that the number of messages is that expected."""
+        """Assert that the number of messages is as expected."""
         num_msgs = len(actual_msgs)
         if num_msgs < expected_number:
             self.assertEqual(num_msgs, expected_number,
