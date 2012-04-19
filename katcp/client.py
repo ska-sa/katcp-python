@@ -846,7 +846,8 @@ class CallbackClient(DeviceClient):
                                  user_data, timer)
         if self._use_ids:
             msg.mid = msg_id
-        timer.start()
+        if timer:
+            timer.start()
         try:
             super(CallbackClient, self).request(msg)
         except KatcpClientError, e:

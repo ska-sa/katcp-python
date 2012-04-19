@@ -18,6 +18,7 @@ from katcp.testutils import TestLogHandler, \
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 
+NO_HELP_MESSAGES = 14         # Number of requests on DeviceTestServer
 
 class TestDeviceServer(unittest.TestCase, TestUtilMixin):
     def setUp(self):
@@ -134,6 +135,8 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"!log-level ok warn", ""),
             (r"!log-level ok trace", ""),
             (r"!log-level fail Unknown\_logging\_level\_name\_'unknown'", ""),
+            (r"#help cancel-slow-command Cancel\_slow\_command\_request,\_"
+             "resulting\_in\_it\_replying\_immedietely", ""),
             (r"#help client-list", ""),
             (r"#help halt", ""),
             (r"#help help", ""),
@@ -147,7 +150,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#help sensor-value", ""),
             (r"#help slow-command", ""),
             (r"#help watchdog", ""),
-            (r"!help ok 13", ""),
+            (r"!help ok %d" % NO_HELP_MESSAGES, ""),
             (r"#help watchdog", ""),
             (r"!help ok 1", ""),
             (r"!help fail", ""),
@@ -237,13 +240,16 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         time.sleep(0.1)
 
         self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
-        self._assert_msgs_like(get_msgs(), [
+        msgs = get_msgs()
+        self._assert_msgs_like(msgs, [
             (r"!watchdog[1] ok", ""),
             (r"!restart[2] ok", ""),
             (r"!log-level[3] ok warn", ""),
             (r"!log-level[4] ok trace", ""),
             (r"!log-level[5] fail Unknown\_logging\_level\_name\_'unknown'",
              ""),
+            (r"#help[6] cancel-slow-command Cancel\_slow\_command\_request,\_"
+             "resulting\_in\_it\_replying\_immedietely", ""),
             (r"#help[6] client-list", ""),
             (r"#help[6] halt", ""),
             (r"#help[6] help", ""),
@@ -257,7 +263,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#help[6] sensor-value", ""),
             (r"#help[6] slow-command", ""),
             (r"#help[6] watchdog", ""),
-            (r"!help[6] ok 13", ""),
+            (r"!help[6] ok %d" % NO_HELP_MESSAGES, ""),
             (r"#help[7] watchdog", ""),
             (r"!help[7] ok 1", ""),
             (r"!help[8] fail", ""),

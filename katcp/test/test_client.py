@@ -18,6 +18,7 @@ from katcp.testutils import TestLogHandler, DeviceTestServer, TestUtilMixin
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 
+NO_HELP_MESSAGES = 14         # Number of requests on DeviceTestServer
 
 class TestDeviceClient(unittest.TestCase, TestUtilMixin):
     def setUp(self):
@@ -168,7 +169,7 @@ class TestBlockingClient(unittest.TestCase):
         reply, informs = self.client.blocking_request(
             katcp.Message.request("help"))
         assert reply.name == "help"
-        assert reply.arguments == ["ok", "13"]
+        assert reply.arguments == ["ok", "%d" % NO_HELP_MESSAGES]
         assert len(informs) == int(reply.arguments[1])
 
     def test_timeout(self):
@@ -225,7 +226,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def help_reply(reply):
             self.assertEqual(reply.name, "help")
-            self.assertEqual(reply.arguments, ["ok", "13"])
+            self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
             self.assertEqual(len(help_informs), int(reply.arguments[1]))
             help_replies.append(reply)
 
@@ -242,7 +243,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         time.sleep(0.2)
         self.assertEqual(len(help_replies), 1)
-        self.assertEqual(len(help_informs), 13)
+        self.assertEqual(len(help_informs), NO_HELP_MESSAGES)
 
     def test_no_callback(self):
         """Test request without callback."""
@@ -260,8 +261,29 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         time.sleep(0.1)
 
         self._assert_msgs_like(help_messages,
-            [("#help ", "")] * 13 +
-            [("!help ok 13", "")])
+            [("#help ", "")] * NO_HELP_MESSAGES +
+            [("!help ok %d" % NO_HELP_MESSAGES, "")])
+
+    def test_no_timeout(self):
+        self.client._request_timeout = None
+        replies = []
+        informs = []
+        replied = threading.Event()
+        def reply_handler(reply):
+            replies.append(reply)
+            replied.set()
+        def inform_handler(reply):
+            informs.append(reply)
+
+        with mock.patch('katcp.client.threading.Timer') as MockTimer:
+            self.client.request(katcp.Message.request("help"),
+                                reply_cb=reply_handler,
+                                inform_cb=inform_handler)
+        replied.wait(0.1)
+        # With no timeout no Timer object should have been instantiated
+        self.assertEqual(MockTimer.call_count, 0)
+        self.assertEqual(len(replies), 1)
+        self.assertEqual(len(informs), NO_HELP_MESSAGES)
 
     def test_timeout(self):
         """Test requests that timeout."""
@@ -332,7 +354,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         time.sleep(0.1)
         self.assertEqual(len(help_replies), 1)
-        self.assertEqual(len(help_informs), 13)
+        self.assertEqual(len(help_informs), NO_HELP_MESSAGES)
 
     def test_twenty_thread_mayhem(self):
         """Test using callbacks from twenty threads simultaneously."""
@@ -377,10 +399,10 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             done.wait(2.0)
             self.assertEqual(len(replies), 1)
             self.assertEqual(replies[0].arguments[0], "ok")
-            if len(informs) != 13:
+            if len(informs) != NO_HELP_MESSAGES:
                 print thread_id, len(informs)
                 print [x.arguments[0] for x in informs]
-            self.assertEqual(len(informs), 13)
+            self.assertEqual(len(informs), NO_HELP_MESSAGES)
 
     def test_blocking_request(self):
         """Test the callback client's blocking request."""
@@ -389,8 +411,8 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         )
 
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "13"])
-        self.assertEqual(len(informs), 13)
+        self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
+        self.assertEqual(len(informs), NO_HELP_MESSAGES)
 
         reply, informs = self.client.blocking_request(
             katcp.Message.request("slow-command", "0.5"),
@@ -424,7 +446,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def help_reply(reply):
             self.assertEqual(reply.name, "help")
-            self.assertEqual(reply.arguments, ["ok", "13"])
+            self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
             self.assertEqual(len(help_informs), int(reply.arguments[1]))
             help_replies.append(reply)
 
@@ -441,7 +463,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         time.sleep(0.2)
         self.assertEqual(len(help_replies), 1)
-        self.assertEqual(len(help_informs), 13)
+        self.assertEqual(len(help_informs), NO_HELP_MESSAGES)
 
     def test_request_fail_on_raise(self):
         """Test that the callback is called even if send_message raises
@@ -481,4 +503,3 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         # It's OK not to have this in teardown since the client will
         # itself cancel the slow_command when it is stop()ed
         self.client.blocking_request(katcp.Message.request("cancel-slow-command"))
-
