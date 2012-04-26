@@ -839,7 +839,6 @@ class CallbackClient(DeviceClient):
                 is_antenna = True
         except AttributeError:
             pass
-        if is_antenna: print 'r-t'
 
         if timeout is None:
             timeout = self._request_timeout
@@ -852,11 +851,9 @@ class CallbackClient(DeviceClient):
 
         self._push_async_request(msg_id, msg.name, reply_cb, inform_cb,
                                  user_data, timer)
-        if is_antenna: print 'r-m'
         if self._use_ids:
             msg.mid = msg_id
         if timer:
-            if is_antenna: print 'r-timer.start()'
             timer.start()
         try:
             super(CallbackClient, self).request(msg)
@@ -865,7 +862,6 @@ class CallbackClient(DeviceClient):
             if self._use_ids:
                 reply.mid = msg_id
             self.handle_reply(reply)
-        if is_antenna: print 'r-b'
 
     def blocking_request(self, msg, timeout=None):
         """Send a request messsage.
@@ -905,19 +901,22 @@ class CallbackClient(DeviceClient):
         def inform_cb(msg):
             informs.append(msg)
 
-        if is_antenna: print 'br-t'
-        # if is_antenna: self.br_trace = 'br-t'
         self.request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
                      timeout=timeout)
-        if is_antenna: print 'br-m'
-        # if is_antenna: self.br_trace = 'br-m'
-        print 'timeout: %r' % timeout
-        done.wait(timeout=timeout+1)
+        ## We wait on the done event that should be set by the reply
+        # handler callback. If this event does not occur within the
+        # timeout it means something unexpected went wrong. We give it
+        # an extra 5 seconds to deal with (unlikely?) slowness in the
+        # rest of the code
+        extra_wait = 5
+        wait_timeout = timeout
+        if not wait_timeout is None:
+            wait_timeout = wait_timeout + extra_wait
+        done.wait(timeout=wait_timeout)
         if not done.isSet():
-            import IPython ; IPython.embed()
+            raise RuntimeError('Unexpected error: Async request handler did '
+                               'not call reply handler within timeout period')
         reply = replies[0]
-        if is_antenna: print 'br-b'
-        # if is_antenna: self.br_trace = 'br-b'
 
         return reply, informs
 
@@ -965,7 +964,6 @@ class CallbackClient(DeviceClient):
         """Do callback for a failed request"""
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
-        print 'ht-t'
 
         if reply_cb is None:
             # this happens if no reply_cb was passed in to the request or
@@ -979,7 +977,6 @@ class CallbackClient(DeviceClient):
             else:
                 reply_cb(timeout_msg, *user_data)
         except Exception:
-            print 'ht-exc'
             e_type, e_value, trace = sys.exc_info()
             exc_reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, self._tb_limit))
