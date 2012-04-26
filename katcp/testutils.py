@@ -13,6 +13,7 @@ import re
 import time
 import Queue
 import threading
+import functools
 from .core import Sensor, Message
 from .server import DeviceServer, FailReply
 
@@ -106,29 +107,69 @@ class BlockingTestClient(client.BlockingClient):
         whitelist = set(whitelist)
         blacklist = set(blacklist)
 
-        msgs = []
 
-        def get_msgs():
-            """Return the messages recorded so far."""
-            msg_count = len(msgs)
-            msgs_copy = msgs[:msg_count]
-            del msgs[:msg_count]
-            return msgs_copy
+        class MessageRecorder(object):
+            def __init__(self, msg_types, whitelist, blacklist):
+                self.msgs = []
+                self.msg_types = msg_types
+                self.whitelist = whitelist
+                self.blacklist = blacklist
+                self.msg_received = threading.Event()
 
-        def append_msg(msg):
-            """Append a message if it matches the criteria."""
-            if msg.mtype not in msg_types:
-                return
-            if whitelist:
-                if msg.name in whitelist:
-                    msgs.append(msg)
-            else:
-                if msg.name not in blacklist:
-                    msgs.append(msg)
+            def get_msgs(self, min_number=0, timeout=1):
+                """Return the messages recorded so far. and delete them
 
-        self._message_recorders[id(get_msgs)] = append_msg
+                Parameters
+                ==========
+                number -- Minumum number of messages to return, else wait
+                timeout: int seconds or None -- Don't wait longer than this
+                """
+                self.wait_number(min_number, timeout)
+                msg_count = len(self.msgs)
+                msgs_copy = self.msgs[:msg_count]
+                del self.msgs[:msg_count]
+                return msgs_copy
 
-        return get_msgs
+            __call__ = get_msgs           # For backwards compatibility
+
+            def wait_number(self, number, timeout=1):
+                """Wait until at least certain number of messages have been recorded
+
+                Parameters
+                ==========
+                number -- Number of messages to wait for
+                timeout: int seconds or None -- Don't wait longer than this
+                """
+                start_time = time.time()
+                while True:
+                    if len(self.msgs) >= number:
+                        return True
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time >= timeout:
+                        return None
+                    self.msg_received.wait(timeout=timeout-elapsed_time)
+
+            def append_msg(self, msg):
+                """Append a message if it matches the criteria."""
+                if msg.mtype not in self.msg_types:
+                    return
+                try:
+                    if self.whitelist:
+                        if msg.name in whitelist:
+                            self.msgs.append(msg)
+                            self.msg_received.set()
+                    else:
+                        if msg.name not in self.blacklist:
+                            self.msgs.append(msg)
+                            self.msg_received.set()
+                finally:
+                    self.msg_received.clear()
+
+        mr = MessageRecorder(msg_types, whitelist, blacklist)
+
+        self._message_recorders[id(mr)] = mr.append_msg
+
+        return mr
 
     @staticmethod
     def expected_sensor_value_tuple(sensorname, value, sensortype=str,
@@ -879,3 +920,28 @@ class TestUtilMixin(object):
                     msg="Message '%s' does not end with '%s'."
                     % (str_msg, suffix))
         self._assert_msgs_length(actual_msgs, len(expected))
+
+def counting_callback(event, number_of_calls=1):
+    """Decorate a callback to set an event once it has been called a certain number of times
+
+    Parameters
+    ==========
+    event: threading.Event() -- will be set when enough calls have been made
+    number_of_calls: int > 0 -- Number of calls before event.set() is called
+
+    """
+    def decorator(original_callback):
+        assert number_of_calls > 0
+        calls = [0]
+        @functools.wraps(original_callback)
+        def wrapped_callback(*args, **kwargs):
+            original_callback(*args, **kwargs)
+            calls[0] += 1
+            if calls[0] >= number_of_calls:
+                event.set()
+                event.clear()
+        wrapped_callback.get_no_calls = lambda : calls[0]
+
+        return wrapped_callback
+    return decorator
+

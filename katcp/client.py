@@ -833,6 +833,13 @@ class CallbackClient(DeviceClient):
             How long to wait for a reply. The default is the
             the timeout set when creating the CallbackClient.
         """
+        is_antenna = False
+        try:
+            if self.name == 'antenna':
+                is_antenna = True
+        except AttributeError:
+            pass
+
         if timeout is None:
             timeout = self._request_timeout
 
@@ -874,6 +881,12 @@ class CallbackClient(DeviceClient):
         informs : list of Message objects
             A list of the inform messages received.
         """
+        is_antenna = False
+        try:
+            if self.name == 'antenna':
+                is_antenna = True
+        except AttributeError:
+            pass
         if timeout is None:
             timeout = self._request_timeout
 
@@ -890,7 +903,19 @@ class CallbackClient(DeviceClient):
 
         self.request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
                      timeout=timeout)
-        done.wait()
+        ## We wait on the done event that should be set by the reply
+        # handler callback. If this event does not occur within the
+        # timeout it means something unexpected went wrong. We give it
+        # an extra 5 seconds to deal with (unlikely?) slowness in the
+        # rest of the code
+        extra_wait = 5
+        wait_timeout = timeout
+        if not wait_timeout is None:
+            wait_timeout = wait_timeout + extra_wait
+        done.wait(timeout=wait_timeout)
+        if not done.isSet():
+            raise RuntimeError('Unexpected error: Async request handler did '
+                               'not call reply handler within timeout period')
         reply = replies[0]
 
         return reply, informs
@@ -935,26 +960,16 @@ class CallbackClient(DeviceClient):
             self._logger.error("Callback inform %s FAIL: %s" %
                                (msg.name, reason))
 
-    def _handle_timeout(self, msg_id):
-        """Handle a timed out callback request.
-
-        Parameters
-        ----------
-        msg_id : uuid.UUID for message
-            The name of the reply which was expected.
-        """
+    def _do_fail_callback(self, reason, msg_name, reply_cb, inform_cb, user_data, timer):
+        """Do callback for a failed request"""
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
-        msg_name, reply_cb, _inform_cb, user_data, timer = \
-            self._pop_async_request(msg_id, None)
 
         if reply_cb is None:
             # this happens if no reply_cb was passed in to the request or
             return
 
-        timeout_msg = Message.reply(msg_name, "fail",
-                                    "Timed out after %f seconds" %
-                                    timer.interval)
+        timeout_msg = Message.reply(msg_name, "fail", reason)
 
         try:
             if user_data is None:
@@ -963,10 +978,25 @@ class CallbackClient(DeviceClient):
                 reply_cb(timeout_msg, *user_data)
         except Exception:
             e_type, e_value, trace = sys.exc_info()
-            reason = "\n".join(traceback.format_exception(
+            exc_reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, self._tb_limit))
-            self._logger.error("Callback reply during timeout %s FAIL: %s" %
-                               (msg_name, reason))
+            self._logger.error("Callback reply during failure %s, %s FAIL: %s" %
+                               (reason, msg_name, exc_reason))
+
+
+    def _handle_timeout(self, msg_id):
+        """Handle a timed out callback request.
+
+        Parameters
+        ----------
+        msg_id : uuid.UUID for message
+            The name of the reply which was expected.
+        """
+        msg_name, reply_cb, inform_cb, user_data, timer  = \
+            self._pop_async_request(msg_id, None)
+        reason = "Timed out after %f seconds" % timer.interval
+        self._do_fail_callback(
+            reason, msg_name, reply_cb, inform_cb, user_data, timer)
 
     def handle_reply(self, msg):
         """Handle a reply message related to the current request.
@@ -1015,9 +1045,12 @@ class CallbackClient(DeviceClient):
         super(CallbackClient, self).stop(*args, **kwargs)
         # Stop all async timeout handlers
         with self._async_lock:
-            for (_, _, _, _, timer) in self._async_queue.values():
+            for request_data in self._async_queue.values():
+                timer = request_data[-1]   # Last one should be timeout timer
                 if timer is not None:
                     timer.cancel()
+                self._do_fail_callback('Client stopped before reply was received',
+                                       *request_data)
 
     def join(self, timeout=None):
         with self._async_lock:

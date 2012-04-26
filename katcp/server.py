@@ -11,6 +11,7 @@ import socket
 import errno
 import select
 import threading
+import Queue
 import traceback
 import logging
 import sys
@@ -84,6 +85,7 @@ class DeviceServerBase(object):
     """
 
     __metaclass__ = DeviceMetaclass
+    MAX_DEFERRED_QUEUE_SIZE = 100000      # Maximum size of deferred action queue
 
     def __init__(self, host, port, tb_limit=20, logger=log):
         self._parser = MessageParser()
@@ -93,6 +95,7 @@ class DeviceServerBase(object):
         self._sock = None
         self._thread = None
         self._logger = logger
+        self._deferred_queue = Queue.Queue(maxsize=self.MAX_DEFERRED_QUEUE_SIZE)
 
         # sockets and data
         self._data_lock = threading.Lock()
@@ -438,6 +441,30 @@ class DeviceServerBase(object):
         inform.mid = orig_req.mid
         self._send_message(sock, inform)
 
+    def _process_deferred_queue(self, max_items=0):
+        """
+        Process deferred queue
+
+        Items in self._deferred_queue are assumed to be functions that
+        are to be called once.
+
+        Parameters
+        ==========
+
+        max_items: int
+            Maximum number of items to process, 0 if the whole
+            queue is to be processed
+        """
+        processed = 0
+        while max_items == 0 or processed < max_items:
+            try:
+                task = self._deferred_queue.get_nowait()
+            except Queue.Empty:
+                break
+            task()                        # Execute the task
+            self._deferred_queue.task_done()   # tell the queue that it is done
+            processed = processed + 1
+
     def run(self):
         """Listen for clients and process their requests."""
         timeout = 0.5  # s
@@ -452,9 +479,10 @@ class DeviceServerBase(object):
         # replace bindaddr with real address so we can rebind
         # to the same port.
         self._bindaddr = self._sock.getsockname()
-
+        
         self._running.set()
         while self._running.isSet():
+            self._process_deferred_queue()
             all_socks = self._socks + [self._sock]
             try:
                 readers, _writers, errors = _select(
@@ -520,6 +548,7 @@ class DeviceServerBase(object):
         for sock in list(self._socks):
             self.on_client_disconnect(sock, "Device server shutting down.",
                                       True)
+            self._process_deferred_queue()
             self._remove_socket(sock)
 
         self._sock.close()
@@ -720,18 +749,23 @@ class DeviceServer(DeviceServerBase):
             True if sock is still open for sending,
             False otherwise.
         """
-        self._strat_lock.acquire()
-        try:
-            strategies = self._strategies.pop(sock, None)
-            if strategies is not None:
-                for sensor, strategy in list(strategies.items()):
-                    del strategies[sensor]
-                    self._reactor.remove_strategy(strategy)
-        finally:
-            self._strat_lock.release()
 
-        if sock_valid:
-            self.inform(sock, Message.inform("disconnect", msg))
+        def remove_strategies():
+            with self._strat_lock:
+                strategies = self._strategies.pop(sock, None)
+                if strategies is not None:
+                    for sensor, strategy in list(strategies.items()):
+                        del strategies[sensor]
+                        self._reactor.remove_strategy(strategy)
+            if sock_valid:
+                self.inform(sock, Message.inform("disconnect", msg))
+
+        try:
+            self._deferred_queue.put_nowait(remove_strategies)
+        except Queue.Full:
+            self._logger.error(
+                'Deferred queue full when trying to add sensor '
+                'strategy de-registration task for client %r' % socket)
 
     def build_state(self):
         """Return a build state string in the form
