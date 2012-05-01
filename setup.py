@@ -26,7 +26,7 @@ setup (
         "Topic :: Scientific/Engineering :: Astronomy",
     ],
     platforms = [ "OS Independent" ],
-    install_requires = ["nose", "unittest2", "mock"],
+    install_requires = ["twisted", "nose", "unittest2", "mock"],
     keywords="kat kat7 ska",
     zip_safe = False,
     # Bitten Test Suite
