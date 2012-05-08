@@ -6,7 +6,20 @@
 
 """Tests for the katcp.tx package.
    """
+### Horrendious monkey patch hack to make twisted.trial.unittest
+### support skipping in python 2.6
+import unittest, unittest2
+oldTestCase = unittest.TestCase
+unittest.TestCase = unittest2.TestCase
 
+from twisted.trial import unittest as tx_unit
+unittest.TestCase = oldTestCase
+
+def addSkip(self, test, reason):
+    self.original.addSkip(test, reason)
+
+tx_unit.PyUnitResultAdapter.addSkip = addSkip
+### End horrendious hack
 
 def suite():
     import unittest
