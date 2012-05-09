@@ -34,13 +34,17 @@ class KatcpType(object):
         The default value for this type.
     optional : boolean
         Whether the value is allowed to be None.
+    multiple : boolean
+        Whether multiple values of this type are expected. Must be the
+        last type parameter if this is True.
     """
 
     name = "unknown"
 
-    def __init__(self, default=None, optional=False):
+    def __init__(self, default=None, optional=False, multiple=False):
         self._default = default
         self._optional = optional
+        self._multiple = multiple
 
     def get_default(self):
         """Return the default value.
@@ -162,7 +166,6 @@ class Float(KatcpType):
     """
 
     name = "float"
-
     encode = lambda self, value: "%.15g" % (value,)
 
     def decode(self, value):
@@ -519,7 +522,8 @@ def request(*types, **options):
     Parameters
     ----------
     types : list of kattypes
-        The types of the request message parameters (in order).
+        The types of the request message parameters (in order). A type
+        with multiple=True has to be the last type.
 
     Examples
     --------
@@ -531,6 +535,12 @@ def request(*types, **options):
     ...
     """
     include_msg = options.get('include_msg', False)
+    # Check that only the last type has multiple=True
+    if len(types) > 1:
+        for type_ in types[:-1]:
+            if type_._multiple:
+                raise TypeError(
+                    'Only the last parameter type can accept multiple arguments.')
 
     def decorator(handler):
         argnames = []
@@ -612,6 +622,13 @@ def return_reply(*types):
     ...         return ("ok", my_int + 1, my_int * 2.0)
     ...
     """
+    # Check that only the last type has multiple=True
+    if len(types) > 1:
+        for type_ in types[:-1]:
+            if type_._multiple:
+                raise TypeError(
+                    'Only the last parameter type can accept multiple arguments.')
+
     def decorator(handler):
         if not handler.__name__.startswith("request_"):
             raise ValueError("This decorator can only be used on a katcp"
@@ -705,7 +722,12 @@ def unpack_types(types, args, argnames):
     argnames : list of strings
         The names of the arguments.
     """
-    if len(types) < len(args):
+    if len(types) > 0:
+        multiple = types[-1]._multiple
+    else:
+        multiple = False
+
+    if len(types) < len(args) and not multiple:
         raise FailReply("Too many parameters given.")
 
     # Wrap the types in parameter objects
@@ -714,11 +736,15 @@ def unpack_types(types, args, argnames):
         name = ""
         if i < len(argnames):
             name = argnames[i]
-        params.append(Parameter(i + 1, name, kattype))
+        params.append(Parameter(i+1, name, kattype))
+
+
+    if len(args) > len(types) and multiple:
+        for i in range(len(types), len(args)):
+            params.append(Parameter(i+1, name, kattype))
 
     # if len(args) < len(types) this passes in None for missing args
     return map(lambda param, arg: param.unpack(arg), params, args)
-
 
 def pack_types(types, args):
     """Pack arguments according the the types list.
@@ -730,7 +756,23 @@ def pack_types(types, args):
     args : list of objects
         The arguments to format.
     """
-    if len(types) < len(args):
+    if len(types) > 0:
+        multiple = types[-1]._multiple
+    else:
+        multiple = False
+
+    if len(types) < len(args) and not multiple:
         raise ValueError("Too many arguments to pack.")
-    # if len(args) < len(types) this passes in None for missing args
-    return map(lambda ktype, arg: ktype.pack(arg), types, args)
+
+    if len(args) < len(types):
+        # this passes in None for missing args
+        retvals = map(lambda ktype, arg: ktype.pack(arg), types, args)
+    else:
+        retvals = [ktype.pack(arg) for ktype, arg in zip(types, args)]
+
+    if len(args) > len(types) and multiple:
+        last_ktype = types[-1]
+        for arg in args[len(types):]:
+            retvals.append(last_ktype.pack(arg))
+
+    return retvals

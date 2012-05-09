@@ -7,7 +7,7 @@
 """Tests for the kattypes module.
    """
 
-import unittest
+import unittest2 as unittest
 from katcp import Message, FailReply, AsyncReply
 from katcp.kattypes import request, inform, return_reply, send_reply,  \
                            Bool, Discrete, Float, Int, Lru, Timestamp, \
@@ -498,10 +498,28 @@ class TestDevice(object):
     def request_eight(self, sock, msg, i):
         return ("ok", i, msg.name)
 
+    @request(Int(), Float(multiple=True))
+    @return_reply(Int(), Float(multiple=True))
+    def request_int_multifloat(self, sock, i, *floats):
+        return ('ok', i) + floats
 
 class TestDecorator(unittest.TestCase):
     def setUp(self):
         self.device = TestDevice()
+
+    def test_request_multi(self):
+        with self.assertRaises(TypeError) as ex:
+            request(Bool(multiple=True), Int())
+        self.assertEqual(
+            ex.exception.message,
+            'Only the last parameter type can accept multiple arguments.')
+
+    def test_return_reply_multi(self):
+        with self.assertRaises(TypeError) as ex:
+            return_reply(Bool(multiple=True), Int())
+        self.assertEqual(
+            ex.exception.message,
+            'Only the last parameter type can accept multiple arguments.')
 
     def test_request_one(self):
         """Test request with no defaults."""
@@ -620,3 +638,16 @@ class TestDecorator(unittest.TestCase):
         sock = ""
         self.assertEqual(str(self.device.request_eight(sock, Message.request(
                          "eight", "8"))), "!eight ok 8 eight")
+
+    def test_request_int_multifloat(self):
+        req = self.device.request_int_multifloat
+        desired_i, desired_floats = (7, (1.2, 999, 71.43))
+        self.assertEqual(str(req('sock', Message.request(
+            'int-multifloat', desired_i, *desired_floats))),
+                         '!int-multifloat ok 7 1.2 999 71.43')
+        with self.assertRaises(FailReply) as ex:
+            req('sock', Message.request('int-multifloat', desired_i, 1.2, 'abc'))
+        self.assertEqual(
+            ex.exception.message,
+            "Error in parameter 3 (): Could not parse value 'abc' as float.")
+
