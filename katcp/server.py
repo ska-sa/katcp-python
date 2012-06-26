@@ -4,6 +4,8 @@
 # Copyright 2009 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
 
+from __future__ import with_statement
+
 """Servers for the KAT device control language.
 """
 
