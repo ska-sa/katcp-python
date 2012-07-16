@@ -14,7 +14,7 @@ import threading
 import Queue
 import traceback
 import logging
-import sys
+import sys gf
 import re
 import time
 from .core import DeviceMetaclass, ExcepthookThread, Message, MessageParser, \
