@@ -18,8 +18,9 @@ import sys
 import re
 import time
 from .core import DeviceMetaclass, ExcepthookThread, Message, MessageParser, \
-                   FailReply, AsyncReply
+                   FailReply, AsyncReply, ProtocolFlags
 from .sampling import SampleReactor, SampleStrategy, SampleNone
+from .version import VERSION, VERSION_STR
 
 # logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp")
@@ -685,6 +686,11 @@ class DeviceServer(DeviceServerBase):
     instance and may have a fourth element containing additional
     version information (e.g. rc1).
 
+    Subclasses may manipulate the versions returned by the ?version-list
+    command by editing .extra_versions which is a dictionary mapping
+    role or component names to (version, build_state_or_serial_no) tuples.
+    The build_state_or_serial_no may be None.
+
     Subclasses must override the .setup_sensors() method. If they
     have no sensors to register, the method should just be a pass.
     """
@@ -700,6 +706,12 @@ class DeviceServer(DeviceServerBase):
     ## @brief Device server build / instance information.
     BUILD_INFO = ("name", 0, 1, "")
 
+    ## @brief Protocol versions and flags
+    PROTOCOL_INFO = ProtocolFlags(5, 0, set([
+        ProtocolFlags.MULTI_CLIENT,
+        ProtocolFlags.MESSAGE_IDS,
+        ]))
+
     ## @var log
     # @brief DeviceLogger instance for sending log messages to the client.
 
@@ -709,6 +721,9 @@ class DeviceServer(DeviceServerBase):
     def __init__(self, *args, **kwargs):
         super(DeviceServer, self).__init__(*args, **kwargs)
         self.log = DeviceLogger(self, python_logger=self._logger)
+        # map names to (version, build state/serial no.) tuples.
+        #   None may used to indicate no build state or serial no.
+        self.extra_versions = {}
         self._restart_queue = None
         self._sensors = {}  # map names to sensor objects
         self._reactor = None  # created in run
@@ -733,6 +748,13 @@ class DeviceServer(DeviceServerBase):
             self._strategies[sock] = {}  # map sensors -> sampling strategies
         finally:
             self._strat_lock.release()
+        self.inform(sock, Message.inform("version-connect", "katcp-protocol",
+                                         self.PROTOCOL_INFO))
+        self.inform(sock, Message.inform("version-connect", "katcp-library",
+                                         "katcp-python-%d.%d" % VERSION[:2],
+                                         VERSION_STR))
+        self.inform(sock, Message.inform("version-connect", "katcp-device",
+                                         self.version(), self.build_state()))
         self.inform(sock, Message.inform("version", self.version()))
         self.inform(sock, Message.inform("build-state", self.build_state()))
 
@@ -1049,6 +1071,57 @@ class DeviceServer(DeviceServerBase):
                 addr = repr(client)
             self.reply_inform(sock, Message.inform("client-list", addr), msg)
         return Message.reply("client-list", "ok", str(num_clients))
+
+    def request_version_list(self, sock, msg):
+        """Request the list of versions of roles and subcomponents.
+
+        Informs
+        -------
+        name : str
+            Name of the role or component.
+        version : str
+            A string identifying the version of the component. Individual
+            components may define the structure of this argument as they
+            choose. In the absence of other information clients should
+            treat it as an opaque string.
+        build_state_or_serial_number : str
+            A unique identifier for a particular instance of a component.
+            This should change whenever the component is replaced or updated.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the version list succeeded.
+        informs : int
+            Number of #version-list inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?version-list
+            #version-list katcp-protocol 5.0-MI
+            #version-list katcp-library katcp-python-0.4 katcp-python-0.4.1-py2
+            #version-list katcp-device foodevice-1.0 foodevice-1.0.0rc1
+            !version-list ok 3
+        """
+        versions = [
+            ("katcp-protocol", (self.PROTOCOL_INFO, None)),
+            ("katcp-library", ("katcp-python-%d.%d" % VERSION[:2],
+                               VERSION_STR)),
+            ("katcp-device", (self.version(), self.build_state())),
+            ]
+        extra_versions = sorted(self.extra_versions.items())
+
+        for name, (version, build_state) in versions + extra_versions:
+            if build_state is None:
+                inform = Message.inform(msg.name, name, version)
+            else:
+                inform = Message.inform(msg.name, name, version, build_state)
+            self.reply_inform(sock, inform, msg)
+
+        num_versions = len(versions) + len(extra_versions)
+        return Message.reply(msg.name, "ok", str(num_versions))
 
     def request_sensor_list(self, sock, msg):
         """Request the list of sensors.
