@@ -6,8 +6,8 @@ setup (
     name = "katcp",
     version = version.VERSION_STR,
     description = "Karoo Array Telescope Communication Protocol library",
-    author = "Simon Cross",
-    author_email = "simon.cross@ska.ac.za",
+    author = "SKA SA KAT-7 / MeerKAT CAM team",
+    author_email = "cam@ska.ac.za",
     packages = find_packages(),
     scripts = [
         "scripts/katcp-exampleserver.py",
