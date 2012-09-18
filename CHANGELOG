@@ -1,3 +1,15 @@
+18 September 2012
+ * PEP-8 cleanup of code
+ * Store sensor state as a tuple to allow 'atomic' read
+ * Use nose as the default test runner
+ * Fix thread leak in callback client when outstanding async requests are
+   outstanding when the client is shutdown
+ * Fix server deadlock on sensor strategy lock at shutdown
+ * Add variable number of arguments support to kattypes decorators
+ * Version 0.3.5 released -- Should be last public release adhering to the KATCP
+   v4 specifications. Next release should be based ont he KATCP v5
+   specifications.
+
 01 June 2011:
  * Merge r9501,9706,9764,9769,9771,9776,9780:
    * Numerous improvements to katcp.tx.proxy to add hooks that proxy
