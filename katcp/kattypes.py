@@ -284,6 +284,45 @@ class Lru(KatcpType):
         return Lru.LRU_CONSTANTS[value]
 
 
+class Address(KatcpType):
+    """The KATCP address type.
+
+    .. note::
+
+       The address type was added in katcp 0.4.
+    """
+
+    name = "address"
+
+    NULL = ("0.0.0.0", None)  # null address for use as an initial value
+
+    IPV4_RE = re.compile(r"^(?P<host>[^:]*)(:(?P<port>\d+))?$")
+    IPV6_RE = re.compile(r"^\[(?P<host>[^[]*)\](:(?P<port>\d+))?$")
+
+    def encode(self, value):
+        try:
+            host, port = value
+        except (ValueError, TypeError):
+            raise ValueError("Could not extract host and port from value %r" %
+                             (value,))
+        if ':' in host:
+            # IPv6
+            host = "[%s]" % host
+        return "%s:%s" % (host, port) if port is not None else host
+
+    def decode(self, value):
+        if value.startswith("["):
+            match = self.IPV6_RE.match(value)
+        else:
+            match = self.IPV4_RE.match(value)
+        if match is None:
+            raise ValueError("Could not parse '%s' as an address." % value)
+        port = match.group('port')
+        if port is not None:
+            port = int(port)
+        return match.group('host'), port
+
+
 class Timestamp(KatcpType):
     """The KATCP timestamp type."""
 
@@ -324,7 +363,7 @@ class TimestampOrNow(Timestamp):
 
 
 class StrictTimestamp(KatcpType):
-    """The a timestamp that enforces the XXXX.YYY format for timestamps.
+    """A timestamp that enforces the XXXX.YYY format for timestamps.
     """
 
     name = "strict_timestamp"
