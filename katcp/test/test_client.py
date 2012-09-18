@@ -18,7 +18,7 @@ from katcp.testutils import TestLogHandler, DeviceTestServer, TestUtilMixin
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 
-NO_HELP_MESSAGES = 14         # Number of requests on DeviceTestServer
+NO_HELP_MESSAGES = 15         # Number of requests on DeviceTestServer
 
 class TestDeviceClient(unittest.TestCase, TestUtilMixin):
     def setUp(self):
@@ -162,15 +162,15 @@ class TestBlockingClient(unittest.TestCase):
         """Test blocking_request."""
         reply, informs = self.client.blocking_request(
             katcp.Message.request("watchdog"))
-        assert reply.name == "watchdog"
-        assert reply.arguments == ["ok"]
-        assert informs == []
+        self.assertEqual(reply.name, "watchdog")
+        self.assertEqual(reply.arguments, ["ok"])
+        self.assertEqual(informs, [])
 
         reply, informs = self.client.blocking_request(
             katcp.Message.request("help"))
-        assert reply.name == "help"
-        assert reply.arguments == ["ok", "%d" % NO_HELP_MESSAGES]
-        assert len(informs) == int(reply.arguments[1])
+        self.assertEqual(reply.name, "help")
+        self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
+        self.assertEqual(len(informs), int(reply.arguments[1]))
 
     def test_timeout(self):
         """Test calling blocking_request with a timeout."""
