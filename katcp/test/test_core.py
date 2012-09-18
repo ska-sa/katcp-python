@@ -154,6 +154,27 @@ class TestMessageParser(unittest.TestCase):
         self.assertEqual(m.mid, "1234")
 
 
+class TestProtocolFlags(unittest.TestCase):
+    def test_parse_version(self):
+        PF = katcp.ProtocolFlags
+        self.assertEqual(PF.parse_version("foo"), PF(None, None, set()))
+        self.assertEqual(PF.parse_version("1.0"), PF(1, 0, set()))
+        self.assertEqual(PF.parse_version("5.0-MI"),
+                         PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS])))
+        # check an unknown flag
+        self.assertEqual(PF.parse_version("5.1-MIU"),
+                         PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS, 'U'])))
+
+    def test_str(self):
+        PF = katcp.ProtocolFlags
+        self.assertEqual(str(PF(1, 0, set())), "1.0")
+        self.assertEqual(str(PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS]))),
+                         "5.0-IM")
+        self.assertEqual(str(PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
+                                           "U"]))),
+                         "5.0-IMU")
+
+
 class TestSensor(unittest.TestCase):
     def test_int_sensor(self):
         """Test integer sensor."""
