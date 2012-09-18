@@ -12,7 +12,7 @@ from katcp import Message, FailReply, AsyncReply
 from katcp.kattypes import request, inform, return_reply, send_reply,  \
                            Bool, Discrete, Float, Int, Lru, Timestamp, \
                            Str, Struct, Regex, DiscreteMulti, TimestampOrNow, \
-                           StrictTimestamp
+                           StrictTimestamp, Address
 
 
 class TestType(unittest.TestCase):
@@ -205,6 +205,44 @@ class TestLru(TestType):
             (basic, None, ValueError),
             (default, None, Lru.LRU_NOMINAL),
             (default_optional, None, Lru.LRU_NOMINAL),
+            (optional, None, None),
+        ]
+
+
+class TestAddress(TestType):
+
+    def setUp(self):
+        basic = Address()
+        default = Address(default=("127.0.0.1", None))
+        optional = Address(optional=True)
+        default_optional = Address(default=("127.0.0.1", None), optional=True)
+
+        self._pack = [
+            (basic, ("127.0.0.1", None), "127.0.0.1"),
+            (basic, ("127.0.0.1", 80), "127.0.0.1:80"),
+            (basic, ("0:0:0:0:0:0:0:1", None), "[0:0:0:0:0:0:0:1]"),
+            (basic, ("::1", None), "[::1]"),
+            (basic, ("::FFFF:204.152.189.116", None),
+             "[::FFFF:204.152.189.116]"),
+            (basic, ("::1", 80), "[::1]:80"),
+            (basic, "127.0.0.1", ValueError),  # value not a tuple
+            (default, None, "127.0.0.1"),
+            (default_optional, None, "127.0.0.1"),
+            (optional, None, ValueError),
+        ]
+
+        self._unpack = [
+            (basic, "127.0.0.1", ("127.0.0.1", None)),
+            (basic, "127.0.0.1:80", ("127.0.0.1", 80)),
+            (basic, "[0:0:0:0:0:0:0:1]", ("0:0:0:0:0:0:0:1", None)),
+            (basic, "[::1]", ("::1", None)),
+            (basic, "[::FFFF:204.152.189.116]", ("::FFFF:204.152.189.116",
+                                                 None)),
+            (basic, "[::1]:80", ("::1", 80)),
+            (basic, "127.0.0.1:foo", ValueError),
+            (basic, None, ValueError),
+            (default, None, ("127.0.0.1", None)),
+            (default_optional, None, ("127.0.0.1", None)),
             (optional, None, None),
         ]
 
