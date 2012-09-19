@@ -70,6 +70,19 @@ class TestKatCP(TestCase):
         d, process = run_subprocess(connected, TestClientKatCP)
         return d
 
+    def test_event_rate_sensor_sampling(self):
+        def check(protocol):
+            self.assertTrue(len(protocol.status_updates) in (30, 31))
+            protocol.send_request('halt')
+
+        def connected(protocol):
+            protocol.send_request('sensor-sampling', 'int_sensor',
+                                  'event-rate', 5, 10)
+            reactor.callLater(0.3, check, protocol)
+
+        d, process = run_subprocess(connected, TestClientKatCP)
+        return d
+
 
 class TestProtocol(DeviceProtocol):
     notify_con_lost = None

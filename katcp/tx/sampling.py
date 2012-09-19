@@ -1,5 +1,6 @@
 
 from twisted.internet import reactor
+import time
 
 
 class SamplingStrategy(object):
@@ -33,6 +34,36 @@ class PeriodicStrategy(SamplingStrategy):
     def run(self, period):
         self.period = float(period) / 1000
         self._run_once()
+
+
+class EventRateStrategy(SamplingStrategy):
+    next = None
+
+    def _run_once(self):
+        self.update(self.sensor)
+        now = self._time()
+        wait = self.last_plus_shortest + (self.longest_period -
+                                          self.shortest_period) - now
+        self.next = reactor.callLater(wait, self._run_once)
+
+    def update(self, sensor):
+        now = self._time()
+        if now < self.last_plus_shortest:
+            return
+        self.last_plus_shortest = now + self.shortest_period
+        self.inform()
+
+    def cancel(self):
+        self.sensor.detach(self)
+        self.next.cancel()
+
+    def run(self, shortest_period, longest_period):
+        self.shortest_period = float(shortest_period) / 1000
+        self.longest_period = float(longest_period) / 1000
+        self.last_plus_shortest = 0
+        self._time = time.time
+        self._run_once()
+        self.sensor.attach(self)
 
 
 class NoStrategy(SamplingStrategy):
