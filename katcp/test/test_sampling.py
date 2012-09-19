@@ -121,6 +121,40 @@ class TestSampling(unittest.TestCase):
         period.periodic(12)
         self.assertEqual(len(self.calls), 3)
 
+    def test_event_rate(self):
+        """Test SampleEventRate strategy."""
+        # shortest period = 10s, longest period = 20s
+        evrate = sampling.SampleEventRate(self.inform, self.sensor, 10000,
+                                          20000)
+        now = [1]
+        evrate._time = lambda: now[0]
+        self.assertEqual(self.calls, [])
+
+        evrate.attach()
+        self.assertEqual(len(self.calls), 1)
+
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 1)
+
+        now[0] = 11
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 2)
+
+        evrate.periodic(12)
+        self.assertEqual(len(self.calls), 2)
+        evrate.periodic(13)
+        self.assertEqual(len(self.calls), 2)
+        evrate.periodic(31)
+        self.assertEqual(len(self.calls), 3)
+
+        now[0] = 32
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 3)
+
+        now[0] = 41
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 4)
+
 
 class TestReactor(unittest.TestCase):
 

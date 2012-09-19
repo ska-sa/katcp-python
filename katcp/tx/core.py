@@ -13,7 +13,7 @@ from katcp.core import FailReply, ProtocolFlags
 from katcp.server import DeviceLogger, construct_name_filter
 from katcp.version import VERSION, VERSION_STR
 from katcp.tx.sampling import (DifferentialStrategy, AutoStrategy,
-    EventStrategy, NoStrategy, PeriodicStrategy)
+    EventStrategy, NoStrategy, PeriodicStrategy, EventRateStrategy)
 
 import sys
 import traceback
@@ -370,7 +370,8 @@ class DeviceProtocol(ServerKatCPProtocol):
                            'none': NoStrategy,
                            'auto': AutoStrategy,
                            'event': EventStrategy,
-                           'differential': DifferentialStrategy}
+                           'differential': DifferentialStrategy,
+                           'event-rate': EventRateStrategy}
 
     def __init__(self, *args, **kwds):
         KatCP.__init__(self, *args, **kwds)
