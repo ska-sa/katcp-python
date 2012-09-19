@@ -507,6 +507,18 @@ class TestDeviceServer(TestCase):
         finish = Deferred()
         return finish
 
+    def test_version_list(self):
+        def reply((informs, reply), protocol):
+            self.assertEquals(reply, Message.reply('version-list', 'ok',
+                                                   len(informs)))
+            self.assertEquals([(m.name, m.arguments[0]) for m in informs], [
+                                  ("version-list", "katcp-protocol"),
+                                  ("version-list", "katcp-library"),
+                                  ("version-list", "katcp-device"),
+                              ])
+
+        return self._base_test(('version-list',), reply)
+
     def test_log_basic(self):
         class TestProtocol(ClientKatCPProtocol):
             def inform_log(self, msg):

@@ -646,7 +646,7 @@ class Sensor(object):
     SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
 
     # Sensor status constants
-    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE = range(5)
+    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE = range(6)
 
     ## @brief Mapping from sensor status to status name.
     STATUSES = {
@@ -655,6 +655,7 @@ class Sensor(object):
         WARN: 'warn',
         ERROR: 'error',
         FAILURE: 'failure',
+        UNREACHABLE: 'unreachable',
     }
 
     ## @brief Mapping from status name to sensor status.
@@ -709,9 +710,12 @@ class Sensor(object):
         typeclass, default_value = self.SENSOR_TYPES[sensor_type]
 
         if self._sensor_type in [Sensor.INTEGER, Sensor.FLOAT]:
-            if not params[0] <= default_value <= params[1]:
-                default_value = params[0]
-            self._kattype = typeclass(params[0], params[1])
+            # as of version 5 of the guidelines, integer and float
+            # ranges are optional and informational
+            if len(params) == 2:
+                if not params[0] <= default_value <= params[1]:
+                    default_value = params[0]
+            self._kattype = typeclass()
         elif self._sensor_type == Sensor.DISCRETE:
             default_value = params[0]
             self._kattype = typeclass(params)
