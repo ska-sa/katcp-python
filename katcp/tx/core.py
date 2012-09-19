@@ -9,8 +9,9 @@ from twisted.python import log
 from twisted.internet.interfaces import IPushProducer
 
 from katcp import MessageParser, Message, AsyncReply
-from katcp.core import FailReply
+from katcp.core import FailReply, ProtocolFlags
 from katcp.server import DeviceLogger, construct_name_filter
+from katcp.version import VERSION, VERSION_STR
 from katcp.tx.sampling import (DifferentialStrategy, AutoStrategy,
     EventStrategy, NoStrategy, PeriodicStrategy)
 
@@ -216,12 +217,24 @@ class ClientKatCPProtocol(KatCP):
 class ServerKatCPProtocol(KatCP):
     VERSION = ("device_stub", 0, 1)
     BUILD_STATE = ("name", 0, 1, "")
+    PROTOCOL_INFO = ProtocolFlags(5, 0, set([
+        ProtocolFlags.MULTI_CLIENT,
+        ProtocolFlags.MESSAGE_IDS,
+        ]))
 
     def connectionMade(self):
         """ Called when connection is made. Send default informs - version
         and build data
         """
         self.transport.registerProducer(self, True)
+
+        self.send_message(Message.inform("version-connect", "katcp-protocol",
+                                         self.PROTOCOL_INFO))
+        self.send_message(Message.inform("version-connect", "katcp-library",
+                                         "katcp-python-tx-%d.%d" % VERSION[:2],
+                                         VERSION_STR))
+        self.send_message(Message.inform("version-connect", "katcp-device",
+                                         self.version(), self.build_state()))
         self.send_message(Message.inform("version", self.version()))
         self.send_message(Message.inform("build-state", self.build_state()))
 
@@ -350,6 +363,7 @@ class DeviceProtocol(ServerKatCPProtocol):
     def __init__(self, *args, **kwds):
         KatCP.__init__(self, *args, **kwds)
         self.strategies = {}
+        self.extra_versions = {}
 
     def connectionLost(self, _):
         self.factory.deregister_client(self.transport.client)
@@ -711,11 +725,27 @@ class DeviceProtocol(ServerKatCPProtocol):
 
             ?version-list
             #version-list katcp-protocol 5.0-MI
-            #version-list katcp-library katcp-python-0.4 katcp-python-0.4.1-py2
+            #version-list katcp-library katcp-python-tx-0.4 katcp-python-0.4.1
             #version-list katcp-device foodevice-1.0 foodevice-1.0.0rc1
             !version-list ok 3
         """
-        return Message.reply(msg.name, "fail", "TODO: Implement ?version-list")
+        versions = [
+            ("katcp-protocol", (self.PROTOCOL_INFO, None)),
+            ("katcp-library", ("katcp-python-tx-%d.%d" % VERSION[:2],
+                               VERSION_STR)),
+            ("katcp-device", (self.version(), self.build_state())),
+            ]
+        extra_versions = sorted(self.extra_versions.items())
+
+        for name, (version, build_state) in versions + extra_versions:
+            if build_state is None:
+                inform = Message.inform(msg.name, name, version)
+            else:
+                inform = Message.inform(msg.name, name, version, build_state)
+            self.send_reply_inform(inform, msg)
+
+        num_versions = len(versions) + len(extra_versions)
+        return Message.reply(msg.name, "ok", str(num_versions))
 
     def request_log_level(self, msg):
         """Query or set the current logging level.

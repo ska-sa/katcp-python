@@ -184,8 +184,8 @@ class TestSensor(unittest.TestCase):
                 timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
         self.assertEqual(s.read_formatted(), ("12345000", "nominal", "3"))
         self.assertEquals(s.parse_value("3"), 3)
-        self.assertRaises(ValueError, s.parse_value, "4")
-        self.assertRaises(ValueError, s.parse_value, "-10")
+        self.assertEquals(s.parse_value("4"), 4)
+        self.assertEquals(s.parse_value("-10"), -10)
         self.assertRaises(ValueError, s.parse_value, "asd")
 
         s = katcp.Sensor(katcp.Sensor.INTEGER, "an.int", "An integer.",
@@ -206,8 +206,8 @@ class TestSensor(unittest.TestCase):
                 timestamp=12345, status=katcp.Sensor.WARN, value=3.0)
         self.assertEqual(s.read_formatted(), ("12345000", "warn", "3"))
         self.assertEquals(s.parse_value("3"), 3.0)
-        self.assertRaises(ValueError, s.parse_value, "10")
-        self.assertRaises(ValueError, s.parse_value, "-10")
+        self.assertEquals(s.parse_value("10"), 10.0)
+        self.assertEquals(s.parse_value("-10"), -10.0)
         self.assertRaises(ValueError, s.parse_value, "asd")
 
         s = katcp.Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "",
@@ -299,4 +299,5 @@ class TestSensor(unittest.TestCase):
         s.set_value(3, timestamp=12345)
         self.assertEqual(s.read(), (12345, katcp.Sensor.NOMINAL, 3))
 
-        self.assertRaises(ValueError, s.set_value, 5)
+        s.set_value(5, timestamp=12345)
+        self.assertEqual(s.read(), (12345, katcp.Sensor.NOMINAL, 5))
