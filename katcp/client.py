@@ -81,6 +81,19 @@ class DeviceClient(object):
         self._server_supports_ids = False
         self._protocol_flags = None
 
+        # message id and lock
+        self._last_msg_id = 0
+        self._msg_id_lock = threading.Lock()
+
+    def _next_id(self):
+        """Return the next available message id."""
+        self._msg_id_lock.acquire()
+        try:
+            self._last_msg_id += 1
+            return str(self._last_msg_id)
+        finally:
+            self._msg_id_lock.release()
+
     def inform_version_connect(self, msg):
         """Process a #version-connect message."""
         if len(msg.arguments) < 2:
@@ -529,6 +542,8 @@ class DeviceClient(object):
 class BlockingClient(DeviceClient):
     """Implement blocking requests on top of DeviceClient.
 
+    This client will use message IDs if the server supports them.
+
     Parameters
     ----------
     host : string
@@ -566,11 +581,23 @@ class BlockingClient(DeviceClient):
         self._request_end = threading.Event()
         self._request_lock = threading.Lock()
         self._current_name = None
+        self._current_msg_id = None  # only used if server supports msg ids
         self._current_informs = None
         self._current_reply = None
         self._current_inform_count = None
 
-    def blocking_request(self, msg, timeout=None, keepalive=False):
+    def _message_matches(self, msg):
+        """Check whether message matches current request.
+
+           Must be called with _request_lock held.
+           """
+        return ((self._current_msg_id is not None and
+                 msg.mid == self._current_msg_id)
+                or
+                (self._current_msg_id is None and
+                 msg.name == self._current_name))
+
+    def blocking_request(self, msg, timeout=None, keepalive=False, use_mid=None):
         """Send a request messsage.
 
         Parameters
@@ -580,9 +607,12 @@ class BlockingClient(DeviceClient):
         timeout : float in seconds
             How long to wait for a reply. The default is the
             the timeout set when creating the BlockingClient.
-        keepalive : boolean
+        keepalive : boolean, optional
             Whether the arrival of an inform should
             cause the timeout to be reset.
+        use_mid : boolean, optional
+            Whether to use message IDs. Default is to use message IDs
+            if the server supports them.
 
         Returns
         -------
@@ -591,10 +621,15 @@ class BlockingClient(DeviceClient):
         informs : list of Message objects
             A list of the inform messages received.
         """
+        if use_mid is None:
+            use_mid = self._server_supports_ids
         try:
             self._request_lock.acquire()
             self._request_end.clear()
             self._current_name = msg.name
+            if use_mid:
+                msg.mid = self._next_id()
+                self._current_msg_id = msg.mid
             self._current_informs = []
             self._current_reply = None
             self._current_inform_count = 0
@@ -628,6 +663,7 @@ class BlockingClient(DeviceClient):
                 self._current_informs = None
                 self._current_reply = None
                 self._current_name = None
+                self._current_msg_id = None
             finally:
                 self._request_lock.release()
 
@@ -650,7 +686,7 @@ class BlockingClient(DeviceClient):
         """
         try:
             self._request_lock.acquire()
-            if msg.name == self._current_name:
+            if self._message_matches(msg):
                 self._current_informs.append(msg)
                 return
         finally:
@@ -671,7 +707,7 @@ class BlockingClient(DeviceClient):
         """
         try:
             self._request_lock.acquire()
-            if msg.name == self._current_name:
+            if self._message_matches(msg):
                 # unset _current_name so that no more replies or informs
                 # match this request
                 self._current_name = None
@@ -686,6 +722,8 @@ class BlockingClient(DeviceClient):
 
 class CallbackClient(DeviceClient):
     """Implement callback-based requests on top of DeviceClient.
+
+    This client will use message IDs if the server supports them.
 
     Parameters
     ----------
@@ -704,8 +742,6 @@ class CallbackClient(DeviceClient):
     timeout : float in seconds, optional
         Default number of seconds to wait before a callback request times
         out. Can be overriden in individual calls to request. Default is 5s.
-    use_ids : bool, optional
-        Whether to send messages with ids. Default is False.
 
     Examples
     --------
@@ -730,23 +766,18 @@ class CallbackClient(DeviceClient):
     """
 
     def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
-                 auto_reconnect=True, use_ids=False):
+                 auto_reconnect=True):
         super(CallbackClient, self).__init__(host, port, tb_limit=tb_limit,
                                              logger=logger,
                                              auto_reconnect=auto_reconnect)
 
         self._request_timeout = timeout
-        self._use_ids = use_ids
-
-        # message id and lock
-        self._last_msg_id = 0
-        self._msg_id_lock = threading.Lock()
 
         # lock for checking and popping requests
         self._async_lock = threading.Lock()
 
         # pending requests
-        # msg_id -> (request_name, reply_cb, inform_cb, user_data, timer)
+        # msg_id -> (request, reply_cb, inform_cb, user_data, timer)
         #           callback tuples
         self._async_queue = {}
 
@@ -754,19 +785,19 @@ class CallbackClient(DeviceClient):
         # msg_name -> [ list of msg_ids ]
         self._async_id_stack = {}
 
-    def _push_async_request(self, msg_id, request_name, reply_cb, inform_cb,
+    def _push_async_request(self, msg_id, request, reply_cb, inform_cb,
                             user_data, timer):
         """Store the callbacks for a request we've sent so we
            can forward any replies and informs to them.
            """
         self._async_lock.acquire()
         try:
-            self._async_queue[msg_id] = (request_name, reply_cb, inform_cb,
+            self._async_queue[msg_id] = (request, reply_cb, inform_cb,
                                          user_data, timer)
-            if request_name in self._async_id_stack:
-                self._async_id_stack[request_name].append(msg_id)
+            if request.name in self._async_id_stack:
+                self._async_id_stack[request.name].append(msg_id)
             else:
-                self._async_id_stack[request_name] = [msg_id]
+                self._async_id_stack[request.name] = [msg_id]
         finally:
             self._async_lock.release()
 
@@ -782,7 +813,7 @@ class CallbackClient(DeviceClient):
             if msg_id in self._async_queue:
                 callback_tuple = self._async_queue[msg_id]
                 del self._async_queue[msg_id]
-                self._async_id_stack[callback_tuple[0]].remove(msg_id)
+                self._async_id_stack[callback_tuple[0].name].remove(msg_id)
                 return callback_tuple
             else:
                 return None, None, None, None, None
@@ -815,17 +846,8 @@ class CallbackClient(DeviceClient):
         if msg_name in self._async_id_stack and self._async_id_stack[msg_name]:
             return self._async_id_stack[msg_name][0]
 
-    def _next_id(self):
-        """Return the next available message id."""
-        self._msg_id_lock.acquire()
-        try:
-            self._last_msg_id += 1
-            return str(self._last_msg_id)
-        finally:
-            self._msg_id_lock.release()
-
     def request(self, msg, reply_cb=None, inform_cb=None, user_data=None,
-                timeout=None):
+                timeout=None, use_mid=None):
         """Send a request messsage.
 
         Parameters
@@ -844,6 +866,9 @@ class CallbackClient(DeviceClient):
         timeout : float in seconds
             How long to wait for a reply. The default is the
             the timeout set when creating the CallbackClient.
+        use_mid : boolean, optional
+            Whether to use message IDs. Default is to use message IDs
+            if the server supports them.
         """
         is_antenna = False
         try:
@@ -855,27 +880,31 @@ class CallbackClient(DeviceClient):
         if timeout is None:
             timeout = self._request_timeout
 
+        if use_mid is None:
+            use_mid = self._server_supports_ids
+
         msg_id = self._next_id()
+        if use_mid:
+            msg.mid = msg_id
+
         if timeout is None: # deal with 'no timeout', i.e. None
             timer = None
         else:
             timer = threading.Timer(timeout, self._handle_timeout, (msg_id,))
 
-        self._push_async_request(msg_id, msg.name, reply_cb, inform_cb,
+        self._push_async_request(msg_id, msg, reply_cb, inform_cb,
                                  user_data, timer)
-        if self._use_ids:
-            msg.mid = msg_id
         if timer:
             timer.start()
         try:
             super(CallbackClient, self).request(msg)
         except KatcpClientError, e:
             reply = Message.request(msg.name, "fail", str(e))
-            if self._use_ids:
+            if self._server_supports_ids:
                 reply.mid = msg_id
             self.handle_reply(reply)
 
-    def blocking_request(self, msg, timeout=None):
+    def blocking_request(self, msg, timeout=None, use_mid=None):
         """Send a request messsage.
 
         Parameters
@@ -885,6 +914,9 @@ class CallbackClient(DeviceClient):
         timeout : float in seconds
             How long to wait for a reply. The default is the
             the timeout set when creating the CallbackClient.
+        use_mid : boolean, optional
+            Whether to use message IDs. Default is to use message IDs
+            if the server supports them.
 
         Returns
         -------
@@ -914,7 +946,7 @@ class CallbackClient(DeviceClient):
             informs.append(msg)
 
         self.request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
-                     timeout=timeout)
+                     timeout=timeout, use_mid=use_mid)
         ## We wait on the done event that should be set by the reply
         # handler callback. If this event does not occur within the
         # timeout it means something unexpected went wrong. We give it
@@ -945,15 +977,15 @@ class CallbackClient(DeviceClient):
         """
         # this may also result in inform_cb being None if no
         # inform_cb was passed to the request method.
-        if self._use_ids:
-            if msg.mid is not None:
-                _msg_name, _reply_cb, inform_cb, user_data, _timer = \
+        if msg.mid is not None:
+            _request, _reply_cb, inform_cb, user_data, _timer = \
                     self._peek_async_request(msg.mid, None)
-            else:
-                inform_cb, user_data = None, None
         else:
-            _msg_name, _reply_cb, inform_cb, user_data, _timer = \
+            request, _reply_cb, inform_cb, user_data, _timer = \
                 self._peek_async_request(None, msg.name)
+            if request is not None and request.mid != None:
+                # we sent a mid but this inform doesn't have one
+                inform_cb, user_data = None, None
 
         if inform_cb is None:
             inform_cb = super(CallbackClient, self).handle_inform
@@ -972,7 +1004,8 @@ class CallbackClient(DeviceClient):
             self._logger.error("Callback inform %s FAIL: %s" %
                                (msg.name, reason))
 
-    def _do_fail_callback(self, reason, msg_name, reply_cb, inform_cb, user_data, timer):
+    def _do_fail_callback(
+            self, reason, msg, reply_cb, inform_cb, user_data, timer):
         """Do callback for a failed request"""
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
@@ -981,7 +1014,7 @@ class CallbackClient(DeviceClient):
             # this happens if no reply_cb was passed in to the request or
             return
 
-        timeout_msg = Message.reply(msg_name, "fail", reason)
+        timeout_msg = Message.reply(msg.name, "fail", reason)
 
         try:
             if user_data is None:
@@ -993,8 +1026,7 @@ class CallbackClient(DeviceClient):
             exc_reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, self._tb_limit))
             self._logger.error("Callback reply during failure %s, %s FAIL: %s" %
-                               (reason, msg_name, exc_reason))
-
+                               (reason, msg.name, exc_reason))
 
     def _handle_timeout(self, msg_id):
         """Handle a timed out callback request.
@@ -1004,11 +1036,11 @@ class CallbackClient(DeviceClient):
         msg_id : uuid.UUID for message
             The name of the reply which was expected.
         """
-        msg_name, reply_cb, inform_cb, user_data, timer  = \
+        msg, reply_cb, inform_cb, user_data, timer  = \
             self._pop_async_request(msg_id, None)
         reason = "Timed out after %f seconds" % timer.interval
         self._do_fail_callback(
-            reason, msg_name, reply_cb, inform_cb, user_data, timer)
+            reason, msg, reply_cb, inform_cb, user_data, timer)
 
     def handle_reply(self, msg):
         """Handle a reply message related to the current request.
@@ -1023,15 +1055,18 @@ class CallbackClient(DeviceClient):
         """
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
-        if self._use_ids:
-            if msg.mid is not None:
-                _msg_name, reply_cb, _inform_cb, user_data, timer = \
+        if msg.mid is not None:
+            _request, reply_cb, _inform_cb, user_data, timer = \
                     self._pop_async_request(msg.mid, None)
-            else:
-                reply_cb, user_data, timer = None, None, None
         else:
-            _msg_name, reply_cb, _inform_cb, user_data, timer = \
-                self._pop_async_request(None, msg.name)
+            request, _reply_cb, _inform_cb, _user_data, _timer = \
+                self._peek_async_request(None, msg.name)
+            if request is not None and request.mid == None:
+                # we didn't send a mid so this is the request we want
+                _request, reply_cb, _inform_cb, user_data, timer = \
+                          self._pop_async_request(None, msg.name)
+            else:
+                reply_cb, user_data = None, None
 
         if timer is not None:
             timer.cancel()
