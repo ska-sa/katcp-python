@@ -255,14 +255,16 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         self.client._inform_handlers["help"] = handle_help_message
         self.client._reply_handlers["help"] = handle_help_message
-
+        # Set client._last_msg_id so we know that the ID is. Should be
+        # _last_msg_id + 1
+        self.client._last_msg_id = 0
         self.client.request(katcp.Message.request("help"))
 
         time.sleep(0.1)
 
         self._assert_msgs_like(help_messages,
-            [("#help ", "")] * NO_HELP_MESSAGES +
-            [("!help ok %d" % NO_HELP_MESSAGES, "")])
+            [("#help[1] ", "")] * NO_HELP_MESSAGES +
+            [("!help[1] ok %d" % NO_HELP_MESSAGES, "")])
 
     def test_no_timeout(self):
         self.client._request_timeout = None
@@ -373,7 +375,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def worker(thread_id, request):
             self.client.request(
-                request,
+                request.copy(),
                 reply_cb=reply_cb,
                 inform_cb=inform_cb,
                 user_data=(thread_id,),
@@ -397,6 +399,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         for thread_id in range(num_threads):
             replies, informs, done = results[thread_id]
             done.wait(2.0)
+            self.assertTrue(done.isSet())
             self.assertEqual(len(replies), 1)
             self.assertEqual(replies[0].arguments[0], "ok")
             if len(informs) != NO_HELP_MESSAGES:
