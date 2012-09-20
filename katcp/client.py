@@ -1075,11 +1075,11 @@ class CallbackClient(DeviceClient):
         """
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
-        if msg.mid is not None:
+        if not msg.mid is None:
             _request, reply_cb, _inform_cb, user_data, timer = \
                     self._pop_async_request(msg.mid, None)
         else:
-            request, _reply_cb, _inform_cb, _user_data, _timer = \
+            request, _reply_cb, _inform_cb, _user_data, timer = \
                 self._peek_async_request(None, msg.name)
             if request is not None and request.mid == None:
                 # we didn't send a mid so this is the request we want

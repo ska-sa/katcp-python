@@ -207,28 +207,33 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         """Test callback request."""
 
         watchdog_replies = []
+        watchdog_replied = threading.Event()
 
         def watchdog_reply(reply):
             self.assertEqual(reply.name, "watchdog")
             self.assertEqual(reply.arguments, ["ok"])
             watchdog_replies.append(reply)
+            watchdog_replied.set()
 
+        self.assertTrue(self.client.wait_protocol(0.2))
         self.client.request(
             katcp.Message.request("watchdog"),
             reply_cb=watchdog_reply,
         )
 
-        time.sleep(0.1)
+        watchdog_replied.wait(0.2)
         self.assertTrue(watchdog_replies)
 
         help_replies = []
         help_informs = []
+        help_replied = threading.Event()
 
         def help_reply(reply):
             self.assertEqual(reply.name, "help")
             self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
             self.assertEqual(len(help_informs), int(reply.arguments[1]))
             help_replies.append(reply)
+            help_replied.set()
 
         def help_inform(inform):
             self.assertEqual(inform.name, "help")
@@ -241,7 +246,11 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             inform_cb=help_inform,
         )
 
-        time.sleep(0.2)
+        help_replied.wait(0.2)
+        self.assertTrue(help_replied.isSet())
+        help_replied.clear()
+        help_replied.wait(0.05)   # Check if (unwanted) late help replies arrive
+        self.assertFalse(help_replied.isSet())
         self.assertEqual(len(help_replies), 1)
         self.assertEqual(len(help_informs), NO_HELP_MESSAGES)
 
@@ -292,26 +301,37 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(len(informs), NO_HELP_MESSAGES)
 
     def test_timeout(self):
+        self._test_timeout()
+
+    def test_timeout_nomid(self, use_mid=False):
+        self._test_timeout(use_mid=False)
+
+    def _test_timeout(self, use_mid=None):
         """Test requests that timeout."""
 
         replies = []
+        replied = threading.Event()
         informs = []
         timeout = 0.001
 
         def reply_cb(msg):
             replies.append(msg)
+            replied.set()
 
         def inform_cb(msg):
             informs.append(msg)
 
+        self.assertTrue(self.client.wait_protocol(0.2))
         self.client.request(
             katcp.Message.request("slow-command", "0.1"),
+            use_mid=use_mid,
             reply_cb=reply_cb,
             inform_cb=inform_cb,
             timeout=timeout,
         )
 
-        time.sleep(0.2)
+        replied.wait(0.2)
+        self.assertTrue(replied.isSet())
         self.assertEqual(len(replies), 1)
         self.assertEqual(len(informs), 0)
         self.assertEqual([msg.name for msg in replies], ["slow-command"])
