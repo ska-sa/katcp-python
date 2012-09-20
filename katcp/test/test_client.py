@@ -249,18 +249,22 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         """Test request without callback."""
 
         help_messages = []
+        help_completed = threading.Event()
 
         def handle_help_message(client, msg):
             help_messages.append(msg)
+            if msg.mtype == msg.REPLY:
+                help_completed.set()
 
         self.client._inform_handlers["help"] = handle_help_message
         self.client._reply_handlers["help"] = handle_help_message
         # Set client._last_msg_id so we know that the ID is. Should be
         # _last_msg_id + 1
         self.client._last_msg_id = 0
+        self.assertTrue(self.client.wait_protocol(0.2))
         self.client.request(katcp.Message.request("help"))
-
-        time.sleep(0.1)
+        help_completed.wait(0.2)
+        self.assertTrue(help_completed.isSet())
 
         self._assert_msgs_like(help_messages,
             [("#help[1] ", "")] * NO_HELP_MESSAGES +

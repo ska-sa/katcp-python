@@ -73,6 +73,7 @@ class DeviceClient(object):
         self._waiting_chunk = ""
         self._running = threading.Event()
         self._connected = threading.Event()
+        self._received_protocol_info = threading.Event()
         self._send_lock = threading.Lock()
         self._thread = None
         self._logger = logger
@@ -103,6 +104,7 @@ class DeviceClient(object):
                 msg.arguments[1])
             self._server_supports_ids = self._protocol_info.supports(
                 ProtocolFlags.MESSAGE_IDS)
+            self._received_protocol_info.set()
 
     def request(self, msg):
         """Send a request messsage.
@@ -519,6 +521,23 @@ class DeviceClient(object):
         self._connected.wait(timeout)
         return self._connected.isSet()
 
+
+    def wait_protocol(self, timeout=None):
+        """Wait until katcp protocol information has been received from the client.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for the client to connect.
+
+        Returns
+        -------
+        connected : bool
+            Whether protocol information was received
+        """
+        self._received_protocol_info.wait(timeout)
+        return self._received_protocol_info.isSet()
+
     def notify_connected(self, connected):
         """Event handler that is called wheneved the connection status changes.
 
@@ -884,6 +903,7 @@ class CallbackClient(DeviceClient):
             use_mid = self._server_supports_ids
 
         msg_id = self._next_id()
+
         if use_mid:
             msg.mid = msg_id
 
