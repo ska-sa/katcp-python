@@ -13,7 +13,8 @@ import time
 import logging
 import threading
 import katcp
-from katcp.testutils import TestLogHandler, DeviceTestServer, TestUtilMixin
+from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
+                             counting_callback)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -292,6 +293,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         informs = []
         timeout = 0.001
 
+        @counting_callback()
         def reply_cb(msg):
             replies.append(msg)
 
@@ -305,15 +307,16 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             timeout=timeout,
         )
 
-        time.sleep(0.2)
+        reply_cb.assert_wait(1)
         self.assertEqual(len(replies), 1)
-        self.assertEqual(len(informs), 0)
         self.assertEqual([msg.name for msg in replies], ["slow-command"])
         self.assertEqual([msg.arguments for msg in replies], [
                 ["fail", "Timed out after %f seconds" % timeout]])
+        self.assertEqual(len(informs), 0)
 
         del replies[:]
         del informs[:]
+        reply_cb.reset()
 
         # test next request succeeds
         self.client.request(
@@ -322,12 +325,27 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             inform_cb=inform_cb,
         )
 
-        time.sleep(0.2)
+        reply_cb.assert_wait(1)
         self.assertEqual(len(replies), 1)
         self.assertEqual(len(informs), 0)
         self.assertEqual([msg.name for msg in replies + informs],
                          ["slow-command"] * len(replies + informs))
         self.assertEqual([msg.arguments for msg in replies], [["ok"]])
+
+    def test_timeout_nocb(self):
+        """Test requests that timeout with no callbacks."""
+        # Included to test https://katfs.kat.ac.za/mantis/view.php?id=1722
+        # Situation can occur during a race between the timeout handler and the
+        # receipt of a reply -- the reply can arrive after the timeout timer has
+        # expired but before the request has been popped off the stack with
+        # client._pop_async_request(). The normal request handler then pops off
+        # the request first, resulting in the timeout handler getting a bunch of
+        # None's. It should handle this gracefully.
+
+        # Running the handler with a fake msg_id should have the same result as
+        # running it after a real request has already been popped. The expected
+        # result is that no assertions are raised.
+        self.client._handle_timeout('fake_msg_id')
 
     def test_user_data(self):
         """Test callbacks with user data."""

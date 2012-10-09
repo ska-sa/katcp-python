@@ -969,13 +969,13 @@ class CallbackClient(DeviceClient):
             # this happens if no reply_cb was passed in to the request or
             return
 
-        timeout_msg = Message.reply(msg_name, "fail", reason)
+        reason_msg = Message.reply(msg_name, "fail", reason)
 
         try:
             if user_data is None:
-                reply_cb(timeout_msg)
+                reply_cb(reason_msg)
             else:
-                reply_cb(timeout_msg, *user_data)
+                reply_cb(reason_msg, *user_data)
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             exc_reason = "\n".join(traceback.format_exception(
@@ -994,6 +994,12 @@ class CallbackClient(DeviceClient):
         """
         msg_name, reply_cb, inform_cb, user_data, timer  = \
             self._pop_async_request(msg_id, None)
+        # We may have been racing with the actual reply handler if the reply
+        # arrived close to the timeout expiry, which means the
+        # self._pop_async_request() call gave us None's. In this case, just bail
+        if timer is None:
+            return
+
         reason = "Timed out after %f seconds" % timer.interval
         self._do_fail_callback(
             reason, msg_name, reply_cb, inform_cb, user_data, timer)
