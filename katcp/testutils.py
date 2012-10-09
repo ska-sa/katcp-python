@@ -973,6 +973,31 @@ def counting_callback(event=None, number_of_calls=1):
         return wrapped_callback
     return decorator
 
+
+def suppress_queue_repeats(queue, initial_value, read_time=None):
+    """Generator that reads a Queue.Queue() and suppresses runs of repeated values
+
+    The queue is consumed, and a value yielded whenever it differs from the
+    previous value. If read_time is specified, stops iteration if the
+    queue is empty after reading the queue for read_time seconds. read_time=None
+    continues reading forever.
+    """
+    start_time = time.time()
+    cur_value = initial_value
+    next_wait = read_time
+
+    while True:
+        if next_wait:
+            next_wait = read_time - (time.time() - start_time)
+            next_wait = max(0, next_wait)
+        try:
+            next_value = queue.get(timeout=next_wait)
+        except Queue.Empty:
+            break
+        if next_value != cur_value:
+            yield next_value
+            cur_value = next_value
+
 class SensorTransitionWaiter(object):
     """
     Wait for a given set of sensor transitions
@@ -1018,6 +1043,7 @@ class SensorTransitionWaiter(object):
             lambda x: x < 0.7,
             lambda x: x >= 0.7,
             lambda x: x >= 1,
+            lambda x: x < 1,
             lambda x: x < 0.3)
         waiter.wait(timeout=1)
 
@@ -1094,14 +1120,15 @@ class SensorTransitionWaiter(object):
         as the `received_values` member of the object. Sets the member
         `timed_out` to True if a timeout occured.
         """
-        start_time = time.time()
         if self._done:
             raise RuntimeError('Transition already triggered. Instantiate a new '
                                'SensorTransitionWaiter object')
         if self._torn_down:
             raise RuntimeError('This object has been torn down. Instantiate a new '
                                'SensorTransitionWaiter object')
-        next_wait = None         # Default to no timeout for Queue.get
+        nonrepeat_sensor_values = suppress_queue_repeats(
+            self._value_queue, self.received_values[-1], timeout)
+
         try:
             # While current and not next test passes, continue reading
             # If neither current nor next passes, signal failure
@@ -1114,28 +1141,20 @@ class SensorTransitionWaiter(object):
                 while True:
                     # Read values from the queue until either the timeout
                     # expires or a value different from the last is found
-                    if not timeout is None:
-                        next_wait = timeout - (time.time() - start_time)
-                        if next_wait < 0:
-                            next_wait = 0
-                    next_value = self._value_queue.get(timeout=next_wait)
-                    if next_value == self.received_values[-1]:
-                        continue # Value is still unchanged -- try again
-                    else:
-                        # Value has changed. Now check it for validity
-                        self.received_values.append(next_value)
-                        current_pass = self._test_value(next_value, current_test)
-                        next_pass = self._test_value(next_value, next_test)
-                        if next_pass:
-                            break         # Matches, move on to the next test
-                        if not current_pass:
-                            # Matches neither the current test nor the
-                            # next. Indicates an invalid sequence.
-                            return False
+                    next_value = nonrepeat_sensor_values.next()
+                    self.received_values.append(next_value)
+                    current_pass = self._test_value(next_value, current_test)
+                    next_pass = self._test_value(next_value, next_test)
+                    if next_pass:
+                        break         # Matches, move on to the next test
+                    if not current_pass:
+                        # Matches neither the current test nor the
+                        # next. Indicates an invalid sequence.
+                        return False
             # We have passed all test conditions, hence the desired
             # transition has occured
             return True
-        except Queue.Empty:
+        except StopIteration:
             self.timed_out = True
             return False
         finally:
