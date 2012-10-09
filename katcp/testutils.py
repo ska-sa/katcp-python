@@ -921,26 +921,54 @@ class TestUtilMixin(object):
                     % (str_msg, suffix))
         self._assert_msgs_length(actual_msgs, len(expected))
 
-def counting_callback(event, number_of_calls=1):
+def counting_callback(event=None, number_of_calls=1):
     """Decorate a callback to set an event once it has been called a certain number of times
 
     Parameters
     ==========
-    event: threading.Event() -- will be set when enough calls have been made
+    event: threading.Event() -- will be set when enough calls have been made.
+        If None, a new event will be created
     number_of_calls: int > 0 -- Number of calls before event.set() is called
 
+    Decorated Properties
+    ====================
+
+    done -- The event object
+    get_no_calls() -- Returns current number of calls
+    wait(timeout=None) -- Wait for number_of_calls to be made
+    assert_wait(timeout=None) -- Wait for number_of_calls and raises
+        AssertionError if they are not made before the timeout.
+    reset() -- Set call count back to zero
     """
+    if event is None:
+        event = threading.Event()
+
     def decorator(original_callback):
         assert number_of_calls > 0
         calls = [0]
+
         @functools.wraps(original_callback)
         def wrapped_callback(*args, **kwargs):
-            original_callback(*args, **kwargs)
+            retval = original_callback(*args, **kwargs)
             calls[0] += 1
             if calls[0] >= number_of_calls:
                 event.set()
-                event.clear()
+            return retval
+
         wrapped_callback.get_no_calls = lambda : calls[0]
+        wrapped_callback.done = event
+        wrapped_callback.wait = event.wait
+
+        def assert_wait(timeout=None):
+            done = event.wait(timeout)
+            assert event.isSet()
+            return done
+        wrapped_callback.assert_wait = assert_wait
+
+        def reset():
+            calls[0] = 0
+            event.clear()
+        wrapped_callback.reset = reset
 
         return wrapped_callback
     return decorator
