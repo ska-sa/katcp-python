@@ -514,7 +514,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         get_msgs = self.client.message_recorder(
                 blacklist=self.BLACKLIST, replies=True)
         self.client.request(katcp.Message.request("sensor-sampling", "an.int",
-                                                  "period", 100./1000))
+                                                  "period", 0.125))
         time.sleep(1.0)
         self.client.request(katcp.Message.request("sensor-sampling", "an.int",
                                                   "none"))
@@ -523,11 +523,11 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         msgs = get_msgs()
         updates = [x for x in msgs if x.name == "sensor-status"]
         others = [x for x in msgs if x.name != "sensor-status"]
-        self.assertTrue(abs(len(updates) - 12) < 2,
-                        "Expected 12 informs, saw %d." % len(updates))
+        self.assertTrue(abs(len(updates) - 10) < 2,
+                        "Expected 10 informs, saw %d." % len(updates))
 
         self._assert_msgs_equal(others, [
-            r"!sensor-sampling ok an.int period 0.1",
+            r"!sensor-sampling ok an.int period 0.125",
             r"!sensor-sampling ok an.int none",
         ])
 
