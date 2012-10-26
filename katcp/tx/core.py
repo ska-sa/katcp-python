@@ -602,6 +602,7 @@ class DeviceProtocol(ServerKatCPProtocol):
             ?sensor-sampling cpu.power.on period 500
             !sensor-sampling ok cpu.power.on period 500
         """
+        # XXX v4v5 uses milliseconds, think its in the docstring only
         if not msg.arguments:
             return Message.reply(msg.name, "fail", "No sensor name given.")
         sensor = self.factory.sensors.get(msg.arguments[0], None)
@@ -826,6 +827,7 @@ class DeviceServer(KatCPServer):
            """
         if timestamp is None:
             timestamp = time.time()
+        # XXX v4v5 uses milliseconds
         return Message.inform("log",
                 level_name,
                 str(int(timestamp * 1000.0)),  # time since epoch in ms

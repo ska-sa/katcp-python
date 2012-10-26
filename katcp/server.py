@@ -113,6 +113,7 @@ class DeviceServerBase(object):
            """
         if timestamp is None:
             timestamp = time.time()
+        # XXX v4v5 uses milliseconds
         return Message.inform("log",
                 level_name,
                 str(int(timestamp * 1000.0)),  # time since epoch in ms
@@ -1236,6 +1237,7 @@ class DeviceServer(DeviceServerBase):
             #sensor-value 1244631611415.231 1 cpu.power.on 0
             !sensor-value ok 1
         """
+        # XXX v4v5 uses milliseconds
         exact, name_filter = construct_name_filter(msg.arguments[0]
                     if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
@@ -1498,6 +1500,7 @@ class DeviceLogger(object):
             to the root logger. The timestamp is a float in seconds. If not
             given the timestamp defaults to the current time.
         """
+        # XXX v4v5 uses milliseconds
         timestamp = kwargs.get("timestamp")
         python_msg = msg
         if self._python_logger is not None:
