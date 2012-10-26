@@ -264,7 +264,7 @@ class SampleDifferential(SampleStrategy):
     Sends updates only when the value has changed by more than some
     specified threshold, or the status changes.
     """
-
+    # XXX v4v5 uses milliseconds
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
@@ -314,16 +314,15 @@ class SamplePeriod(SampleStrategy):
     """
 
     ## @brief Number of milliseconds in a second (as a float).
-    MILLISECOND = 1e3
 
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
             raise ValueError("The 'period' strategy takes one parameter.")
-        period_ms = int(params[0])
-        if period_ms <= 0:
-            raise ValueError("The period must be a positive integer in ms.")
-        self._period = period_ms / SamplePeriod.MILLISECOND
+        period = int(params[0])
+        if period <= 0:
+            raise ValueError("The period must be a positive integer in seconds.")
+        self._period = period
 
     def periodic(self, timestamp):
         self.inform()
@@ -344,7 +343,7 @@ class SampleEventRate(SampleStrategy):
     """
 
     MILLISECOND = 1e3
-
+    # XXX v4v5 uses milliseconds
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 2:

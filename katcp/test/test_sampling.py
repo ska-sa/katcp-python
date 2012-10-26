@@ -106,24 +106,30 @@ class TestSampling(unittest.TestCase):
     def test_periodic(self):
         """Test SamplePeriod strategy."""
         # period = 10s
-        period = sampling.SamplePeriod(self.inform, self.sensor, 10000)
+        # XXX v4v5 uses milliseconds
+        sample_p = 10
+        period = sampling.SamplePeriod(self.inform, self.sensor, sample_p)
         self.assertEqual(self.calls, [])
 
         period.attach()
         self.assertEqual(self.calls, [])
 
-        period.periodic(1)
+        next_p = period.periodic(1)
+        self.assertEqual(next_p, 1 + sample_p)
         self.assertEqual(len(self.calls), 1)
 
-        period.periodic(11)
+        next_p = period.periodic(11)
         self.assertEqual(len(self.calls), 2)
+        self.assertEqual(next_p, 11 + sample_p)
 
-        period.periodic(12)
+        next_p = period.periodic(12)
+        self.assertEqual(next_p, 12 + sample_p)
         self.assertEqual(len(self.calls), 3)
 
     def test_event_rate(self):
         """Test SampleEventRate strategy."""
         # shortest period = 10s, longest period = 20s
+        # XXX v4v5 uses milliseconds
         evrate = sampling.SampleEventRate(self.inform, self.sensor, 10000,
                                           20000)
         now = [1]

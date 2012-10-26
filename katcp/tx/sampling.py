@@ -32,6 +32,7 @@ class PeriodicStrategy(SamplingStrategy):
         self.next.cancel()
 
     def run(self, period):
+        # XXX v4v5 uses milliseconds
         self.period = float(period) / 1000
         self._run_once()
 
@@ -58,6 +59,7 @@ class EventRateStrategy(SamplingStrategy):
         self.next.cancel()
 
     def run(self, shortest_period, longest_period):
+        # XXX v4v5 uses milliseconds
         self.shortest_period = float(shortest_period) / 1000
         self.longest_period = float(longest_period) / 1000
         self.last_plus_shortest = 0

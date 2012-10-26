@@ -212,6 +212,8 @@ class TestDeviceServer(TestCase):
 
     def test_all_sensor_values(self):
         def reply((informs, reply), protocol):
+            # XXX v4v5 uses milliseconds (message inform timestamp, from
+            # ExampleDevice that has a timestamp of 1
             msg1 = Message.inform('sensor-value', '1000', '1', 'float_sensor',
                                   'unknown', '0')
             msg2 = Message.inform('sensor-value', '0', '1', 'int_sensor',
@@ -223,6 +225,8 @@ class TestDeviceServer(TestCase):
 
     def test_sensor_value_regex(self):
         def reply((informs, reply), protocol):
+            # XXX v4v5 uses milliseconds (message inform timestamp, from
+            # ExampleDevice that has a timestamp of 1
             msg1 = Message.inform('sensor-value', '1000', '1', 'float_sensor',
                                   'unknown', '0')
             msg2 = Message.inform('sensor-value', '0', '1', 'int_sensor',

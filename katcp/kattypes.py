@@ -327,11 +327,12 @@ class Timestamp(KatcpType):
     """The KATCP timestamp type."""
 
     name = "timestamp"
-
+    # XXX v4v5 uses milliseconds
     encode = lambda self, value: "%i" % (int(float(value) * 1000),)
 
     def decode(self, value):
         try:
+            # XXX v4v5 uses milliseconds
             return float(value) / 1000
         except:
             raise ValueError("Could not parse value '%s' as timestamp." %
@@ -369,6 +370,7 @@ class StrictTimestamp(KatcpType):
     name = "strict_timestamp"
 
     def encode(self, value):
+        # XXX v4v5 uses milliseconds
         try:
             return "%.15g" % (value * 1000.0)
         except:
@@ -379,6 +381,7 @@ class StrictTimestamp(KatcpType):
         try:
             parts = value.split(".", 1)
             _int_parts = [int(x) for x in parts]
+            # XXX v4v5 uses milliseconds
             return float(value) / 1000.0
         except:
             raise ValueError("Could not parse value '%s' as strict timestamp."
