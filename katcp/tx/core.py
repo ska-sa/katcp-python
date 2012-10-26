@@ -7,6 +7,7 @@ from twisted.internet.protocol import ClientCreator, ReconnectingClientFactory
 from twisted.internet.protocol import Factory
 from twisted.python import log
 from twisted.internet.interfaces import IPushProducer
+import logging
 
 from katcp import MessageParser, Message, AsyncReply
 from katcp.core import FailReply, ProtocolFlags
@@ -224,6 +225,18 @@ class ClientKatCPProtocol(KatCP):
         can be overriden
         """
         pass
+
+    def send_message(self, msg):
+        """
+        Serialize and send a message, and also log it at debug level
+        """
+        # Log all sent messages here so no one else has to.
+        log.msg(str(msg), logLevel=logging.DEBUG)
+        return KatCP.send_message(self, msg)
+
+    def lineReceived(self, line):
+        log.msg(line, logLevel=logging.DEBUG)
+        return KatCP.lineReceived(self, line)
 
 
 class ServerKatCPProtocol(KatCP):
