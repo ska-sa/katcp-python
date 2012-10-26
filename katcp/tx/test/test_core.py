@@ -1,4 +1,3 @@
-
 from katcp.tx.core import (ClientKatCPProtocol, DeviceServer, DeviceProtocol,
                            KatCPClientFactory)
 from katcp import Message, Sensor
@@ -7,16 +6,29 @@ from twisted.trial.unittest import TestCase
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet.protocol import ClientCreator
+from twisted.python import log
 
 from katcp.core import FailReply
+from katcp.testutils import TestLogHandler
+
+import logging
 
 #DelayedCall.debug = True
 #Deferred.debug = True
 
 timeout = 5
 
+class PythonLoggingTestCase(TestCase):
+    """
+    Test class that sets up a python logging observer for the twisted logging
+    framework
+    """
+    def setUp(self):
+        log_observer = log.PythonLoggingObserver(loggerName='katcp')
+        log_observer.start()
+        self.addCleanup(log_observer.stop)
 
-class TestKatCP(TestCase):
+class TestKatCP(PythonLoggingTestCase):
     """ A tesited test case, run with trial testing
 
     Also note - don't forget to open a log file:
@@ -64,7 +76,7 @@ class TestKatCP(TestCase):
 
         def connected(protocol):
             protocol.send_request('sensor-sampling', 'int_sensor',
-                                  'period', 10)
+                                  'period', 0.01)
             reactor.callLater(0.3, check, protocol)
 
         d, process = run_subprocess(connected, TestClientKatCP)

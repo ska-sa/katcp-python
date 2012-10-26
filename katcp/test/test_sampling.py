@@ -47,7 +47,7 @@ class TestSampling(unittest.TestCase):
         self.assertRaises(ValueError, sampling.SampleNone, None, s, "foo")
         self.assertRaises(ValueError, sampling.SampleAuto, None, s, "bar")
         self.assertRaises(ValueError, sampling.SamplePeriod, None, s)
-        self.assertRaises(ValueError, sampling.SamplePeriod, None, s, "1.5")
+        self.assertRaises(ValueError, sampling.SamplePeriod, None, s, "0")
         self.assertRaises(ValueError, sampling.SamplePeriod, None, s, "-1")
         self.assertRaises(ValueError, sampling.SampleEvent, None, s, "foo")
         self.assertRaises(ValueError, sampling.SampleDifferential, None, s)
@@ -190,7 +190,7 @@ class TestReactor(unittest.TestCase):
 
     def test_periodic(self):
         """Test reactor with periodic sampling."""
-        period = sampling.SamplePeriod(self.inform, self.sensor, 10)
+        period = sampling.SamplePeriod(self.inform, self.sensor, 10./1000)
         start = time.time()
         self.reactor.add_strategy(period)
         time.sleep(0.1)

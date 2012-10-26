@@ -313,15 +313,13 @@ class SamplePeriod(SampleStrategy):
     For periodic sampling of any sensor.
     """
 
-    ## @brief Number of milliseconds in a second (as a float).
-
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
             raise ValueError("The 'period' strategy takes one parameter.")
-        period = int(params[0])
+        period = float(params[0])
         if period <= 0:
-            raise ValueError("The period must be a positive integer in seconds.")
+            raise ValueError("The period must be a float in seconds.")
         self._period = period
 
     def periodic(self, timestamp):
