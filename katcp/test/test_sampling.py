@@ -12,7 +12,7 @@ import time
 import logging
 import katcp
 from katcp.testutils import TestLogHandler, DeviceTestSensor
-from katcp import sampling
+from katcp import sampling, Sensor
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -24,9 +24,9 @@ class TestSampling(unittest.TestCase):
         """Set up for test."""
         # test sensor
         self.sensor = DeviceTestSensor(
-                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
+                Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
-                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
+                timestamp=12345, status=Sensor.NOMINAL, value=3)
 
         # test callback
         def inform(msg):
@@ -103,11 +103,18 @@ class TestSampling(unittest.TestCase):
         diff.attach()
         self.assertEqual(len(self.calls), 1)
 
+    def test_differential_timestamp(self):
+        # Test that the timetamp differential is stored correctly as
+        # seconds. This is mainly to check the conversion of the katcp spec from
+        # milliseconds to seconds for katcp v5 spec.
+        time_diff = 4.12                  # Time differential in seconds
+        ts_sensor = Sensor(Sensor.TIMESTAMP, 'ts', 'ts sensor', '')
+        diff = sampling.SampleDifferential(self.inform, ts_sensor, time_diff)
+        self.assertEqual(diff._threshold, time_diff)
+
     def test_periodic(self):
         """Test SamplePeriod strategy."""
-        # period = 10s
-        # XXX v4v5 uses milliseconds
-        sample_p = 10
+        sample_p = 10                            # sample period in seconds
         period = sampling.SamplePeriod(self.inform, self.sensor, sample_p)
         self.assertEqual(self.calls, [])
 
@@ -168,9 +175,9 @@ class TestReactor(unittest.TestCase):
         """Set up for test."""
         # test sensor
         self.sensor = DeviceTestSensor(
-                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
+                Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
-                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
+                timestamp=12345, status=Sensor.NOMINAL, value=3)
 
         # test callback
         def inform(msg):
