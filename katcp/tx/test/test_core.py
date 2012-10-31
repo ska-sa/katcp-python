@@ -89,7 +89,7 @@ class TestKatCP(PythonLoggingTestCase):
 
         def connected(protocol):
             protocol.send_request('sensor-sampling', 'int_sensor',
-                                  'event-rate', 5, 10)
+                                  'event-rate', 5./1000, 10./1000)
             reactor.callLater(0.3, check, protocol)
 
         d, process = run_subprocess(connected, TestClientKatCP)

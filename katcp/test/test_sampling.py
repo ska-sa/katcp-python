@@ -135,10 +135,10 @@ class TestSampling(unittest.TestCase):
 
     def test_event_rate(self):
         """Test SampleEventRate strategy."""
-        # shortest period = 10s, longest period = 20s
-        # XXX v4v5 uses milliseconds
-        evrate = sampling.SampleEventRate(self.inform, self.sensor, 10000,
-                                          20000)
+        shortest = 10
+        longest = 20
+        evrate = sampling.SampleEventRate(self.inform, self.sensor, shortest,
+                                          longest)
         now = [1]
         evrate._time = lambda: now[0]
         self.assertEqual(self.calls, [])
@@ -168,6 +168,32 @@ class TestSampling(unittest.TestCase):
         self.sensor.set_value(1)
         self.assertEqual(len(self.calls), 4)
 
+    def test_event_rate_fractions(self):
+        # Test SampleEventRate strategy in the presence of fractional seconds --
+        # mainly to catch bugs when it was converted to taking seconds instead of
+        # milliseconds, since the previous implementation used an integer number
+        # of milliseconds
+        shortest = 3./8
+        longest = 6./8
+        evrate = sampling.SampleEventRate(self.inform, self.sensor, shortest,
+                                          longest)
+        now = [0]
+        evrate._time = lambda: now[0]
+
+        evrate.attach()
+        self.assertEqual(len(self.calls), 1)
+
+        now[0] = 0.999*shortest
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 1)
+
+        now[0] = shortest
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 2)
+
+        next_time = evrate.periodic(now[0] + 0.99*shortest)
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(next_time, now[0] + longest)
 
 class TestReactor(unittest.TestCase):
 

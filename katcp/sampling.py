@@ -339,20 +339,17 @@ class SampleEventRate(SampleStrategy):
     update.
     """
 
-    MILLISECOND = 1e3
-    # XXX v4v5 uses milliseconds
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 2:
             raise ValueError("The 'event-rate' strategy takes two parameters.")
-        shortest_period_ms = int(params[0])
-        longest_period_ms = int(params[1])
-        if not 0 <= shortest_period_ms <= longest_period_ms:
+        shortest_period = float(params[0])
+        longest_period = float(params[1])
+        if not 0 <= shortest_period <= longest_period:
             raise ValueError("The longest and shortest periods must"
                              " satisfy 0 <= shorest_period <= longest_period")
-        self._shortest_period = (shortest_period_ms /
-                                 SampleEventRate.MILLISECOND)
-        self._longest_period = longest_period_ms / SampleEventRate.MILLISECOND
+        self._shortest_period = shortest_period
+        self._longest_period = longest_period
         # don't send updates before _last_plus_shortest
         self._last_plus_shortest = 0
         # time between _last_plus_shortest and next required update
