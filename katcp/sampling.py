@@ -183,50 +183,6 @@ class SampleStrategy(object):
         self._sensor.detach(self)
 
 
-class SampleEvent(SampleStrategy):
-    """Strategy which sends updates when the sensor value or status changes.
-
-       This implementation of the event strategy extends the KATCP guidelines
-       to allow an optional minimum time between updates (in millseconds) to
-       be specified as a parameter. If further sensor updates occur before
-       this time has elapsed, no additional events are sent out.
-       """
-
-    def __init__(self, inform_callback, sensor, *params):
-        SampleStrategy.__init__(self, inform_callback, sensor, *params)
-        if len(params) > 1:
-            raise ValueError("The 'event' strategy takes one or"
-                             " zero parameters.")
-        elif len(params) == 1:
-            self._minTimeSep = float(params[0]) / 1000.0
-        else:
-            self._minTimeSep = None
-        self._lastStatus = None
-        self._lastValue = None
-        self._nextTime = None
-
-    def update(self, sensor):
-        now = time.time()
-
-        if self._nextTime is not None and (self._nextTime > now):
-            return
-
-        _timestamp, status, value = sensor.read()
-        if status != self._lastStatus or value != self._lastValue:
-            self._lastStatus = status
-            self._lastValue = value
-            if self._minTimeSep:
-                self._nextTime = now + self._minTimeSep
-            self.inform()
-
-    def get_sampling(self):
-        return SampleStrategy.EVENT
-
-    def attach(self):
-        self.update(self._sensor)
-        super(SampleEvent, self).attach()
-
-
 class SampleAuto(SampleStrategy):
     """Strategy which sends updates whenever the sensor itself is updated."""
 
@@ -376,6 +332,35 @@ class SampleEventRate(SampleStrategy):
         self.update(self._sensor)
         super(SampleEventRate, self).attach()
 
+
+class SampleEvent(SampleEventRate):
+    """
+    Strategy which sends updates when the sensor value or status changes.
+
+    This implementation of the event strategy extends the KATCP guidelines
+    to allow an optional minimum time between updates (in millseconds) to
+    be specified as a parameter. If further sensor updates occur before
+    this time has elapsed, no additional events are sent out.
+    """
+
+    # Since SampleEvent is just a special case of SampleEventRate, we use
+    # SampleEventRate with the appropriate default values to implement
+    # SampleEvent
+
+    def __init__(self, inform_callback, sensor, *params):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+        if len(params) > 1:
+            raise ValueError("The 'event' strategy takes one or"
+                             " zero parameters.")
+        elif len(params) == 1:
+            minTimeSep = float(params[0])
+        else:
+            minTimeSep = 0
+        super(SampleEvent, self).__init__(
+            inform_callback, sensor, minTimeSep, 1e99)
+
+    def get_sampling(self):
+        return SampleStrategy.EVENT
 
 class SampleReactor(ExcepthookThread):
     """SampleReactor manages sampling strategies.
