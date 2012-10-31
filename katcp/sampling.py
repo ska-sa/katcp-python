@@ -264,7 +264,6 @@ class SampleDifferential(SampleStrategy):
     Sends updates only when the value has changed by more than some
     specified threshold, or the status changes.
     """
-    # XXX v4v5 uses milliseconds
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
@@ -284,7 +283,7 @@ class SampleDifferential(SampleStrategy):
                 raise ValueError("The diff amount must be a positive float.")
         else:
             # _sensor_type must be Sensor.TIMESTAMP
-            self._threshold = int(params[0]) / 1000.0  # convert threshold to s
+            self._threshold = float(params[0])
             if self._threshold <= 0:
                 raise ValueError("The diff amount must be a positive number"
                                  " of milliseconds.")
