@@ -111,12 +111,13 @@ class DeviceServerBase(object):
            but it is also used by the methods in this class when errors
            need to be reported to the client.
            """
+
+        # TODO: Write a test that fails if milliseconds are logged!
         if timestamp is None:
             timestamp = time.time()
-        # XXX v4v5 uses milliseconds
         return Message.inform("log",
                 level_name,
-                str(int(timestamp * 1000.0)),  # time since epoch in ms
+                str(timestamp),  # time since epoch in seconds
                 name,
                 msg,
         )
@@ -1500,7 +1501,6 @@ class DeviceLogger(object):
             to the root logger. The timestamp is a float in seconds. If not
             given the timestamp defaults to the current time.
         """
-        # XXX v4v5 uses milliseconds
         timestamp = kwargs.get("timestamp")
         python_msg = msg
         if self._python_logger is not None:

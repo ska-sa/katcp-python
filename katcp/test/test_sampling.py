@@ -71,6 +71,9 @@ class TestSampling(unittest.TestCase):
     def test_event(self):
         """Test SampleEvent strategy."""
         event = sampling.SampleEvent(self.inform, self.sensor)
+        self.assertEqual(event.get_sampling_formatted(),
+                         ('event', []) )
+
         self.assertEqual(self.calls, [])
 
         event.attach()
