@@ -358,6 +358,9 @@ class SampleEvent(SampleEventRate):
             minTimeSep = 0
         super(SampleEvent, self).__init__(
             inform_callback, sensor, minTimeSep, 1e99)
+        # Fix up the parameters so we don't see the extra parameters that were
+        # passed to SampleEventRate
+        self._params = params
 
     def get_sampling(self):
         return SampleStrategy.EVENT
