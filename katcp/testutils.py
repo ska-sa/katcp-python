@@ -921,27 +921,285 @@ class TestUtilMixin(object):
                     % (str_msg, suffix))
         self._assert_msgs_length(actual_msgs, len(expected))
 
-def counting_callback(event, number_of_calls=1):
+def counting_callback(event=None, number_of_calls=1):
     """Decorate a callback to set an event once it has been called a certain number of times
 
     Parameters
     ==========
-    event: threading.Event() -- will be set when enough calls have been made
+    event: threading.Event() -- will be set when enough calls have been made.
+        If None, a new event will be created
     number_of_calls: int > 0 -- Number of calls before event.set() is called
 
+    Decorated Properties
+    ====================
+
+    done -- The event object
+    get_no_calls() -- Returns current number of calls
+    wait(timeout=None) -- Wait for number_of_calls to be made
+    assert_wait(timeout=None) -- Wait for number_of_calls and raises
+        AssertionError if they are not made before the timeout.
+    reset() -- Set call count back to zero
     """
+    if event is None:
+        event = threading.Event()
+
     def decorator(original_callback):
         assert number_of_calls > 0
         calls = [0]
+
         @functools.wraps(original_callback)
         def wrapped_callback(*args, **kwargs):
-            original_callback(*args, **kwargs)
+            retval = original_callback(*args, **kwargs)
             calls[0] += 1
             if calls[0] >= number_of_calls:
                 event.set()
-                event.clear()
+            return retval
+
         wrapped_callback.get_no_calls = lambda : calls[0]
+        wrapped_callback.done = event
+        wrapped_callback.wait = event.wait
+
+        def assert_wait(timeout=None):
+            done = event.wait(timeout)
+            assert event.isSet()
+            return done
+        wrapped_callback.assert_wait = assert_wait
+
+        def reset():
+            calls[0] = 0
+            event.clear()
+        wrapped_callback.reset = reset
 
         return wrapped_callback
     return decorator
+
+
+def suppress_queue_repeats(queue, initial_value, read_time=None):
+    """Generator that reads a Queue.Queue() and suppresses runs of repeated values
+
+    The queue is consumed, and a value yielded whenever it differs from the
+    previous value. If read_time is specified, stops iteration if the
+    queue is empty after reading the queue for read_time seconds. read_time=None
+    continues reading forever.
+    """
+    start_time = time.time()
+    cur_value = initial_value
+    next_wait = read_time
+
+    while True:
+        if next_wait:
+            next_wait = read_time - (time.time() - start_time)
+            next_wait = max(0, next_wait)
+        try:
+            next_value = queue.get(timeout=next_wait)
+        except Queue.Empty:
+            break
+        if next_value != cur_value:
+            yield next_value
+            cur_value = next_value
+
+class SensorTransitionWaiter(object):
+    """
+    Wait for a given set of sensor transitions
+
+    Can be used to test sensor transitions indepedent of timing. If the
+    SensorTransitionWaiter object is instantiated before the test is triggered
+    the transitions are guaranteed (I hope) to be detected.
+    """
+    def __init__(self, sensor, value_sequence=None):
+        """
+        Parameters
+        ----------
+        sensor : KATSensor object to watch
+        value_sequence : list of sensor values or callable conditions or None
+
+            Will check that this sequence of values occurs on the watched
+            sensor. The first value is the starting value -- an error will be
+            raised if that is not the initial value.  If an object in the list
+            is a callable, it will be called on the actual sensor value. If it
+            returns True, the value will be considered as matched. If
+            value_sequence is None, no checking will be done, and the .wait()
+            method cannot be called. However, the received values can be
+            retrieved using get_received_values().
+
+        If an exact value sequence is passed, the sensor is watched
+        until its value changes. If the sensor does not take on the
+        exact sequence of values, the transition is not matched. If
+        expected values are repeated (e.g. [1, 2, 2, 3]) the repeated
+        values (i.e. the second 2 in the example) are ignored.
+
+
+        The following algorithm is used to test a For a sequence for validity
+        when callable tests are used:
+
+        * The initial value needs to satisfy at least the first test
+        * While the current and not next test passes, continue reading
+        * If neither current nor next passes, signal failure
+        * If next passes, move test sequence along
+
+        This can be used to check a sequence of floating point values:
+
+        waiter = WaitForSensorTransition(sensor, value_sequence=(
+            lambda x: x < 0.7,
+            lambda x: x >= 0.7,
+            lambda x: x >= 1,
+            lambda x: x < 1,
+            lambda x: x < 0.3)
+        waiter.wait(timeout=1)
+
+        can be used to check that a sensor starts at a value smaller than 0.7,
+        then grows to a value larger than 1 and then shrinks to a value smaller
+        than 0.3. Note that the x >= 0.7 test is required in case the sensor
+        value attains exactly 0.7.
+
+        For tests like this it is important to specify a timeout.
+        """
+
+        self.sensor = sensor
+        self.desired_value_sequence = value_sequence
+        self._torn_down = False
+        self._done = False
+        self._value_queue = Queue.Queue()
+        self.timed_out = False
+        current_value = self._get_current_sensor_value()
+        if value_sequence:
+            if not self._test_value(current_value, value_sequence[0]):
+                raise ValueError('Sensor value does not satisfy initial condition')
+        self.received_values = [current_value]
+        self._configure_sensor()
+
+    def _get_current_sensor_value(self):
+        return self.sensor.value()
+
+    def _configure_sensor(self):
+        # Do neccesary sensor configuration. Assumes sensor is stored as
+        # self.sensor
+
+        # Attach our observer to the katcp sensor
+        class observer(object): pass
+        observer.update = self._sensor_callback
+        self._observer = observer
+        self.sensor.attach(self._observer)
+
+    def _teardown_sensor(self):
+        # Perform teardown cleanup actions on self.sensor
+        self.sensor.detach(self._observer)
+
+    def _sensor_callback(self, sensor):
+        assert(sensor is self.sensor)
+        self._value_queue.put(sensor.value())
+
+    def _test_value(self, value, value_test):
+        """
+        Test value against value_test
+
+        value_test can be a callable or a simple value. If it is a simple
+        value it is compared for equality, otherwise value_test(value)
+        is called and the result returned
+        """
+        if callable(value_test):
+            return value_test(value)
+        else:
+            return value == value_test
+
+    def wait(self, timeout=5):
+        """
+        Wait until the specified transition occurs
+
+        Parameters
+        ----------
+        timeout : float seconds or None
+            Time to wait for the transition. Wait forever if None
+
+        Return Value
+        ------------
+
+        Returns True if the sequence is matched within the
+        timeout. Returns False if the sequence does not match or if
+        the timeout expired. The actual received values is available
+        as the `received_values` member of the object. Sets the member
+        `timed_out` to True if a timeout occured.
+        """
+        if self._done:
+            raise RuntimeError('Transition already triggered. Instantiate a new '
+                               'SensorTransitionWaiter object')
+        if self._torn_down:
+            raise RuntimeError('This object has been torn down. Instantiate a new '
+                               'SensorTransitionWaiter object')
+        nonrepeat_sensor_values = suppress_queue_repeats(
+            self._value_queue, self.received_values[-1], timeout)
+
+        try:
+            # While current and not next test passes, continue reading
+            # If neither current nor next passes, signal failure
+            # If next passes, move test sequence along
+            for current_test, next_test in zip(
+                    self.desired_value_sequence[:-1],
+                    self.desired_value_sequence[1:]):
+                if self._test_value(self.received_values[-1], next_test):
+                    continue # Next test already satisfied by current value
+                while True:
+                    # Read values from the queue until either the timeout
+                    # expires or a value different from the last is found
+                    next_value = nonrepeat_sensor_values.next()
+                    self.received_values.append(next_value)
+                    current_pass = self._test_value(next_value, current_test)
+                    next_pass = self._test_value(next_value, next_test)
+                    if next_pass:
+                        break         # Matches, move on to the next test
+                    if not current_pass:
+                        # Matches neither the current test nor the
+                        # next. Indicates an invalid sequence.
+                        return False
+            # We have passed all test conditions, hence the desired
+            # transition has occured
+            return True
+        except StopIteration:
+            self.timed_out = True
+            return False
+        finally:
+            self._done = True
+            self.teardown()
+
+    def get_received_values(self, stop=True, reset=True):
+        """Return list of values received to date.
+
+        Parameters
+        ----------
+
+        stop -- Stop listening, tear down and unsubscribe from sensor
+        reset -- Reset the recieved values to an empty list
+
+        Note, once this method has been called, wait() can no longer work
+        """
+        try:
+            while True:
+                self.received_values.append(self._value_queue.get_nowait())
+        except Queue.Empty:
+            pass
+        received_values = self.received_values
+        if reset:
+            self.received_values = []
+        if stop:
+            self.teardown()
+        return received_values
+
+    def teardown(self):
+        """Clean up, restoring sensor strategy and deregistering the sensor callback"""
+        if self._torn_down:
+            return
+        self._teardown_sensor()
+        self._torn_down = True
+
+def wait_sensor(sensor, value, timeout=5):
+    """Wait for a katcp sensor to attain a certain value
+
+    Temporarily attaches to the sensor to get sensor updates. It is assumed that
+    the sensor is getting updated by another thread.
+
+    """
+    tests = (lambda x: True, value)
+    waiter = SensorTransitionWaiter(sensor, tests)
+    return waiter.wait(timeout=timeout)
+
 
