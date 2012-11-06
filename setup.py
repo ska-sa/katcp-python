@@ -13,11 +13,11 @@ setup (
         "scripts/katcp-exampleserver.py",
         "scripts/katcp-exampleclient.py",
     ],
-    url='http://pypi.python.org/pypi/katcp',
+    url='https://github.com/ska-sa/katcp-python',
     download_url='http://pypi.python.org/pypi/katcp',
     license="BSD",
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
