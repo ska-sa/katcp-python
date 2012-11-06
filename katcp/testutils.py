@@ -241,10 +241,10 @@ class BlockingTestClient(client.BlockingClient):
                 (status, sensorname))
 
         try:
-            timestamp = int(timestamp)
+            timestamp = float(timestamp)
         except ValueError, e:
             self.test.fail("Could not convert timestamp %r of sensor '%s' to"
-                           " type %r: %s" % (timestamp, sensorname, int, e))
+                           " type %r: %s" % (timestamp, sensorname, float, e))
 
         return value, status, timestamp
 
