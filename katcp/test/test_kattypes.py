@@ -256,16 +256,16 @@ class TestTimestamp(TestType):
         default_optional = Timestamp(default=1235475793.0324881, optional=True)
 
         self._pack = [
-            (basic, 1235475381.6966901, "1235475381696"),
+            (basic, 1235475381.6966901, "1235475381.696690"),
             (basic, "a", ValueError),
             (basic, None, ValueError),
-            (default, None, "1235475793032"),
-            (default_optional, None, "1235475793032"),
+            (default, None, "1235475793.032488"),
+            (default_optional, None, "1235475793.032488"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "1235475381696", 1235475381.6960001),
+            (basic, "1235475381.696", 1235475381.6960001),
             (basic, "a", ValueError),
             (basic, None, ValueError),
             (default, None, 1235475793.0324881),
@@ -284,16 +284,16 @@ class TestStrictTimestamp(TestType):
                                            optional=True)
 
         self._pack = [
-            (basic, 1235475381.69669, "1235475381696.69"),
+            (basic, 1235475381.69669, "1235475381.69669"),
             (basic, "a", ValueError),
             (basic, None, ValueError),
-            (default, None, "1235475793032.49"),
-            (default_optional, None, "1235475793032.49"),
+            (default, None, "1235475793.03249"),
+            (default_optional, None, "1235475793.03249"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "1235475381696", 1235475381.6960001),
+            (basic, "1235475381.696", 1235475381.6960001),
             (basic, "a", ValueError),
             (basic, None, ValueError),
             (default, None, 1235475793.03249),
@@ -313,19 +313,19 @@ class TestTimestampOrNow(TestType):
         default_now = TimestampOrNow(default=TimestampOrNow.NOW)
 
         self._pack = [
-            (basic, 1235475381.6966901, "1235475381696"),
+            (basic, 1235475381.6966901, "1235475381.696690"),
             (basic, "a", ValueError),
             (basic, TimestampOrNow.NOW, "now"),
             (basic, None, ValueError),
-            (default, None, "1235475793032"),
+            (default, None, "1235475793.032488"),
             (default, TimestampOrNow.NOW, "now"),
-            (default_optional, None, "1235475793032"),
+            (default_optional, None, "1235475793.032488"),
             (optional, None, ValueError),
             (default_now, None, "now"),
         ]
 
         self._unpack = [
-            (basic, "1235475381696", 1235475381.6960001),
+            (basic, "1235475381.696", 1235475381.6960001),
             (basic, "a", ValueError),
             (basic, "now", TimestampOrNow.NOW),
             (basic, None, ValueError),

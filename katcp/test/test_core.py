@@ -182,7 +182,7 @@ class TestSensor(unittest.TestCase):
                 katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
                 timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
-        self.assertEqual(s.read_formatted(), ("12345000", "nominal", "3"))
+        self.assertEqual(s.read_formatted(), ("12345.000000", "nominal", "3"))
         self.assertEquals(s.parse_value("3"), 3)
         self.assertEquals(s.parse_value("4"), 4)
         self.assertEquals(s.parse_value("-10"), -10)
@@ -204,7 +204,7 @@ class TestSensor(unittest.TestCase):
                 katcp.Sensor.FLOAT, "a.float", "A float.", "power",
                 [0.0, 5.0],
                 timestamp=12345, status=katcp.Sensor.WARN, value=3.0)
-        self.assertEqual(s.read_formatted(), ("12345000", "warn", "3"))
+        self.assertEqual(s.read_formatted(), ("12345.000000", "warn", "3"))
         self.assertEquals(s.parse_value("3"), 3.0)
         self.assertEquals(s.parse_value("10"), 10.0)
         self.assertEquals(s.parse_value("-10"), -10.0)
@@ -226,7 +226,7 @@ class TestSensor(unittest.TestCase):
                 katcp.Sensor.BOOLEAN, "a.boolean", "A boolean.", "on/off",
                 None,
                 timestamp=12345, status=katcp.Sensor.UNKNOWN, value=True)
-        self.assertEqual(s.read_formatted(), ("12345000", "unknown", "1"))
+        self.assertEqual(s.read_formatted(), ("12345.000000", "unknown", "1"))
         self.assertEquals(s.parse_value("1"), True)
         self.assertEquals(s.parse_value("0"), False)
         self.assertRaises(ValueError, s.parse_value, "asd")
@@ -237,7 +237,7 @@ class TestSensor(unittest.TestCase):
                 katcp.Sensor.DISCRETE, "a.discrete", "A discrete sensor.",
                 "state", ["on", "off"],
                 timestamp=12345, status=katcp.Sensor.ERROR, value="on")
-        self.assertEqual(s.read_formatted(), ("12345000", "error", "on"))
+        self.assertEqual(s.read_formatted(), ("12345.000000", "error", "on"))
         self.assertEquals(s.parse_value("on"), "on")
         self.assertRaises(ValueError, s.parse_value, "fish")
 
@@ -248,7 +248,7 @@ class TestSensor(unittest.TestCase):
                 None,
                 timestamp=12345, status=katcp.Sensor.FAILURE,
                 value=katcp.Sensor.LRU_ERROR)
-        self.assertEqual(s.read_formatted(), ("12345000", "failure", "error"))
+        self.assertEqual(s.read_formatted(), ("12345.000000", "failure", "error"))
         self.assertEquals(s.parse_value("nominal"), katcp.Sensor.LRU_NOMINAL)
         self.assertRaises(ValueError, s.parse_value, "fish")
 
@@ -258,7 +258,7 @@ class TestSensor(unittest.TestCase):
             katcp.Sensor.STRING, "a.string", "A string sensor.", "filename",
             None,
             timestamp=12345, status=katcp.Sensor.NOMINAL, value="zwoop")
-        self.assertEqual(s.read_formatted(), ("12345000", "nominal", "zwoop"))
+        self.assertEqual(s.read_formatted(), ("12345.000000", "nominal", "zwoop"))
         self.assertEquals(s.parse_value("bar foo"), "bar foo")
 
     def test_timestamp_sensor(self):
@@ -268,8 +268,8 @@ class TestSensor(unittest.TestCase):
             None,
             timestamp=12345, status=katcp.Sensor.NOMINAL, value=1001.9)
         self.assertEqual(s.read_formatted(),
-                         ("12345000", "nominal", "1001900"))
-        self.assertAlmostEqual(s.parse_value("1002100"), 1002.1)
+                         ("12345.000000", "nominal", "1001.900000"))
+        self.assertAlmostEqual(s.parse_value("1002.100"), 1002.1)
         self.assertRaises(ValueError, s.parse_value, "bicycle")
 
     def test_address_sensor(self):
@@ -280,7 +280,7 @@ class TestSensor(unittest.TestCase):
             timestamp=12345, status=katcp.Sensor.NOMINAL,
             value=("127.0.0.1", 80))
         self.assertEqual(s.read_formatted(),
-                         ("12345000", "nominal", "127.0.0.1:80"))
+                         ("12345.000000", "nominal", "127.0.0.1:80"))
         self.assertEqual(s.parse_value("[::1]:80"), ("::1", 80))
         self.assertRaises(ValueError, s.parse_value, "[::1]:foo")
 

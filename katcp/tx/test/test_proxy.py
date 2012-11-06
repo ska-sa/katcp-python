@@ -135,7 +135,7 @@ class TestProxyBase(TestCase):
             # XXX v4v5 uses milliseconds (message inform timestamp, from
             # ExampleDevice that has a timestamp of 1
             self.assertEquals(informs,
-                    [Message.inform('sensor-value', '1000', '1',
+                    [Message.inform('sensor-value', '1.000000', '1',
                                     'device.sensor1', 'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
 
@@ -146,9 +146,9 @@ class TestProxyBase(TestCase):
             # XXX v4v5 uses milliseconds (message inform timestamp, from
             # ExampleDevice that has a timestamp of 1
             self.assertEquals(informs[2:],
-                  [Message.inform('sensor-value', '1000', '1',
+                  [Message.inform('sensor-value', '1.000000', '1',
                                   'device.sensor1', 'unknown', '0'),
-                   Message.inform('sensor-value', '0', '1', 'device.sensor2',
+                   Message.inform('sensor-value', '0.000000', '1', 'device.sensor2',
                                   'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '4'))
 
@@ -159,7 +159,7 @@ class TestProxyBase(TestCase):
         # ExampleDevice that has a timestamp of 1
         def callback((informs, reply)):
             self.assertEquals(informs,
-                  [Message.inform('sensor-value', '1000', '1',
+                  [Message.inform('sensor-value', '1.000000', '1',
                                   'device.sensor1', 'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
 
