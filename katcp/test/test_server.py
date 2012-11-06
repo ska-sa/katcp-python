@@ -173,13 +173,13 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
             (r"!sensor-list ok 1", ""),
             (r"!sensor-list fail", ""),
-            (r"#sensor-value 12345000 1 an.int nominal 3", ""),
+            (r"#sensor-value 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-value ok 1", ""),
-            (r"#sensor-value 12345000 1 an.int nominal 3", ""),
+            (r"#sensor-value 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-value ok 1", ""),
             (r"!sensor-value fail", ""),
             (r"!sensor-sampling ok an.int none", ""),
-            (r"#sensor-status 12345000 1 an.int nominal 3", ""),
+            (r"#sensor-status 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-sampling ok an.int differential 2", ""),
             (r"!sensor-sampling fail No\_sensor\_name\_given.", ""),
             (r"!sensor-sampling fail Unknown\_sensor\_name.", ""),
@@ -291,13 +291,13 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#sensor-list[12] an.int An\_Integer. count integer -5 5", ""),
             (r"!sensor-list[12] ok 1", ""),
             (r"!sensor-list[13] fail", ""),
-            (r"#sensor-value[14] 12345000 1 an.int nominal 3", ""),
+            (r"#sensor-value[14] 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-value[14] ok 1", ""),
-            (r"#sensor-value[15] 12345000 1 an.int nominal 3", ""),
+            (r"#sensor-value[15] 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-value[15] ok 1", ""),
             (r"!sensor-value[16] fail", ""),
             (r"!sensor-sampling[17] ok an.int none", ""),
-            (r"#sensor-status 12345000 1 an.int nominal 3", ""),
+            (r"#sensor-status 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-sampling[18] ok an.int differential 2", ""),
             (r"!sensor-sampling[19] fail No\_sensor\_name\_given.", ""),
             (r"!sensor-sampling[20] fail Unknown\_sensor\_name.", ""),
@@ -335,14 +335,14 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         reply, informs = self.client.blocking_request(katcp.Message.request(
                 "sensor-value", "/a.*/"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
-            r"#sensor-value 12345000 1 an.int nominal 3",
+            r"#sensor-value 12345.000000 1 an.int nominal 3",
             r"!sensor-value ok 1",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
                 "sensor-value", "//"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
-            r"#sensor-value 12345000 1 an.int nominal 3",
+            r"#sensor-value 12345.000000 1 an.int nominal 3",
             r"!sensor-value ok 1",
         ])
 

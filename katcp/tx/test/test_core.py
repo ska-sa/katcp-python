@@ -204,7 +204,7 @@ class TestDeviceServer(TestCase):
 
     def test_run_basic_sensors(self):
         def sensor_value_replied((informs, reply), protocol):
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
@@ -224,11 +224,9 @@ class TestDeviceServer(TestCase):
 
     def test_all_sensor_values(self):
         def reply((informs, reply), protocol):
-            # XXX v4v5 uses milliseconds (message inform timestamp, from
-            # ExampleDevice that has a timestamp of 1
-            msg1 = Message.inform('sensor-value', '1000', '1', 'float_sensor',
+            msg1 = Message.inform('sensor-value', '1.000000', '1', 'float_sensor',
                                   'unknown', '0')
-            msg2 = Message.inform('sensor-value', '0', '1', 'int_sensor',
+            msg2 = Message.inform('sensor-value', '0.000000', '1', 'int_sensor',
                                   'unknown', '0')
             self.assertEquals(informs, [msg1, msg2])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '2'))
@@ -237,11 +235,9 @@ class TestDeviceServer(TestCase):
 
     def test_sensor_value_regex(self):
         def reply((informs, reply), protocol):
-            # XXX v4v5 uses milliseconds (message inform timestamp, from
-            # ExampleDevice that has a timestamp of 1
-            msg1 = Message.inform('sensor-value', '1000', '1', 'float_sensor',
+            msg1 = Message.inform('sensor-value', '1.000000', '1', 'float_sensor',
                                   'unknown', '0')
-            msg2 = Message.inform('sensor-value', '0', '1', 'int_sensor',
+            msg2 = Message.inform('sensor-value', '0.000000', '1', 'int_sensor',
                                   'unknown', '0')
             self.assertEquals(informs, [msg1, msg2])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '2'))
@@ -354,14 +350,14 @@ class TestDeviceServer(TestCase):
     def test_sensor_sampling_auto(self):
         def even_more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 2)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'nominal', '5')])
             protocol.send_request('halt').addCallback(self._end_test)
 
         def more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'nominal', '3')])
             self.factory.sensors['int_sensor'].set(0, Sensor.NOMINAL, 5)
@@ -385,14 +381,14 @@ class TestDeviceServer(TestCase):
     def test_sensor_sampling_event(self):
         def even_more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'nominal', '3')])
             protocol.send_request('halt').addCallback(self._end_test)
 
         def more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'nominal', '3')])
             self.factory.sensors['int_sensor'].set_value(3, timestamp=0)
@@ -416,7 +412,7 @@ class TestDeviceServer(TestCase):
     def test_sensor_sampling_differential(self):
         def first((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'nominal', '2')])
             self.factory.sensors['int_sensor'].set_value(5, timestamp=0)
@@ -425,7 +421,7 @@ class TestDeviceServer(TestCase):
 
         def second((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'nominal', '5')])
             self.factory.sensors['int_sensor'].set_value(10, timestamp=0)
@@ -434,7 +430,7 @@ class TestDeviceServer(TestCase):
 
         def third((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 2)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'nominal', '10')])
             protocol.send_request('halt').addCallback(self._end_test)
