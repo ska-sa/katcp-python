@@ -387,6 +387,10 @@ class ProtocolFlags(object):
         self.flags = flags
         self.multi_client = self.MULTI_CLIENT in self.flags
         self.message_ids = self.MESSAGE_IDS in self.flags
+        if self.message_ids and self.major < 5:
+            raise ValueError(
+                'MESSAGE_IDS is only supported in katcp v5 and newer')
+            
 
     def __eq__(self, other):
         if not isinstance(other, ProtocolFlags):

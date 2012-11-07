@@ -112,12 +112,11 @@ class DeviceServerBase(object):
            need to be reported to the client.
            """
 
-        # TODO: Write a test that fails if milliseconds are logged!
         if timestamp is None:
             timestamp = time.time()
         return Message.inform("log",
                 level_name,
-                str(timestamp),  # time since epoch in seconds
+                '%.6f' % timestamp,  # time since epoch in seconds
                 name,
                 msg,
         )
@@ -714,6 +713,12 @@ class DeviceServer(DeviceServerBase):
         ProtocolFlags.MESSAGE_IDS,
         ]))
 
+    UNSUPPORTED_REQUESTS_BY_MAJOR_VERSION = {
+        4: set(['version-list']),
+        }
+
+    SUPPORTED_PROTOCOL_MAJOR_VERSIONS = (4,5)
+    
     ## @var log
     # @brief DeviceLogger instance for sending log messages to the client.
 
@@ -721,6 +726,11 @@ class DeviceServer(DeviceServerBase):
     # pylint: disable-msg = W0142
 
     def __init__(self, *args, **kwargs):
+        if self.PROTOCOL_INFO.major not in self.SUPPORTED_PROTOCOL_MAJOR_VERSIONS:
+            raise ValueError(
+        'Device server only supports katcp procotol versions %r, not '
+        '%r as specified in self.PROTOCOL_INFO' % (
+            self.SUPPORTED_PROTOCOL_MAJOR_VERSIONS, self.PROTOCOL_INFO.major) )
         super(DeviceServer, self).__init__(*args, **kwargs)
         self.log = DeviceLogger(self, python_logger=self._logger)
         # map names to (version, build state/serial no.) tuples.

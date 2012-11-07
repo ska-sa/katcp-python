@@ -174,6 +174,11 @@ class TestProtocolFlags(unittest.TestCase):
                                            "U"]))),
                          "5.0-IMU")
 
+    def test_incompatible_options(self):
+        PF = katcp.ProtocolFlags
+        # Katcp v4 and below don't support message ids
+        with self.assertRaises(ValueError):
+            PF(4, 0, [PF.MESSAGE_IDS])
 
 class TestSensor(unittest.TestCase):
     def test_int_sensor(self):
