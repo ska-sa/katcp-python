@@ -7,11 +7,13 @@
 """Tests for the server module.
    """
 
-import unittest
+import unittest2 as unittest
 import katcp
 import time
 import logging
 import threading
+import mock
+
 from katcp.testutils import TestLogHandler, \
     BlockingTestClient, DeviceTestServer, TestUtilMixin
 
@@ -19,6 +21,41 @@ log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 
 NO_HELP_MESSAGES = 15       # Number of requests on DeviceTestServer
+
+class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
+
+    class DeviceTestServerV4(DeviceTestServer):
+        ## Protocol versions and flags for a katcp v4 server
+        PROTOCOL_INFO = katcp.ProtocolFlags(4, 0, set([
+            katcp.ProtocolFlags.MULTI_CLIENT,
+            ]))
+
+    def setUp(self):
+        self.server = self.DeviceTestServerV4('', 0)
+
+    def test_log(self):
+        self.server
+        pass
+
+
+
+class TestVersionCompatibility(unittest.TestCase):
+    def test_wrong_version(self):
+        class DeviceTestServerWrong(DeviceTestServer):
+            ## Protocol versions and flags for a katcp v4 server
+            PROTOCOL_INFO = katcp.ProtocolFlags(3, 0, set([
+                katcp.ProtocolFlags.MULTI_CLIENT,
+                ]))
+
+        # Only major versions 4 and 5 are supported
+        with self.assertRaises(ValueError):
+            DeviceTestServerWrong('', 0)
+        DeviceTestServerWrong.PROTOCOL_INFO.major = 6
+        with self.assertRaises(ValueError):
+            DeviceTestServerWrong('', 0)
+           
+            
+
 
 class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
@@ -41,6 +78,18 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             self.server.stop()
             self.server.join()
 
+    def test_log(self):
+        get_msgs = self.client.message_recorder(
+                blacklist=self.BLACKLIST,
+                replies=True)
+
+        with mock.patch('katcp.server.time.time') as m_time:
+            m_time.return_value = 1234
+            self.server.log.error('An error')
+        get_msgs.wait_number(1)
+        self._assert_msgs_equal(
+            get_msgs(), [r"#log error 1234.000000 root An\_error"])
+                                
     def test_simple_connect(self):
         """Test a simple server setup and teardown with client connect."""
         get_msgs = self.client.message_recorder(
