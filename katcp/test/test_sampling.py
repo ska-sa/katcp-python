@@ -29,8 +29,9 @@ class TestSampling(unittest.TestCase):
                 timestamp=12345, status=Sensor.NOMINAL, value=3)
 
         # test callback
-        def inform(msg):
-            self.calls.append(msg)
+        def inform(sensor_name, timestamp, status, value):
+            self.calls.append(sampling.format_inform_v5(
+                sensor_name, timestamp, status, value) )
 
         self.calls = []
         self.inform = inform
@@ -209,8 +210,9 @@ class TestReactor(unittest.TestCase):
                 timestamp=12345, status=Sensor.NOMINAL, value=3)
 
         # test callback
-        def inform(msg):
-            self.calls.append(msg)
+        def inform(sensor_name, timestamp, status, value):
+            self.calls.append(sampling.format_inform_v5(
+                sensor_name, timestamp, status, value) )
 
         # test reactor
         self.reactor = sampling.SampleReactor()

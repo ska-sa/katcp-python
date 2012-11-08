@@ -7,7 +7,7 @@
 """Tests for the katcp utilities module.
    """
 
-import unittest
+import unittest2 as unittest
 import logging
 import katcp
 from katcp.testutils import TestLogHandler, DeviceTestSensor

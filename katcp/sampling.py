@@ -16,7 +16,19 @@ from .core import Message, Sensor, ExcepthookThread
 
 log = logging.getLogger("katcp.sampling")
 
+SEC_TO_MS_FAC = 1000
+MS_TO_SEC_FAC = 1./1000
+
 # pylint: disable-msg=W0142
+
+def format_inform_v4(sensor_name, timestamp, status, value):
+    timestamp = int(timestamp * SEC_TO_MS_FAC)
+    return Message.inform(
+        "sensor-status", timestamp, "1", sensor_name, status, value)
+
+def format_inform_v5(sensor_name, timestamp, status, value):
+    return Message.inform(
+        "sensor-status", timestamp, "1", sensor_name, status, value)
 
 
 class SampleStrategy(object):
@@ -138,9 +150,8 @@ class SampleStrategy(object):
 
     def inform(self):
         """Inform strategy creator of the sensor status."""
-        timestamp_ms, status, value = self._sensor.read_formatted()
-        self._inform_callback(Message.inform("sensor-status",
-                    timestamp_ms, "1", self._sensor.name, status, value))
+        timestamp, status, value = self._sensor.read_formatted()
+        self._inform_callback(self._sensor.name, timestamp, status, value)
 
     def get_sampling(self):
         """Return the Strategy constant for this sampling strategy.
