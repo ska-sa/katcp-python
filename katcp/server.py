@@ -20,6 +20,7 @@ import time
 from .core import DeviceMetaclass, ExcepthookThread, Message, MessageParser, \
                    FailReply, AsyncReply, ProtocolFlags
 from .sampling import SampleReactor, SampleStrategy, SampleNone
+from .sampling import format_inform_v5, format_inform_v4
 from .version import VERSION, VERSION_STR
 
 # logging.basicConfig(level=logging.DEBUG)
@@ -1326,7 +1327,9 @@ class DeviceServer(DeviceServerBase):
             if strategy not in SampleStrategy.SAMPLING_LOOKUP_REV:
                 raise FailReply("Unknown strategy name.")
 
-            def inform_callback(cb_msg):
+            def inform_callback(sensor_name, timestamp, status, value):
+                cb_msg = format_inform_v5(
+                sensor_name, timestamp, status, value)
                 """Inform callback for sensor strategy."""
                 self.inform(sock, cb_msg)
 
