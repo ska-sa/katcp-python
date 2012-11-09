@@ -565,6 +565,12 @@ def request(*types, **options):
         The types of the request message parameters (in order). A type
         with multiple=True has to be the last type.
 
+    Keyword Arguments
+    -----------------
+    include_msg: bool, default: False
+        Pass the request message as the third parameter to the decorated request
+        handler function
+
     Examples
     --------
     >>> class MyDevice(DeviceServer):
@@ -573,7 +579,15 @@ def request(*types, **options):
     ...     def request_myreq(self, sock, my_int, my_float, my_bool):
     ...         return ("ok", my_int + 1, my_float / 2.0)
     ...
-    """
+    ...     @request(Int(), include_msg=True)
+    ...     @reply(Bool())
+    ...     def request_is_odd(self, sock, msg, my_int):
+    ...         self.inform(sock, Message.reply_inform(
+    ...             msg, 'Checking oddity of %d' % my_int))
+    ...         return ("ok", my_int % 2)
+    ...
+
+"""
     include_msg = options.get('include_msg', False)
     # Check that only the last type has multiple=True
     if len(types) > 1:
