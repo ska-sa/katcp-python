@@ -53,8 +53,7 @@ class TestVersionCompatibility(unittest.TestCase):
         DeviceTestServerWrong.PROTOCOL_INFO.major = 6
         with self.assertRaises(ValueError):
             DeviceTestServerWrong('', 0)
-           
-            
+
 
 
 class TestDeviceServer(unittest.TestCase, TestUtilMixin):
@@ -121,8 +120,8 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
                 blacklist=self.BLACKLIST, replies=True)
         self.client.raw_send("bad msg\n")
         # wait for reply
-        self.client.blocking_request(katcp.Message.request("watchdog"),
-                                     use_mid=False)
+        self.client.blocking_request(
+            katcp.Message.request("watchdog"), use_mid=False)
 
         self._assert_msgs_like(get_msgs(), [
             (r"#log error", "KatcpSyntaxError:"
