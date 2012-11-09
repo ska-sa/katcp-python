@@ -19,13 +19,12 @@ import re
 import time
 from functools import partial
 
-from .core import DeviceMetaclass, ExcepthookThread, Message, MessageParser, \
-                   FailReply, AsyncReply, ProtocolFlags
+from .core import (DeviceMetaclass, ExcepthookThread, Message, MessageParser,
+                   FailReply, AsyncReply, ProtocolFlags)
 from .sampling import SampleReactor, SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
 from .version import VERSION, VERSION_STR
 
-# logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp")
 
 
@@ -56,11 +55,28 @@ def construct_name_filter(pattern):
     return True, lambda name: name == pattern
 
 class ClientConnectionTCP(object):
+    # XXX TODO We should factor the whole TCP select loop (or future twisted
+    # implementation?) out of the server class and into a Connection class that
+    # spews katcp messages and ClientConnection* objecto onto the katcp
+    # server. This will allow us to abstract out the connection and allow us to
+    # support serial connections cleanly
     def __init__(self, server, raw_socket):
         self.inform = partial(server.tcp_inform, raw_socket)
         self.reply_inform = partial(server.tcp_reply_inform, raw_socket)
         self.reply = partial(server.tcp_reply, raw_socket)
 
+class ClientRequestConnection(object):
+    def __init__(self, client_connection, req_msg):
+        self.client_connection = client_connection
+        self.req_msg = req_msg
+
+    def inform(self, *args):
+        inf_msg = Message.reply_inform(self.req_msg, *args)
+        self.client_connection.inform(inf_msg)
+
+    def reply(self, *args):
+        rep_msg = Message.reply_to_request(self.req_msg, *args)
+        self.client_connection.reply(rep_msg, self.req_msg)
 
 
 class DeviceServerBase(object):
@@ -251,8 +267,9 @@ class DeviceServerBase(object):
         """
         send_reply = True
         if msg.name in self._request_handlers:
+            req_conn = ClientRequestConnection(connection, msg)
             try:
-                reply = self._request_handlers[msg.name](self, connection, msg)
+                reply = self._request_handlers[msg.name](self, req_conn, msg)
                 assert (reply.mtype == Message.REPLY)
                 assert (reply.name == msg.name)
                 self._logger.debug("%s OK" % (msg.name,))
@@ -391,6 +408,27 @@ class DeviceServerBase(object):
             self.on_client_disconnect(conn, msg, False)
 
     def inform(self, connection, msg):
+        """Send an inform message to a particular client.
+
+        Should only be used for asynchronous informs. Informs
+        that are part of the response to a request should use
+        :meth:`reply_inform` so that the message identifier
+        from the original request can be attached to the
+        inform.
+
+        Parameters
+        ----------
+        connection : ClientConnectionTCP object
+            The client to send the message to.
+        msg : Message object
+            The inform message to send.
+        """
+        if isinstance(connection, ClientRequestConnection):
+            self._logger.warn(
+                'Deprecation warning: do not use self.reply() '
+                'within a reply handler context -- use connection.reply()')
+            # Get the underlying ClientConnectionTCP instance
+            connection = connection.client_connection
         connection.inform(msg)
 
     def tcp_inform(self, sock, msg):
@@ -443,6 +481,12 @@ class DeviceServerBase(object):
             id is overridden with the id from orig_req before the
             reply is sent.
         """
+        if isinstance(connection, ClientRequestConnection):
+            self._logger.warn(
+                'Deprecation warning: do not use self.reply() '
+                'within a reply handler context -- use connection.reply()')
+            # Get the underlying ClientConnectionTCP instance
+            connection = connection.client_connection
         connection.reply(reply, orig_req)
 
     def tcp_reply(self, sock, reply, orig_req):
@@ -477,6 +521,12 @@ class DeviceServerBase(object):
             id is overridden with the id from orig_req before the
             inform is sent.
         """
+        if isinstance(connection, ClientRequestConnection):
+            self._logger.warn(
+                'Deprecation warning: do not use self.reply() '
+                'within a reply handler context -- use connection.reply()')
+            # Get the underlying ClientConnectionTCP instance
+            connection = connection.client_connection
         connection.reply_inform(inform, orig_req)
 
     def tcp_reply_inform(self, sock, inform, orig_req):
@@ -778,7 +828,7 @@ class DeviceServer(DeviceServerBase):
         }
 
     SUPPORTED_PROTOCOL_MAJOR_VERSIONS = (4,5)
-    
+
     ## @var log
     # @brief DeviceLogger instance for sending log messages to the client.
 
@@ -1324,7 +1374,7 @@ class DeviceServer(DeviceServerBase):
                     timestamp_ms, "1", name, status, value), msg)
         return Message.reply("sensor-value", "ok", str(len(sensors)))
 
-    def request_sensor_sampling(self, sock, msg):
+    def request_sensor_sampling(self, conn, msg):
         """Configure or query the way a sensor is sampled.
 
         Sampled values are reported asynchronously using the #sensor-status
@@ -1377,6 +1427,8 @@ class DeviceServer(DeviceServerBase):
             raise FailReply("Unknown sensor name.")
 
         sensor = self._sensors[name]
+        # The client connection that is not specific to this request context
+        client = conn.client_connection
 
         if len(msg.arguments) > 1:
             # attempt to set sampling strategy
@@ -1390,30 +1442,27 @@ class DeviceServer(DeviceServerBase):
                 cb_msg = format_inform_v5(
                 sensor_name, timestamp, status, value)
                 """Inform callback for sensor strategy."""
-                self.inform(sock, cb_msg)
+                self.inform(conn, cb_msg)
 
             new_strategy = SampleStrategy.get_strategy(strategy,
                                         inform_callback, sensor, *params)
 
-            self._strat_lock.acquire()
-            try:
-                old_strategy = self._strategies[sock].get(sensor, None)
+            with self._strat_lock:
+                old_strategy = self._strategies[client].get(sensor, None)
                 if old_strategy is not None:
                     self._reactor.remove_strategy(old_strategy)
 
                 # todo: replace isinstance check with something better
                 if isinstance(new_strategy, SampleNone):
-                    if sensor in self._strategies[sock]:
-                        del self._strategies[sock][sensor]
+                    if sensor in self._strategies[client]:
+                        del self._strategies[client][sensor]
                 else:
-                    self._strategies[sock][sensor] = new_strategy
+                    self._strategies[client][sensor] = new_strategy
                     # reactor.add_strategy() sends out an inform
                     # which is not great while the lock is held.
                     self._reactor.add_strategy(new_strategy)
-            finally:
-                self._strat_lock.release()
 
-        current_strategy = self._strategies[sock].get(sensor, None)
+        current_strategy = self._strategies[client].get(sensor, None)
         if not current_strategy:
             current_strategy = SampleStrategy.get_strategy("none",
                                                            lambda msg: None,

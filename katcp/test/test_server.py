@@ -88,7 +88,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         get_msgs.wait_number(1)
         self._assert_msgs_equal(
             get_msgs(), [r"#log error 1234.000000 root An\_error"])
-                                
+
     def test_simple_connect(self):
         """Test a simple server setup and teardown with client connect."""
         get_msgs = self.client.message_recorder(
