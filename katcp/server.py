@@ -17,6 +17,8 @@ import logging
 import sys
 import re
 import time
+from functools import partial
+
 from .core import DeviceMetaclass, ExcepthookThread, Message, MessageParser, \
                    FailReply, AsyncReply, ProtocolFlags
 from .sampling import SampleReactor, SampleStrategy, SampleNone
@@ -52,6 +54,13 @@ def construct_name_filter(pattern):
         name_re = re.compile(pattern[1:-1])
         return False, lambda name: name_re.search(name) is not None
     return True, lambda name: name == pattern
+
+class ClientConnectionTCP(object):
+    def __init__(self, server, raw_socket):
+        self.inform = partial(server.tcp_inform, raw_socket)
+        self.reply_inform = partial(server.tcp_reply_inform, raw_socket)
+        self.reply = partial(server.tcp_reply, raw_socket)
+
 
 
 class DeviceServerBase(object):
@@ -104,6 +113,8 @@ class DeviceServerBase(object):
         self._socks = []  # list of client sockets
         self._waiting_chunks = {}  # map from client sockets to messages pieces
         self._sock_locks = {}  # map from client sockets to sending locks
+        # map from sockets to ClientConnectionTCP objects
+        self._sock_connections = {}
 
     def _log_msg(self, level_name, msg, name, timestamp=None):
         """Create a katcp logging inform message.
@@ -143,6 +154,7 @@ class DeviceServerBase(object):
             self._socks.append(sock)
             self._waiting_chunks[sock] = ""
             self._sock_locks[sock] = threading.Lock()
+            self._sock_connections[sock] = ClientConnectionTCP(self, sock)
         finally:
             self._data_lock.release()
 
@@ -155,6 +167,7 @@ class DeviceServerBase(object):
                 self._socks.remove(sock)
                 del self._waiting_chunks[sock]
                 del self._sock_locks[sock]
+                del self._sock_connections[sock]
         finally:
             self._data_lock.release()
 
@@ -189,7 +202,7 @@ class DeviceServerBase(object):
                     reason = "\n".join(traceback.format_exception(
                         e_type, e_value, trace, self._tb_limit))
                     self._logger.error("BAD COMMAND: %s" % (reason,))
-                    self.inform(sock, self._log_msg("error", reason, "root"))
+                    self.tcp_inform(sock, self._log_msg("error", reason, "root"))
                 else:
                     self.handle_message(sock, msg)
 
@@ -213,31 +226,33 @@ class DeviceServerBase(object):
         # log messages received so that no one else has to
         self._logger.debug(msg)
 
+        client_connection = self._sock_connections[sock]
+
         if msg.mtype == msg.REQUEST:
-            self.handle_request(sock, msg)
+            self.handle_request(client_connection, msg)
         elif msg.mtype == msg.INFORM:
-            self.handle_inform(sock, msg)
+            self.handle_inform(client_connection, msg)
         elif msg.mtype == msg.REPLY:
-            self.handle_reply(sock, msg)
+            self.handle_reply(client_connection, msg)
         else:
             reason = "Unexpected message type received by server ['%s']." \
                      % (msg,)
             self.inform(sock, self._log_msg("error", reason, "root"))
 
-    def handle_request(self, sock, msg):
+    def handle_request(self, connection, msg):
         """Dispatch a request message to the appropriate method.
 
         Parameters
         ----------
-        sock : socket.socket object
-            The socket the message was from.
+        connection : ClientConnectionTCP object
+            The client connection the message was from.
         msg : Message object
             The request message to process.
         """
         send_reply = True
         if msg.name in self._request_handlers:
             try:
-                reply = self._request_handlers[msg.name](self, sock, msg)
+                reply = self._request_handlers[msg.name](self, connection, msg)
                 assert (reply.mtype == Message.REPLY)
                 assert (reply.name == msg.name)
                 self._logger.debug("%s OK" % (msg.name,))
@@ -261,21 +276,21 @@ class DeviceServerBase(object):
             reply = Message.reply(msg.name, "invalid", "Unknown request.")
 
         if send_reply:
-            self.reply(sock, reply, msg)
+            connection.reply(reply, msg)
 
-    def handle_inform(self, sock, msg):
+    def handle_inform(self, connection, msg):
         """Dispatch an inform message to the appropriate method.
 
         Parameters
         ----------
-        sock : socket.socket object
-            The socket the message was from.
+        connection : ClientConnectionTCP object
+            The client connection the message was from.
         msg : Message object
             The inform message to process.
         """
         if msg.name in self._inform_handlers:
             try:
-                self._inform_handlers[msg.name](self, sock, msg)
+                self._inform_handlers[msg.name](self, connection, msg)
             except Exception:
                 e_type, e_value, trace = sys.exc_info()
                 reason = "\n".join(traceback.format_exception(
@@ -284,19 +299,19 @@ class DeviceServerBase(object):
         else:
             self._logger.warn("%s INVALID: Unknown inform." % (msg.name,))
 
-    def handle_reply(self, sock, msg):
+    def handle_reply(self, connection, msg):
         """Dispatch a reply message to the appropriate method.
 
         Parameters
         ----------
-        sock : socket.socket object
-            The socket the message was from.
+        connection : ClientConnectionTCP object
+            The client connection the message was from.
         msg : Message object
             The reply message to process.
         """
         if msg.name in self._reply_handlers:
             try:
-                self._reply_handlers[msg.name](self, sock, msg)
+                self._reply_handlers[msg.name](self, connection, msg)
             except Exception:
                 e_type, e_value, trace = sys.exc_info()
                 reason = "\n".join(traceback.format_exception(
@@ -370,10 +385,15 @@ class DeviceServerBase(object):
                 client_name = "<disconnected client>"
             msg = "Failed to send message to client %s (%s)" % (client_name, e)
             self._logger.error(msg)
+            # Need to get connection before calling _remove_socket()
+            conn = self._sock_connections[sock]
             self._remove_socket(sock)
-            self.on_client_disconnect(sock, msg, False)
+            self.on_client_disconnect(conn, msg, False)
 
-    def inform(self, sock, msg):
+    def inform(self, connection, msg):
+        connection.inform(msg)
+
+    def tcp_inform(self, sock, msg):
         """Send an inform messages to a particular client.
 
         Should only be used for asynchronous informs. Informs
@@ -406,10 +426,27 @@ class DeviceServerBase(object):
         for sock in list(self._socks):
             if sock is self._sock:
                 continue
-            self.inform(sock, msg)
+            self.tcp_inform(sock, msg)
 
-    def reply(self, sock, reply, orig_req):
+
+    def reply(self, connection, reply, orig_req):
         """Send an asynchronous reply to an earlier request.
+
+        Parameters
+        ----------
+        connection : ClientConnectionTCP object
+            The client to send the reply to.
+        reply : Message object
+            The reply message to send.
+        orig_req : Message object
+            The request message being replied to. The reply message's
+            id is overridden with the id from orig_req before the
+            reply is sent.
+        """
+        connection.reply(reply, orig_req)
+
+    def tcp_reply(self, sock, reply, orig_req):
+        """Send an asynchronous reply to an earlier request for a tcp socket.
 
         Parameters
         ----------
@@ -426,7 +463,23 @@ class DeviceServerBase(object):
         reply.mid = orig_req.mid
         self._send_message(sock, reply)
 
-    def reply_inform(self, sock, inform, orig_req):
+    def reply_inform(self, connection, inform, orig_req):
+        """Send an inform as part of the reply to an earlier request.
+
+        Parameters
+        ----------
+        connection : ClientConnectionTCP object
+            The client to send the inform to.
+        inform : Message object
+            The inform message to send.
+        orig_req : Message object
+            The request message being replied to. The inform message's
+            id is overridden with the id from orig_req before the
+            inform is sent.
+        """
+        connection.reply_inform(inform, orig_req)
+
+    def tcp_reply_inform(self, sock, inform, orig_req):
         """Send an inform as part of the reply to an earlier request.
 
         Parameters
@@ -482,7 +535,7 @@ class DeviceServerBase(object):
         # replace bindaddr with real address so we can rebind
         # to the same port.
         self._bindaddr = self._sock.getsockname()
-        
+
         self._running.set()
         while self._running.isSet():
             self._process_deferred_queue()
@@ -501,10 +554,12 @@ class DeviceServerBase(object):
                         _readers, _writers, _errors = _select([sock], [], [],
                                                               0)
                     except Exception, e:
+                        # Need to get connection before calling _remove_socket()
+                        conn = self._sock_connections[sock]
                         self._remove_socket(sock)
-                        self.on_client_disconnect(sock, "Client socket died"
-                                                  " with error %s" % (e,),
-                                                  False)
+                        self.on_client_disconnect(
+                            conn, "Client socket died" " with error %s" % (e,),
+                            False)
                 # check server socket
                 try:
                     _readers, _writers, _errors = _select([self._sock], [], [],
@@ -522,9 +577,10 @@ class DeviceServerBase(object):
                     self._sock = self._bind(self._bindaddr)
                 else:
                     # client socket died, remove it
+                    # Need to get connection before calling _remove_socket()
+                    conn = self._sock_connections[sock]
                     self._remove_socket(sock)
-                    self.on_client_disconnect(sock, "Client socket died",
-                                              False)
+                    self.on_client_disconnect(conn, "Client socket died", False)
 
             for sock in readers:
                 if sock is self._sock:
@@ -533,7 +589,7 @@ class DeviceServerBase(object):
                     self.mass_inform(Message.inform("client-connected",
                         "New client connected from %s" % (addr,)))
                     self._add_socket(client)
-                    self.on_client_connect(client)
+                    self.on_client_connect(self._sock_connections[client])
                 else:
                     try:
                         chunk = sock.recv(4096)
@@ -545,12 +601,15 @@ class DeviceServerBase(object):
                         self._handle_chunk(sock, chunk)
                     else:
                         # no data, assume socket EOF
+                        # Need to get connection before calling _remove_socket()
+                        conn = self._sock_connections[sock]
                         self._remove_socket(sock)
-                        self.on_client_disconnect(sock, "Socket EOF", False)
+                        self.on_client_disconnect(conn, "Socket EOF", False)
 
         for sock in list(self._socks):
-            self.on_client_disconnect(sock, "Device server shutting down.",
-                                      True)
+            conn = self._sock_connections[sock]
+            self.on_client_disconnect(
+                conn, "Device server shutting down.", True)
             self._process_deferred_queue()
             self._remove_socket(sock)
 
@@ -748,59 +807,59 @@ class DeviceServer(DeviceServerBase):
 
     # pylint: enable-msg = W0142
 
-    def on_client_connect(self, sock):
+    def on_client_connect(self, connection):
         """Inform client of build state and version on connect.
 
         Parameters
         ----------
-        sock : socket.socket object
+        connection : ClientConnectionTCP object
             The client connection that has been successfully established.
         """
         self._strat_lock.acquire()
         try:
-            self._strategies[sock] = {}  # map sensors -> sampling strategies
+            self._strategies[connection] = {}  # map sensors -> sampling strategies
         finally:
             self._strat_lock.release()
-        self.inform(sock, Message.inform("version-connect", "katcp-protocol",
+        self.inform(connection, Message.inform("version-connect", "katcp-protocol",
                                          self.PROTOCOL_INFO))
-        self.inform(sock, Message.inform("version-connect", "katcp-library",
+        self.inform(connection, Message.inform("version-connect", "katcp-library",
                                          "katcp-python-%d.%d" % VERSION[:2],
                                          VERSION_STR))
-        self.inform(sock, Message.inform("version-connect", "katcp-device",
+        self.inform(connection, Message.inform("version-connect", "katcp-device",
                                          self.version(), self.build_state()))
-        self.inform(sock, Message.inform("version", self.version()))
-        self.inform(sock, Message.inform("build-state", self.build_state()))
+        self.inform(connection, Message.inform("version", self.version()))
+        self.inform(connection, Message.inform("build-state", self.build_state()))
 
-    def on_client_disconnect(self, sock, msg, sock_valid):
+    def on_client_disconnect(self, connection, msg, connection_valid):
         """Inform client it is about to be disconnected.
 
         Parameters
         ----------
-        sock : socket.socket object
-            Client socket being disconnected.
+        connection : ClientConnectionTCP object
+            The client connection being disconnected.
         msg : str
             Reason client is being disconnected.
-        sock_valid : boolean
-            True if sock is still open for sending,
+        connection_valid : boolean
+            True if connection is still open for sending,
             False otherwise.
         """
 
         def remove_strategies():
             with self._strat_lock:
-                strategies = self._strategies.pop(sock, None)
+                strategies = self._strategies.pop(connection, None)
                 if strategies is not None:
                     for sensor, strategy in list(strategies.items()):
                         del strategies[sensor]
                         self._reactor.remove_strategy(strategy)
-            if sock_valid:
-                self.inform(sock, Message.inform("disconnect", msg))
+            if connection_valid:
+                self.inform(connection, Message.inform("disconnect", msg))
 
         try:
             self._deferred_queue.put_nowait(remove_strategies)
         except Queue.Full:
             self._logger.error(
                 'Deferred queue full when trying to add sensor '
-                'strategy de-registration task for client %r' % socket)
+                'strategy de-registration task for client %r' % connection)
 
     def build_state(self):
         """Return a build state string in the form
