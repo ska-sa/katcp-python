@@ -246,6 +246,21 @@ class Message(object):
         """
         return cls(cls.INFORM, name, args, kwargs.get('mid'))
 
+    @classmethod
+    def reply_inform(cls, req_msg, *args):
+        """Helper method for creating inform messages in reply to a request.
+
+        Copies the request name and message identifier from the request message
+
+        Parameters
+        ----------
+        req_msg : katcp.core.Message instance
+            The request message that this inform if in reply to
+        args : list of strings
+            The message arguments except name
+        """
+        return cls(cls.INFORM, req_msg.name, args, req_msg.mid)
+
     # pylint: enable-msg = W0142
 
 
