@@ -555,7 +555,7 @@ class Parameter(object):
 def request(*types, **options):
     """Decorator for request handler methods.
 
-    The method being decorated should take a sock argument followed
+    The method being decorated should take a conn argument followed
     by arguments matching the list of types. The decorator will
     unpack the request message into the arguments.
 
@@ -576,13 +576,13 @@ def request(*types, **options):
     >>> class MyDevice(DeviceServer):
     ...     @request(Int(), Float(), Bool())
     ...     @reply(Int(), Float())
-    ...     def request_myreq(self, sock, my_int, my_float, my_bool):
+    ...     def request_myreq(self, conn, my_int, my_float, my_bool):
     ...         return ("ok", my_int + 1, my_float / 2.0)
     ...
     ...     @request(Int(), include_msg=True)
     ...     @reply(Bool())
-    ...     def request_is_odd(self, sock, msg, my_int):
-    ...         self.inform(sock, Message.reply_inform(
+    ...     def request_is_odd(self, conn, msg, my_int):
+    ...         self.inform(conn, Message.reply_inform(
     ...             msg, 'Checking oddity of %d' % my_int))
     ...         return ("ok", my_int % 2)
     ...
@@ -607,11 +607,11 @@ def request(*types, **options):
             # We must be on the inside. Introspect the parameter names.
             all_argnames = inspect.getargspec(handler)[0]
 
-        # Slightly hacky way of determining whether there is a sock
-        has_sock = len(all_argnames) > 1 and all_argnames[1] == "sock"
+        # Slightly hacky way of determining whether there is a conn
+        has_conn = len(all_argnames) > 1 and all_argnames[1] == "conn"
 
         params_start = 1
-        if has_sock:
+        if has_conn:
             params_start += 1
         if include_msg:
             params_start += 1
@@ -619,13 +619,13 @@ def request(*types, **options):
         argnames = all_argnames[params_start:]
 
         def raw_handler(self, *args):
-            if has_sock:
-                (sock, msg) = args
+            if has_conn:
+                (conn, msg) = args
                 new_args = unpack_types(types, msg.arguments, argnames)
                 if include_msg:
-                    return handler(self, sock, msg, *new_args)
+                    return handler(self, conn, msg, *new_args)
                 else:
-                    return handler(self, sock, *new_args)
+                    return handler(self, conn, *new_args)
             else:
                 (msg,) = args
                 new_args = unpack_types(types, msg.arguments, argnames)
@@ -672,7 +672,7 @@ def return_reply(*types):
     >>> class MyDevice(DeviceServer):
     ...     @request(Int())
     ...     @reply(Int(), Float())
-    ...     def request_myreq(self, sock, my_int):
+    ...     def request_myreq(self, conn, my_int):
     ...         return ("ok", my_int + 1, my_int * 2.0)
     ...
     """
@@ -713,9 +713,10 @@ def send_reply(*types):
     from a callback method, but unlike the return_reply decorator it
     also sends the reply rather than returning it.
 
-    The list/tuple returned from the callback method must have a sock
-    as its first parameter and the original message as the second. The
-    original message is needed to determine the message name and ID.
+    The list/tuple returned from the callback method must have conn (a
+    ClientRequestConnection instance) as its first parameter and the original
+    message as the second. The original message is needed to determine the
+    message name and ID.
 
     The device with the callback method must have a reply method.
 
@@ -728,17 +729,17 @@ def send_reply(*types):
     --------
     >>> class MyDevice(DeviceServer):
     ...     @send_reply('myreq', Int(), Float())
-    ...     def my_callback(self, msg, sock):
-    ...         return (sock, msg, "ok", 5, 2.0)
+    ...     def my_callback(self, msg, conn):
+    ...         return (conn, msg, "ok", 5, 2.0)
     ...
     """
     def decorator(handler):
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
-            sock = reply_args[0]
+            conn = reply_args[0]
             msg = reply_args[1]
             reply = make_reply(msg.name, types, reply_args[2:])
-            self.reply(sock, reply, msg)
+            self.reply(conn, reply, msg)
         return raw_handler
 
     return decorator

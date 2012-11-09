@@ -84,10 +84,8 @@ class DeviceServerBase(object):
 
     Subclasses should add .request\_* methods for dealing
     with request messages. These methods each take the client
-    socket and msg objects as arguments and should return the
-    reply message or raise an exception as a result. In these
-    methods, the client socket should only be used as an argument
-    to .inform().
+    request connection and msg objects as arguments and should return
+    the reply message or raise an exception as a result.
 
     Subclasses can also add .inform\_* and reply\_* methods to handle
     those types of messages.
@@ -253,7 +251,7 @@ class DeviceServerBase(object):
         else:
             reason = "Unexpected message type received by server ['%s']." \
                      % (msg,)
-            self.inform(sock, self._log_msg("error", reason, "root"))
+            self.tcp_inform(sock, self._log_msg("error", reason, "root"))
 
     def handle_request(self, connection, msg):
         """Dispatch a request message to the appropriate method.
@@ -723,7 +721,7 @@ class DeviceServerBase(object):
         """Whether the server is running."""
         return self._running.isSet()
 
-    def on_client_connect(self, sock):
+    def on_client_connect(self, conn):
         """Called after client connection is established.
 
         Subclasses should override if they wish to send clients
@@ -731,12 +729,12 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        sock : socket.socket object
+        conn : ClientConnectionTCP object
             The client connection that has been successfully established.
         """
         pass
 
-    def on_client_disconnect(self, sock, msg, sock_valid):
+    def on_client_disconnect(self, conn, msg, connection_valid):
         """Called before a client connection is closed.
 
         Subclasses should override if they wish to send clients
@@ -747,12 +745,12 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        sock : socket.socket object
-            Client socket being disconnected.
+        conn : ClientConnectionTCP object
+            Client connection being disconnected.
         msg : str
             Reason client is being disconnected.
-        sock_valid : boolean
-            True if sock is still open for sending,
+        connection_valid : boolean
+            True if connection is still open for sending,
             False otherwise.
         """
         pass
@@ -857,35 +855,35 @@ class DeviceServer(DeviceServerBase):
 
     # pylint: enable-msg = W0142
 
-    def on_client_connect(self, connection):
+    def on_client_connect(self, conn):
         """Inform client of build state and version on connect.
 
         Parameters
         ----------
-        connection : ClientConnectionTCP object
+        conn : ClientConnectionTCP object
             The client connection that has been successfully established.
         """
         self._strat_lock.acquire()
         try:
-            self._strategies[connection] = {}  # map sensors -> sampling strategies
+            self._strategies[conn] = {}  # map sensors -> sampling strategies
         finally:
             self._strat_lock.release()
-        self.inform(connection, Message.inform("version-connect", "katcp-protocol",
+        self.inform(conn, Message.inform("version-connect", "katcp-protocol",
                                          self.PROTOCOL_INFO))
-        self.inform(connection, Message.inform("version-connect", "katcp-library",
+        self.inform(conn, Message.inform("version-connect", "katcp-library",
                                          "katcp-python-%d.%d" % VERSION[:2],
                                          VERSION_STR))
-        self.inform(connection, Message.inform("version-connect", "katcp-device",
+        self.inform(conn, Message.inform("version-connect", "katcp-device",
                                          self.version(), self.build_state()))
-        self.inform(connection, Message.inform("version", self.version()))
-        self.inform(connection, Message.inform("build-state", self.build_state()))
+        self.inform(conn, Message.inform("version", self.version()))
+        self.inform(conn, Message.inform("build-state", self.build_state()))
 
-    def on_client_disconnect(self, connection, msg, connection_valid):
+    def on_client_disconnect(self, conn, msg, connection_valid):
         """Inform client it is about to be disconnected.
 
         Parameters
         ----------
-        connection : ClientConnectionTCP object
+        conn : ClientConnectionTCP object
             The client connection being disconnected.
         msg : str
             Reason client is being disconnected.
@@ -896,20 +894,20 @@ class DeviceServer(DeviceServerBase):
 
         def remove_strategies():
             with self._strat_lock:
-                strategies = self._strategies.pop(connection, None)
+                strategies = self._strategies.pop(conn, None)
                 if strategies is not None:
                     for sensor, strategy in list(strategies.items()):
                         del strategies[sensor]
                         self._reactor.remove_strategy(strategy)
             if connection_valid:
-                self.inform(connection, Message.inform("disconnect", msg))
+                self.inform(conn, Message.inform("disconnect", msg))
 
         try:
             self._deferred_queue.put_nowait(remove_strategies)
         except Queue.Full:
             self._logger.error(
                 'Deferred queue full when trying to add sensor '
-                'strategy de-registration task for client %r' % connection)
+                'strategy de-registration task for client %r' % conn)
 
     def build_state(self):
         """Return a build state string in the form
@@ -1016,11 +1014,11 @@ class DeviceServer(DeviceServerBase):
 
     # request implementations
 
-    # all requests take sock and msg arguments regardless of whether
+    # all requests take conn and msg arguments regardless of whether
     # they're used
     # pylint: disable-msg = W0613
 
-    def request_halt(self, sock, msg):
+    def request_halt(self, conn, msg):
         """Halt the device server.
 
         Returns
@@ -1041,7 +1039,7 @@ class DeviceServer(DeviceServerBase):
         # has been sent.
         return Message.reply("halt", "ok")
 
-    def request_help(self, sock, msg):
+    def request_help(self, conn, msg):
         """Return help on the available requests.
 
         Return a description of the available requests using a seqeunce of
@@ -1084,7 +1082,7 @@ class DeviceServer(DeviceServerBase):
         if not msg.arguments:
             for name, method in sorted(self._request_handlers.items()):
                 doc = method.__doc__
-                self.reply_inform(sock, Message.inform("help", name, doc), msg)
+                self.reply_inform(conn, Message.inform("help", name, doc), msg)
             num_methods = len(self._request_handlers)
             return Message.reply("help", "ok", str(num_methods))
         else:
@@ -1092,11 +1090,11 @@ class DeviceServer(DeviceServerBase):
             if name in self._request_handlers:
                 method = self._request_handlers[name]
                 doc = method.__doc__.strip()
-                self.reply_inform(sock, Message.inform("help", name, doc), msg)
+                self.reply_inform(conn, Message.inform("help", name, doc), msg)
                 return Message.reply("help", "ok", "1")
             return Message.reply("help", "fail", "Unknown request method.")
 
-    def request_log_level(self, sock, msg):
+    def request_log_level(self, conn, msg):
         """Query or set the current logging level.
 
         Parameters
@@ -1131,7 +1129,7 @@ class DeviceServer(DeviceServerBase):
                 raise FailReply(str(e))
         return Message.reply("log-level", "ok", self.log.level_name())
 
-    def request_restart(self, sock, msg):
+    def request_restart(self, conn, msg):
         """Restart the device server.
 
         Returns
@@ -1155,7 +1153,7 @@ class DeviceServer(DeviceServerBase):
         # has been sent.
         return Message.reply("restart", "ok")
 
-    def request_client_list(self, sock, msg):
+    def request_client_list(self, conn, msg):
         """Request the list of connected clients.
 
         The list of clients is sent as a sequence of #client-list informs.
@@ -1191,10 +1189,10 @@ class DeviceServer(DeviceServerBase):
             except socket.error:
                 # client may be gone, in which case just send a description
                 addr = repr(client)
-            self.reply_inform(sock, Message.inform("client-list", addr), msg)
+            self.reply_inform(conn, Message.inform("client-list", addr), msg)
         return Message.reply("client-list", "ok", str(num_clients))
 
-    def request_version_list(self, sock, msg):
+    def request_version_list(self, conn, msg):
         """Request the list of versions of roles and subcomponents.
 
         Informs
@@ -1240,12 +1238,12 @@ class DeviceServer(DeviceServerBase):
                 inform = Message.inform(msg.name, name, version)
             else:
                 inform = Message.inform(msg.name, name, version, build_state)
-            self.reply_inform(sock, inform, msg)
+            self.reply_inform(conn, inform, msg)
 
         num_versions = len(versions) + len(extra_versions)
         return Message.reply(msg.name, "ok", str(num_versions))
 
-    def request_sensor_list(self, sock, msg):
+    def request_sensor_list(self, conn, msg):
         """Request the list of sensors.
 
         The list of sensors is sent as a sequence of #sensor-list informs.
@@ -1305,12 +1303,12 @@ class DeviceServer(DeviceServerBase):
             return Message.reply("sensor-list", "fail", "Unknown sensor name.")
 
         for name, sensor in sensors:
-            self.reply_inform(sock, Message.inform("sensor-list",
+            self.reply_inform(conn, Message.inform("sensor-list",
                 name, sensor.description, sensor.units, sensor.stype,
                 *sensor.formatted_params), msg)
         return Message.reply("sensor-list", "ok", str(len(sensors)))
 
-    def request_sensor_value(self, sock, msg):
+    def request_sensor_value(self, conn, msg):
         """Request the value of a sensor or sensors.
 
         A list of sensor values as a sequence of #sensor-value informs.
@@ -1370,7 +1368,7 @@ class DeviceServer(DeviceServerBase):
 
         for name, sensor in sensors:
             timestamp_ms, status, value = sensor.read_formatted()
-            self.reply_inform(sock, Message.inform("sensor-value",
+            self.reply_inform(conn, Message.inform("sensor-value",
                     timestamp_ms, "1", name, status, value), msg)
         return Message.reply("sensor-value", "ok", str(len(sensors)))
 
@@ -1471,7 +1469,7 @@ class DeviceServer(DeviceServerBase):
         strategy, params = current_strategy.get_sampling_formatted()
         return Message.reply("sensor-sampling", "ok", name, strategy, *params)
 
-    def request_watchdog(self, sock, msg):
+    def request_watchdog(self, conn, msg):
         """Check that the server is still alive.
 
         Returns
