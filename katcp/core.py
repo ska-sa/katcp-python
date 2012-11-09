@@ -469,7 +469,9 @@ class DeviceMetaclass(type):
                 inform_name = convert("inform_", name)
                 mcs._inform_handlers[inform_name] = getattr(mcs, name)
                 assert(mcs._inform_handlers[inform_name].__doc__ is not None)
-            elif name.startswith("reply_"):
+                # There is a bit of a name colission between the reply_*
+                # convention and the server reply_inform() method
+            elif name.startswith("reply_") and name != 'reply_inform':
                 reply_name = convert("reply_", name)
                 mcs._reply_handlers[reply_name] = getattr(mcs, name)
                 assert(mcs._reply_handlers[reply_name].__doc__ is not None)
