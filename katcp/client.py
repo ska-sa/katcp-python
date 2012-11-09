@@ -647,7 +647,7 @@ class BlockingClient(DeviceClient):
             self._request_end.clear()
             self._current_name = msg.name
             if use_mid:
-                msg.mid = self._next_id()
+                msg.mid = self._next_id() if msg.mid is None else msg.mid
                 self._current_msg_id = msg.mid
             self._current_informs = []
             self._current_reply = None
