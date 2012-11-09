@@ -824,33 +824,33 @@ class DeviceTestServer(DeviceServer):
             [-5, 5],
             timestamp=12345, status=Sensor.NOMINAL, value=3))
 
-    def request_new_command(self, sock, msg):
+    def request_new_command(self, conn, msg):
         """A new command."""
         return Message.reply(msg.name, "ok", "param1", "param2")
 
-    def request_raise_exception(self, sock, msg):
+    def request_raise_exception(self, conn, msg):
         """A handler which raises an exception."""
         raise Exception("An exception occurred!")
 
-    def request_raise_fail(self, sock, msg):
+    def request_raise_fail(self, conn, msg):
         """A handler which raises a FailReply."""
         raise FailReply("There was a problem with your request.")
 
-    def request_slow_command(self, sock, msg):
+    def request_slow_command(self, conn, msg):
         """A slow command, waits for msg.arguments[0] seconds"""
         self.slow_waiting = True
         self._cancel_slow_command.wait(float(msg.arguments[0]))
         self.slow_waiting = False
         return Message.reply(msg.name, "ok", msgid=msg.mid)
 
-    def request_cancel_slow_command(self, sock, msg):
+    def request_cancel_slow_command(self, conn, msg):
         """Cancel slow command request, resulting in it replying immedietely"""
         self._cancel_slow_command.set()
         return Message.reply(msg.name, "ok", msgid=msg.mid)
 
-    def handle_message(self, sock, msg):
+    def handle_message(self, conn, msg):
         self.__msgs.append(msg)
-        super(DeviceTestServer, self).handle_message(sock, msg)
+        super(DeviceTestServer, self).handle_message(conn, msg)
 
     def messages(self):
         return self.__msgs

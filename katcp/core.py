@@ -529,7 +529,7 @@ class FailReply(Exception):
     Examples
     --------
     >>> class MyDevice(DeviceServer):
-    ...     def request_myreq(self, sock, msg):
+    ...     def request_myreq(self, conn, msg):
     ...         raise FailReply("This request always fails.")
     ...
     """
@@ -547,7 +547,7 @@ class AsyncReply(Exception):
     Examples
     --------
     >>> class MyDevice(DeviceServer):
-    ...     def request_myreq(self, sock, msg):
+    ...     def request_myreq(self, conn, msg):
     ...         self.callback_client.request(
     ...             Message.request("otherreq"),
     ...             reply_cb=self._send_reply,
