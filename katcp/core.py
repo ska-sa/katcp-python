@@ -14,6 +14,17 @@ import re
 import time
 import warnings
 
+class KatcpSyntaxError(ValueError):
+    """Exception raised by parsers on encountering syntax errors."""
+
+class KatcpClientError(Exception):
+    """Raised by KATCP clients when errors occur."""
+
+class KatcpVersionError(KatcpClientError):
+    """
+    Exception raised when a katcp feature not supported by the katcp version
+    of the server/client is requested
+    """
 
 class Message(object):
     """Represents a KAT device control language message.
@@ -278,11 +289,6 @@ class Message(object):
         return cls(cls.INFORM, req_msg.name, args, req_msg.mid)
 
     # pylint: enable-msg = W0142
-
-
-class KatcpSyntaxError(ValueError):
-    """Exception raised by parsers on encountering syntax errors."""
-    pass
 
 
 class MessageParser(object):
@@ -556,11 +562,6 @@ class AsyncReply(Exception):
     ...
 
     """
-    pass
-
-
-class KatcpClientError(Exception):
-    """Raised by KATCP clients when errors occur."""
     pass
 
 

@@ -21,6 +21,10 @@ logging.getLogger("katcp").addHandler(log_handler)
 
 NO_HELP_MESSAGES = 15         # Number of requests on DeviceTestServer
 
+def remove_version_connect(msgs):
+    """Remove #version-connect messages from a list of messages"""
+    return [msg for msg in msgs if msg.name != 'version-connect']
+
 class TestDeviceClient(unittest.TestCase, TestUtilMixin):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
@@ -41,13 +45,14 @@ class TestDeviceClient(unittest.TestCase, TestUtilMixin):
 
     def test_request(self):
         """Test request method."""
+        self.assertTrue(self.client.wait_protocol(1))
         self.client.request(katcp.Message.request("watchdog"))
 
         time.sleep(0.1)
 
         msgs = self.server.messages()
         self._assert_msgs_equal(msgs, [
-            r"?watchdog",
+            r"?watchdog[1]",
         ])
 
     def test_send_message(self):
@@ -150,6 +155,7 @@ class TestBlockingClient(unittest.TestCase):
 
         self.client = katcp.BlockingClient(host, port)
         self.client.start(timeout=0.1)
+        self.assertTrue(self.client.wait_protocol(timeout=1))
 
     def tearDown(self):
         if self.client.running():
@@ -165,7 +171,7 @@ class TestBlockingClient(unittest.TestCase):
             katcp.Message.request("watchdog"))
         self.assertEqual(reply.name, "watchdog")
         self.assertEqual(reply.arguments, ["ok"])
-        self.assertEqual(informs, [])
+        self.assertEqual(remove_version_connect(informs), [])
 
         reply, informs = self.client.blocking_request(
             katcp.Message.request("help"))
@@ -187,7 +193,9 @@ class TestBlockingClient(unittest.TestCase):
 
 
 class TestCallbackClient(unittest.TestCase, TestUtilMixin):
+
     def setUp(self):
+        self.addCleanup(self.stop_server_client)
         self.server = DeviceTestServer('', 0)
         self.server.start(timeout=0.1)
 
@@ -195,12 +203,13 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         self.client = katcp.CallbackClient(host, port)
         self.client.start(timeout=0.1)
+        self.assertTrue(self.client.wait_protocol(timeout=1))
 
-    def tearDown(self):
-        if self.client.running():
+    def stop_server_client(self):
+        if hasattr(self, 'client') and self.client.running():
             self.client.stop()
             self.client.join()
-        if self.server.running():
+        if hasattr(self, 'server') and self.server.running():
             self.server.stop()
             self.server.join()
 
@@ -255,6 +264,55 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(len(help_replies), 1)
         self.assertEqual(len(help_informs), NO_HELP_MESSAGES)
 
+    def test_callback_request_mid(self):
+        ## Test that the client does the right thing with message identifiers
+
+        # Wait for the client to detect the server protocol. Server should
+        # support message identifiers
+        self.assertTrue(self.client.wait_protocol(0.2))
+        # Replace send_message so that we can check the message
+        self.client.send_message = mock.Mock()
+
+        # By default message identifiers should be enabled, and should start
+        # counting at 1
+        self.client.request(katcp.Message.request('watchdog'))
+        self.client.request(katcp.Message.request('watchdog'))
+        self.client.request(katcp.Message.request('watchdog'))
+        # Extract katcp.Message object .mid attributes from the mock calls to
+        # send_message
+        mids = [args[0].mid              # arg[0] should be the Message() object
+                for args, kwargs in self.client.send_message.call_args_list]
+        self.assertEqual(mids, ['1','2','3'])
+        self.client.send_message.reset_mock()
+
+        # Explicitly ask for no mid to be used
+        self.client.request(katcp.Message.request('watchdog'), use_mid=False)
+        mid = self.client.send_message.call_args[0][0].mid
+        self.assertEqual(mid, None)
+
+        # Ask for a specific mid to be used
+        self.client.send_message.reset_mock()
+        self.client.request(katcp.Message.request('watchdog', mid=42))
+        mid = self.client.send_message.call_args[0][0].mid
+        self.assertEqual(mid, '42')
+
+        ## Check situation for a katcpv4 server
+        self.client._server_supports_ids = False
+
+        # Should fail if an mid is passed
+        with self.assertRaises(katcp.core.KatcpVersionError):
+            self.client.request(katcp.Message.request('watchdog', mid=42))
+
+        # Should fail if an mid is requested
+        with self.assertRaises(katcp.core.KatcpVersionError):
+            self.client.request(katcp.Message.request('watchdog'), use_mid=True)
+
+        # Should use no mid by default
+        self.client.send_message.reset_mock()
+        self.client.request(katcp.Message.request('watchdog'))
+        mid = self.client.send_message.call_args[0][0].mid
+        self.assertEqual(mid, None)
+
     def test_no_callback(self):
         """Test request without callback."""
 
@@ -299,7 +357,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         # With no timeout no Timer object should have been instantiated
         self.assertEqual(MockTimer.call_count, 0)
         self.assertEqual(len(replies), 1)
-        self.assertEqual(len(informs), NO_HELP_MESSAGES)
+        self.assertEqual(len(remove_version_connect(informs)), NO_HELP_MESSAGES)
 
     def test_timeout(self):
         self._test_timeout()
@@ -337,7 +395,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual([msg.name for msg in replies], ["slow-command"])
         self.assertEqual([msg.arguments for msg in replies], [
                 ["fail", "Timed out after %f seconds" % timeout]])
-        self.assertEqual(len(informs), 0)
+        self.assertEqual(len(remove_version_connect(informs)), 0)
 
         del replies[:]
         del informs[:]
@@ -397,10 +455,11 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         time.sleep(0.1)
         self.assertEqual(len(help_replies), 1)
-        self.assertEqual(len(help_informs), NO_HELP_MESSAGES)
+        self.assertEqual(len(remove_version_connect(help_informs)),
+                         NO_HELP_MESSAGES)
 
-    def test_twenty_thread_mayhem(self):
-        """Test using callbacks from twenty threads simultaneously."""
+    def test_fifty_thread_mayhem(self):
+        """Test using callbacks from fifty threads simultaneously."""
         num_threads = 50
         # map from thread_id -> (replies, informs)
         results = {}
@@ -443,6 +502,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             self.assertTrue(done.isSet())
             self.assertEqual(len(replies), 1)
             self.assertEqual(replies[0].arguments[0], "ok")
+            informs = remove_version_connect(informs)
             if len(informs) != NO_HELP_MESSAGES:
                 print thread_id, len(informs)
                 print [x.arguments[0] for x in informs]
@@ -456,7 +516,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         self.assertEqual(reply.name, "help")
         self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
-        self.assertEqual(len(informs), NO_HELP_MESSAGES)
+        self.assertEqual(len(remove_version_connect(informs)), NO_HELP_MESSAGES)
 
         reply, informs = self.client.blocking_request(
             katcp.Message.request("slow-command", "0.5"),
@@ -467,7 +527,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertTrue(reply.arguments[1].startswith("Timed out after"))
 
     def test_use_ids(self):
-        """Test the callbak client's use of message ids."""
+        """Test the callback client's use of message ids."""
         self.client._use_ids = True
 
         watchdog_replies = []
