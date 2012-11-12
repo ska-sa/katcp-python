@@ -17,7 +17,7 @@ import time
 import logging
 import errno
 from .core import DeviceMetaclass, MessageParser, Message, ExcepthookThread, \
-                   KatcpClientError, ProtocolFlags
+                   KatcpClientError, KatcpVersionError, ProtocolFlags
 
 #logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp")
@@ -106,7 +106,7 @@ class DeviceClient(object):
                 ProtocolFlags.MESSAGE_IDS)
             self._received_protocol_info.set()
 
-    def request(self, msg):
+    def request(self, msg, use_mid=None):
         """Send a request messsage.
 
         Parameters
@@ -115,6 +115,17 @@ class DeviceClient(object):
             The request Message to send.
         """
         assert(msg.mtype == Message.REQUEST)
+
+        if use_mid is None:
+            use_mid = self._server_supports_ids
+
+        if use_mid:
+            msg.mid = self._next_id() if msg.mid is None else msg.mid
+
+        if not self._server_supports_ids and msg.mid is not None:
+            raise KatcpVersionError(
+                'Message identifiers only supported for katcp version 5 or up.')
+
         self.send_message(msg)
 
     def send_message(self, msg):
@@ -889,40 +900,32 @@ class CallbackClient(DeviceClient):
             Whether to use message IDs. Default is to use message IDs
             if the server supports them.
         """
-        is_antenna = False
-        try:
-            if self.name == 'antenna':
-                is_antenna = True
-        except AttributeError:
-            pass
-
         if timeout is None:
             timeout = self._request_timeout
 
-        if use_mid is None:
-            use_mid = self._server_supports_ids
-
-        msg_id = self._next_id()
-
-        if use_mid:
-            msg.mid = msg_id
+        client_error = False
+        try:
+            super(CallbackClient, self).request(msg, use_mid=use_mid)
+        except KatcpVersionError:
+            raise
+        except KatcpClientError, e:
+            error_reply = Message.request(msg.name, "fail", str(e))
+            error_reply.mid = msg.mid
+            client_error = True
 
         if timeout is None: # deal with 'no timeout', i.e. None
             timer = None
         else:
-            timer = threading.Timer(timeout, self._handle_timeout, (msg_id,))
+            timer = threading.Timer(timeout, self._handle_timeout, (msg.mid,))
 
-        self._push_async_request(msg_id, msg, reply_cb, inform_cb,
-                                 user_data, timer)
+        self._push_async_request(
+            msg.mid, msg, reply_cb, inform_cb, user_data, timer)
         if timer:
             timer.start()
-        try:
-            super(CallbackClient, self).request(msg)
-        except KatcpClientError, e:
-            reply = Message.request(msg.name, "fail", str(e))
-            if self._server_supports_ids:
-                reply.mid = msg_id
-            self.handle_reply(reply)
+
+        if client_error:
+            self.handle_reply(error_reply)
+
 
     def blocking_request(self, msg, timeout=None, use_mid=None):
         """Send a request messsage.
