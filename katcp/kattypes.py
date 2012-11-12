@@ -608,7 +608,10 @@ def request(*types, **options):
             all_argnames = inspect.getargspec(handler)[0]
 
         # Slightly hacky way of determining whether there is a conn
-        has_conn = len(all_argnames) > 1 and all_argnames[1] == "conn"
+        # For backward-compatibility also check for 'sock' and handle it the
+        # same as 'conn'
+        has_conn = len(all_argnames) > 1 and all_argnames[1] in ("conn", "sock")
+
 
         params_start = 1
         if has_conn:
