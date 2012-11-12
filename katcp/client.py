@@ -948,12 +948,6 @@ class CallbackClient(DeviceClient):
         informs : list of Message objects
             A list of the inform messages received.
         """
-        is_antenna = False
-        try:
-            if self.name == 'antenna':
-                is_antenna = True
-        except AttributeError:
-            pass
         if timeout is None:
             timeout = self._request_timeout
 
