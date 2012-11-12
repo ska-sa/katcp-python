@@ -215,7 +215,8 @@ class DeviceServerBase(object):
                     e_type, e_value, trace = sys.exc_info()
                     reason = "\n".join(traceback.format_exception(
                         e_type, e_value, trace, self._tb_limit))
-                    self._logger.error("BAD COMMAND: %s" % (reason,))
+                    self._logger.error("BAD COMMAND: %s in line %r" % (
+                        reason, full_line))
                     self.tcp_inform(sock, self._log_msg("error", reason, "root"))
                 else:
                     self.handle_message(sock, msg)
@@ -863,11 +864,9 @@ class DeviceServer(DeviceServerBase):
         conn : ClientConnectionTCP object
             The client connection that has been successfully established.
         """
-        self._strat_lock.acquire()
-        try:
+        with self._strat_lock:
             self._strategies[conn] = {}  # map sensors -> sampling strategies
-        finally:
-            self._strat_lock.release()
+
         self.inform(conn, Message.inform("version-connect", "katcp-protocol",
                                          self.PROTOCOL_INFO))
         self.inform(conn, Message.inform("version-connect", "katcp-library",
@@ -875,15 +874,39 @@ class DeviceServer(DeviceServerBase):
                                          VERSION_STR))
         self.inform(conn, Message.inform("version-connect", "katcp-device",
                                          self.version(), self.build_state()))
-        self.inform(conn, Message.inform("version", self.version()))
-        self.inform(conn, Message.inform("build-state", self.build_state()))
 
-    def on_client_disconnect(self, conn, msg, connection_valid):
+        ## Two lines below are deprecated for version 5, should enable when we do
+        ## a version 4 server self.inform(conn, Message.inform("version",
+        # self.version())) self.inform(conn, Message.inform("build-state",
+        # self.build_state()))
+
+    def clear_strategies(self, client_conn, remove_client=False):
+        """
+        Clear the sensor strategies of a client connection
+
+        Parameters
+        ----------
+        client_connection : ClientConnectionTCP instance
+            The connection that should have its sampling strategies cleared
+        remove_client : bool, default=False
+            Remove the client connection from the strategies dstastructure.
+            Usefull for clients that disconnect.
+        """
+        with self._strat_lock:
+            getter = (self._strategies.pop if remove_client
+                      else self._strategies.get)
+            strategies = getter(client_conn, None)
+            if strategies is not None:
+                for sensor, strategy in list(strategies.items()):
+                    del strategies[sensor]
+                    self._reactor.remove_strategy(strategy)
+
+    def on_client_disconnect(self, client_conn, msg, connection_valid):
         """Inform client it is about to be disconnected.
 
         Parameters
         ----------
-        conn : ClientConnectionTCP object
+        client_conn : ClientConnectionTCP object
             The client connection being disconnected.
         msg : str
             Reason client is being disconnected.
@@ -893,14 +916,9 @@ class DeviceServer(DeviceServerBase):
         """
 
         def remove_strategies():
-            with self._strat_lock:
-                strategies = self._strategies.pop(conn, None)
-                if strategies is not None:
-                    for sensor, strategy in list(strategies.items()):
-                        del strategies[sensor]
-                        self._reactor.remove_strategy(strategy)
+            self.clear_strategies(client_conn, remove_client=True)
             if connection_valid:
-                self.inform(conn, Message.inform("disconnect", msg))
+                self.inform(client_conn, Message.inform("disconnect", msg))
 
         try:
             self._deferred_queue.put_nowait(remove_strategies)
@@ -1462,9 +1480,8 @@ class DeviceServer(DeviceServerBase):
 
         current_strategy = self._strategies[client].get(sensor, None)
         if not current_strategy:
-            current_strategy = SampleStrategy.get_strategy("none",
-                                                           lambda msg: None,
-                                                           sensor)
+            current_strategy = SampleStrategy.get_strategy(
+                "none", lambda msg: None, sensor)
 
         strategy, params = current_strategy.get_sampling_formatted()
         return Message.reply("sensor-sampling", "ok", name, strategy, *params)

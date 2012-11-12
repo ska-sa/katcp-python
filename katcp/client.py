@@ -670,7 +670,7 @@ class BlockingClient(DeviceClient):
             timeout = self._request_timeout
 
         try:
-            self.request(msg)
+            self.request(msg, use_mid=use_mid)
             while True:
                 self._request_end.wait(timeout)
                 if self._request_end.isSet() or not keepalive:
