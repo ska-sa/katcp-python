@@ -229,7 +229,10 @@ class Message(object):
         args : list of strings
             The message arguments.
         """
-        return cls(cls.REQUEST, name, args, kwargs.get('mid'))
+        mid = kwargs.pop('mid', None)
+        if len(kwargs) > 0:
+            raise TypeError('Invalid keyword argument(s): %r' % kwargs)
+        return cls(cls.REQUEST, name, args, mid)
 
     @classmethod
     def reply(cls, name, *args, **kwargs):
@@ -242,10 +245,13 @@ class Message(object):
         args : list of strings
             The message arguments.
         """
-        return cls(cls.REPLY, name, args, kwargs.get('mid'))
+        mid = kwargs.pop('mid', None)
+        if len(kwargs) > 0:
+            raise TypeError('Invalid keyword argument(s): %r' % kwargs)
+        return cls(cls.REPLY, name, args, mid)
 
     @classmethod
-    def reply_to_request(cls, req_msg, name, *args):
+    def reply_to_request(cls, req_msg, *args):
         """Helper method for creating reply messages to a specific request.
 
         Copies the message name and message identifier from the request message
@@ -271,7 +277,10 @@ class Message(object):
         args : list of strings
             The message arguments.
         """
-        return cls(cls.INFORM, name, args, kwargs.get('mid'))
+        mid = kwargs.pop('mid', None)
+        if len(kwargs) > 0:
+            raise TypeError('Invalid keyword argument(s): %r' % kwargs)
+        return cls(cls.INFORM, name, args, mid)
 
     @classmethod
     def reply_inform(cls, req_msg, *args):
