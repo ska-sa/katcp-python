@@ -725,9 +725,6 @@ class Sensor(object):
 
     # pylint: enable-msg = E0602
 
-    ## @brief Number of milliseconds in a second.
-    MILLISECOND = 1000
-
     ## @brief kattype Timestamp instance for encoding and decoding timestamps
     TIMESTAMP_TYPE = Timestamp()
 
@@ -814,6 +811,9 @@ class Sensor(object):
         cls = self.__class__
         return "<%s.%s object name=%r at 0x%x>" % \
                (cls.__module__, cls.__name__, self.name, id(self))
+
+    # TODO XXX Add factory classmethods for different kinds of sensors like Message
+    # has
 
     def attach(self, observer):
         """Attach an observer to this sensor.

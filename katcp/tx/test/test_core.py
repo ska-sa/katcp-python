@@ -2,7 +2,7 @@ from katcp.tx.core import (ClientKatCPProtocol, DeviceServer, DeviceProtocol,
                            KatCPClientFactory)
 from katcp import Message, Sensor
 from katcp.tx.test.testserver import run_subprocess
-from twisted.trial.unittest import TestCase
+from twisted.trial.unittest import TestCase, SkipTest
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet.protocol import ClientCreator
@@ -44,6 +44,8 @@ class TestKatCP(PythonLoggingTestCase):
         return d
 
     def test_version_check(self):
+        raise SkipTest('This test should only be run for v4 servers. Should '
+                        'also add an updated test for v5 server')
         class TestKatCP(ClientKatCPProtocol):
             def inform_build_state(self, args):
                 ClientKatCPProtocol.inform_build_state(self, args)
