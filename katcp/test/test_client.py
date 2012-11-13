@@ -179,6 +179,67 @@ class TestBlockingClient(unittest.TestCase):
         self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
         self.assertEqual(len(informs), int(reply.arguments[1]))
 
+    def test_blocking_request_mid(self):
+        ## Test that the blocking client does the right thing with message
+        ## identifiers
+        # Wait for the client to detect the server protocol. Server should
+        # support message identifiers
+        self.assertTrue(self.client.wait_protocol(0.2))
+        # Replace send_message so that we can check the message
+        self.client.send_message = mock.Mock()
+
+        # blocking_request() raises RuntimeError on timeout, so make a wrapper
+        # function to eat that
+        def blocking_request(*args, **kwargs):
+            try:
+                return self.client.blocking_request(*args, **kwargs)
+            except RuntimeError, e:
+                if not e.args[0].startswith('Request '):
+                    raise
+ 
+        # By default message identifiers should be enabled, and should start
+        # counting at 1
+        blocking_request(katcp.Message.request('watchdog'), timeout=0)
+        blocking_request(katcp.Message.request('watchdog'), timeout=0)
+        blocking_request(katcp.Message.request('watchdog'), timeout=0)
+        # Extract katcp.Message object .mid attributes from the mock calls to
+        # send_message
+        mids = [args[0].mid              # arg[0] should be the Message() object
+                for args, kwargs in self.client.send_message.call_args_list]
+        self.assertEqual(mids, ['1','2','3'])
+        self.client.send_message.reset_mock()
+
+        # Explicitly ask for no mid to be used
+        blocking_request(
+            katcp.Message.request('watchdog'), use_mid=False, timeout=0)
+        mid = self.client.send_message.call_args[0][0].mid
+        self.assertEqual(mid, None)
+
+        # Ask for a specific mid to be used
+        self.client.send_message.reset_mock()
+        blocking_request(katcp.Message.request('watchdog', mid=42), timeout=0)
+        mid = self.client.send_message.call_args[0][0].mid
+        self.assertEqual(mid, '42')
+
+        ## Check situation for a katcpv4 server
+        self.client._server_supports_ids = False
+
+        # Should fail if an mid is passed
+        with self.assertRaises(katcp.core.KatcpVersionError):
+            blocking_request(
+                katcp.Message.request('watchdog', mid=42), timeout=0)
+
+        # Should fail if an mid is requested
+        with self.assertRaises(katcp.core.KatcpVersionError):
+            blocking_request(
+                katcp.Message.request('watchdog'), use_mid=True, timeout=0)
+
+        # Should use no mid by default
+        self.client.send_message.reset_mock()
+        blocking_request(katcp.Message.request('watchdog'), timeout=0)
+        mid = self.client.send_message.call_args[0][0].mid
+        self.assertEqual(mid, None)
+
     def test_timeout(self):
         """Test calling blocking_request with a timeout."""
         try:
@@ -526,48 +587,63 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(reply.arguments[0], "fail")
         self.assertTrue(reply.arguments[1].startswith("Timed out after"))
 
-    def test_use_ids(self):
-        """Test the callback client's use of message ids."""
-        self.client._use_ids = True
+    def test_blocking_request_mid(self):
+        ## Test that the blocking client does the right thing with message
+        ## identifiers
 
-        watchdog_replies = []
+        # Wait for the client to detect the server protocol. Server should
+        # support message identifiers
+        self.assertTrue(self.client.wait_protocol(0.2))
+        # Replace send_message so that we can check the message
+        self.client.send_message = mock.Mock()
 
-        def watchdog_reply(reply):
-            self.assertEqual(reply.name, "watchdog")
-            self.assertEqual(reply.arguments, ["ok"])
-            watchdog_replies.append(reply)
+        # By default message identifiers should be enabled, and should start
+        # counting at 1
+        self.client.blocking_request(
+            katcp.Message.request('watchdog'), timeout=0)
+        self.client.blocking_request(
+            katcp.Message.request('watchdog'), timeout=0)
+        self.client.blocking_request(
+            katcp.Message.request('watchdog'), timeout=0)
+        # Extract katcp.Message object .mid attributes from the mock calls to
+        # send_message
+        mids = [args[0].mid              # arg[0] should be the Message() object
+                for args, kwargs in self.client.send_message.call_args_list]
+        self.assertEqual(mids, ['1','2','3'])
+        self.client.send_message.reset_mock()
 
-        self.client.request(
-            katcp.Message.request("watchdog"),
-            reply_cb=watchdog_reply,
-        )
+        # Explicitly ask for no mid to be used
+        self.client.blocking_request(katcp.Message.request('watchdog'),
+                                     use_mid=False, timeout=0)
+        mid = self.client.send_message.call_args[0][0].mid
+        self.assertEqual(mid, None)
 
-        time.sleep(0.1)
-        self.assertTrue(watchdog_replies)
+        # Ask for a specific mid to be used
+        self.client.send_message.reset_mock()
+        self.client.blocking_request(katcp.Message.request(
+            'watchdog', mid=42), timeout=0)
+        mid = self.client.send_message.call_args[0][0].mid
+        self.assertEqual(mid, '42')
 
-        help_replies = []
-        help_informs = []
+        ## Check situation for a katcpv4 server
+        self.client._server_supports_ids = False
 
-        def help_reply(reply):
-            self.assertEqual(reply.name, "help")
-            self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
-            self.assertEqual(len(help_informs), int(reply.arguments[1]))
-            help_replies.append(reply)
+        # Should fail if an mid is passed
+        with self.assertRaises(katcp.core.KatcpVersionError):
+            self.client.blocking_request(katcp.Message.request(
+                'watchdog', mid=42), timeout=0)
 
-        def help_inform(inform):
-            self.assertEqual(inform.name, "help")
-            self.assertEqual(len(inform.arguments), 2)
-            help_informs.append(inform)
+        # Should fail if an mid is requested
+        with self.assertRaises(katcp.core.KatcpVersionError):
+            self.client.blocking_request(
+                katcp.Message.request('watchdog'), use_mid=True, timeout=0)
 
-        self.client.request(
-            katcp.Message.request("help"),
-            reply_cb=help_reply,
-            inform_cb=help_inform,
-        )
-
-        time.sleep(0.2)
-        self.assertEqual(len(help_replies), 1)
-        self.assertEqual(len(help_informs), NO_HELP_MESSAGES)
+        # Should use no mid by default
+        self.client.send_message.reset_mock()
+        self.client.blocking_request(katcp.Message.request(
+            'watchdog'), timeout=0)
+        mid = self.client.send_message.call_args[0][0].mid
+        self.assertEqual(mid, None)
 
     def test_request_fail_on_raise(self):
         """Test that the callback is called even if send_message raises

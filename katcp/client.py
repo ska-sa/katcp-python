@@ -651,15 +651,10 @@ class BlockingClient(DeviceClient):
         informs : list of Message objects
             A list of the inform messages received.
         """
-        if use_mid is None:
-            use_mid = self._server_supports_ids
         try:
             self._request_lock.acquire()
             self._request_end.clear()
             self._current_name = msg.name
-            if use_mid:
-                msg.mid = self._next_id() if msg.mid is None else msg.mid
-                self._current_msg_id = msg.mid
             self._current_informs = []
             self._current_reply = None
             self._current_inform_count = 0
@@ -671,6 +666,7 @@ class BlockingClient(DeviceClient):
 
         try:
             self.request(msg, use_mid=use_mid)
+            self._current_msg_id = msg.mid
             while True:
                 self._request_end.wait(timeout)
                 if self._request_end.isSet() or not keepalive:
@@ -971,7 +967,7 @@ class CallbackClient(DeviceClient):
         # rest of the code
         extra_wait = 5
         wait_timeout = timeout
-        if not wait_timeout is None:
+        if wait_timeout is not None:
             wait_timeout = wait_timeout + extra_wait
         done.wait(timeout=wait_timeout)
         if not done.isSet():
