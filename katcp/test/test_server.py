@@ -22,6 +22,61 @@ logging.getLogger("katcp").addHandler(log_handler)
 
 NO_HELP_MESSAGES = 15       # Number of requests on DeviceTestServer
 
+class test_ClientConnectionTCP(unittest.TestCase):
+    def test_init(self):
+        # Test that the ClientConnection methods are correctly bound to the
+        # server methods
+        server = mock.Mock()
+        raw_socket = 'raw_socket'
+        DUT = katcp.server.ClientConnectionTCP(server, raw_socket)
+        DUT.inform('inf_arg')
+        server.tcp_inform.assert_called_once_with(raw_socket, 'inf_arg')
+        DUT.reply_inform('rif_arg')
+        server.tcp_reply_inform.assert_called_once_with(raw_socket, 'rif_arg')
+        DUT.reply('rep_arg')
+        server.tcp_reply.assert_called_once_with(raw_socket, 'rep_arg')
+
+
+class test_ClientRequestConnection(unittest.TestCase):
+    def setUp(self):
+        self.client_connection = mock.Mock()
+        self.req_msg = katcp.Message.request(
+            'test-request', 'parm1', 'parm2', mid=42)
+        self.DUT = katcp.server.ClientRequestConnection(
+            self.client_connection, self.req_msg)
+
+    def test_inform(self):
+        arguments = ('inf1', 'inf2')
+        self.DUT.inform(*arguments)
+        self.assertEqual(self.client_connection.inform.call_count, 1)
+        (inf_msg,), kwargs = self.client_connection.inform.call_args
+        self.assertSequenceEqual(inf_msg.arguments, arguments)
+        self.assertEqual(inf_msg.name, 'test-request')
+        self.assertEqual(inf_msg.mid, '42')
+        self.assertEqual(inf_msg.mtype, katcp.Message.INFORM)
+
+    def test_reply(self):
+        arguments = ('inf1', 'inf2')
+        self.DUT.reply(*arguments)
+        self.assertEqual(self.client_connection.reply.call_count, 1)
+        (rep_msg, req_msg), kwargs = self.client_connection.reply.call_args
+        self.assertIs(req_msg, self.req_msg)
+        self.assertSequenceEqual(rep_msg.arguments, arguments)
+        self.assertEqual(rep_msg.name, 'test-request')
+        self.assertEqual(rep_msg.mid, '42')
+        self.assertEqual(rep_msg.mtype, katcp.Message.REPLY)
+        # Test that we can't reply twice
+        with self.assertRaises(RuntimeError):
+            self.DUT.reply(*arguments)
+
+    def test_reply_message(self):
+        arguments = ('inf1', 'inf2')
+        rep_msg = self.DUT.reply_message(*arguments)
+        self.assertSequenceEqual(rep_msg.arguments, arguments)
+        self.assertEqual(rep_msg.name, 'test-request')
+        self.assertEqual(rep_msg.mid, '42')
+        self.assertEqual(rep_msg.mtype, katcp.Message.REPLY)
+
 class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
 
     class DeviceTestServerV4(DeviceTestServer):

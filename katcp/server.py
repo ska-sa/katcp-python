@@ -77,7 +77,14 @@ class ClientRequestConnection(object):
     def reply(self, *args):
         rep_msg = Message.reply_to_request(self.req_msg, *args)
         self.client_connection.reply(rep_msg, self.req_msg)
+        # Future calls to reply() should error out.
+        self.reply = self.reply_again
 
+    def reply_again(self, *args):
+        raise RuntimeError('Reply to request %r already sent.' % self.req_msg)
+
+    def reply_message(self, *args):
+        return Message.reply_to_request(self.req_msg, *args)
 
 class DeviceServerBase(object):
     """Base class for device servers.
