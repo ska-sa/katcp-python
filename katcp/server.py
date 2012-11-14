@@ -119,6 +119,14 @@ class DeviceServerBase(object):
     __metaclass__ = DeviceMetaclass
     MAX_DEFERRED_QUEUE_SIZE = 100000      # Maximum size of deferred action queue
 
+    ## @brief Protocol versions and flags. Default to version 5, subclasses
+    ## should override PROTOCOL_INFO
+    PROTOCOL_INFO = ProtocolFlags(5, 0, set([
+        ProtocolFlags.MULTI_CLIENT,
+        ProtocolFlags.MESSAGE_IDS,
+        ]))
+
+
     def __init__(self, host, port, tb_limit=20, logger=log):
         self._parser = MessageParser()
         self._bindaddr = (host, port)
@@ -147,9 +155,13 @@ class DeviceServerBase(object):
 
         if timestamp is None:
             timestamp = time.time()
+
+        katcp_version = self.PROTOCOL_INFO.major
+        timestamp_msg = ('%.6f' % timestamp if katcp_version >= 5
+                         else str(int(timestamp*1000)) )
         return Message.inform("log",
                 level_name,
-                '%.6f' % timestamp,  # time since epoch in seconds
+                timestamp_msg,  # time since epoch in seconds
                 name,
                 msg,
         )
@@ -823,12 +835,6 @@ class DeviceServer(DeviceServerBase):
     ## @brief Device server build / instance information.
     BUILD_INFO = ("name", 0, 1, "")
 
-    ## @brief Protocol versions and flags
-    PROTOCOL_INFO = ProtocolFlags(5, 0, set([
-        ProtocolFlags.MULTI_CLIENT,
-        ProtocolFlags.MESSAGE_IDS,
-        ]))
-
     UNSUPPORTED_REQUESTS_BY_MAJOR_VERSION = {
         4: set(['version-list']),
         }
@@ -863,29 +869,30 @@ class DeviceServer(DeviceServerBase):
 
     # pylint: enable-msg = W0142
 
-    def on_client_connect(self, conn):
+    def on_client_connect(self, client_conn):
         """Inform client of build state and version on connect.
 
         Parameters
         ----------
-        conn : ClientConnectionTCP object
+        client_conn : ClientConnectionTCP object
             The client connection that has been successfully established.
         """
         with self._strat_lock:
-            self._strategies[conn] = {}  # map sensors -> sampling strategies
+            self._strategies[client_conn] = {}  # map sensors -> sampling strategies
 
-        self.inform(conn, Message.inform("version-connect", "katcp-protocol",
-                                         self.PROTOCOL_INFO))
-        self.inform(conn, Message.inform("version-connect", "katcp-library",
-                                         "katcp-python-%d.%d" % VERSION[:2],
-                                         VERSION_STR))
-        self.inform(conn, Message.inform("version-connect", "katcp-device",
-                                         self.version(), self.build_state()))
-
-        ## Two lines below are deprecated for version 5, should enable when we do
-        ## a version 4 server self.inform(conn, Message.inform("version",
-        # self.version())) self.inform(conn, Message.inform("build-state",
-        # self.build_state()))
+        katcp_version = self.PROTOCOL_INFO.major
+        if katcp_version >= 5:
+            client_conn.inform(Message.inform(
+                "version-connect", "katcp-protocol", self.PROTOCOL_INFO))
+            client_conn.inform(Message.inform(
+                "version-connect", "katcp-library",
+                "katcp-python-%s" % VERSION_STR))
+            client_conn.inform(Message.inform(
+                "version-connect", "katcp-device",
+                self.version(), self.build_state() ))
+        else:
+            self.inform(client_conn, Message.inform("version", self.version()))
+            self.inform(client_conn, Message.inform("build-state", self.build_state()))
 
     def clear_strategies(self, client_conn, remove_client=False):
         """

@@ -89,8 +89,34 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         self.server = self.DeviceTestServerV4('', 0)
 
     def test_log(self):
-        self.server
-        pass
+        self.server.mass_inform = mock.Mock()
+        self.server.log.warn('A warning', timestamp=1234)
+        self.assertEqual(self.server.mass_inform.call_count, 1)
+        (msg, ), _ = self.server.mass_inform.call_args
+        level, timestamp, name, log_message = msg.arguments
+        self.assertEqual(msg.name, 'log')
+        self.assertIs(msg.mid, None)
+        # Timestamp should be in miliseconds
+        self.assertEqual(timestamp, '1234000')
+        self.assertIn('A warning', log_message)
+
+    def test_on_client_connect(self):
+        conn = katcp.server.ClientConnectionTCP(self.server, 'fake-sock')
+        m_sm = self.server._send_message = mock.Mock()
+        self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
+        self.server.VERSION_INFO = ('deviceapi', 5, 6)
+        self.server.on_client_connect(conn)
+        # we are expecting 2 inform messages
+        no_msgs = 2
+        self.assertEqual(m_sm.call_count, no_msgs)
+        # Check that calls were syntactically valid
+        self.assertEqual(m_sm.call_args_list,
+                         [mock.call('fake-sock', mock.ANY)]*no_msgs)
+        # Get all the messages sent to _send_message
+        msgs = [str(call[0][1]) for call in m_sm.call_args_list]
+        self._assert_msgs_equal(msgs, (
+            r'#version deviceapi-5.6',
+            r'#build-state buildy-1.2g') )
 
 
 
@@ -110,8 +136,32 @@ class TestVersionCompatibility(unittest.TestCase):
             DeviceTestServerWrong('', 0)
 
 
+class test_DeviceServer(unittest.TestCase, TestUtilMixin):
+    def setUp(self):
+        self.server = DeviceTestServer('', 0)
 
-class TestDeviceServer(unittest.TestCase, TestUtilMixin):
+    def test_on_client_connect(self):
+        conn = katcp.server.ClientConnectionTCP(self.server, 'fake-sock')
+        m_sm = self.server._send_message = mock.Mock()
+        self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
+        self.server.VERSION_INFO = ('deviceapi', 5, 6)
+        self.server.on_client_connect(conn)
+        # we are expecting 3 inform messages
+        no_msgs = 3
+        self.assertEqual(m_sm.call_count, no_msgs)
+        # Check that calls were syntactically valid
+        self.assertEqual(m_sm.call_args_list,
+                         [mock.call('fake-sock', mock.ANY)]*no_msgs)
+        # Get all the messages sent to _send_message
+        msgs = [str(call[0][1]) for call in m_sm.call_args_list]
+        self._assert_msgs_equal(msgs, (
+            r'#version-connect katcp-protocol 5.0-IM',
+            # Will have to be updated for every library version bump
+            r'#version-connect katcp-library katcp-python-0.5.0a0',
+            r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g') )
+
+
+class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     BLACKLIST = ("version-connect", "version", "build-state")
 
