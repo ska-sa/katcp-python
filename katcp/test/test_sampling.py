@@ -83,22 +83,6 @@ class TestSampling(unittest.TestCase):
         self.sensor.set_value(2)
         self.assertEqual(len(self.calls), 2)
 
-    def test_event_with_rate_limit(self):
-        """Test SampleEvent strategy with a rate limit."""
-        event = sampling.SampleEvent(self.inform, self.sensor, 100)
-        self.assertEqual(self.calls, [])
-
-        event.attach()
-        self.assertEqual(len(self.calls), 1)
-
-        for i in [-4, -3, -2, -1, 0, 1, 2, 3]:
-            self.sensor.set_value(i)
-        self.assertEqual(len(self.calls), 1)
-
-        time.sleep(0.1)
-        self.sensor.set_value(3)
-        self.assertEqual(len(self.calls), 1)
-
     def test_differential(self):
         """Test SampleDifferential strategy."""
         diff = sampling.SampleDifferential(self.inform, self.sensor, 5)
