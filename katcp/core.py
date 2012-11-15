@@ -744,7 +744,7 @@ class Sensor(object):
     # @brief List of strings containing the additional parameters (length and
     #        interpretation are specific to the sensor type)
 
-    def __init__(self, sensor_type, name, description, units, params=None,
+    def __init__(self, sensor_type, name, description=None, units='', params=None,
                  default=None):
         if params is None:
             params = []
@@ -785,6 +785,11 @@ class Sensor(object):
         self.stype = self._kattype.name
 
         self.name = name
+        if description is None:
+            description = '%(type)s sensor %(name)r %(unit_description)s' % dict(
+               type=self.stype.capitalize(), name=self.name,
+               unit_description=('in unit '+units if units else 'with no unit'))
+
         self.description = description
         self.units = units
         self.params = params
@@ -812,8 +817,151 @@ class Sensor(object):
         return "<%s.%s object name=%r at 0x%x>" % \
                (cls.__module__, cls.__name__, self.name, id(self))
 
-    # TODO XXX Add factory classmethods for different kinds of sensors like Message
-    # has
+    @classmethod
+    def integer(cls, name, description=None, unit='', params=None, default=None):
+        """
+        Instantiate a new integer sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        params : list
+            [min, max] -- miniumum and maximum values of the sensor
+        default : int
+            An initial value for the sensor. Defaults to 0.
+        """
+        return cls(cls.INTEGER, name, description, unit, params, default)
+
+    @classmethod
+    def float(cls, name, description=None, unit='', params=None, default=None):
+        """
+        Instantiate a new float sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        params : list
+            [min, max] -- miniumum and maximum values of the sensor
+        default : float
+            An initial value for the sensor. Defaults to 0.0.
+        """
+        return cls(cls.FLOAT, name, description, unit, params, default)
+
+    @classmethod
+    def boolean(cls, name, description=None, unit='', default=None):
+        """
+        Instantiate a new boolean sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        default : bool
+            An initial value for the sensor. Defaults to False.
+        """
+        return cls(cls.BOOLEAN, name, description, unit, None, default)
+
+    @classmethod
+    def lru(cls, name, description=None, unit='', default=None):
+        """
+        Instantiate a new lru sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        default : enum, Sensor.LRU_*
+            An initial value for the sensor. Defaults to self.LRU_NOMINAL
+        """
+        return cls(cls.LRU, name, description, unit, None, default)
+
+    @classmethod
+    def string(cls, name, description=None, unit='', default=None):
+        """
+        Instantiate a new string sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        default : string
+            An initial value for the sensor. Defaults to the empty string.
+        """
+        return cls(cls.STRING, name, description, unit, None, default)
+
+    @classmethod
+    def discrete(cls, name, description=None, unit='', params=None, default=None):
+        """
+        Instantiate a new discrete sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        params : [str]
+            Sequence of all allowable discrete sensor states
+        default : str
+            An initial value for the sensor. Defaults to the first item
+            of params
+        """
+        return cls(cls.DISCRETE, name, description, unit, params, default)
+
+    @classmethod
+    def timestamp(cls, name, description=None, unit='seconds', default=None):
+        """
+        Instantiate a new timestamp sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units. Defaults to 'seconds'.
+        default : string
+            An initial value for the sensor in seconds since the Unix Epoch.
+            Defaults to 0.
+        """
+        return cls(cls.TIMESTAMP, name, description, unit, None, default)
+
+    @classmethod
+    def address(cls, name, description=None, unit='', default=None):
+        """
+        Instantiate a new IP address sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        default : (string, int)
+            An initial value for the sensor. Tuple contaning (host, port).
+            default is ("0.0.0.0", None)
+        """
+        return cls(cls.ADDRESS, name, description, unit, None, default)
+
 
     def attach(self, observer):
         """Attach an observer to this sensor.
@@ -895,7 +1043,7 @@ class Sensor(object):
         self.set(timestamp, status, value)
 
     def read_formatted(self):
-        """Read the sensor and return a timestamp_ms, status, value tuple.
+        """Read the sensor and return a timestamp, status, value tuple.
 
         All values are strings formatted as specified in the Sensor Type
         Formats in the katcp specification.
