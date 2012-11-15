@@ -360,15 +360,9 @@ class SampleEvent(SampleEventRate):
 
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
-        if len(params) > 1:
-            raise ValueError("The 'event' strategy takes one or"
-                             " zero parameters.")
-        elif len(params) == 1:
-            minTimeSep = float(params[0])
-        else:
-            minTimeSep = 0
-        super(SampleEvent, self).__init__(
-            inform_callback, sensor, minTimeSep, 1e99)
+        if len(params) > 0:
+            raise ValueError("The 'event' strategy takes no parameters.")
+        super(SampleEvent, self).__init__(inform_callback, sensor, 0, 1e99)
         # Fix up the parameters so we don't see the extra parameters that were
         # passed to SampleEventRate
         self._params = params
