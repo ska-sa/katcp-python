@@ -22,7 +22,7 @@ MS_TO_SEC_FAC = 1./1000
 # pylint: disable-msg=W0142
 
 def format_inform_v4(sensor_name, timestamp, status, value):
-    timestamp = int(timestamp * SEC_TO_MS_FAC)
+    timestamp = int(float(timestamp) * SEC_TO_MS_FAC)
     return Message.inform(
         "sensor-status", timestamp, "1", sensor_name, status, value)
 
@@ -250,10 +250,14 @@ class SampleDifferential(SampleStrategy):
                 raise ValueError("The diff amount must be a positive float.")
         else:
             # _sensor_type must be Sensor.TIMESTAMP
+
+            # There is a potential snafu here if katcpv4 server is used, since
+            # the timestamp sensor type should be in milliseconds. For now, just
+            # ignore this eventuality, and fix if anyone actually needs this
             self._threshold = float(params[0])
             if self._threshold <= 0:
                 raise ValueError("The diff amount must be a positive number"
-                                 " of milliseconds.")
+                                 " of seconds.")
         self._lastStatus = None
         self._lastValue = None
 

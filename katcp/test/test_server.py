@@ -13,9 +13,12 @@ import time
 import logging
 import threading
 import mock
+from collections import defaultdict
 
-from katcp.testutils import TestLogHandler, \
-    BlockingTestClient, DeviceTestServer, TestUtilMixin
+from katcp.testutils import (
+    TestLogHandler, BlockingTestClient, DeviceTestServer, TestUtilMixin,
+    start_thread_with_cleanup, WaitingMock)
+from katcp.core import FailReply
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -118,6 +121,43 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
             r'#version deviceapi-5.6',
             r'#build-state buildy-1.2g') )
 
+    def test_sensor_sampling(self):
+        start_thread_with_cleanup(self, self.server)
+        s = katcp.Sensor.boolean('a-sens')
+        s.set(1234, katcp.Sensor.NOMINAL, True)
+        self.server.add_sensor(s)
+        sm = self.server._send_message = WaitingMock()
+        self.server.wait_running(timeout=1.)
+        self.assertTrue(self.server.running())
+        self.server._strategies = defaultdict(lambda : {})
+        conn = WaitingMock()
+        self.server.request_sensor_sampling(conn, katcp.Message.request(
+              'sensor-sampling', 'a-sens', 'event'))
+        inf = conn.client_connection.inform
+        inf.assert_wait_call_count(count=1)
+        (inf_msg, ) = inf.call_args[0]
+        self._assert_msgs_equal([inf_msg], (
+            r'#sensor-status 1234000 1 a-sens nominal 1',))
+
+        self.server.request_sensor_sampling(conn, katcp.Message.request(
+              'sensor-sampling', 'a-sens', 'period', 1000))
+        client = conn.client_connection
+        strat = self.server._strategies[client][s]
+        # Test that the periodic update period is converted to seconds
+        self.assertEqual(strat._period, 1.)
+        # test that parameters returned by the request matches v4 format.
+        reply = self.server.request_sensor_sampling(conn, katcp.Message.request(
+              'sensor-sampling', 'a-sens'))
+        self._assert_msgs_equal([reply],
+                                ['!sensor-sampling ok a-sens period 1000'])
+        # event-rate is not an allowed v4 strategy
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(conn, katcp.Message.request(
+                'sensor-sampling', 'a-sens', 'event-rate', 1000, 2000))
+        # differential-rate is not an allowed v4 strategy
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(conn, katcp.Message.request(
+             'sensor-sampling', 'a-sens', 'differential-rate', 1, 1000, 2000))
 
 
 class TestVersionCompatibility(unittest.TestCase):
@@ -380,19 +420,15 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("sensor-value", "an.unknown",
                                                   mid=mid()))
         self.client._next_id = mid  # mock our mid generator for testing
-        self.client.blocking_request(katcp.Message.request("sensor-sampling",
-                                                           "an.int"))
-        self.client.blocking_request(katcp.Message.request("sensor-sampling",
-                                                           "an.int",
-                                                           "differential",
-                                                           "2"))
+        self.client.blocking_request(katcp.Message.request(
+            "sensor-sampling", "an.int"))
+        self.client.blocking_request(katcp.Message.request(
+            "sensor-sampling", "an.int", "differential", "2"))
         self.client.blocking_request(katcp.Message.request("sensor-sampling"))
-        self.client.blocking_request(katcp.Message.request("sensor-sampling",
-                                                           "an.unknown",
-                                                           "auto"))
-        self.client.blocking_request(katcp.Message.request("sensor-sampling",
-                                                           "an.int",
-                                                           "unknown"))
+        self.client.blocking_request(katcp.Message.request(
+            "sensor-sampling", "an.unknown", "auto"))
+        self.client.blocking_request(katcp.Message.request(
+            "sensor-sampling", "an.int", "unknown"))
 
         self.server.log.trace("trace-msg")
         self.server.log.debug("debug-msg")
@@ -667,8 +703,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         get_msgs = self.client.message_recorder(
                 blacklist=self.BLACKLIST, replies=True)
         self.client.wait_protocol(timeout=1)
-        self.client.request(katcp.Message.request("sensor-sampling", "an.int",
-                                                  "period", 1/32.))
+        self.client.request(katcp.Message.request(
+            "sensor-sampling", "an.int", "period", 1/32.))
 
         # Wait for the request reply and for the sensor update messages to
         # arrive. We expect update one the moment the sensor-sampling request is

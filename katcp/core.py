@@ -427,6 +427,15 @@ class ProtocolFlags(object):
     MULTI_CLIENT = 'M'
     MESSAGE_IDS = 'I'
 
+    STRATEGIES_V4 = frozenset(['none', 'auto', 'period', 'event', 'differential'])
+    STRATEGIES_V5 = STRATEGIES_V4 | frozenset(
+        ['event-rate', 'differential-rate'])
+
+    STRATEGIES_ALLOWED_BY_MAJOR_VERSION = {
+        4: STRATEGIES_V4,
+        5: STRATEGIES_V5
+        }
+
     def __init__(self, major, minor, flags):
         self.major = major
         self.minor = minor
@@ -436,7 +445,9 @@ class ProtocolFlags(object):
         if self.message_ids and self.major < 5:
             raise ValueError(
                 'MESSAGE_IDS is only supported in katcp v5 and newer')
-            
+
+    def strategy_allowed(self, strategy):
+        return strategy in self.STRATEGIES_ALLOWED_BY_MAJOR_VERSION[self.major]
 
     def __eq__(self, other):
         if not isinstance(other, ProtocolFlags):
