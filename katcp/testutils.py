@@ -14,6 +14,8 @@ import time
 import Queue
 import threading
 import functools
+import mock
+
 from .core import Sensor, Message
 from .server import DeviceServer, FailReply
 
@@ -1203,3 +1205,39 @@ def wait_sensor(sensor, value, timeout=5):
     return waiter.wait(timeout=timeout)
 
 
+def start_thread_with_cleanup(test_instance, thread_object, timeout=1):
+    """Start thread_object and add cleanup functions to test_instance
+
+    thread_object.start() is called to start the thread.
+    thread_object.join(timeout=timeout) and thread_object.stop() is added to the
+    test instance cleanup
+    """
+    thread_object.start()
+    test_instance.addCleanup(thread_object.join, timeout=timeout)
+    test_instance.addCleanup(thread_object.stop)
+
+class WaitingMock(mock.Mock):
+    def __init__(self, *args, **kwargs):
+        super(WaitingMock, self).__init__(*args, **kwargs)
+        self._wait_call_count_event = threading.Event()
+        self._num_calls_waiting_for = None
+
+    def _mock_call(self, *args, **kwargs):
+        retval = super(WaitingMock, self)._mock_call(*args, **kwargs)
+        waiting_for = self._num_calls_waiting_for
+        if waiting_for and self.call_count >= waiting_for:
+            self._wait_call_count_event.set()
+        return retval
+
+    def assert_wait_call_count(self, count, timeout=1.):
+        """
+        Wait for mock to be called at least 'count' times within 'timeout' seconds
+
+        Raises AssertionError if the call count is not reached.
+        """
+        self._num_calls_waiting_for = count
+        self._wait_call_count_event.clear()
+        if self.call_count >= count:
+            return True
+        self._wait_call_count_event.wait(timeout=timeout)
+        assert(self._wait_call_count_event.isSet())

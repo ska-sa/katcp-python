@@ -23,6 +23,7 @@ from .core import (DeviceMetaclass, ExcepthookThread, Message, MessageParser,
                    FailReply, AsyncReply, ProtocolFlags)
 from .sampling import SampleReactor, SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
+from .sampling import SEC_TO_MS_FAC, MS_TO_SEC_FAC
 from .version import VERSION, VERSION_STR
 
 log = logging.getLogger("katcp")
@@ -740,6 +741,10 @@ class DeviceServerBase(object):
     def running(self):
         """Whether the server is running."""
         return self._running.isSet()
+
+    def wait_running(self, timeout=None):
+        """Wait until the server is running"""
+        return self._running.wait(timeout=timeout)
 
     def on_client_connect(self, conn):
         """Called after client connection is established.
@@ -1459,6 +1464,7 @@ class DeviceServer(DeviceServerBase):
         sensor = self._sensors[name]
         # The client connection that is not specific to this request context
         client = conn.client_connection
+        katcp_version = self.PROTOCOL_INFO.major
 
         if len(msg.arguments) > 1:
             # attempt to set sampling strategy
@@ -1468,13 +1474,23 @@ class DeviceServer(DeviceServerBase):
             if strategy not in SampleStrategy.SAMPLING_LOOKUP_REV:
                 raise FailReply("Unknown strategy name.")
 
-            
+            if not self.PROTOCOL_INFO.strategy_allowed(strategy):
+                raise FailReply("Strategy not allowed for version %d of katcp"
+                                % katcp_version)
+
+            format_inform = (format_inform_v5 if katcp_version >= 5
+                             else format_inform_v4)
 
             def inform_callback(sensor_name, timestamp, status, value):
-                cb_msg = format_inform_v5(
+                cb_msg = format_inform(
                 sensor_name, timestamp, status, value)
                 """Inform callback for sensor strategy."""
-                self.inform(conn, cb_msg)
+                client.inform(cb_msg)
+
+            if katcp_version <= 4 and strategy == 'period':
+                # Slightly nasty hack, but since only the only strategy involves
+                # timestamps for v4 is period it's not _too_ nasty :)
+                params = [float(params[0])* MS_TO_SEC_FAC] + params[1:]
 
             new_strategy = SampleStrategy.get_strategy(
                 strategy, inform_callback, sensor, *params)
@@ -1500,6 +1516,10 @@ class DeviceServer(DeviceServerBase):
                 "none", lambda msg: None, sensor)
 
         strategy, params = current_strategy.get_sampling_formatted()
+        if katcp_version <= 4 and strategy == 'period':
+            # Another Slightly nasty hack, but since only the only strategy involves
+            # timestamps for v4 is period it's not _too_ nasty :)
+            params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
         return Message.reply("sensor-sampling", "ok", name, strategy, *params)
 
     def request_watchdog(self, conn, msg):
