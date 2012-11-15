@@ -1468,14 +1468,16 @@ class DeviceServer(DeviceServerBase):
             if strategy not in SampleStrategy.SAMPLING_LOOKUP_REV:
                 raise FailReply("Unknown strategy name.")
 
+            
+
             def inform_callback(sensor_name, timestamp, status, value):
                 cb_msg = format_inform_v5(
                 sensor_name, timestamp, status, value)
                 """Inform callback for sensor strategy."""
                 self.inform(conn, cb_msg)
 
-            new_strategy = SampleStrategy.get_strategy(strategy,
-                                        inform_callback, sensor, *params)
+            new_strategy = SampleStrategy.get_strategy(
+                strategy, inform_callback, sensor, *params)
 
             with self._strat_lock:
                 old_strategy = self._strategies[client].get(sensor, None)
