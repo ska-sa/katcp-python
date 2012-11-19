@@ -439,7 +439,7 @@ class ProtocolFlags(object):
     def __init__(self, major, minor, flags):
         self.major = major
         self.minor = minor
-        self.flags = flags
+        self.flags = set(list(flags))
         self.multi_client = self.MULTI_CLIENT in self.flags
         self.message_ids = self.MESSAGE_IDS in self.flags
         if self.message_ids and self.major < 5:

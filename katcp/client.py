@@ -81,10 +81,22 @@ class DeviceClient(object):
         self._connect_failures = 0
         self._server_supports_ids = False
         self._protocol_flags = None
+        self._static_protocol_configuration = False
 
         # message id and lock
         self._last_msg_id = 0
         self._msg_id_lock = threading.Lock()
+
+    @property
+    def protocol_flags(self):
+        return self._protocol_flags
+
+    @protocol_flags.setter
+    def protocol_flags(self, val):
+        self._protocol_flags = val
+        self._server_supports_ids = self.protocol_flags.supports(
+            ProtocolFlags.MESSAGE_IDS)
+        self._received_protocol_info.set()
 
     def _next_id(self):
         """Return the next available message id."""
@@ -95,16 +107,69 @@ class DeviceClient(object):
         finally:
             self._msg_id_lock.release()
 
+    def preset_protocol_flags(self, protocol_flags):
+        """
+        Preset server protocol flags.
+
+        Disables automatic server version detection
+
+        Parameters
+        ----------
+
+        protocol_flags : katcp.core.ProtocolFlags instance
+        """
+        self._static_protocol_configuration = True
+        self.protocol_flags = protocol_flags
+
     def inform_version_connect(self, msg):
         """Process a #version-connect message."""
         if len(msg.arguments) < 2:
             return
         if msg.arguments[0] == "katcp-protocol":
-            self._protocol_info = ProtocolFlags.parse_version(
-                msg.arguments[1])
-            self._server_supports_ids = self._protocol_info.supports(
-                ProtocolFlags.MESSAGE_IDS)
-            self._received_protocol_info.set()
+            protocol_flags = ProtocolFlags.parse_version(msg.arguments[1])
+        self._set_protocol_from_inform(protocol_flags, msg)
+
+    def inform_version(self, msg):
+        """Handle katcp v4 and below version inform"""
+        self._set_v4_protocol(msg)
+
+    def inform_build_state(self, msg):
+        """Handle katcp v4 and below build-state inform"""
+        self._set_v4_protocol(msg)
+
+    def _set_v4_protocol(self, inform):
+        # We don't know if the server supports multiple connections (katcp v4
+        # has no way of indicating this), but this should not really make any
+        # difference to the client
+        protocol_flags = ProtocolFlags(4, 0, '')
+        self._set_protocol_from_inform(protocol_flags, inform)
+
+    def _set_protocol_from_inform(self, protocol_flags, inform):
+        if protocol_flags == self.protocol_flags:
+            # New value matches old, no need to do consistency checking
+            return
+        if self.protocol_flags:
+            # It seems that the protocol flags have been set before. Now we need
+            # to do some consistency checking.
+            if self._static_protocol_configuration:
+                # Only warn if a static protocol definition is used
+                self._logger.warn(
+                    'Protocol Version Warning: Ignoring inform received from '
+                    'server indicating a katcp protocol revision inconsistent '
+                    'with the static configuration. Static configuration: %r.'
+                    'Inform received: %r' % (
+                        str(self.protocol_flags), str(inform)))
+                return
+            else:
+                # Log an error and disconnect if we are in auto-detection mode
+                self._logger.error(
+                    'Protocol Version Error: Inform received from '
+                    'server indicating a katcp protocol revision inconsistent '
+                    'with the previously detected version. Disconnecting in '
+                    'disgust. Previous version: %r. Inform received: %r' % (
+                        str(self.protocol_flags), str(inform)))
+                self._disconnect()
+        self.protocol_flags = protocol_flags
 
     def request(self, msg, use_mid=None):
         """Send a request messsage.
@@ -543,14 +608,14 @@ class DeviceClient(object):
 
         Returns
         -------
-        connected : bool
+        received : bool
             Whether protocol information was received
         """
         self._received_protocol_info.wait(timeout)
         return self._received_protocol_info.isSet()
 
     def notify_connected(self, connected):
-        """Event handler that is called wheneved the connection status changes.
+        """Event handler that is called whenever the connection status changes.
 
         Override in derived class for desired behaviour.
 

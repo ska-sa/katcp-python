@@ -13,6 +13,8 @@ import time
 import logging
 import threading
 import katcp
+from katcp.core import ProtocolFlags
+
 from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
                              counting_callback)
 
@@ -25,7 +27,135 @@ def remove_version_connect(msgs):
     """Remove #version-connect messages from a list of messages"""
     return [msg for msg in msgs if msg.name != 'version-connect']
 
-class TestDeviceClient(unittest.TestCase, TestUtilMixin):
+class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
+    def setUp(self):
+        self.client = katcp.DeviceClient('localhost', 0)
+        self.assertFalse(self.client._received_protocol_info.isSet())
+        self.v4_build_state = katcp.Message.inform('build-state', 'blah-5.21a3')
+        self.v4_version = katcp.Message.inform('version', '7.3')
+        self.v5_version_connect_mid = katcp.Message.inform(
+            'version-connect', 'katcp-protocol', '5.0-I')
+        self.v5_version_connect_nomid = katcp.Message.inform(
+            'version-connect', 'katcp-protocol', '5.0')
+
+    def _check_v5_mid(self):
+        self.assertTrue(self.client._received_protocol_info.isSet())
+        pf = self.client.protocol_flags
+        self.assertTrue(pf.supports(pf.MESSAGE_IDS))
+        self.assertTrue(self.client._server_supports_ids)
+        self.assertEqual(pf.major, 5)
+
+    def test_valid_v5(self):
+        self.client.handle_message(self.v5_version_connect_mid)
+        self._check_v5_mid()
+
+    def _check_v4(self):
+        self.assertTrue(self.client._received_protocol_info.isSet())
+        pf = self.client.protocol_flags
+        self.assertFalse(pf.supports(pf.MESSAGE_IDS))
+        self.assertFalse(self.client._server_supports_ids)
+        self.assertEqual(pf.major, 4)
+
+    def test_valid_v4_version_first(self):
+        self.client.handle_message(self.v4_version)
+        self._check_v4()
+        self.client.handle_message(self.v4_build_state)
+        self._check_v4()
+
+    def test_valid_v4_build_state_first(self):
+        self.client.handle_message(self.v4_build_state)
+        self._check_v4()
+        self.client.handle_message(self.v4_version)
+        self._check_v4()
+
+    def test_inconsistent_v4_then_v5(self):
+        self.client.handle_message(self.v4_build_state)
+        self._check_v4()
+        self.client._disconnect = mock.Mock()
+        self.client._logger = mock.Mock()
+        self.client.handle_message(self.v5_version_connect_mid)
+        self.assertEqual(self.client._disconnect.call_count, 1)
+        self.assertEqual(self.client._logger.error.call_count, 1)
+        log_msg = self.client._logger.error.call_args[0][0]
+        self.assertIn('Protocol Version Error', log_msg)
+
+    def test_inconsistent_v5_then_v4(self):
+        self.client.handle_message(self.v5_version_connect_mid)
+        self._check_v5_mid()
+        self.client._disconnect = mock.Mock()
+        self.client._logger = mock.Mock()
+        self.client.handle_message(self.v4_build_state)
+        self.assertEqual(self.client._disconnect.call_count, 1)
+        self.assertEqual(self.client._logger.error.call_count, 1)
+        log_msg = self.client._logger.error.call_args[0][0]
+        self.assertIn('Protocol Version', log_msg)
+
+    def test_preset(self):
+        self.client.preset_protocol_flags(ProtocolFlags(
+            5, 0, [ProtocolFlags.MESSAGE_IDS]))
+        self._check_v5_mid()
+        self.client._received_protocol_info.clear()
+        self.client.preset_protocol_flags(ProtocolFlags(4, 0, ''))
+        self._check_v4()
+
+    def test_preset_v4_then_v5(self):
+        self.client.preset_protocol_flags(ProtocolFlags(4, 0, ''))
+        self._check_v4()
+        self.client._disconnect = mock.Mock()
+        self.client._logger = mock.Mock()
+        # A version 5 version-connect message should result in a warning
+        self.client.handle_message(self.v5_version_connect_mid)
+        self.assertEqual(self.client._disconnect.call_count, 0)
+        self.assertEqual(self.client._logger.warn.call_count, 1)
+        log_msg = self.client._logger.warn.call_args[0][0]
+        self.assertIn('Protocol Version', log_msg)
+        self._check_v4()
+        self.client._logger.warn.reset_mock()
+        # Version 4-identifying informs should not cause any warnings
+        self.client.handle_message(self.v4_version)
+        self.client.handle_message(self.v4_build_state)
+        self.assertEqual(self.client._disconnect.call_count, 0)
+        self.assertEqual(self.client._logger.warn.call_count, 0)
+        self._check_v4()
+
+    def test_preset_v5_then_v4(self):
+        self.client.preset_protocol_flags(ProtocolFlags(
+            5, 0, [ProtocolFlags.MESSAGE_IDS]))
+        self._check_v5_mid()
+        self.client._disconnect = mock.Mock()
+        self.client._logger = mock.Mock()
+        # Any Version 4-identifying informs should cause warnings
+        self.client.handle_message(self.v4_build_state)
+        self.assertEqual(self.client._disconnect.call_count, 0)
+        self.assertEqual(self.client._logger.warn.call_count, 1)
+        log_msg = self.client._logger.warn.call_args[0][0]
+        self.assertIn('Protocol Version', log_msg)
+        self._check_v5_mid()
+        self.client._logger.warn.reset_mock()
+        self.client.handle_message(self.v4_version)
+        self.assertEqual(self.client._disconnect.call_count, 0)
+        self.assertEqual(self.client._logger.warn.call_count, 1)
+        log_msg = self.client._logger.warn.call_args[0][0]
+        self.assertIn('Protocol Version', log_msg)
+        self._check_v5_mid()
+        # A version 5 version-connect message with different flags should also
+        # result in a warning
+        self.client._logger.warn.reset_mock()
+        self.client.handle_message(self.v5_version_connect_nomid)
+        self.assertEqual(self.client._disconnect.call_count, 0)
+        self.assertEqual(self.client._logger.warn.call_count, 1)
+        log_msg = self.client._logger.warn.call_args[0][0]
+        self.assertIn('Protocol Version', log_msg)
+        self._check_v5_mid()
+        # An identical version 5 version-connect message should not result in
+        # any warnings
+        self.client._logger.warn.reset_mock()
+        self.client.handle_message(self.v5_version_connect_mid)
+        self.assertEqual(self.client._disconnect.call_count, 0)
+        self.assertEqual(self.client._logger.warn.call_count, 0)
+
+
+class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
         self.server.start(timeout=0.1)
