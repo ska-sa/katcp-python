@@ -127,7 +127,7 @@ class DeviceClient(object):
             return
         if msg.arguments[0] == "katcp-protocol":
             protocol_flags = ProtocolFlags.parse_version(msg.arguments[1])
-        self._set_protocol_from_inform(protocol_flags, msg)
+            self._set_protocol_from_inform(protocol_flags, msg)
 
     def inform_version(self, msg):
         """Handle katcp v4 and below version inform"""

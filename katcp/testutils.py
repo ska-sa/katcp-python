@@ -1205,14 +1205,18 @@ def wait_sensor(sensor, value, timeout=5):
     return waiter.wait(timeout=timeout)
 
 
-def start_thread_with_cleanup(test_instance, thread_object, timeout=1):
+def start_thread_with_cleanup(
+        test_instance, thread_object, timeout=1, start_timeout=None):
     """Start thread_object and add cleanup functions to test_instance
 
     thread_object.start() is called to start the thread.
     thread_object.join(timeout=timeout) and thread_object.stop() is added to the
     test instance cleanup
     """
-    thread_object.start()
+    if start_timeout is not None:
+        thread_object.start(timeout=timeout)
+    else:
+        thread_object.start()
     test_instance.addCleanup(thread_object.join, timeout=timeout)
     test_instance.addCleanup(thread_object.stop)
 
