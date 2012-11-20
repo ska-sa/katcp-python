@@ -118,6 +118,15 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
         self.assertEqual(self.client._logger.warn.call_count, 0)
         self._check_v4()
 
+    def test_inform_version_connect(self):
+        # Test that the inform handler doesn't screw up with a non-katcp related
+        # version-connect inform.
+        self.client.handle_message(katcp.Message.inform(
+            'version-connect', 'not-katcp', '5.71a3'))
+        # Should not raise any errors, but should also not set the protocol
+        # infor received flag.
+        self.assertFalse(self.client._received_protocol_info.isSet())
+
     def test_preset_v5_then_v4(self):
         self.client.preset_protocol_flags(ProtocolFlags(
             5, 0, [ProtocolFlags.MESSAGE_IDS]))
