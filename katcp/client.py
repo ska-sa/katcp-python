@@ -27,12 +27,12 @@ class DeviceClient(object):
     """Device client proxy.
 
     Subclasses should implement .reply\_*, .inform\_* and
-    request\_* methods to take actions when messages arrive,
+    send_request\_* methods to take actions when messages arrive,
     and implement unhandled_inform, unhandled_reply and
     unhandled_request to provide fallbacks for messages for
     which there is no handler.
 
-    Request messages can be sent by calling .request().
+    Request messages can be sent by calling .send_request().
 
     Parameters
     ----------
@@ -55,7 +55,7 @@ class DeviceClient(object):
     ...
     >>> c = MyClient('localhost', 10000)
     >>> c.start()
-    >>> c.request(katcp.Message.request('myreq'))
+    >>> c.send_request(katcp.Message.request('myreq'))
     >>> # expect reply to be printed here
     >>> # stop the client once we're finished with it
     >>> c.stop()
@@ -171,7 +171,65 @@ class DeviceClient(object):
                 self._disconnect()
         self.protocol_flags = protocol_flags
 
+    def _get_mid_and_update_msg(self, msg, use_mid):
+        """
+        Get message ID for current request and assign to msg.mid if needed
+
+        Parameters
+        ----------
+        msg : katcp.Message ?request message
+        use_mid : bool or None
+
+        If msg.mid is None, a new message ID will be created. msg.mid will be
+        filled with this ID if use_mid is True or if use_mid is None and the
+        server supports message ids. If msg.mid is already assigned, it will not
+        be touched, and will be used as the active message ID
+
+        Return value
+        ------------
+        The active message ID
+        """
+        if use_mid is None:
+            use_mid = self._server_supports_ids
+
+        if msg.mid is None:
+            mid = self._next_id()
+            if use_mid:
+                msg.mid = mid
+            # An internal mid may be needed for the request/inform/response machinery
+            # to work, so we return it
+            return mid
+        else:
+            return msg.mid
+
     def request(self, msg, use_mid=None):
+        """
+        Send a request message, automatically assign a message ID if requested
+
+        Parameters
+        ----------
+        msg : katcp.Message request message
+        use_mid : bool or None
+
+        Return Value
+        ------------
+
+        mid : string or None
+            The message id, or None if no msg id is used
+
+        If use_mid is None and the server supports msg ids, or if use_mid is
+        True a message ID will automatically be assigned msg.mid is None.
+
+        if msg.mid has a value, and the server supports msg ids, that value will
+        be used. If the server does not support msg ids, KatcpVersionError will
+        be raised
+        """
+
+        mid = self._get_mid_and_update_msg(msg, use_mid)
+        self.send_request(msg)
+        return mid
+
+    def send_request(self, msg):
         """Send a request messsage.
 
         Parameters
@@ -180,17 +238,8 @@ class DeviceClient(object):
             The request Message to send.
         """
         assert(msg.mtype == Message.REQUEST)
-
-        if use_mid is None:
-            use_mid = self._server_supports_ids
-
-        if use_mid:
-            msg.mid = self._next_id() if msg.mid is None else msg.mid
-
-        if not self._server_supports_ids and msg.mid is not None:
-            raise KatcpVersionError(
-                'Message identifiers only supported for katcp version 5 or up.')
-
+        if msg.mid and not self._server_supports_ids:
+            raise KatcpVersionError
         self.send_message(msg)
 
     def send_message(self, msg):
@@ -652,7 +701,7 @@ class BlockingClient(DeviceClient):
     auto_reconnect : bool
         Whether to automatically reconnect if the connection dies.
     timeout : float in seconds
-        Default number of seconds to wait before a blocking request times
+        Default number of seconds to wait before a blocking send_request times
         out. Can be overriden in individual calls to blocking_request.
 
     Examples
@@ -716,22 +765,20 @@ class BlockingClient(DeviceClient):
         informs : list of Message objects
             A list of the inform messages received.
         """
-        try:
-            self._request_lock.acquire()
+        with self._request_lock:
             self._request_end.clear()
             self._current_name = msg.name
             self._current_informs = []
             self._current_reply = None
             self._current_inform_count = 0
-        finally:
-            self._request_lock.release()
 
         if timeout is None:
             timeout = self._request_timeout
 
         try:
-            self.request(msg, use_mid=use_mid)
+            self._get_mid_and_update_msg(msg, use_mid)
             self._current_msg_id = msg.mid
+            self.send_request(msg)
             while True:
                 self._request_end.wait(timeout)
                 if self._request_end.isSet() or not keepalive:
@@ -831,8 +878,8 @@ class CallbackClient(DeviceClient):
         Whether to automatically reconnect if the connection dies. Default
         is True.
     timeout : float in seconds, optional
-        Default number of seconds to wait before a callback request times
-        out. Can be overriden in individual calls to request. Default is 5s.
+        Default number of seconds to wait before a callback callback_request times
+        out. Can be overriden in individual calls to callback_request. Default is 5s.
 
     Examples
     --------
@@ -844,7 +891,7 @@ class CallbackClient(DeviceClient):
     ...
     >>> c = CallbackClient('localhost', 10000)
     >>> c.start()
-    >>> c.request(
+    >>> c.callback_request(
     ...     katcp.Message.request('myreq'),
     ...     reply_cb=reply_cb,
     ...     inform_cb=inform_cb,
@@ -881,16 +928,13 @@ class CallbackClient(DeviceClient):
         """Store the callbacks for a request we've sent so we
            can forward any replies and informs to them.
            """
-        self._async_lock.acquire()
-        try:
-            self._async_queue[msg_id] = (request, reply_cb, inform_cb,
-                                         user_data, timer)
+        with self._async_lock:
+            self._async_queue[msg_id] = (
+                request, reply_cb, inform_cb, user_data, timer)
             if request.name in self._async_id_stack:
                 self._async_id_stack[request.name].append(msg_id)
             else:
                 self._async_id_stack[request.name] = [msg_id]
-        finally:
-            self._async_lock.release()
 
     def _pop_async_request(self, msg_id, msg_name):
         """Pop the set of callbacks for a request.
@@ -937,8 +981,8 @@ class CallbackClient(DeviceClient):
         if msg_name in self._async_id_stack and self._async_id_stack[msg_name]:
             return self._async_id_stack[msg_name][0]
 
-    def request(self, msg, reply_cb=None, inform_cb=None, user_data=None,
-                timeout=None, use_mid=None):
+    def callback_request(self, msg, reply_cb=None, inform_cb=None,
+                user_data=None, timeout=None, use_mid=None):
         """Send a request messsage.
 
         Parameters
@@ -964,28 +1008,27 @@ class CallbackClient(DeviceClient):
         if timeout is None:
             timeout = self._request_timeout
 
-        client_error = False
-        try:
-            super(CallbackClient, self).request(msg, use_mid=use_mid)
-        except KatcpVersionError:
-            raise
-        except KatcpClientError, e:
-            error_reply = Message.request(msg.name, "fail", str(e))
-            error_reply.mid = msg.mid
-            client_error = True
+        mid = self._get_mid_and_update_msg(msg, use_mid)
 
         if timeout is None: # deal with 'no timeout', i.e. None
             timer = None
         else:
-            timer = threading.Timer(timeout, self._handle_timeout, (msg.mid,))
+            timer = threading.Timer(timeout, self._handle_timeout, (mid,))
+
 
         self._push_async_request(
-            msg.mid, msg, reply_cb, inform_cb, user_data, timer)
+            mid, msg, reply_cb, inform_cb, user_data, timer)
         if timer:
             timer.start()
 
-        if client_error:
+        try:
+            self.send_request(msg)
+        except KatcpClientError, e:
+            error_reply = Message.request(msg.name, "fail", str(e))
+            error_reply.mid = mid
             self.handle_reply(error_reply)
+            if isinstance(e, KatcpVersionError):
+                raise
 
 
     def blocking_request(self, msg, timeout=None, use_mid=None):
@@ -1017,20 +1060,22 @@ class CallbackClient(DeviceClient):
         replies = []
 
         def reply_cb(msg):
+            self._logger.debug('received reply %r', str(msg))
             replies.append(msg)
             done.set()
 
         def inform_cb(msg):
+            self._logger.debug('received inform %r', str(msg))
             informs.append(msg)
 
-        self.request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
-                     timeout=timeout, use_mid=use_mid)
+        self.callback_request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
+                              timeout=timeout, use_mid=use_mid)
         ## We wait on the done event that should be set by the reply
         # handler callback. If this event does not occur within the
         # timeout it means something unexpected went wrong. We give it
-        # an extra 5 seconds to deal with (unlikely?) slowness in the
+        # an extra second to deal with (unlikely?) slowness in the
         # rest of the code
-        extra_wait = 5
+        extra_wait = 1
         wait_timeout = timeout
         if wait_timeout is not None:
             wait_timeout = wait_timeout + extra_wait

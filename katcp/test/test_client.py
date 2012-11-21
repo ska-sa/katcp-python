@@ -185,13 +185,18 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
     def test_request(self):
         """Test request method."""
         self.assertTrue(self.client.wait_protocol(1))
-        self.client.request(katcp.Message.request("watchdog"))
+        self.client.send_request(katcp.Message.request("watchdog"))
+        self.client.send_request(katcp.Message.request("watchdog", mid=55))
+        self.client._server_supports_ids = False
+        with self.assertRaises(katcp.core.KatcpVersionError):
+            self.client.send_request(katcp.Message.request("watchdog", mid=56))
 
         time.sleep(0.1)
 
         msgs = self.server.messages()
         self._assert_msgs_equal(msgs, [
-            r"?watchdog[1]",
+            r"?watchdog",
+            r"?watchdog[55]",
         ])
 
     def test_send_message(self):
@@ -426,7 +431,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             watchdog_replied.set()
 
         self.assertTrue(self.client.wait_protocol(0.2))
-        self.client.request(
+        self.client.callback_request(
             katcp.Message.request("watchdog"),
             reply_cb=watchdog_reply,
         )
@@ -450,7 +455,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             self.assertEqual(len(inform.arguments), 2)
             help_informs.append(inform)
 
-        self.client.request(
+        self.client.callback_request(
             katcp.Message.request("help"),
             reply_cb=help_reply,
             inform_cb=help_inform,
@@ -475,9 +480,9 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         # By default message identifiers should be enabled, and should start
         # counting at 1
-        self.client.request(katcp.Message.request('watchdog'))
-        self.client.request(katcp.Message.request('watchdog'))
-        self.client.request(katcp.Message.request('watchdog'))
+        self.client.callback_request(katcp.Message.request('watchdog'))
+        self.client.callback_request(katcp.Message.request('watchdog'))
+        self.client.callback_request(katcp.Message.request('watchdog'))
         # Extract katcp.Message object .mid attributes from the mock calls to
         # send_message
         mids = [args[0].mid              # arg[0] should be the Message() object
@@ -486,13 +491,14 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.client.send_message.reset_mock()
 
         # Explicitly ask for no mid to be used
-        self.client.request(katcp.Message.request('watchdog'), use_mid=False)
+        self.client.callback_request(
+            katcp.Message.request('watchdog'), use_mid=False)
         mid = self.client.send_message.call_args[0][0].mid
         self.assertEqual(mid, None)
 
         # Ask for a specific mid to be used
         self.client.send_message.reset_mock()
-        self.client.request(katcp.Message.request('watchdog', mid=42))
+        self.client.callback_request(katcp.Message.request('watchdog', mid=42))
         mid = self.client.send_message.call_args[0][0].mid
         self.assertEqual(mid, '42')
 
@@ -501,15 +507,17 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         # Should fail if an mid is passed
         with self.assertRaises(katcp.core.KatcpVersionError):
-            self.client.request(katcp.Message.request('watchdog', mid=42))
+            self.client.callback_request(
+                katcp.Message.request('watchdog', mid=42))
 
         # Should fail if an mid is requested
         with self.assertRaises(katcp.core.KatcpVersionError):
-            self.client.request(katcp.Message.request('watchdog'), use_mid=True)
+            self.client.callback_request(
+                katcp.Message.request('watchdog'), use_mid=True)
 
         # Should use no mid by default
         self.client.send_message.reset_mock()
-        self.client.request(katcp.Message.request('watchdog'))
+        self.client.callback_request(katcp.Message.request('watchdog'))
         mid = self.client.send_message.call_args[0][0].mid
         self.assertEqual(mid, None)
 
@@ -530,7 +538,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         # _last_msg_id + 1
         self.client._last_msg_id = 0
         self.assertTrue(self.client.wait_protocol(0.2))
-        self.client.request(katcp.Message.request("help"))
+        self.client.callback_request(katcp.Message.request("help"))
         help_completed.wait(0.2)
         self.assertTrue(help_completed.isSet())
 
@@ -550,7 +558,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             informs.append(reply)
 
         with mock.patch('katcp.client.threading.Timer') as MockTimer:
-            self.client.request(katcp.Message.request("help"),
+            self.client.callback_request(katcp.Message.request("help"),
                                 reply_cb=reply_handler,
                                 inform_cb=inform_handler)
         replied.wait(0.1)
@@ -582,7 +590,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             informs.append(msg)
 
         self.assertTrue(self.client.wait_protocol(0.2))
-        self.client.request(
+        self.client.callback_request(
             katcp.Message.request("slow-command", "0.1"),
             use_mid=use_mid,
             reply_cb=reply_cb,
@@ -602,7 +610,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         reply_cb.reset()
 
         # test next request succeeds
-        self.client.request(
+        self.client.callback_request(
             katcp.Message.request("slow-command", "0.05"),
             reply_cb=reply_cb,
             inform_cb=inform_cb,
@@ -647,7 +655,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             self.assertEqual(y, "foo")
             help_informs.append(inform)
 
-        self.client.request(
+        self.client.callback_request(
             katcp.Message.request("help"),
             reply_cb=help_reply,
             inform_cb=help_inform,
@@ -674,7 +682,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             results[thread_id][1].append(inform)
 
         def worker(thread_id, request):
-            self.client.request(
+            self.client.callback_request(
                 request.copy(),
                 reply_cb=reply_cb,
                 inform_cb=inform_cb,
@@ -796,7 +804,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         def reply_cb(msg):
             replies.append(msg)
 
-        self.client.request(katcp.Message.request("foo"),
+        self.client.callback_request(katcp.Message.request("foo"),
             reply_cb=reply_cb,
         )
 
@@ -809,7 +817,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         # the async queue
         with mock.patch('katcp.client.threading.Timer') as MockTimer:
             instance = MockTimer.return_value
-            self.client.request(
+            self.client.callback_request(
                     katcp.Message.request("slow-command", "10000"),
                     timeout=10000.1)
         # Exactly one instance of MockTimer should have been instantiated
