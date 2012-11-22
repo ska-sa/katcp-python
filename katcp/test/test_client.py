@@ -75,6 +75,7 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
         self.client._logger = mock.Mock()
         self.client.handle_message(self.v5_version_connect_mid)
         self.assertEqual(self.client._disconnect.call_count, 1)
+        self.assertEqual(self.client._auto_reconnect, False)
         self.assertEqual(self.client._logger.error.call_count, 1)
         log_msg = self.client._logger.error.call_args[0][0]
         self.assertIn('Protocol Version Error', log_msg)
@@ -86,6 +87,7 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
         self.client._logger = mock.Mock()
         self.client.handle_message(self.v4_build_state)
         self.assertEqual(self.client._disconnect.call_count, 1)
+        self.assertEqual(self.client._auto_reconnect, False)
         self.assertEqual(self.client._logger.error.call_count, 1)
         log_msg = self.client._logger.error.call_args[0][0]
         self.assertIn('Protocol Version', log_msg)
@@ -106,6 +108,7 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
         # A version 5 version-connect message should result in a warning
         self.client.handle_message(self.v5_version_connect_mid)
         self.assertEqual(self.client._disconnect.call_count, 0)
+        self.assertEqual(self.client._auto_reconnect, True)
         self.assertEqual(self.client._logger.warn.call_count, 1)
         log_msg = self.client._logger.warn.call_args[0][0]
         self.assertIn('Protocol Version', log_msg)
@@ -115,6 +118,7 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
         self.client.handle_message(self.v4_version)
         self.client.handle_message(self.v4_build_state)
         self.assertEqual(self.client._disconnect.call_count, 0)
+        self.assertEqual(self.client._auto_reconnect, True)
         self.assertEqual(self.client._logger.warn.call_count, 0)
         self._check_v4()
 
@@ -128,6 +132,14 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
         self.assertFalse(self.client._received_protocol_info.isSet())
 
     def test_preset_v5_then_v4(self):
+        def check_warn_not_disconect():
+            self.assertEqual(self.client._disconnect.call_count, 0)
+            self.assertEqual(self.client._auto_reconnect, True)
+            self.assertEqual(self.client._logger.warn.call_count, 1)
+            log_msg = self.client._logger.warn.call_args[0][0]
+            self.assertIn('Protocol Version', log_msg)
+            self.client._logger.warn.reset_mock()
+
         self.client.preset_protocol_flags(ProtocolFlags(
             5, 0, [ProtocolFlags.MESSAGE_IDS]))
         self._check_v5_mid()
@@ -135,34 +147,23 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
         self.client._logger = mock.Mock()
         # Any Version 4-identifying informs should cause warnings
         self.client.handle_message(self.v4_build_state)
-        self.assertEqual(self.client._disconnect.call_count, 0)
-        self.assertEqual(self.client._logger.warn.call_count, 1)
-        log_msg = self.client._logger.warn.call_args[0][0]
-        self.assertIn('Protocol Version', log_msg)
+        check_warn_not_disconect()
         self._check_v5_mid()
-        self.client._logger.warn.reset_mock()
         self.client.handle_message(self.v4_version)
-        self.assertEqual(self.client._disconnect.call_count, 0)
-        self.assertEqual(self.client._logger.warn.call_count, 1)
-        log_msg = self.client._logger.warn.call_args[0][0]
-        self.assertIn('Protocol Version', log_msg)
+        check_warn_not_disconect()
         self._check_v5_mid()
         # A version 5 version-connect message with different flags should also
         # result in a warning
-        self.client._logger.warn.reset_mock()
         self.client.handle_message(self.v5_version_connect_nomid)
-        self.assertEqual(self.client._disconnect.call_count, 0)
-        self.assertEqual(self.client._logger.warn.call_count, 1)
-        log_msg = self.client._logger.warn.call_args[0][0]
-        self.assertIn('Protocol Version', log_msg)
+        check_warn_not_disconect()
         self._check_v5_mid()
         # An identical version 5 version-connect message should not result in
         # any warnings
-        self.client._logger.warn.reset_mock()
         self.client.handle_message(self.v5_version_connect_mid)
         self.assertEqual(self.client._disconnect.call_count, 0)
         self.assertEqual(self.client._logger.warn.call_count, 0)
-
+        self.assertEqual(self.client._auto_reconnect, True)
+        self._check_v5_mid()
 
 class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
     def setUp(self):
