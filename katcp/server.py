@@ -28,7 +28,6 @@ from .version import VERSION, VERSION_STR
 
 log = logging.getLogger("katcp")
 
-
 def construct_name_filter(pattern):
     """Return a funciton for filtering sensor names based on a pattern.
 
@@ -239,7 +238,8 @@ class DeviceServerBase(object):
                         reason, full_line))
                     self.tcp_inform(sock, self._log_msg("error", reason, "root"))
                 else:
-                    self.handle_message(sock, msg)
+                    client_conn = self._sock_connections[sock]
+                    self.handle_message(client_conn, msg)
 
         self._data_lock.acquire()
         try:
@@ -248,7 +248,7 @@ class DeviceServerBase(object):
         finally:
             self._data_lock.release()
 
-    def handle_message(self, sock, msg):
+    def handle_message(self, client_conn, msg):
         """Handle messages of all types from clients.
 
         Parameters
@@ -261,18 +261,16 @@ class DeviceServerBase(object):
         # log messages received so that no one else has to
         self._logger.debug(msg)
 
-        client_connection = self._sock_connections[sock]
-
         if msg.mtype == msg.REQUEST:
-            self.handle_request(client_connection, msg)
+            self.handle_request(client_conn, msg)
         elif msg.mtype == msg.INFORM:
-            self.handle_inform(client_connection, msg)
+            self.handle_inform(client_conn, msg)
         elif msg.mtype == msg.REPLY:
-            self.handle_reply(client_connection, msg)
+            self.handle_reply(client_conn, msg)
         else:
             reason = "Unexpected message type received by server ['%s']." \
                      % (msg,)
-            self.tcp_inform(sock, self._log_msg("error", reason, "root"))
+            client_conn.inform(self._log_msg("error", reason, "root"))
 
     def handle_request(self, connection, msg):
         """Dispatch a request message to the appropriate method.
@@ -1395,7 +1393,6 @@ class DeviceServer(DeviceServerBase):
             #sensor-value 1244631611415.231 1 cpu.power.on 0
             !sensor-value ok 1
         """
-        # XXX v4v5 uses milliseconds
         exact, name_filter = construct_name_filter(msg.arguments[0]
                     if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
@@ -1405,8 +1402,11 @@ class DeviceServer(DeviceServerBase):
             return Message.reply("sensor-value", "fail",
                                  "Unknown sensor name.")
 
+        katcp_version = self.PROTOCOL_INFO.major
         for name, sensor in sensors:
             timestamp, status, value = sensor.read_formatted()
+            if katcp_version <= 4:
+                timestamp = int(SEC_TO_MS_FAC*float(timestamp))
             conn.inform(timestamp, "1", name, status, value)
         return Message.reply("sensor-value", "ok", str(len(sensors)))
 

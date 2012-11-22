@@ -17,7 +17,7 @@ from collections import defaultdict
 
 from katcp.testutils import (
     TestLogHandler, BlockingTestClient, DeviceTestServer, TestUtilMixin,
-    start_thread_with_cleanup, WaitingMock)
+    start_thread_with_cleanup, WaitingMock, ClientConnectionTest)
 from katcp.core import FailReply
 
 log_handler = TestLogHandler()
@@ -126,7 +126,7 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         s = katcp.Sensor.boolean('a-sens')
         s.set(1234, katcp.Sensor.NOMINAL, True)
         self.server.add_sensor(s)
-        sm = self.server._send_message = WaitingMock()
+        self.server._send_message = WaitingMock()
         self.server.wait_running(timeout=1.)
         self.assertTrue(self.server.running())
         self.server._strategies = defaultdict(lambda : {})
@@ -159,6 +159,17 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
             self.server.request_sensor_sampling(conn, katcp.Message.request(
              'sensor-sampling', 'a-sens', 'differential-rate', 1, 1000, 2000))
 
+
+    def test_sensor_value(self):
+        s = katcp.Sensor.boolean('a-sens')
+        s.set(1234, katcp.Sensor.NOMINAL, True)
+        self.server.add_sensor(s)
+        client_conn = ClientConnectionTest()
+        self.server.handle_message(client_conn, katcp.Message.request(
+            'sensor-value', 'a-sens'))
+        self._assert_msgs_equal(client_conn.messages, [
+            '#sensor-value 1234000 1 a-sens nominal 1',
+            '!sensor-value ok 1'])
 
 class TestVersionCompatibility(unittest.TestCase):
     def test_wrong_version(self):
