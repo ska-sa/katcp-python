@@ -444,8 +444,9 @@ class DeviceServerBase(object):
         """
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
-                'Deprecation warning: do not use self.reply() '
-                'within a reply handler context -- use connection.reply()')
+                'Deprecation warning: do not use self.inform() '
+                'within a reply handler context -- use conn.reply()\n'
+                'Traceback:\n %s', "".join(traceback.format_stack() ))
             # Get the underlying ClientConnectionTCP instance
             connection = connection.client_connection
         connection.inform(msg)
@@ -503,7 +504,8 @@ class DeviceServerBase(object):
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
                 'Deprecation warning: do not use self.reply() '
-                'within a reply handler context -- use connection.reply()')
+                'within a reply handler context -- use conn.reply()\n'
+                'Traceback:\n %s', "".join(traceback.format_stack() ))
             # Get the underlying ClientConnectionTCP instance
             connection = connection.client_connection
         connection.reply(reply, orig_req)
@@ -542,8 +544,9 @@ class DeviceServerBase(object):
         """
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
-                'Deprecation warning: do not use self.reply() '
-                'within a reply handler context -- use connection.reply()')
+                'Deprecation warning: do not use self.reply_inform() '
+                'within a reply handler context -- use conn.inform()\n'
+                'Traceback:\n %s', "".join(traceback.format_stack() ))
             # Get the underlying ClientConnectionTCP instance
             connection = connection.client_connection
         connection.reply_inform(inform, orig_req)
@@ -1119,7 +1122,7 @@ class DeviceServer(DeviceServerBase):
         if not msg.arguments:
             for name, method in sorted(self._request_handlers.items()):
                 doc = method.__doc__
-                self.reply_inform(conn, Message.inform("help", name, doc), msg)
+                conn.inform(name, doc)
             num_methods = len(self._request_handlers)
             return Message.reply("help", "ok", str(num_methods))
         else:
@@ -1127,7 +1130,7 @@ class DeviceServer(DeviceServerBase):
             if name in self._request_handlers:
                 method = self._request_handlers[name]
                 doc = method.__doc__.strip()
-                self.reply_inform(conn, Message.inform("help", name, doc), msg)
+                conn.inform(name, doc)
                 return Message.reply("help", "ok", "1")
             return Message.reply("help", "fail", "Unknown request method.")
 
@@ -1226,7 +1229,7 @@ class DeviceServer(DeviceServerBase):
             except socket.error:
                 # client may be gone, in which case just send a description
                 addr = repr(client)
-            self.reply_inform(conn, Message.inform("client-list", addr), msg)
+            conn.inform("client-list", addr)
         return Message.reply("client-list", "ok", str(num_clients))
 
     def request_version_list(self, conn, msg):
@@ -1272,10 +1275,10 @@ class DeviceServer(DeviceServerBase):
 
         for name, (version, build_state) in versions + extra_versions:
             if build_state is None:
-                inform = Message.inform(msg.name, name, version)
+                inform_args = (name, version)
             else:
-                inform = Message.inform(msg.name, name, version, build_state)
-            self.reply_inform(conn, inform, msg)
+                inform_args = (name, version, build_state)
+            conn.inform(*inform_args)
 
         num_versions = len(versions) + len(extra_versions)
         return Message.reply(msg.name, "ok", str(num_versions))
@@ -1340,9 +1343,8 @@ class DeviceServer(DeviceServerBase):
             return Message.reply("sensor-list", "fail", "Unknown sensor name.")
 
         for name, sensor in sensors:
-            self.reply_inform(conn, Message.inform("sensor-list",
-                name, sensor.description, sensor.units, sensor.stype,
-                *sensor.formatted_params), msg)
+            conn.inform(name, sensor.description, sensor.units, sensor.stype,
+                        *sensor.formatted_params)
         return Message.reply("sensor-list", "ok", str(len(sensors)))
 
     def request_sensor_value(self, conn, msg):
@@ -1404,9 +1406,8 @@ class DeviceServer(DeviceServerBase):
                                  "Unknown sensor name.")
 
         for name, sensor in sensors:
-            timestamp_ms, status, value = sensor.read_formatted()
-            self.reply_inform(conn, Message.inform("sensor-value",
-                    timestamp_ms, "1", name, status, value), msg)
+            timestamp, status, value = sensor.read_formatted()
+            conn.inform(timestamp, "1", name, status, value)
         return Message.reply("sensor-value", "ok", str(len(sensors)))
 
     def request_sensor_sampling(self, conn, msg):

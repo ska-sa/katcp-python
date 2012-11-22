@@ -461,7 +461,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             inform_cb=help_inform,
         )
 
-        help_replied.wait(0.2)
+        help_replied.wait(1)
         self.assertTrue(help_replied.isSet())
         help_replied.clear()
         help_replied.wait(0.05)   # Check if (unwanted) late help replies arrive
@@ -539,7 +539,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.client._last_msg_id = 0
         self.assertTrue(self.client.wait_protocol(0.2))
         self.client.callback_request(katcp.Message.request("help"))
-        help_completed.wait(0.2)
+        help_completed.wait(1)
         self.assertTrue(help_completed.isSet())
 
         self._assert_msgs_like(help_messages,
@@ -561,7 +561,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             self.client.callback_request(katcp.Message.request("help"),
                                 reply_cb=reply_handler,
                                 inform_cb=inform_handler)
-        replied.wait(0.1)
+        replied.wait(1)
         # With no timeout no Timer object should have been instantiated
         self.assertEqual(MockTimer.call_count, 0)
         self.assertEqual(len(replies), 1)
@@ -642,12 +642,14 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         """Test callbacks with user data."""
         help_replies = []
         help_informs = []
-
+        done = threading.Event()
+        
         def help_reply(reply, x, y):
             self.assertEqual(reply.name, "help")
             self.assertEqual(x, 5)
             self.assertEqual(y, "foo")
             help_replies.append(reply)
+            done.set()
 
         def help_inform(inform, x, y):
             self.assertEqual(inform.name, "help")
@@ -661,7 +663,9 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             inform_cb=help_inform,
             user_data=(5, "foo"))
 
-        time.sleep(0.1)
+        done.wait(1)
+        # Wait a bit longer to see if spurious replies arrive
+        time.sleep(0.01)
         self.assertEqual(len(help_replies), 1)
         self.assertEqual(len(remove_version_connect(help_informs)),
                          NO_HELP_MESSAGES)
@@ -706,7 +710,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         for thread_id in range(num_threads):
             replies, informs, done = results[thread_id]
-            done.wait(2.0)
+            done.wait(5.0)
             self.assertTrue(done.isSet())
             self.assertEqual(len(replies), 1)
             self.assertEqual(replies[0].arguments[0], "ok")
