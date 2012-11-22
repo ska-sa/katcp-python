@@ -132,8 +132,6 @@ class TestProxyBase(TestCase):
 
     def test_forwarding_sensors(self):
         def callback((informs, reply)):
-            # XXX v4v5 uses milliseconds (message inform timestamp, from
-            # ExampleDevice that has a timestamp of 1
             self.assertEquals(informs,
                     [Message.inform('sensor-value', '1.000000', '1',
                                     'device.sensor1', 'unknown', '0')])
@@ -143,8 +141,6 @@ class TestProxyBase(TestCase):
 
     def test_all_forwarded_sensors(self):
         def callback((informs, reply)):
-            # XXX v4v5 uses milliseconds (message inform timestamp, from
-            # ExampleDevice that has a timestamp of 1
             self.assertEquals(informs[2:],
                   [Message.inform('sensor-value', '1.000000', '1',
                                   'device.sensor1', 'unknown', '0'),
@@ -155,8 +151,6 @@ class TestProxyBase(TestCase):
         return self._base_test(('sensor-value',), callback)
 
     def test_all_forwarded_sensors_regex(self):
-        # XXX v4v5 uses milliseconds (message inform timestamp, from
-        # ExampleDevice that has a timestamp of 1
         def callback((informs, reply)):
             self.assertEquals(informs,
                   [Message.inform('sensor-value', '1.000000', '1',
@@ -207,7 +201,7 @@ class TestProxyBase(TestCase):
 
         def callback(arg):
             d = self.proxy.devices['device'].send_request(
-                'sensor-sampling', 'sensor1', 'period', '10')
+                'sensor-sampling', 'sensor1', 'period', '0.01')
             d.addCallback(sampling_done)
             return True
         return self._base_test(None, callback)

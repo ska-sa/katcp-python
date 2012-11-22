@@ -340,36 +340,33 @@ class TestDeviceServer(TestCase):
 
         def reply((informs, reply), protocol):
             self.assertEquals(informs, [])
-            self.assertEquals(reply, Message.reply('sensor-sampling', 'ok',
-                                                   'int_sensor', 'period',
-                                                   '10'))
+            self.assertEquals(reply, Message.reply(
+                'sensor-sampling', 'ok', 'int_sensor', 'period', '0.01'))
             reactor.callLater(0.3, called_later, protocol)
             return True
 
         return self._base_test(('sensor-sampling', 'int_sensor',
-                                'period', '10'), reply)
+                                'period', '0.01'), reply)
 
     def test_sensor_sampling_auto(self):
         def even_more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 2)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
-                                                       '1', 'int_sensor',
-                                                       'nominal', '5')])
+            self.assertEquals(informs, [Message.inform(
+                'sensor-value', '0.000000', '1', 'int_sensor', 'nominal', '5')])
             protocol.send_request('halt').addCallback(self._end_test)
 
         def more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
-                                                       '1', 'int_sensor',
-                                                       'nominal', '3')])
+            self.assertEquals(informs, [Message.inform(
+                'sensor-value', '0.000000', '1', 'int_sensor', 'nominal', '3')])
             self.factory.sensors['int_sensor'].set(0, Sensor.NOMINAL, 5)
             protocol.send_request('sensor-value', 'int_sensor').addCallback(
                     even_more, protocol)
 
         def reply((informs, reply), protocol):
             self.assertEquals(informs, [])
-            self.assertEquals(reply, Message.reply('sensor-sampling', 'ok',
-                                                   'int_sensor', 'auto'))
+            self.assertEquals(reply, Message.reply(
+                'sensor-sampling', 'ok', 'int_sensor', 'auto'))
             self.assertEquals(len(self.client.status_updates), 0)
 
             self.factory.sensors['int_sensor'].set(0, Sensor.NOMINAL, 3)
@@ -383,16 +380,14 @@ class TestDeviceServer(TestCase):
     def test_sensor_sampling_event(self):
         def even_more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
-                                                       '1', 'int_sensor',
-                                                       'nominal', '3')])
+            self.assertEquals(informs, [Message.inform(
+                'sensor-value', '0.000000', '1', 'int_sensor', 'nominal', '3')])
             protocol.send_request('halt').addCallback(self._end_test)
 
         def more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
-                                                       '1', 'int_sensor',
-                                                       'nominal', '3')])
+            self.assertEquals(informs, [Message.inform(
+                'sensor-value', '0.000000', '1', 'int_sensor', 'nominal', '3')])
             self.factory.sensors['int_sensor'].set_value(3, timestamp=0)
             protocol.send_request('sensor-value', 'int_sensor').addCallback(
                     even_more, protocol)
@@ -552,7 +547,7 @@ class TestDeviceServer(TestCase):
                 got_log.callback(msg)
 
         def log_received(msg):
-            self.assertEquals(msg, Message.inform("log", "warn", "0", "root",
+            self.assertEquals(msg, Message.inform("log", "warn", "0.000000", "root",
                                                   "a warning"))
             self.factory.stop()
             finish.callback(None)
@@ -607,9 +602,8 @@ class TestDeviceServer(TestCase):
                                                            protocol)
 
         def log_level3((informs, reply), protocol):
-            self.assertEquals(protocol.msgs, [Message.inform("log", "debug",
-                                                             "0", "root",
-                                                             "foo")])
+            self.assertEquals(protocol.msgs, [
+                Message.inform("log", "debug", "0.000000", "root", "foo")])
             self.factory.stop()
             self.finish.callback(None)
 
