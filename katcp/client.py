@@ -168,7 +168,10 @@ class DeviceClient(object):
                     'with the previously detected version. Disconnecting in '
                     'disgust. Previous version: %r. Inform received: %r' % (
                         str(self.protocol_flags), str(inform)))
+                # Prevent an infinite loop
+                self._auto_reconnect = False
                 self._disconnect()
+
         self.protocol_flags = protocol_flags
 
     def _get_mid_and_update_msg(self, msg, use_mid):
