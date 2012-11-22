@@ -19,6 +19,27 @@ import mock
 from .core import Sensor, Message
 from .server import DeviceServer, FailReply
 
+class ClientConnectionTest(object):
+    """
+    A version of katcp.server.ClientConnection* suitable for testing
+    Records all messages
+    """
+    def __init__(self):
+        self.messages = []
+
+    def inform(self, msg):
+        self.messages.append(msg)
+
+    def reply(self, msg, req_msg):
+        self.messages.append(msg)
+
+    @property
+    def informs(self):
+        return [m for m in self.messages if m.mtype == Message.INFORM]
+
+    @property
+    def replies(self):
+        return [m for m in self.messages if m.mtype == Message.REPLY]
 
 class TestLogHandler(logging.Handler):
     """A logger for KATCP tests."""
