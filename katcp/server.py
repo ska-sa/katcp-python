@@ -77,13 +77,27 @@ class ClientRequestConnection(object):
     def reply(self, *args):
         rep_msg = Message.reply_to_request(self.req_msg, *args)
         self.client_connection.reply(rep_msg, self.req_msg)
-        # Future calls to reply() should error out.
+        self._post_reply()
+
+    def reply_with_message(self, rep_msg):
+        """
+        Send a pre-created reply message to the client connection
+
+        Will check that rep_msg.name matches the bound request
+        """
+        assert rep_msg.name == self.req_msg.name
+        self.client_connection.reply(rep_msg, self.req_msg)
+        self._post_reply()
+
+    def _post_reply(self):
+        # Future calls to reply_*() should error out.
         self.reply = self.reply_again
+        self.reply_with_message = self.reply_again
 
     def reply_again(self, *args):
         raise RuntimeError('Reply to request %r already sent.' % self.req_msg)
 
-    def reply_message(self, *args):
+    def get_reply_message(self, *args):
         return Message.reply_to_request(self.req_msg, *args)
 
 class DeviceServerBase(object):
@@ -502,8 +516,9 @@ class DeviceServerBase(object):
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
                 'Deprecation warning: do not use self.reply() '
-                'within a reply handler context -- use conn.reply()\n'
-                'Traceback:\n %s', "".join(traceback.format_stack() ))
+                'within a reply handler context -- use conn.reply(*msg_args)\n'
+                'or conn.reply_with_msg(msg) Traceback:\n %s',
+                "".join(traceback.format_stack() ))
             # Get the underlying ClientConnectionTCP instance
             connection = connection.client_connection
         connection.reply(reply, orig_req)
@@ -543,7 +558,8 @@ class DeviceServerBase(object):
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
                 'Deprecation warning: do not use self.reply_inform() '
-                'within a reply handler context -- use conn.inform()\n'
+                'within a reply handler context -- '
+                'use conn.inform(*inform_arguments)\n'
                 'Traceback:\n %s', "".join(traceback.format_stack() ))
             # Get the underlying ClientConnectionTCP instance
             connection = connection.client_connection
@@ -1361,8 +1377,8 @@ class DeviceServer(DeviceServerBase):
         Informs
         -------
         timestamp : float
-            Timestamp of the sensor reading in milliseconds since the Unix
-            epoch.
+            Timestamp of the sensor reading in seconds since the Unix
+            epoch, or milliseconds for katcp versions <= 4.
         count : {1}
             Number of sensors described in this #sensor-value inform. Will
             always be one. It exists to keep this inform compatible with
@@ -1384,13 +1400,13 @@ class DeviceServer(DeviceServerBase):
         ::
 
             ?sensor-value
-            #sensor-value 1244631611415.231 1 psu.voltage 4.5
-            #sensor-value 1244631611415.200 1 cpu.status off
+            #sensor-value 1244631611.415231 1 psu.voltage 4.5
+            #sensor-value 1244631611.415200 1 cpu.status off
             ...
             !sensor-value ok 5
 
             ?sensor-value cpu.power.on
-            #sensor-value 1244631611415.231 1 cpu.power.on 0
+            #sensor-value 1244631611.415231 1 cpu.power.on 0
             !sensor-value ok 1
         """
         exact, name_filter = construct_name_filter(msg.arguments[0]

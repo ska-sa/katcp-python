@@ -72,9 +72,23 @@ class test_ClientRequestConnection(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.DUT.reply(*arguments)
 
+    def test_reply_with_msg(self):
+        wrong_rep_msg = katcp.Message.reply('wrong-request', 'inf1', 'inf2')
+        with self.assertRaises(AssertionError):
+            self.DUT.reply_with_message(wrong_rep_msg)
+        rep_msg = katcp.Message.reply('test-request', 'inf1', 'inf2')
+        self.DUT.reply_with_message(rep_msg.copy())
+        self.assertEqual(self.client_connection.reply.call_count, 1)
+        (actual_rep_msg, req_msg), kwargs = self.client_connection.reply.call_args
+        self.assertIs(req_msg, self.req_msg)
+        self.assertEqual(actual_rep_msg, rep_msg)
+        # Test that we can't reply twice
+        with self.assertRaises(RuntimeError):
+            self.DUT.reply_with_message(rep_msg)
+
     def test_reply_message(self):
         arguments = ('inf1', 'inf2')
-        rep_msg = self.DUT.reply_message(*arguments)
+        rep_msg = self.DUT.get_reply_message(*arguments)
         self.assertSequenceEqual(rep_msg.arguments, arguments)
         self.assertEqual(rep_msg.name, 'test-request')
         self.assertEqual(rep_msg.mid, '42')
