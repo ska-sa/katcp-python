@@ -25,11 +25,12 @@ from .sampling import SampleReactor, SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
 from .sampling import SEC_TO_MS_FAC, MS_TO_SEC_FAC
 from .version import VERSION, VERSION_STR
+from .kattypes import (request, return_reply)
 
 log = logging.getLogger("katcp")
 
 def construct_name_filter(pattern):
-    """Return a funciton for filtering sensor names based on a pattern.
+    """Return a function for filtering sensor names based on a pattern.
 
     Parameters
     ----------
@@ -925,7 +926,7 @@ class DeviceServer(DeviceServerBase):
         client_connection : ClientConnectionTCP instance
             The connection that should have its sampling strategies cleared
         remove_client : bool, default=False
-            Remove the client connection from the strategies dstastructure.
+            Remove the client connection from the strategies datastructure.
             Usefull for clients that disconnect.
         """
         with self._strat_lock:
@@ -1356,10 +1357,13 @@ class DeviceServer(DeviceServerBase):
         if exact and not sensors:
             return Message.reply("sensor-list", "fail", "Unknown sensor name.")
 
+        self._send_sensor_value_informs(conn, sensors)
+        return Message.reply("sensor-list", "ok", str(len(sensors)))
+
+    def _send_sensor_value_informs(self, conn, sensors):
         for name, sensor in sensors:
             conn.inform(name, sensor.description, sensor.units, sensor.stype,
                         *sensor.formatted_params)
-        return Message.reply("sensor-list", "ok", str(len(sensors)))
 
     def request_sensor_value(self, conn, msg):
         """Request the value of a sensor or sensors.
@@ -1538,6 +1542,26 @@ class DeviceServer(DeviceServerBase):
             # timestamps for v4 is period it's not _too_ nasty :)
             params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
         return Message.reply("sensor-sampling", "ok", name, strategy, *params)
+
+    @request()
+    @return_reply()
+    def request_sensor_sampling_clear(self, conn):
+        """Set all sampling strategies for this client to none.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the list of devices succeeded.
+
+        Examples
+        --------
+        ?sensor-sampling-clear
+        !sensor-sampling-clear ok
+        """
+        self.clear_strategies(conn.client_connection)
+
+        return ["ok"]
+
 
     def request_watchdog(self, conn, msg):
         """Check that the server is still alive.

@@ -17,7 +17,7 @@ import functools
 import mock
 
 from .core import Sensor, Message
-from .server import DeviceServer, FailReply
+from .server import DeviceServer, FailReply, ClientRequestConnection
 
 class ClientConnectionTest(object):
     """

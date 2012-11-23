@@ -21,7 +21,7 @@ from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 
-NO_HELP_MESSAGES = 15         # Number of requests on DeviceTestServer
+NO_HELP_MESSAGES = 16         # Number of requests on DeviceTestServer
 
 def remove_version_connect(msgs):
     """Remove #version-connect messages from a list of messages"""
@@ -341,7 +341,7 @@ class TestBlockingClient(unittest.TestCase):
             except RuntimeError, e:
                 if not e.args[0].startswith('Request '):
                     raise
- 
+
         # By default message identifiers should be enabled, and should start
         # counting at 1
         blocking_request(katcp.Message.request('watchdog'), timeout=0)

@@ -639,6 +639,22 @@ class DeviceProtocol(ServerKatCPProtocol):
             msg.arguments.append('none')
         return Message.reply(msg.name, "ok", *msg.arguments)
 
+    def request_sensor_sampling_clear(self, msg):
+        """Set all sampling strategies for this client to none.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the list of devices succeeded.
+
+        Examples
+        --------
+        ?sensor-sampling-clear
+        !sensor-sampling-clear ok
+        """
+        return Message.reply_to_request(msg, 'fail', 'Not implemented for '
+                                        'twisted server')
+
     def request_halt(self, msg):
         """Halt the device server.
 

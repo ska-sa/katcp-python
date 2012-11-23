@@ -23,7 +23,7 @@ from katcp.core import FailReply
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 
-NO_HELP_MESSAGES = 15       # Number of requests on DeviceTestServer
+NO_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
 
 class test_ClientConnectionTCP(unittest.TestCase):
     def test_init(self):
@@ -225,6 +225,15 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
             r'#version-connect katcp-library katcp-python-0.5.0a0',
             r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g') )
 
+    def test_request_sensor_sampling_clear(self):
+        self.server.clear_strategies = mock.Mock()
+        client_connection = ClientConnectionTest()
+        self.server.handle_message(
+            client_connection, katcp.Message.request('sensor-sampling-clear'))
+        self._assert_msgs_equal(client_connection.messages, [
+            '!sensor-sampling-clear ok'])
+        self.server.clear_strategies.assert_called_once_with(client_connection)
+
 
 class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
@@ -371,6 +380,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#help[6] restart", ""),
             (r"#help[6] sensor-list", ""),
             (r"#help[6] sensor-sampling", ""),
+            (r"#help[6] sensor-sampling-clear", ""),
             (r"#help[6] sensor-value", ""),
             (r"#help[6] slow-command", ""),
             (r"#help[6] version-list", ""),
@@ -485,6 +495,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#help[6] restart", ""),
             (r"#help[6] sensor-list", ""),
             (r"#help[6] sensor-sampling", ""),
+            (r"#help[6] sensor-sampling-clear", ""),
             (r"#help[6] sensor-value", ""),
             (r"#help[6] slow-command", ""),
             (r"#help[6] version-list", ""),
