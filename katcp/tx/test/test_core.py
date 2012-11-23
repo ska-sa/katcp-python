@@ -58,7 +58,7 @@ class TestKatCP(PythonLoggingTestCase):
 
     def test_help(self):
         def received_help((msgs, reply_msg), protocol):
-            assert len(msgs) == 10
+            assert len(msgs) == 11
             requests = set(msg.arguments[0] for msg in msgs)
             assert 'help' in requests
             assert 'sensor-list' in requests
@@ -636,8 +636,11 @@ class TestClient(TestCase):
 
 class TestMisc(TestCase):
     def test_requests(self):
+        # Test that the twisted DeviceProtocol has the same requests as the
+        # original katcp.server.DeviceServer
         from katcp.server import DeviceServer
         for name in dir(DeviceServer):
             if (name.startswith('request_') and
                 callable(getattr(DeviceServer, name))):
+                print name
                 assert hasattr(DeviceProtocol, name)
