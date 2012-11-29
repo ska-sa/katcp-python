@@ -987,6 +987,10 @@ class DeviceServer(DeviceServerBase):
         """
         self._sensors[sensor.name] = sensor
 
+    def has_sensor(self, sensor_name):
+        """Whether a sensor_name is known."""
+        return sensor_name in self._sensors
+
     def remove_sensor(self, sensor):
         """Remove a sensor from the device.
 
