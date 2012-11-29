@@ -234,6 +234,11 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
             '!sensor-sampling-clear ok'])
         self.server.clear_strategies.assert_called_once_with(client_connection)
 
+    def test_has_sensor(self):
+        self.assertFalse(self.server.has_sensor('blaah'))
+        self.server.add_sensor(katcp.Sensor.boolean('blaah', 'blaah sens'))
+        self.assertTrue(self.server.has_sensor('blaah'))
+
 
 class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
