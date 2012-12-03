@@ -12,12 +12,11 @@ import threading
 import time
 import logging
 import heapq
-from .core import Message, Sensor, ExcepthookThread
+from .core import Message, Sensor, ExcepthookThread, SEC_TO_MS_FAC, MS_TO_SEC_FAC
+
 
 log = logging.getLogger("katcp.sampling")
 
-SEC_TO_MS_FAC = 1000
-MS_TO_SEC_FAC = 1./1000
 
 # pylint: disable-msg=W0142
 

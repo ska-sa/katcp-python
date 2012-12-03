@@ -14,6 +14,13 @@ import re
 import time
 import warnings
 
+SEC_TO_MS_FAC = 1000
+MS_TO_SEC_FAC = 1./1000
+DEFAULT_KATCP_MAJOR = 5
+SEC_TS_KATCP_MAJOR = 5
+MID_KATCP_MAJOR = 5
+VERSION_CONNECT_KATCP_MAJOR = 5
+
 class KatcpSyntaxError(ValueError):
     """Exception raised by parsers on encountering syntax errors."""
 
@@ -442,7 +449,7 @@ class ProtocolFlags(object):
         self.flags = set(list(flags))
         self.multi_client = self.MULTI_CLIENT in self.flags
         self.message_ids = self.MESSAGE_IDS in self.flags
-        if self.message_ids and self.major < 5:
+        if self.message_ids and self.major < MID_KATCP_MAJOR:
             raise ValueError(
                 'MESSAGE_IDS is only supported in katcp v5 and newer')
 
@@ -778,6 +785,11 @@ class Sensor(object):
             default_value = params[0]
             self._kattype = typeclass(params)
         else:
+            if self._sensor_type == Sensor.TIMESTAMP and units:
+                raise ValueError(
+                    'Units cannot be specified for TIMESTAMP sensors since '
+                    'their units is defined by the KATCP spec as either '
+                    'seconds or, for katcp versions 4 and below, milliseconds')
             self._kattype = typeclass()
 
         if default is not None:
@@ -1004,7 +1016,7 @@ class Sensor(object):
         for o in list(self._observers):
             o.update(self)
 
-    def parse_value(self, s_value):
+    def parse_value(self, s_value, katcp_major=DEFAULT_KATCP_MAJOR):
         """Parse a value from a string.
 
         Parameters
@@ -1018,7 +1030,7 @@ class Sensor(object):
         value : object
             A value of a type appropriate to the sensor.
         """
-        return self._parser(s_value)
+        return self._parser(s_value, katcp_major)
 
     def set(self, timestamp, status, value):
         """Set the current value of the sensor.
@@ -1036,7 +1048,8 @@ class Sensor(object):
         self._value_tuple = (timestamp, status, value)
         self.notify()
 
-    def set_formatted(self, raw_timestamp, raw_status, raw_value):
+    def set_formatted(self, raw_timestamp, raw_status, raw_value,
+                      katcp_major=DEFAULT_KATCP_MAJOR):
         """Set the current value of the sensor.
 
         Parameters
@@ -1047,10 +1060,14 @@ class Sensor(object):
             KATCP formatted sensor status string
         value : str
             KATCP formatted sensor value
+        katcp_major : int, default = 5
+            KATCP protocol major version to use for interpreting the raw values
         """
         timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp)
+        if katcp_major < SEC_TS_KATCP_MAJOR:
+            timestamp *= MS_TO_SEC_FAC
         status = self.STATUS_NAMES[raw_status]
-        value = self.parse_value(raw_value)
+        value = self.parse_value(raw_value, katcp_major)
         self.set(timestamp, status, value)
 
     def read_formatted(self):
