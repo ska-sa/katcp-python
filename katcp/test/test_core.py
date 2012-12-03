@@ -323,3 +323,28 @@ class TestSensor(unittest.TestCase):
 
         s.set_value(5, timestamp=12345)
         self.assertEqual(s.read(), (12345, katcp.Sensor.NOMINAL, 5))
+
+class test_Sensor(unittest.TestCase):
+    def test_statuses(self):
+        # Test that the status constants are all good
+        valid_statuses = set(['unknown', 'nominal', 'warn', 'error',
+                               'failure', 'unreachable', 'inactive'])
+        status_vals_set = set()
+        status_vals_dict = {}
+        for st in valid_statuses:
+            # Check that a capitalised attribute exists for each status
+            st_val = getattr(Sensor, st.upper(), 'OOPS')
+            self.assertNotEqual(st_val, 'OOPS')
+            # Check that the status to name lookup dict is correct
+            self.assertEqual(Sensor.STATUSES[st_val], st)
+            # Check that the name to value lookup dict is correct
+            self.assertEqual(st, Sensor.STATUSES[st_val])
+            status_vals_set.add(st_val)
+            status_vals_dict[st] = st_val
+
+        # Check that the status values are all unique
+        self.assertEqual(len(status_vals_set), len(valid_statuses))
+        # Check that there are not extra entries in the forward/backward name
+        # lookup dicts
+        self.assertEqual(len(Sensor.STATUSES), len(valid_statuses))
+        self.assertEqual(len(Sensor.STATUS_NAMES), len(valid_statuses))

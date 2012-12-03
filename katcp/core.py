@@ -17,8 +17,11 @@ import warnings
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
 DEFAULT_KATCP_MAJOR = 5
+# First major version to use seconds (in stead of milliseconds) for timestamps
 SEC_TS_KATCP_MAJOR = 5
+# First major version to support message IDs
 MID_KATCP_MAJOR = 5
+# First major version to support #version-connect informs
 VERSION_CONNECT_KATCP_MAJOR = 5
 
 class KatcpSyntaxError(ValueError):
@@ -714,7 +717,7 @@ class Sensor(object):
     SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
 
     # Sensor status constants
-    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE = range(6)
+    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE, INACTIVE = range(7)
 
     ## @brief Mapping from sensor status to status name.
     STATUSES = {
@@ -724,6 +727,7 @@ class Sensor(object):
         ERROR: 'error',
         FAILURE: 'failure',
         UNREACHABLE: 'unreachable',
+        INACTIVE: 'inactive',
     }
 
     ## @brief Mapping from status name to sensor status.
