@@ -1510,7 +1510,7 @@ class DeviceServer(DeviceServerBase):
                 raise FailReply("Strategy not allowed for version %d of katcp"
                                 % katcp_version)
 
-            format_inform = (format_inform_v5 if katcp_version >= 5
+            format_inform = (format_inform_v5 if katcp_version >= SEC_TS_KATCP_MAJOR
                              else format_inform_v4)
 
             def inform_callback(sensor_name, timestamp, status, value):
@@ -1519,7 +1519,7 @@ class DeviceServer(DeviceServerBase):
                 """Inform callback for sensor strategy."""
                 client.inform(cb_msg)
 
-            if katcp_version <= 4 and strategy == 'period':
+            if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
                 # Slightly nasty hack, but since only the only strategy involves
                 # timestamps for v4 is period it's not _too_ nasty :)
                 params = [float(params[0])* MS_TO_SEC_FAC] + params[1:]
