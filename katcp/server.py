@@ -23,7 +23,8 @@ from .core import (DeviceMetaclass, ExcepthookThread, Message, MessageParser,
                    FailReply, AsyncReply, ProtocolFlags)
 from .sampling import SampleReactor, SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
-from .sampling import SEC_TO_MS_FAC, MS_TO_SEC_FAC
+from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
+                   VERSION_CONNECT_KATCP_MAJOR)
 from .version import VERSION, VERSION_STR
 from .kattypes import (request, return_reply)
 
@@ -172,7 +173,7 @@ class DeviceServerBase(object):
             timestamp = time.time()
 
         katcp_version = self.PROTOCOL_INFO.major
-        timestamp_msg = ('%.6f' % timestamp if katcp_version >= 5
+        timestamp_msg = ('%.6f' % timestamp if katcp_version >= SEC_TS_KATCP_MAJOR
                          else str(int(timestamp*1000)) )
         return Message.inform("log",
                 level_name,
@@ -904,7 +905,7 @@ class DeviceServer(DeviceServerBase):
             self._strategies[client_conn] = {}  # map sensors -> sampling strategies
 
         katcp_version = self.PROTOCOL_INFO.major
-        if katcp_version >= 5:
+        if katcp_version >= VERSION_CONNECT_KATCP_MAJOR:
             client_conn.inform(Message.inform(
                 "version-connect", "katcp-protocol", self.PROTOCOL_INFO))
             client_conn.inform(Message.inform(
@@ -1352,6 +1353,12 @@ class DeviceServer(DeviceServerBase):
             ?sensor-list cpu.power.on
             #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
             !sensor-list ok 1
+
+            ?sensor-list /voltage/
+            #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
+            #sensor-list cpu.voltage CPU\_voltage. V float 0.0 3.0
+            !sensor-list ok 2
+
         """
         exact, name_filter = construct_name_filter(msg.arguments[0]
                     if msg.arguments else None)

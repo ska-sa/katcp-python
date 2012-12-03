@@ -284,7 +284,7 @@ class TestSensor(unittest.TestCase):
 
     def test_timestamp_sensor(self):
         """Test timestamp sensor."""
-        s = Sensor.timestamp("a.timestamp", "A timestamp sensor.", "ms", None)
+        s = Sensor.timestamp("a.timestamp", "A timestamp sensor.", "", None)
         self.assertEqual(s.stype, 'timestamp')
         s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value=1001.9)
         self.assertEqual(s.read_formatted(),
@@ -292,7 +292,7 @@ class TestSensor(unittest.TestCase):
         self.assertAlmostEqual(s.parse_value("1002.100"), 1002.1)
         self.assertRaises(ValueError, s.parse_value, "bicycle")
         s = Sensor.timestamp(
-            "a.timestamp", "A timestamp sensor.", "ms", default=123)
+            "a.timestamp", "A timestamp sensor.", "", default=123)
         self.assertEqual(s._value, 123)
 
     def test_address_sensor(self):

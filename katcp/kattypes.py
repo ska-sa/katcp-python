@@ -10,7 +10,11 @@
 import inspect
 import struct
 import re
-from .core import Message, FailReply
+import logging
+from .core import (Message, FailReply, DEFAULT_KATCP_MAJOR,
+                   SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC, MS_TO_SEC_FAC)
+
+logger = logging.getLogger(__name__)
 
 # KATCP Type Classes
 #
@@ -93,13 +97,15 @@ class KatcpType(object):
             self.check(value)
         return self.encode(value)
 
-    def unpack(self, packed_value):
+    def unpack(self, packed_value, major=DEFAULT_KATCP_MAJOR):
         """Parse a KATCP parameter into an object.
 
         Parameters
         ----------
         packed_value : str
             The unescaped KATCP string to parse into a value.
+        major : int, default = 5
+            Major version of KATCP protocol
 
         Returns
         -------
@@ -338,6 +344,12 @@ class Timestamp(KatcpType):
             raise ValueError("Could not parse value '%s' as timestamp." %
                              value)
 
+    def unpack(self, packed_value, major=DEFAULT_KATCP_MAJOR):
+        value = super(Timestamp, self).unpack(packed_value, major)
+        if major < SEC_TS_KATCP_MAJOR:
+            value = value * MS_TO_SEC_FAC
+        return value
+
 
 class TimestampOrNow(Timestamp):
     """KatcpType representing either a Timestamp or the special value
@@ -528,7 +540,7 @@ class Parameter(object):
         """
         return self._kattype.pack(value)
 
-    def unpack(self, value):
+    def unpack(self, value,  major=DEFAULT_KATCP_MAJOR):
         """Unpack the parameter using its kattype.
 
         Parameters
@@ -543,7 +555,7 @@ class Parameter(object):
         """
         # Wrap errors in FailReplies with information identifying the parameter
         try:
-            return self._kattype.unpack(value)
+            return self._kattype.unpack(value, major)
         except ValueError, message:
             raise FailReply("Error in parameter %s (%s): %s" %
                             (self.position, self.name, message))
