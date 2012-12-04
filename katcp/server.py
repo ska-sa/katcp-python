@@ -999,16 +999,20 @@ class DeviceServer(DeviceServerBase):
 
         Parameters
         ----------
-        sensor : Sensor object
-            The sensor object to remove from the device server.
+        sensor : Sensor object or name string
+            The sensor object (or name of sensor) to remove from the device server.
         """
-        del self._sensors[sensor.name]
+        if isinstance(sensor, basestring):
+            sensor_name = sensor
+        else:
+            sensor_name = sensor.name
+        del self._sensors[sensor_name]
 
         self._strat_lock.acquire()
         try:
             for strategies in self._strategies.values():
                 for other_sensor, strategy in list(strategies.items()):
-                    if other_sensor.name == sensor.name:
+                    if other_sensor.name == sensor_name:
                         del strategies[other_sensor]
                         self._reactor.remove_strategy(strategy)
         finally:
