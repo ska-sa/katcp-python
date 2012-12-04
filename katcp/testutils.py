@@ -68,6 +68,95 @@ class DeviceTestSensor(Sensor):
         self.set(timestamp, status, value)
 
 
+class MessageRecorder(object):
+    """
+        Parameters
+        ----------
+        whitelist : list or tuple
+            Record only messages matching these names.  If the list is empty,
+            all received messages will be saved except any specified in the
+            blacklist.
+        blacklist : list or tuple
+            Ignore messages matching these names.  If any names appear both in
+            the whitelist and the blacklist, the whitelist will take
+            precedence.
+        regex_filter : str
+            Record only messages that matches this regexes. Applied to the
+            unescaped message string. Messages are pre-filtered by the whitelist
+            parameter, so only messages that match both this regexe and have
+            names listed in whitelist are recorded.
+        informs : boolean
+            Whether to record informs.  Default: True.
+        replies : boolean
+            Whether to record replies.  Default: False.
+    """
+
+    def __init__(self, msg_types, whitelist, regex_filter, blacklist):
+        self.msgs = []
+        self.msg_types = msg_types
+        self.whitelist = whitelist
+        self.blacklist = blacklist
+        self.regex_filter = re.compile(regex_filter) if regex_filter else None
+        self.msg_received = threading.Event()
+
+    def get_msgs(self, min_number=0, timeout=1):
+        """Return the messages recorded so far. and delete them
+
+        Parameters
+        ==========
+        number -- Minumum number of messages to return, else wait
+        timeout: int seconds or None -- Don't wait longer than this
+        """
+        self.wait_number(min_number, timeout)
+        msg_count = len(self.msgs)
+        msgs_copy = self.msgs[:msg_count]
+        del self.msgs[:msg_count]
+        return msgs_copy
+
+    __call__ = get_msgs           # For backwards compatibility
+
+    def wait_number(self, number, timeout=1):
+        """
+        Wait until at least certain number of messages have been recorded
+
+        Parameters
+        ==========
+        number -- Number of messages to wait for
+        timeout: int seconds or None -- Don't wait longer than this
+        """
+        start_time = time.time()
+        while True:
+            if len(self.msgs) >= number:
+                return True
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= timeout:
+                return None
+            self.msg_received.wait(timeout=timeout-elapsed_time)
+
+    def append_msg(self, msg):
+        """Append a message if it matches the criteria."""
+        if msg.mtype not in self.msg_types:
+            return
+        try:
+            if self._record_predicate(msg):
+                self.msgs.append(msg)
+                self.msg_received.set()
+        finally:
+            self.msg_received.clear()
+
+    def _record_predicate(self, msg):
+        if self.whitelist and msg.name not in self.whitelist:
+            return False
+        if self.regex_filter:
+            if self.regex_filter.match(str(msg)):
+                return True
+            else:
+                return False
+        if msg.name in self.blacklist:
+            return False
+        return True
+
+
 class BlockingTestClient(client.BlockingClient):
     """Test blocking client."""
 
@@ -97,8 +186,8 @@ class BlockingTestClient(client.BlockingClient):
             append_msg(msg)
         return super(BlockingTestClient, self).handle_reply(msg)
 
-    def message_recorder(self, whitelist=(), blacklist=(), informs=True,
-                         replies=False):
+    def message_recorder(self, whitelist=(), blacklist=(), regex_filter=None,
+                         informs=True, replies=False):
         """Helper method for attaching a hook to selected received messages.
 
         Parameters
@@ -111,6 +200,11 @@ class BlockingTestClient(client.BlockingClient):
             Ignore messages matching these names.  If any names appear both in
             the whitelist and the blacklist, the whitelist will take
             precedence.
+        regex_filter : str
+            Record only messages that matches this regexes. Applied to the
+            unescaped message string. Messages are pre-filtered by the whitelist
+            parameter, so only messages that match both this regexe and have
+            names listed in whitelist are recorded.
         informs : boolean
             Whether to record informs.  Default: True.
         replies : boolean
@@ -118,9 +212,10 @@ class BlockingTestClient(client.BlockingClient):
 
         Return
         ------
-        get_msgs : function
-            Function that returns a list of messages that have matched so far.
-            Each call returns the list of message since the previous call.
+        get_msgs : object
+            Callable Instance of MessageRecorder. Returns a list of messages
+            that have matched so far.  Each call returns the list of message
+            since the previous call.
         """
         msg_types = set()
         if informs:
@@ -130,66 +225,7 @@ class BlockingTestClient(client.BlockingClient):
         whitelist = set(whitelist)
         blacklist = set(blacklist)
 
-
-        class MessageRecorder(object):
-            def __init__(self, msg_types, whitelist, blacklist):
-                self.msgs = []
-                self.msg_types = msg_types
-                self.whitelist = whitelist
-                self.blacklist = blacklist
-                self.msg_received = threading.Event()
-
-            def get_msgs(self, min_number=0, timeout=1):
-                """Return the messages recorded so far. and delete them
-
-                Parameters
-                ==========
-                number -- Minumum number of messages to return, else wait
-                timeout: int seconds or None -- Don't wait longer than this
-                """
-                self.wait_number(min_number, timeout)
-                msg_count = len(self.msgs)
-                msgs_copy = self.msgs[:msg_count]
-                del self.msgs[:msg_count]
-                return msgs_copy
-
-            __call__ = get_msgs           # For backwards compatibility
-
-            def wait_number(self, number, timeout=1):
-                """Wait until at least certain number of messages have been recorded
-
-                Parameters
-                ==========
-                number -- Number of messages to wait for
-                timeout: int seconds or None -- Don't wait longer than this
-                """
-                start_time = time.time()
-                while True:
-                    if len(self.msgs) >= number:
-                        return True
-                    elapsed_time = time.time() - start_time
-                    if elapsed_time >= timeout:
-                        return None
-                    self.msg_received.wait(timeout=timeout-elapsed_time)
-
-            def append_msg(self, msg):
-                """Append a message if it matches the criteria."""
-                if msg.mtype not in self.msg_types:
-                    return
-                try:
-                    if self.whitelist:
-                        if msg.name in whitelist:
-                            self.msgs.append(msg)
-                            self.msg_received.set()
-                    else:
-                        if msg.name not in self.blacklist:
-                            self.msgs.append(msg)
-                            self.msg_received.set()
-                finally:
-                    self.msg_received.clear()
-
-        mr = MessageRecorder(msg_types, whitelist, blacklist)
-
+        mr = MessageRecorder(msg_types, whitelist, regex_filter, blacklist)
         self._message_recorders[id(mr)] = mr.append_msg
 
         return mr
@@ -459,7 +495,7 @@ class BlockingTestClient(client.BlockingClient):
                                          msg=msg, places=places)
 
     def wait_until_sensor_equals(self, timeout, sensorname, value,
-                                 sensortype=str, places=7, pollfreq=0.1):
+                                 sensortype=str, places=7, pollfreq=0.02):
         """Wait until a sensor's value is equal to the given value, or time
         out.
 
@@ -479,6 +515,8 @@ class BlockingTestClient(client.BlockingClient):
         pollfreq : float, optional
             How frequently to poll for the sensor value. Default: 0.1.
         """
+
+        # TODO Should be changed to use some varient of SensorTransitionWaiter
 
         stoptime = time.time() + timeout
         success = False
