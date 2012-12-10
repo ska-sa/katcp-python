@@ -519,7 +519,7 @@ class DeviceServerBase(object):
             self._logger.warn(
                 'Deprecation warning: do not use self.reply() '
                 'within a reply handler context -- use conn.reply(*msg_args)\n'
-                'or conn.reply_with_msg(msg) Traceback:\n %s',
+                'or conn.reply_with_message(msg) Traceback:\n %s',
                 "".join(traceback.format_stack() ))
             # Get the underlying ClientConnectionTCP instance
             connection = connection.client_connection

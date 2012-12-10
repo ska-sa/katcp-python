@@ -8,6 +8,7 @@
    """
 
 import unittest2 as unittest
+import mock
 from katcp import Message, FailReply, AsyncReply
 from katcp.kattypes import request, inform, return_reply, send_reply,  \
                            Bool, Discrete, Float, Int, Lru, Timestamp, \
@@ -483,15 +484,13 @@ class TestDevice(object):
         if i == 6:
             return ("ok", i, d, b, "extra parameter")
         if i == 9:
-            # This actually gets put in the callback params automatically
-            orig_msg = Message.request("one", "foo", "bar")
-            self.finish_request_one(orig_msg, conn, i, d, b)
+            self.finish_request_one(conn, i, d, b)
             raise AsyncReply()
         return ("ok", i, d, b)
 
     @send_reply(Int(min=1, max=10), Discrete(("on", "off")), Bool())
-    def finish_request_one(self, msg, conn, i, d, b):
-        return (conn, msg, "ok", i, d, b)
+    def finish_request_one(self, conn, i, d, b):
+        return (conn, "ok", i, d, b)
 
     def reply(self, conn, msg, orig_msg):
         self.sent_messages.append([conn, msg])
@@ -561,7 +560,8 @@ class TestDecorator(unittest.TestCase):
 
     def test_request_one(self):
         """Test request with no defaults."""
-        conn = ""
+        conn = mock.Mock()
+        conn.req_msg.name = 'one'
         self.assertEqual(str(self.device.request_one(conn, Message.request(
                         "one", "2", "on", "0"))), "!one ok 2 on 0")
         self.assertRaises(FailReply, self.device.request_one, conn,
@@ -583,12 +583,12 @@ class TestDecorator(unittest.TestCase):
         self.assertRaises(ValueError, self.device.request_one, conn,
                           Message.request("one", "6", "on", "0"))
 
-        self.assertRaises(AsyncReply, self.device.request_one, "myconn",
+        conn.reset_mock()
+        self.assertRaises(AsyncReply, self.device.request_one, conn,
                           Message.request("one", "9", "on", "0"))
-        self.assertEqual(len(self.device.sent_messages), 1)
-        self.assertEqual(self.device.sent_messages[0][0], "myconn")
-        self.assertEqual(str(self.device.sent_messages[0][1]),
-                         "!one ok 9 on 0")
+        self.assertEqual(conn.reply_with_message.call_count, 1)
+        conn.reply_with_message.assert_called_once_with(Message.reply(
+            'one', 'ok', '9', 'on', '0'))
 
     def test_request_two(self):
         """Test request with defaults."""
