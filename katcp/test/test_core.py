@@ -289,11 +289,21 @@ class TestSensor(unittest.TestCase):
         s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value=1001.9)
         self.assertEqual(s.read_formatted(),
                          ("12345.000000", "nominal", "1001.900000"))
+        # Test with katcp v4 parsing formatting
+        self.assertEqual(s.read_formatted(major=4),
+                         ("12345000", "nominal", "1001900"))
         self.assertAlmostEqual(s.parse_value("1002.100"), 1002.1)
         self.assertRaises(ValueError, s.parse_value, "bicycle")
         s = Sensor.timestamp(
             "a.timestamp", "A timestamp sensor.", "", default=123)
         self.assertEqual(s._value, 123)
+
+        s.set_formatted('12346.1', 'nominal', '12246.1')
+        self.assertEqual(s.read(), (12346.1, katcp.Sensor.NOMINAL, 12246.1))
+
+        # Test with katcp v4 parsing
+        s.set_formatted('12347100', 'nominal', '12247100', major=4)
+        self.assertEqual(s.read(), (12347.1, katcp.Sensor.NOMINAL, 12247.1))
 
     def test_address_sensor(self):
         """Test address sensor."""
@@ -324,7 +334,13 @@ class TestSensor(unittest.TestCase):
         s.set_value(5, timestamp=12345)
         self.assertEqual(s.read(), (12345, katcp.Sensor.NOMINAL, 5))
 
-class test_Sensor(unittest.TestCase):
+        s.set_formatted('12346.1', 'nominal', '-2')
+        self.assertEqual(s.read(), (12346.1, katcp.Sensor.NOMINAL, -2))
+
+        # Test setting with katcp v4 parsing
+        s.set_formatted('12347100', 'warn', '-3', major=4)
+        self.assertEqual(s.read(), (12347.1, katcp.Sensor.WARN, -3))
+
     def test_statuses(self):
         # Test that the status constants are all good
         valid_statuses = set(['unknown', 'nominal', 'warn', 'error',
@@ -348,3 +364,4 @@ class test_Sensor(unittest.TestCase):
         # lookup dicts
         self.assertEqual(len(Sensor.STATUSES), len(valid_statuses))
         self.assertEqual(len(Sensor.STATUS_NAMES), len(valid_statuses))
+
