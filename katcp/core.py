@@ -1055,7 +1055,7 @@ class Sensor(object):
         self.notify()
 
     def set_formatted(self, raw_timestamp, raw_status, raw_value,
-                      katcp_major=DEFAULT_KATCP_MAJOR):
+                      major=DEFAULT_KATCP_MAJOR):
         """Set the current value of the sensor.
 
         Parameters
@@ -1066,21 +1066,26 @@ class Sensor(object):
             KATCP formatted sensor status string
         value : str
             KATCP formatted sensor value
-        katcp_major : int, default = 5
-            KATCP protocol major version to use for interpreting the raw values
+        major : int, default = 5
+            KATCP major version to use for interpreting the raw values
         """
-        timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp)
-        if katcp_major < SEC_TS_KATCP_MAJOR:
+        timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp, major)
+        if major < SEC_TS_KATCP_MAJOR:
             timestamp *= MS_TO_SEC_FAC
         status = self.STATUS_NAMES[raw_status]
-        value = self.parse_value(raw_value, katcp_major)
+        value = self.parse_value(raw_value, major)
         self.set(timestamp, status, value)
 
-    def read_formatted(self):
+    def read_formatted(self, major=DEFAULT_KATCP_MAJOR):
         """Read the sensor and return a timestamp, status, value tuple.
 
         All values are strings formatted as specified in the Sensor Type
         Formats in the katcp specification.
+
+        Parameters
+        ----------
+        major : int. Defaults to latest implemented KATCP version (5)
+            Major version of KATCP to use when interpreting types
 
         Returns
         -------
@@ -1092,7 +1097,7 @@ class Sensor(object):
             KATCP formatted sensor value
         """
         timestamp, status, value = self.read()
-        return (self.TIMESTAMP_TYPE.encode(timestamp),
+        return (self.TIMESTAMP_TYPE.encode(timestamp, major),
                 self.STATUSES[status],
                 self._formatter(value, True))
 
@@ -1111,7 +1116,8 @@ class Sensor(object):
         """
         return self._value_tuple
 
-    def set_value(self, value, status=NOMINAL, timestamp=None):
+    def set_value(self, value, status=NOMINAL, timestamp=None,
+                  major=DEFAULT_KATCP_MAJOR):
         """Check and then set the value of the sensor.
 
         Parameters
@@ -1120,10 +1126,13 @@ class Sensor(object):
             Value of the appropriate type for the sensor.
         status : Sensor status constant
             Whether the value represents an error condition or not.
-        timestamp : float in seconds
-           The time at which the sensor value was determined.
+        timestamp : float in seconds or None
+           The time at which the sensor value was determined. Uses current time
+           if None.
+        major : int. Defaults to latest implemented KATCP version (5)
+            Major version of KATCP to use when interpreting types
         """
-        self._kattype.check(value)
+        self._kattype.check(value, major)
         if timestamp is None:
             timestamp = time.time()
         self.set(timestamp, status, value)
@@ -1160,7 +1169,8 @@ class Sensor(object):
                                    type_string)
 
     @classmethod
-    def parse_params(cls, sensor_type, formatted_params):
+    def parse_params(cls, sensor_type, formatted_params,
+                     major=DEFAULT_KATCP_MAJOR):
         """Parse KATCP formatted parameters into Python values.
 
         Parameters
@@ -1169,6 +1179,8 @@ class Sensor(object):
             The type of sensor the parameters are for.
         formatted_params : list of strings
             The formatted parameters that should be parsed.
+        major : int. Defaults to latest implemented KATCP version (5)
+            Major version of KATCP to use when interpreting types
 
         Returns
         -------
@@ -1180,4 +1192,4 @@ class Sensor(object):
             kattype = typeclass([])
         else:
             kattype = typeclass()
-        return [kattype.decode(x) for x in formatted_params]
+        return [kattype.decode(x, major) for x in formatted_params]
