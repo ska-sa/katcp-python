@@ -1070,8 +1070,6 @@ class Sensor(object):
             KATCP major version to use for interpreting the raw values
         """
         timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp, major)
-        if major < SEC_TS_KATCP_MAJOR:
-            timestamp *= MS_TO_SEC_FAC
         status = self.STATUS_NAMES[raw_status]
         value = self.parse_value(raw_value, major)
         self.set(timestamp, status, value)
@@ -1099,7 +1097,7 @@ class Sensor(object):
         timestamp, status, value = self.read()
         return (self.TIMESTAMP_TYPE.encode(timestamp, major),
                 self.STATUSES[status],
-                self._formatter(value, True))
+                self._formatter(value, True, major))
 
     def read(self):
         """Read the sensor and return a timestamp, status, value tuple.
