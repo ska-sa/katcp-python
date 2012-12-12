@@ -355,9 +355,7 @@ class Timestamp(KatcpType):
         if major < SEC_TS_KATCP_MAJOR:
             # Convert milliseconds to seconds
             decoded = decoded * MS_TO_SEC_FAC
-        self.encode
         return decoded
-
 
 
 class TimestampOrNow(Timestamp):
@@ -882,13 +880,13 @@ def pack_types(types, args, major):
 
     if len(args) < len(types):
         # this passes in None for missing args
-        retvals = map(lambda ktype, arg: ktype.pack(arg, major), types, args)
+        retvals = map(lambda ktype, arg: ktype.pack(arg, major=major), types, args)
     else:
-        retvals = [ktype.pack(arg, major) for ktype, arg in zip(types, args)]
+        retvals = [ktype.pack(arg, major=major) for ktype, arg in zip(types, args)]
 
     if len(args) > len(types) and multiple:
         last_ktype = types[-1]
         for arg in args[len(types):]:
-            retvals.append(last_ktype.pack(arg, major))
+            retvals.append(last_ktype.pack(arg, major=major))
 
     return retvals

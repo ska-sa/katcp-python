@@ -15,6 +15,8 @@ from katcp.kattypes import request, inform, return_reply, send_reply,  \
                            Str, Struct, Regex, DiscreteMulti, TimestampOrNow, \
                            StrictTimestamp, Address
 
+MS_TO_SEC_FAC = 1/1000.
+SEC_TO_MS_FAC = 1000
 
 class TestType(unittest.TestCase):
     def setUp(self):
@@ -520,6 +522,22 @@ class TestDevice(object):
     def request_five(self, i, d, b):
         return ("ok", i, d, b)
 
+    @request(Timestamp(), Timestamp(optional=True), major=4)
+    @return_reply(Timestamp(), Timestamp(default=321), major=4)
+    def request_katcpv4_time(self, conn, timestamp1, timestamp2):
+        self.katcpv4_time1 = timestamp1
+        self.katcpv4_time2 = timestamp2
+        if timestamp2:
+            return ('ok', timestamp1, timestamp2)
+        else:
+            return ('ok', timestamp1)
+
+    @request(Timestamp(multiple=True), major=4)
+    @return_reply(Timestamp(multiple=True), major=4)
+    def request_katcpv4_time_multi(self, conn, *timestamps):
+        self.katcpv4_time_multi = timestamps
+        return ('ok',) + timestamps
+
     @return_reply(Int(min=1, max=3), Discrete(("on", "off")), Bool())
     @request(Int(min=1, max=3), Discrete(("on", "off")), Bool())
     def request_six(self, i, d, b):
@@ -557,6 +575,37 @@ class TestDecorator(unittest.TestCase):
         self.assertEqual(
             ex.exception.message,
             'Only the last parameter type can accept multiple arguments.')
+
+    def test_katcpv4(self):
+        ts = 12345678                     # In milliseconds
+        conn = mock.Mock()
+        ret_msg = self.device.request_katcpv4_time(conn, Message.request(
+            'katcpv4-time', str(ts)))
+        self.assertTrue(ret_msg.reply_ok())
+        self.assertAlmostEqual(float(ret_msg.arguments[1]), ts)
+        # Test decorator default value
+        self.assertAlmostEqual(float(ret_msg.arguments[2]), 321*SEC_TO_MS_FAC)
+        self.assertAlmostEqual(self.device.katcpv4_time1*SEC_TO_MS_FAC, ts)
+        self.assertEqual(self.device.katcpv4_time2, None)
+        ts1 = 1234
+        ts2 = 2345
+        ret_msg = self.device.request_katcpv4_time(conn, Message.request(
+            'katcpv4-time', str(ts1), str(ts2)))
+        self.assertTrue(ret_msg.reply_ok())
+        self.assertAlmostEqual(float(ret_msg.arguments[1]), ts1)
+        self.assertAlmostEqual(float(ret_msg.arguments[2]), ts2)
+        self.assertAlmostEqual(self.device.katcpv4_time1*SEC_TO_MS_FAC, ts1)
+        self.assertAlmostEqual(self.device.katcpv4_time2*SEC_TO_MS_FAC, ts2)
+
+    def test_katcpv4_multi(self):
+        tss = (1234, 5678, 9012)                     # In milliseconds
+        conn = mock.Mock()
+        ret_msg = self.device.request_katcpv4_time_multi(conn, Message.request(
+            'katcpv4-time-multi', *(str(ts) for ts in tss) ))
+        for i, ts in enumerate(tss):
+            self.assertAlmostEqual(float(ret_msg.arguments[i+1]), ts)
+            self.assertAlmostEqual(self.device.katcpv4_time_multi[i],
+                                   ts*MS_TO_SEC_FAC)
 
     def test_request_one(self):
         """Test request with no defaults."""

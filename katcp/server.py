@@ -915,8 +915,8 @@ class DeviceServer(DeviceServerBase):
                 "version-connect", "katcp-device",
                 self.version(), self.build_state() ))
         else:
-            self.inform(client_conn, Message.inform("version", self.version()))
-            self.inform(client_conn, Message.inform("build-state", self.build_state()))
+            client_conn.inform(Message.inform("version", self.version()))
+            client_conn.inform(Message.inform("build-state", self.build_state()))
 
     def clear_strategies(self, client_conn, remove_client=False):
         """
