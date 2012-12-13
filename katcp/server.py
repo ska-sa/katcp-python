@@ -1524,8 +1524,8 @@ class DeviceServer(DeviceServerBase):
                 client.inform(cb_msg)
 
             if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
-                # Slightly nasty hack, but since only the only strategy involves
-                # timestamps for v4 is period it's not _too_ nasty :)
+                # Slightly nasty hack, but since period is the only strategy
+                # involves timestamps for v4 is period it's not _too_ nasty :)
                 params = [float(params[0])* MS_TO_SEC_FAC] + params[1:]
 
             new_strategy = SampleStrategy.get_strategy(
@@ -1553,8 +1553,8 @@ class DeviceServer(DeviceServerBase):
 
         strategy, params = current_strategy.get_sampling_formatted()
         if katcp_version <= 4 and strategy == 'period':
-            # Another Slightly nasty hack, but since only the only strategy involves
-            # timestamps for v4 is period it's not _too_ nasty :)
+            # Another slightly nasty hack, but since period is the only strategy
+            # involves timestamps for v4 is period it's not _too_ nasty :)
             params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
         return Message.reply("sensor-sampling", "ok", name, strategy, *params)
 
