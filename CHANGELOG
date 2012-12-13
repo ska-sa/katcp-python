@@ -1,3 +1,47 @@
+13 December 2012 (0.5.0a0)
+ * Add support for protocol flags to katcp.core -- a standard
+   datastructure for storing katcp protocol versions and capabilities
+ * Clean-up various bits of code, docstring fixes, etc.
+ * katcp.Message constructors are now strict about unknown keyword arguments
+ * Add clear_strategies() method to server class to clear all sampling
+   strategies for a connection.
+ * Support for serving either KATCP v4 or v5
+   * sensor timestamp conversions as needed
+   * log timestamp conversion as needed
+   * kattypes decorators can be configured for the appropriate protocol versions
+   * generate appropriate on-connect messages
+ * Support for being a client of ether KATCP v4 or v5
+   * Auto-detect server version using on-connect informs
+   * Add ability for clients to wait until protocol information is received from
+     server
+ * Refactor use of raw 'sock' object as a connection identifier
+   * Abstract sock to a transport-neutral connectin object
+   * Pass a request-bound connection object to request handlers, rather than a
+     raw sock. Automatically use the right name and mid for informs and replies
+   * Deprecate use of self.reply(sock, ....) and self.reply_inform(sock,
+     ....). Rather use conn.reply(...), conn.reply_with_message(...),
+     conn.inform(...)
+ * Renamed CallbackClient.request to callback_request to be more consistent with
+   superclass API
+ * Add sensor construction classmethods, e.g. Sensor.integer(...), rather than
+   Sensor(Sensor.INTEGER, ...)
+ * Removed non-standard rate-limit extension from 'event' sample strategy
+   implementation. KATCP v5 event-rate strategy covers that use case.
+ * Fix race condition between timeout and reply handlers
+ * Various improvements to tests and testutils to make tests more robust and
+   (sometimes) faster
+ * Add implementation of subset of new KATCP v5 features
+   * Add Address sensor type
+   * Implement ?version-list and #version-connect
+   * Add 'unreachable' and 'inactive' sensor states
+   * Make float and integer sensor ranges optional and informational.
+   * Add Message Identifier (mid) support. Enabled by default in client
+     for servers that support mids.
+   * Use seconds instead of milliseconds for all timestamps and periods (except
+     when explicitly configured to use an older KATCP, see multi-version support
+     above)
+ * Version 0.5.0a0 released
+
 18 September 2012
  * PEP-8 cleanup of code.
  * Store sensor state as a tuple to allow 'atomic' read.
