@@ -24,7 +24,7 @@ from .core import (DeviceMetaclass, ExcepthookThread, Message, MessageParser,
 from .sampling import SampleReactor, SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
 from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
-                   VERSION_CONNECT_KATCP_MAJOR)
+                   VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR)
 from .version import VERSION, VERSION_STR
 from .kattypes import (request, return_reply)
 
@@ -59,7 +59,7 @@ def construct_name_filter(pattern):
 class ClientConnectionTCP(object):
     # XXX TODO We should factor the whole TCP select loop (or future twisted
     # implementation?) out of the server class and into a Connection class that
-    # spews katcp messages and ClientConnection* objecto onto the katcp
+    # spews katcp messages and ClientConnection* objects onto the katcp
     # server. This will allow us to abstract out the connection and allow us to
     # support serial connections cleanly
     def __init__(self, server, raw_socket):
@@ -70,15 +70,16 @@ class ClientConnectionTCP(object):
 class ClientRequestConnection(object):
     def __init__(self, client_connection, req_msg):
         self.client_connection = client_connection
-        self.req_msg = req_msg
+        assert(req_msg.mtype == Message.REQUEST)
+        self.msg = req_msg
 
     def inform(self, *args):
-        inf_msg = Message.reply_inform(self.req_msg, *args)
+        inf_msg = Message.reply_inform(self.msg, *args)
         self.client_connection.inform(inf_msg)
 
     def reply(self, *args):
-        rep_msg = Message.reply_to_request(self.req_msg, *args)
-        self.client_connection.reply(rep_msg, self.req_msg)
+        rep_msg = Message.reply_to_request(self.msg, *args)
+        self.client_connection.reply(rep_msg, self.msg)
         self._post_reply()
 
     def reply_with_message(self, rep_msg):
@@ -87,8 +88,8 @@ class ClientRequestConnection(object):
 
         Will check that rep_msg.name matches the bound request
         """
-        assert rep_msg.name == self.req_msg.name
-        self.client_connection.reply(rep_msg, self.req_msg)
+        assert rep_msg.name == self.msg.name
+        self.client_connection.reply(rep_msg, self.msg)
         self._post_reply()
 
     def _post_reply(self):
@@ -97,10 +98,10 @@ class ClientRequestConnection(object):
         self.reply_with_message = self.reply_again
 
     def reply_again(self, *args):
-        raise RuntimeError('Reply to request %r already sent.' % self.req_msg)
+        raise RuntimeError('Reply to request %r already sent.' % self.msg)
 
     def get_reply_message(self, *args):
-        return Message.reply_to_request(self.req_msg, *args)
+        return Message.reply_to_request(self.msg, *args)
 
 class DeviceServerBase(object):
     """Base class for device servers.
@@ -137,7 +138,7 @@ class DeviceServerBase(object):
 
     ## @brief Protocol versions and flags. Default to version 5, subclasses
     ## should override PROTOCOL_INFO
-    PROTOCOL_INFO = ProtocolFlags(5, 0, set([
+    PROTOCOL_INFO = ProtocolFlags(DEFAULT_KATCP_MAJOR, 0, set([
         ProtocolFlags.MULTI_CLIENT,
         ProtocolFlags.MESSAGE_IDS,
         ]))
@@ -1078,11 +1079,11 @@ class DeviceServer(DeviceServerBase):
 
     # request implementations
 
-    # all requests take conn and msg arguments regardless of whether
+    # all requests take req and msg arguments regardless of whether
     # they're used
     # pylint: disable-msg = W0613
 
-    def request_halt(self, conn, msg):
+    def request_halt(self, req, msg):
         """Halt the device server.
 
         Returns
@@ -1103,7 +1104,7 @@ class DeviceServer(DeviceServerBase):
         # has been sent.
         return Message.reply("halt", "ok")
 
-    def request_help(self, conn, msg):
+    def request_help(self, req, msg):
         """Return help on the available requests.
 
         Return a description of the available requests using a seqeunce of
@@ -1146,7 +1147,7 @@ class DeviceServer(DeviceServerBase):
         if not msg.arguments:
             for name, method in sorted(self._request_handlers.items()):
                 doc = method.__doc__
-                conn.inform(name, doc)
+                req.inform(name, doc)
             num_methods = len(self._request_handlers)
             return Message.reply("help", "ok", str(num_methods))
         else:
@@ -1154,11 +1155,11 @@ class DeviceServer(DeviceServerBase):
             if name in self._request_handlers:
                 method = self._request_handlers[name]
                 doc = method.__doc__.strip()
-                conn.inform(name, doc)
+                req.inform(name, doc)
                 return Message.reply("help", "ok", "1")
             return Message.reply("help", "fail", "Unknown request method.")
 
-    def request_log_level(self, conn, msg):
+    def request_log_level(self, req, msg):
         """Query or set the current logging level.
 
         Parameters
@@ -1193,7 +1194,7 @@ class DeviceServer(DeviceServerBase):
                 raise FailReply(str(e))
         return Message.reply("log-level", "ok", self.log.level_name())
 
-    def request_restart(self, conn, msg):
+    def request_restart(self, req, msg):
         """Restart the device server.
 
         Returns
@@ -1217,7 +1218,7 @@ class DeviceServer(DeviceServerBase):
         # has been sent.
         return Message.reply("restart", "ok")
 
-    def request_client_list(self, conn, msg):
+    def request_client_list(self, req, msg):
         """Request the list of connected clients.
 
         The list of clients is sent as a sequence of #client-list informs.
@@ -1253,10 +1254,10 @@ class DeviceServer(DeviceServerBase):
             except socket.error:
                 # client may be gone, in which case just send a description
                 addr = repr(client)
-            conn.inform("client-list", addr)
-        return Message.reply("client-list", "ok", str(num_clients))
+            req.inform(addr)
+        return req.get_reply_message('ok', str(num_clients))
 
-    def request_version_list(self, conn, msg):
+    def request_version_list(self, req, msg):
         """Request the list of versions of roles and subcomponents.
 
         Informs
@@ -1302,12 +1303,12 @@ class DeviceServer(DeviceServerBase):
                 inform_args = (name, version)
             else:
                 inform_args = (name, version, build_state)
-            conn.inform(*inform_args)
+            req.inform(*inform_args)
 
         num_versions = len(versions) + len(extra_versions)
-        return Message.reply(msg.name, "ok", str(num_versions))
+        return req.get_reply_message("ok", str(num_versions))
 
-    def request_sensor_list(self, conn, msg):
+    def request_sensor_list(self, req, msg):
         """Request the list of sensors.
 
         The list of sensors is sent as a sequence of #sensor-list informs.
@@ -1372,15 +1373,15 @@ class DeviceServer(DeviceServerBase):
         if exact and not sensors:
             return Message.reply("sensor-list", "fail", "Unknown sensor name.")
 
-        self._send_sensor_value_informs(conn, sensors)
+        self._send_sensor_value_informs(req, sensors)
         return Message.reply("sensor-list", "ok", str(len(sensors)))
 
-    def _send_sensor_value_informs(self, conn, sensors):
+    def _send_sensor_value_informs(self, req, sensors):
         for name, sensor in sensors:
-            conn.inform(name, sensor.description, sensor.units, sensor.stype,
+            req.inform(name, sensor.description, sensor.units, sensor.stype,
                         *sensor.formatted_params)
 
-    def request_sensor_value(self, conn, msg):
+    def request_sensor_value(self, req, msg):
         """Request the value of a sensor or sensors.
 
         A list of sensor values as a sequence of #sensor-value informs.
@@ -1442,10 +1443,10 @@ class DeviceServer(DeviceServerBase):
             timestamp, status, value = sensor.read_formatted()
             if katcp_version <= 4:
                 timestamp = int(SEC_TO_MS_FAC*float(timestamp))
-            conn.inform(timestamp, "1", name, status, value)
+            req.inform(timestamp, "1", name, status, value)
         return Message.reply("sensor-value", "ok", str(len(sensors)))
 
-    def request_sensor_sampling(self, conn, msg):
+    def request_sensor_sampling(self, req, msg):
         """Configure or query the way a sensor is sampled.
 
         Sampled values are reported asynchronously using the #sensor-status
@@ -1499,7 +1500,7 @@ class DeviceServer(DeviceServerBase):
 
         sensor = self._sensors[name]
         # The client connection that is not specific to this request context
-        client = conn.client_connection
+        client = req.client_connection
         katcp_version = self.PROTOCOL_INFO.major
 
         if len(msg.arguments) > 1:
@@ -1560,7 +1561,7 @@ class DeviceServer(DeviceServerBase):
 
     @request()
     @return_reply()
-    def request_sensor_sampling_clear(self, conn):
+    def request_sensor_sampling_clear(self, req):
         """Set all sampling strategies for this client to none.
 
         Returns
@@ -1573,12 +1574,12 @@ class DeviceServer(DeviceServerBase):
         ?sensor-sampling-clear
         !sensor-sampling-clear ok
         """
-        self.clear_strategies(conn.client_connection)
+        self.clear_strategies(req.client_connection)
 
         return ["ok"]
 
 
-    def request_watchdog(self, conn, msg):
+    def request_watchdog(self, req, msg):
         """Check that the server is still alive.
 
         Returns

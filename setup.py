@@ -17,7 +17,7 @@ setup (
     download_url='http://pypi.python.org/pypi/katcp',
     license="BSD",
     classifiers=[
-        "Development Status :: 5 - Production/Stable",
+        "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
@@ -27,7 +27,7 @@ setup (
     ],
     platforms = [ "OS Independent" ],
     install_requires = ["ply", "twisted", "nose", "unittest2", "mock"],
-    keywords="kat kat7 ska",
+    keywords="kat kat7 ska MeerKAT",
     zip_safe = False,
     # Bitten Test Suite
     test_suite = "nose.collector",
