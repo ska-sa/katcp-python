@@ -88,7 +88,7 @@ class test_ClientRequestConnection(unittest.TestCase):
 
     def test_reply_message(self):
         arguments = ('inf1', 'inf2')
-        rep_msg = self.DUT.get_reply_message(*arguments)
+        rep_msg = self.DUT.make_reply(*arguments)
         self.assertSequenceEqual(rep_msg.arguments, arguments)
         self.assertEqual(rep_msg.name, 'test-request')
         self.assertEqual(rep_msg.mid, '42')
