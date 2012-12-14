@@ -100,7 +100,7 @@ class ClientRequestConnection(object):
     def reply_again(self, *args):
         raise RuntimeError('Reply to request %r already sent.' % self.msg)
 
-    def get_reply_message(self, *args):
+    def make_reply(self, *args):
         return Message.reply_to_request(self.msg, *args)
 
 class DeviceServerBase(object):
@@ -1255,7 +1255,7 @@ class DeviceServer(DeviceServerBase):
                 # client may be gone, in which case just send a description
                 addr = repr(client)
             req.inform(addr)
-        return req.get_reply_message('ok', str(num_clients))
+        return req.make_reply('ok', str(num_clients))
 
     def request_version_list(self, req, msg):
         """Request the list of versions of roles and subcomponents.
@@ -1306,7 +1306,7 @@ class DeviceServer(DeviceServerBase):
             req.inform(*inform_args)
 
         num_versions = len(versions) + len(extra_versions)
-        return req.get_reply_message("ok", str(num_versions))
+        return req.make_reply("ok", str(num_versions))
 
     def request_sensor_list(self, req, msg):
         """Request the list of sensors.

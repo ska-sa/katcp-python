@@ -902,12 +902,12 @@ class DeviceTestServer(DeviceServer):
         self.slow_waiting = True
         self._cancel_slow_command.wait(float(msg.arguments[0]))
         self.slow_waiting = False
-        return req.get_reply_message("ok")
+        return req.make_reply("ok")
 
     def request_cancel_slow_command(self, req, msg):
         """Cancel slow command request, resulting in it replying immedietely"""
         self._cancel_slow_command.set()
-        return req.get_reply_message('ok')
+        return req.make_reply('ok')
 
     def handle_message(self, req, msg):
         self.__msgs.append(msg)
