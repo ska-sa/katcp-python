@@ -144,33 +144,33 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         self.server.wait_running(timeout=1.)
         self.assertTrue(self.server.running())
         self.server._strategies = defaultdict(lambda : {})
-        conn = WaitingMock()
-        self.server.request_sensor_sampling(conn, katcp.Message.request(
+        req = WaitingMock()
+        self.server.request_sensor_sampling(req, katcp.Message.request(
               'sensor-sampling', 'a-sens', 'event'))
-        inf = conn.client_connection.inform
+        inf = req.client_connection.inform
         inf.assert_wait_call_count(count=1)
         (inf_msg, ) = inf.call_args[0]
         self._assert_msgs_equal([inf_msg], (
             r'#sensor-status 1234000 1 a-sens nominal 1',))
 
-        self.server.request_sensor_sampling(conn, katcp.Message.request(
+        self.server.request_sensor_sampling(req, katcp.Message.request(
               'sensor-sampling', 'a-sens', 'period', 1000))
-        client = conn.client_connection
+        client = req.client_connection
         strat = self.server._strategies[client][s]
         # Test that the periodic update period is converted to seconds
         self.assertEqual(strat._period, 1.)
         # test that parameters returned by the request matches v4 format.
-        reply = self.server.request_sensor_sampling(conn, katcp.Message.request(
+        reply = self.server.request_sensor_sampling(req, katcp.Message.request(
               'sensor-sampling', 'a-sens'))
         self._assert_msgs_equal([reply],
                                 ['!sensor-sampling ok a-sens period 1000'])
         # event-rate is not an allowed v4 strategy
         with self.assertRaises(FailReply):
-            self.server.request_sensor_sampling(conn, katcp.Message.request(
+            self.server.request_sensor_sampling(req, katcp.Message.request(
                 'sensor-sampling', 'a-sens', 'event-rate', 1000, 2000))
         # differential-rate is not an allowed v4 strategy
         with self.assertRaises(FailReply):
-            self.server.request_sensor_sampling(conn, katcp.Message.request(
+            self.server.request_sensor_sampling(req, katcp.Message.request(
              'sensor-sampling', 'a-sens', 'differential-rate', 1, 1000, 2000))
 
 
@@ -581,6 +581,18 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             r"!sensor-value ok 0",
         ])
 
+    def test_client_list(self):
+        reply, informs = self.client.blocking_request(
+            katcp.Message.request('client-list'), use_mid=False)
+        self.assertEqual(str(reply), '!client-list ok 1')
+        self.assertEqual(len(informs), 1)
+        inform = str(informs[0])
+        self.assertTrue(inform.startswith('#client-list 127.0.0.1:'))
+        _, addr = inform.split()
+        host, port = addr.split(':')
+        port = int(port)
+        self.assertEqual((host, port), self.client._sock.getsockname())
+
     def test_halt_request(self):
         """Test halt request."""
         get_msgs = self.client.message_recorder(
@@ -601,7 +613,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         try:
 
             class BadServer(katcp.DeviceServer):
-                def request_baz(self, conn, msg):
+                def request_baz(self, req, msg):
                     pass
 
         except AssertionError:
@@ -612,7 +624,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         try:
 
             class BadServer(katcp.DeviceServer):
-                def inform_baz(self, conn, msg):
+                def inform_baz(self, req, msg):
                     pass
 
         except AssertionError:

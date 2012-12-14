@@ -7,9 +7,9 @@ Tutorial
 Installing the Python Katcp Library
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-You can install the latest version of the KATCP library by
-running :command:`easy_install katcp`. This requires the
-setuptools Python package to be installed.
+You can install the latest version of the KATCP library by running :command:`pip
+install katcp` if pip is installed. Alternatively, :command:`easy_install
+katcp`; requires the setuptools Python package to be installed.
 
 Using the Blocking Client
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -24,6 +24,7 @@ querying a KATCP device. It is used as follows::
 
     client = BlockingClient(device_host, device_port)
     client.start()
+    client.wait_protocol() # Optional
 
     reply, informs = client.blocking_request(
         Message.request("help"))
@@ -35,11 +36,13 @@ querying a KATCP device. It is used as follows::
     client.stop()
     client.join()
 
-After creating the :class:`BlockingClient <katcp.BlockingClient>`
-instance, the :meth:`start` method is called to launch the client
-thread.  Once you have finished with the client, :meth:`stop`
-can be called to request that the thread shutdown. Finally,
-:meth:`join` is used to wait for the client thread to finish.
+After creating the :class:`BlockingClient <katcp.BlockingClient>` instance, the
+:meth:`start` method is called to launch the client thread.  The
+:meth:`wait_protocol` method waits until katcp version information has been
+received from the server, allowing the KATCP version spoken by the server to be
+known. Once you have finished with the client, :meth:`stop` can be called to
+request that the thread shutdown. Finally, :meth:`join` is used to wait for the
+client thread to finish.
 
 While the client is active the :meth:`blocking_request` method
 can be used to send messages to the KATCP server and wait for
@@ -74,7 +77,7 @@ but doesn't want to wait for a reply, the
     client = CallbackClient(device_host, device_port)
     client.start()
 
-    reply, informs = client.request(
+    reply, informs = client.callback_request(
         Message.request("help"),
         reply_cb=reply_cb,
         inform_cb=inform_cb,
@@ -191,8 +194,9 @@ sub-class in order to function.
 
 A very simple server example looks like::
 
-    from katcp import DeviceServer, Sensor
-    from katcp.kattypes import Str, Float, Timestamp, Discrete, request, return_reply
+    from katcp import DeviceServer, Sensor, ProtocolFlags
+    from katcp.kattypes import (Str, Float, Timestamp, Discrete,
+                                request, return_reply)
     import time
     import random
 
@@ -204,22 +208,28 @@ A very simple server example looks like::
         VERSION_INFO = ("example-api", 1, 0)
         BUILD_INFO = ("example-implementation", 0, 1, "")
 
+        # Optionally set the KATCP dialect
+        PROTOCOL_INFO = ProtocolFlags(5, 0, set([
+            ProtocolFlags.MULTI_CLIENT,
+            ProtocolFlags.MESSAGE_IDS,
+        ]))
+
         FRUIT = [
             "apple", "banana", "pear", "kiwi",
         ]
 
         def setup_sensors(self):
             """Setup some server sensors."""
-            self._add_result = Sensor(Sensor.FLOAT, "add.result",
+            self._add_result = Sensor.float("add.result",
                 "Last ?add result.", "", [-10000, 10000])
 
-            self._time_result = Sensor(Sensor.TIMESTAMP, "time.result",
+            self._time_result = Sensor.timestamp("time.result",
                 "Last ?time result.", "")
 
-            self._eval_result = Sensor(Sensor.STRING, "eval.result",
+            self._eval_result = Sensor.string("eval.result",
                 "Last ?eval result.", "")
 
-            self._fruit_result = Sensor(Sensor.DISCRETE, "fruit.result",
+            self._fruit_result = Sensor.discrete("fruit.result",
                 "Last ?pick-fruit result.", "", self.FRUIT)
 
             self.add_sensor(self._add_result)
@@ -229,7 +239,7 @@ A very simple server example looks like::
 
         @request(Float(), Float())
         @return_reply(Float())
-        def request_add(self, sock, x, y):
+        def request_add(self, req, x, y):
             """Add two numbers"""
             r = x + y
             self._add_result.set_value(r)
@@ -237,7 +247,7 @@ A very simple server example looks like::
 
         @request()
         @return_reply(Timestamp())
-        def request_time(self, sock):
+        def request_time(self, req):
             """Return the current time in ms since the Unix Epoch."""
             r = time.time()
             self._time_result.set_value(r)
@@ -245,7 +255,7 @@ A very simple server example looks like::
 
         @request(Str())
         @return_reply(Str())
-        def request_eval(self, sock, expression):
+        def request_eval(self, req, expression):
             """Evaluate a Python expression."""
             r = str(eval(expression))
             self._eval_result.set_value(r)
@@ -253,7 +263,7 @@ A very simple server example looks like::
 
         @request()
         @return_reply(Discrete(FRUIT))
-        def request_pick_fruit(self, sock):
+        def request_pick_fruit(self, req):
             """Pick a random fruit."""
             r = random.choice(self.FRUIT + [None])
             if r is None:
@@ -268,11 +278,19 @@ A very simple server example looks like::
         server.join()
 
 
-Notice that :class:`MyServer` has two special class attributes :const:`VERSION_INFO` and
-:const:`BUILD_INFO`. :const:`VERSION_INFO` gives the version of the server API. Many
-implementations might use the same :const:`VERSION_INFO`. :const:`BUILD_INFO` gives the
-version of the software that provides the device. Each device implementation should have
-a unique :const:`BUILD_INFO`.
+
+Notice that :class:`MyServer` has three special class attributes
+:const:`VERSION_INFO`, :const:`BUILD_INFO` and
+:const:`PROTOCOL_INFO`. :const:`VERSION_INFO` gives the version of the server
+API. Many implementations might use the same
+:const:`VERSION_INFO`. :const:`BUILD_INFO` gives the version of the software
+that provides the device. Each device implementation should have a unique
+:const:`BUILD_INFO`. :const:`PROTOCOL_INFO` is an instance of
+:class:`ProtocolFlags` that describes the KATCP dialect spoken by the server. If
+not specified, it defaults to the latest implemented version of KATCP, with all
+supported optional features. Using a version different from the default may
+change server behaviour; furthermore version info may need to be passed to the
+:function:`@request` and :function:`@return_reply` decorators.
 
 The :meth:`setup_sensors` method registers :class:`Sensor <katcp.Sensor>` objects with
 the device server. The base class uses this information to implement the :samp:`?sensor-list`,
@@ -288,7 +306,7 @@ applied to the methods.
 
 The :meth:`request` decorator takes a list of :class:`kattype <katcp.kattypes.KatcpType`
 objects describing the request arguments. Once the arguments have been checked they are
-passed in to the underly request method as additional parameters instead of the request
+passed in to the underlying request method as additional parameters instead of the request
 message.
 
 The :meth:`return_reply` decorator performs a similar operation for replies. Once the

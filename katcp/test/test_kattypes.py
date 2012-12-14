@@ -478,7 +478,7 @@ class TestDevice(object):
 
     @request(Int(min=1, max=10), Discrete(("on", "off")), Bool())
     @return_reply(Int(min=1, max=10), Discrete(("on", "off")), Bool())
-    def request_one(self, conn, i, d, b):
+    def request_one(self, req, i, d, b):
         if i == 3:
             return ("fail", "I failed!")
         if i == 5:
@@ -486,35 +486,35 @@ class TestDevice(object):
         if i == 6:
             return ("ok", i, d, b, "extra parameter")
         if i == 9:
-            self.finish_request_one(conn, i, d, b)
+            self.finish_request_one(req, i, d, b)
             raise AsyncReply()
         return ("ok", i, d, b)
 
     @send_reply(Int(min=1, max=10), Discrete(("on", "off")), Bool())
-    def finish_request_one(self, conn, i, d, b):
-        return (conn, "ok", i, d, b)
+    def finish_request_one(self, req, i, d, b):
+        return (req, "ok", i, d, b)
 
-    def reply(self, conn, msg, orig_msg):
-        self.sent_messages.append([conn, msg])
+    def reply(self, req, msg, orig_msg):
+        self.sent_messages.append([req, msg])
 
     @request(Int(min=1, max=3, default=2),
              Discrete(("on", "off"), default="off"), Bool(default=True))
     @return_reply(Int(min=1, max=3), Discrete(("on", "off")), Bool())
-    def request_two(self, conn, i, d, b):
+    def request_two(self, req, i, d, b):
         return ("ok", i, d, b)
 
     @return_reply(Int(min=1, max=3), Discrete(("on", "off")), Bool())
     @request(Int(min=1, max=3), Discrete(("on", "off")), Bool())
-    def request_three(self, conn, i, d, b):
+    def request_three(self, req, i, d, b):
         return ("ok", i, d, b)
 
     @return_reply()
     @request()
-    def request_four(self, conn):
+    def request_four(self, req):
         return ["ok"]
 
     @inform(Int(min=1, max=3), Discrete(("on", "off")), Bool())
-    def inform_one(self, conn, i, d, b):
+    def inform_one(self, req, i, d, b):
         pass
 
     @request(Int(min=1, max=3), Discrete(("on", "off")), Bool())
@@ -524,7 +524,7 @@ class TestDevice(object):
 
     @request(Timestamp(), Timestamp(optional=True), major=4)
     @return_reply(Timestamp(), Timestamp(default=321), major=4)
-    def request_katcpv4_time(self, conn, timestamp1, timestamp2):
+    def request_katcpv4_time(self, req, timestamp1, timestamp2):
         self.katcpv4_time1 = timestamp1
         self.katcpv4_time2 = timestamp2
         if timestamp2:
@@ -534,7 +534,7 @@ class TestDevice(object):
 
     @request(Timestamp(multiple=True), major=4)
     @return_reply(Timestamp(multiple=True), major=4)
-    def request_katcpv4_time_multi(self, conn, *timestamps):
+    def request_katcpv4_time_multi(self, req, *timestamps):
         self.katcpv4_time_multi = timestamps
         return ('ok',) + timestamps
 
@@ -550,12 +550,12 @@ class TestDevice(object):
 
     @return_reply(Int(), Str())
     @request(Int(), include_msg=True)
-    def request_eight(self, conn, msg, i):
+    def request_eight(self, req, msg, i):
         return ("ok", i, msg.name)
 
     @request(Int(), Float(multiple=True))
     @return_reply(Int(), Float(multiple=True))
-    def request_int_multifloat(self, conn, i, *floats):
+    def request_int_multifloat(self, req, i, *floats):
         return ('ok', i) + floats
 
 class TestDecorator(unittest.TestCase):
@@ -578,8 +578,8 @@ class TestDecorator(unittest.TestCase):
 
     def test_katcpv4(self):
         ts = 12345678                     # In milliseconds
-        conn = mock.Mock()
-        ret_msg = self.device.request_katcpv4_time(conn, Message.request(
+        req = mock.Mock()
+        ret_msg = self.device.request_katcpv4_time(req, Message.request(
             'katcpv4-time', str(ts)))
         self.assertTrue(ret_msg.reply_ok())
         self.assertAlmostEqual(float(ret_msg.arguments[1]), ts)
@@ -589,7 +589,7 @@ class TestDecorator(unittest.TestCase):
         self.assertEqual(self.device.katcpv4_time2, None)
         ts1 = 1234
         ts2 = 2345
-        ret_msg = self.device.request_katcpv4_time(conn, Message.request(
+        ret_msg = self.device.request_katcpv4_time(req, Message.request(
             'katcpv4-time', str(ts1), str(ts2)))
         self.assertTrue(ret_msg.reply_ok())
         self.assertAlmostEqual(float(ret_msg.arguments[1]), ts1)
@@ -599,8 +599,8 @@ class TestDecorator(unittest.TestCase):
 
     def test_katcpv4_multi(self):
         tss = (1234, 5678, 9012)                     # In milliseconds
-        conn = mock.Mock()
-        ret_msg = self.device.request_katcpv4_time_multi(conn, Message.request(
+        req = mock.Mock()
+        ret_msg = self.device.request_katcpv4_time_multi(req, Message.request(
             'katcpv4-time-multi', *(str(ts) for ts in tss) ))
         for i, ts in enumerate(tss):
             self.assertAlmostEqual(float(ret_msg.arguments[i+1]), ts)
@@ -609,84 +609,84 @@ class TestDecorator(unittest.TestCase):
 
     def test_request_one(self):
         """Test request with no defaults."""
-        conn = mock.Mock()
-        conn.req_msg.name = 'one'
-        self.assertEqual(str(self.device.request_one(conn, Message.request(
+        req = mock.Mock()
+        req.msg.name = 'one'
+        self.assertEqual(str(self.device.request_one(req, Message.request(
                         "one", "2", "on", "0"))), "!one ok 2 on 0")
-        self.assertRaises(FailReply, self.device.request_one, conn,
+        self.assertRaises(FailReply, self.device.request_one, req,
                           Message.request("one", "14", "on", "0"))
-        self.assertRaises(FailReply, self.device.request_one, conn,
+        self.assertRaises(FailReply, self.device.request_one, req,
                           Message.request("one", "2", "dsfg", "0"))
-        self.assertRaises(FailReply, self.device.request_one, conn,
+        self.assertRaises(FailReply, self.device.request_one, req,
                           Message.request("one", "2", "on", "3"))
-        self.assertRaises(FailReply, self.device.request_one, conn,
+        self.assertRaises(FailReply, self.device.request_one, req,
                           Message.request("one", "2", "on", "0", "3"))
 
-        self.assertRaises(FailReply, self.device.request_one, conn,
+        self.assertRaises(FailReply, self.device.request_one, req,
                           Message.request("one", "2", "on"))
 
-        self.assertEqual(str(self.device.request_one(conn, Message.request(
+        self.assertEqual(str(self.device.request_one(req, Message.request(
                         "one", "3", "on", "0"))), "!one fail I\\_failed!")
-        self.assertRaises(ValueError, self.device.request_one, conn,
+        self.assertRaises(ValueError, self.device.request_one, req,
                           Message.request("one", "5", "on", "0"))
-        self.assertRaises(ValueError, self.device.request_one, conn,
+        self.assertRaises(ValueError, self.device.request_one, req,
                           Message.request("one", "6", "on", "0"))
 
-        conn.reset_mock()
-        self.assertRaises(AsyncReply, self.device.request_one, conn,
+        req.reset_mock()
+        self.assertRaises(AsyncReply, self.device.request_one, req,
                           Message.request("one", "9", "on", "0"))
-        self.assertEqual(conn.reply_with_message.call_count, 1)
-        conn.reply_with_message.assert_called_once_with(Message.reply(
+        self.assertEqual(req.reply_with_message.call_count, 1)
+        req.reply_with_message.assert_called_once_with(Message.reply(
             'one', 'ok', '9', 'on', '0'))
 
     def test_request_two(self):
         """Test request with defaults."""
-        conn = ""
-        self.assertEqual(str(self.device.request_two(conn, Message.request(
+        req = ""
+        self.assertEqual(str(self.device.request_two(req, Message.request(
                         "two", "2", "on", "0"))), "!two ok 2 on 0")
-        self.assertRaises(FailReply, self.device.request_two, conn,
+        self.assertRaises(FailReply, self.device.request_two, req,
                           Message.request("two", "4", "on", "0"))
-        self.assertRaises(FailReply, self.device.request_two, conn,
+        self.assertRaises(FailReply, self.device.request_two, req,
                           Message.request("two", "2", "dsfg", "0"))
-        self.assertRaises(FailReply, self.device.request_two, conn,
+        self.assertRaises(FailReply, self.device.request_two, req,
                           Message.request("two", "2", "on", "3"))
 
-        self.assertEqual(str(self.device.request_two(conn, Message.request(
+        self.assertEqual(str(self.device.request_two(req, Message.request(
                         "two", "2", "on"))), "!two ok 2 on 1")
-        self.assertEqual(str(self.device.request_two(conn, Message.request(
+        self.assertEqual(str(self.device.request_two(req, Message.request(
                         "two", "2"))), "!two ok 2 off 1")
-        self.assertEqual(str(self.device.request_two(conn, Message.request(
+        self.assertEqual(str(self.device.request_two(req, Message.request(
                         "two"))), "!two ok 2 off 1")
 
     def test_request_three(self):
         """Test request with no defaults and decorators in reverse order."""
-        conn = ""
-        self.assertEqual(str(self.device.request_three(conn, Message.request(
+        req = ""
+        self.assertEqual(str(self.device.request_three(req, Message.request(
                         "three", "2", "on", "0"))), "!three ok 2 on 0")
-        self.assertRaises(FailReply, self.device.request_three, conn,
+        self.assertRaises(FailReply, self.device.request_three, req,
                           Message.request("three", "4", "on", "0"))
-        self.assertRaises(FailReply, self.device.request_three, conn,
+        self.assertRaises(FailReply, self.device.request_three, req,
                           Message.request("three", "2", "dsfg", "0"))
-        self.assertRaises(FailReply, self.device.request_three, conn,
+        self.assertRaises(FailReply, self.device.request_three, req,
                           Message.request("three", "2", "on", "3"))
 
-        self.assertRaises(FailReply, self.device.request_three, conn,
+        self.assertRaises(FailReply, self.device.request_three, req,
                           Message.request("three", "2", "on"))
 
     def test_request_four(self):
         """Test request with no defaults and no parameters or return values"""
-        conn = ""
-        self.assertEqual(str(self.device.request_four(conn, Message.request(
+        req = ""
+        self.assertEqual(str(self.device.request_four(req, Message.request(
                         "four"))), "!four ok")
 
     def test_inform_one(self):
         """Test inform with no defaults."""
-        conn = ""
-        self.assertEqual(self.device.inform_one(conn, Message.inform(
+        req = ""
+        self.assertEqual(self.device.inform_one(req, Message.inform(
                          "one", "2", "on", "0")), None)
 
     def test_request_five(self):
-        """Test client request with no conn."""
+        """Test client request with no req."""
         self.assertEqual(str(self.device.request_five(Message.request(
                          "five", "2", "on", "0"))), "!five ok 2 on 0")
         self.assertRaises(FailReply, self.device.request_five,
@@ -702,7 +702,7 @@ class TestDecorator(unittest.TestCase):
                           Message.request("five", "2", "on"))
 
     def test_request_six(self):
-        """Test client request with no conn and decorators in reverse order."""
+        """Test client request with no req and decorators in reverse order."""
         self.assertEqual(str(self.device.request_six(Message.request(
                          "six", "2", "on", "0"))), "!six ok 2 on 0")
         self.assertRaises(FailReply, self.device.request_six,
@@ -716,24 +716,24 @@ class TestDecorator(unittest.TestCase):
                           Message.request("six", "2", "on"))
 
     def test_request_seven(self):
-        """Test client request with no conn but with a message."""
+        """Test client request with no req but with a message."""
         self.assertEqual(str(self.device.request_seven(Message.request(
                          "seven", "7"))), "!seven ok 7 seven")
 
     def test_request_eight(self):
         """Test server request with a message argument."""
-        conn = ""
-        self.assertEqual(str(self.device.request_eight(conn, Message.request(
+        req = ""
+        self.assertEqual(str(self.device.request_eight(req, Message.request(
                          "eight", "8"))), "!eight ok 8 eight")
 
     def test_request_int_multifloat(self):
         req = self.device.request_int_multifloat
         desired_i, desired_floats = (7, (1.2, 999, 71.43))
-        self.assertEqual(str(req('conn', Message.request(
+        self.assertEqual(str(req('req', Message.request(
             'int-multifloat', desired_i, *desired_floats))),
                          '!int-multifloat ok 7 1.2 999 71.43')
         with self.assertRaises(FailReply) as ex:
-            req('conn', Message.request('int-multifloat', desired_i, 1.2, 'abc'))
+            req('req', Message.request('int-multifloat', desired_i, 1.2, 'abc'))
         self.assertEqual(
             ex.exception.message,
             "Error in parameter 3 (): Could not parse value 'abc' as float.")
