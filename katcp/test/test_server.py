@@ -17,7 +17,7 @@ from collections import defaultdict
 
 from katcp.testutils import (
     TestLogHandler, BlockingTestClient, DeviceTestServer, TestUtilMixin,
-    start_thread_with_cleanup, WaitingMock, ClientConnectionTest)
+    start_thread_with_cleanup, WaitingMock, ClientConnectionTest, mock_req)
 from katcp.core import FailReply
 
 log_handler = TestLogHandler()
@@ -144,24 +144,25 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         self.server.wait_running(timeout=1.)
         self.assertTrue(self.server.running())
         self.server._strategies = defaultdict(lambda : {})
-        req = WaitingMock()
-        self.server.request_sensor_sampling(req, katcp.Message.request(
-              'sensor-sampling', 'a-sens', 'event'))
+        req = mock_req('sensor-sampling', 'a-sens', 'event')
+        self.server.request_sensor_sampling(req, req.msg)
         inf = req.client_connection.inform
         inf.assert_wait_call_count(count=1)
         (inf_msg, ) = inf.call_args[0]
         self._assert_msgs_equal([inf_msg], (
             r'#sensor-status 1234000 1 a-sens nominal 1',))
-
-        self.server.request_sensor_sampling(req, katcp.Message.request(
-              'sensor-sampling', 'a-sens', 'period', 1000))
+        req = mock_req('sensor-sampling', 'a-sens', 'period', 1000)
+        self.server.request_sensor_sampling(req, req.msg)
         client = req.client_connection
         strat = self.server._strategies[client][s]
         # Test that the periodic update period is converted to seconds
         self.assertEqual(strat._period, 1.)
         # test that parameters returned by the request matches v4 format.
-        reply = self.server.request_sensor_sampling(req, katcp.Message.request(
-              'sensor-sampling', 'a-sens'))
+        #
+        # We need to pass in the same client_conn as used by the previous
+        # request since strategies are bound to specific connections
+        req = mock_req('sensor-sampling', 'a-sens', client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg)
         self._assert_msgs_equal([reply],
                                 ['!sensor-sampling ok a-sens period 1000'])
         # event-rate is not an allowed v4 strategy

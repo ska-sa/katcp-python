@@ -17,7 +17,8 @@ import functools
 import mock
 
 from .core import Sensor, Message
-from .server import DeviceServer, FailReply, ClientRequestConnection
+from .server import (DeviceServer, FailReply, ClientRequestConnection,
+                     ClientConnectionTCP)
 
 class ClientConnectionTest(object):
     """
@@ -1304,3 +1305,61 @@ class WaitingMock(mock.Mock):
             return True
         self._wait_call_count_event.wait(timeout=timeout)
         assert(self._wait_call_count_event.isSet())
+
+def mock_req(req_name, *args, **kwargs):
+    """
+    Create a mock ClientRequestConnection object
+
+    Parameters
+    ----------
+
+    req_name : str
+        Name of the request
+    *args : obj
+        arguments for the request, used to construct a request Message object
+
+    Optional Keyword Arguments
+    --------------------------
+
+    server : obj
+       Used as the server instance when constructing a client_connection.
+       Cannot be specified together with client_conn
+    client_conn : obj
+       Used as the client_connection object when constructing mock
+       ClientReqeuestConnection object. Cannot be specified together with sock
+    sock : obj
+       Used as the socket object when constructing a server and client_connection
+
+    If server but not sock is specified, a mock sock and real a
+    ClientConnectionTCP instances are used. If client_conn is not specified, a
+    WaitingMock instance is used instead.
+
+    Returns
+    -------
+
+    req : WaitingMock instance
+        The `client_connection` and `msg` attributes are set. The
+        :meth:`make_reply()` method returns the appropriate request Message
+        object as a side effect.
+    """
+
+    server = kwargs.get('server')
+    client_conn = kwargs.get('client_conn')
+    sock = kwargs.get('sock')
+    if server and client_conn:
+        raise TypeError('Specify either server or client_conn, not both')
+    if client_conn and sock:
+        raise TypeError('Specify either client_conn or sock, not both')
+    if not sock:
+        sock = WaitingMock()
+    if server:
+        client_conn = ClientConnectionTCP(server, sock)
+    if not client_conn:
+        client_conn = WaitingMock()
+
+    req = WaitingMock()
+    req.client_connection = client_conn
+    req.msg = Message.request(req_name, *args)
+    req.make_reply.side_effect = lambda *args: Message.reply_to_request(
+        req.msg, *args)
+    return req

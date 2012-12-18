@@ -199,14 +199,11 @@ class DeviceServerBase(object):
 
     def _add_socket(self, sock):
         """Add a client socket to the socket and chunk lists."""
-        self._data_lock.acquire()
-        try:
+        with self._data_lock:
             self._socks.append(sock)
             self._waiting_chunks[sock] = ""
             self._sock_locks[sock] = threading.Lock()
             self._sock_connections[sock] = ClientConnectionTCP(self, sock)
-        finally:
-            self._data_lock.release()
 
     def _remove_socket(self, sock):
         """Remove a client socket from the socket and chunk lists."""
@@ -1102,7 +1099,7 @@ class DeviceServer(DeviceServerBase):
         # this message makes it through because stop
         # only registers in .run(...) after the reply
         # has been sent.
-        return Message.reply("halt", "ok")
+        return req.make_reply("ok")
 
     def request_help(self, req, msg):
         """Return help on the available requests.
@@ -1149,15 +1146,15 @@ class DeviceServer(DeviceServerBase):
                 doc = method.__doc__
                 req.inform(name, doc)
             num_methods = len(self._request_handlers)
-            return Message.reply("help", "ok", str(num_methods))
+            return req.make_reply("ok", str(num_methods))
         else:
             name = msg.arguments[0]
             if name in self._request_handlers:
                 method = self._request_handlers[name]
                 doc = method.__doc__.strip()
                 req.inform(name, doc)
-                return Message.reply("help", "ok", "1")
-            return Message.reply("help", "fail", "Unknown request method.")
+                return req.make_reply("ok", "1")
+            return req.make_reply("fail", "Unknown request method.")
 
     def request_log_level(self, req, msg):
         """Query or set the current logging level.
@@ -1192,7 +1189,7 @@ class DeviceServer(DeviceServerBase):
                 self.log.set_log_level_by_name(msg.arguments[0])
             except ValueError, e:
                 raise FailReply(str(e))
-        return Message.reply("log-level", "ok", self.log.level_name())
+        return req.make_reply("ok", self.log.level_name())
 
     def request_restart(self, req, msg):
         """Restart the device server.
@@ -1216,7 +1213,7 @@ class DeviceServer(DeviceServerBase):
         # this message makes it through because stop
         # only registers in .run(...) after the reply
         # has been sent.
-        return Message.reply("restart", "ok")
+        return req.make_reply("ok")
 
     def request_client_list(self, req, msg):
         """Request the list of connected clients.
@@ -1371,10 +1368,10 @@ class DeviceServer(DeviceServerBase):
                     sorted(self._sensors.iteritems()) if name_filter(name)]
 
         if exact and not sensors:
-            return Message.reply("sensor-list", "fail", "Unknown sensor name.")
+            return req.make_reply("fail", "Unknown sensor name.")
 
         self._send_sensor_value_informs(req, sensors)
-        return Message.reply("sensor-list", "ok", str(len(sensors)))
+        return req.make_reply("ok", str(len(sensors)))
 
     def _send_sensor_value_informs(self, req, sensors):
         for name, sensor in sensors:
@@ -1435,8 +1432,7 @@ class DeviceServer(DeviceServerBase):
                     sorted(self._sensors.iteritems()) if name_filter(name)]
 
         if exact and not sensors:
-            return Message.reply("sensor-value", "fail",
-                                 "Unknown sensor name.")
+            return req.make_reply("fail", "Unknown sensor name.")
 
         katcp_version = self.PROTOCOL_INFO.major
         for name, sensor in sensors:
@@ -1444,7 +1440,7 @@ class DeviceServer(DeviceServerBase):
             if katcp_version <= 4:
                 timestamp = int(SEC_TO_MS_FAC*float(timestamp))
             req.inform(timestamp, "1", name, status, value)
-        return Message.reply("sensor-value", "ok", str(len(sensors)))
+        return req.make_reply("ok", str(len(sensors)))
 
     def request_sensor_sampling(self, req, msg):
         """Configure or query the way a sensor is sampled.
@@ -1557,7 +1553,7 @@ class DeviceServer(DeviceServerBase):
             # Another slightly nasty hack, but since period is the only strategy
             # involves timestamps for v4 is period it's not _too_ nasty :)
             params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
-        return Message.reply("sensor-sampling", "ok", name, strategy, *params)
+        return req.make_reply("ok", name, strategy, *params)
 
     @request()
     @return_reply()
@@ -1595,7 +1591,7 @@ class DeviceServer(DeviceServerBase):
         """
         # not a function, just doesn't use self
         # pylint: disable-msg = R0201
-        return Message.reply("watchdog", "ok")
+        return req.make_reply("ok")
 
     # pylint: enable-msg = W0613
 
