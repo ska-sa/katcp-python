@@ -40,9 +40,10 @@ After creating the :class:`BlockingClient <katcp.BlockingClient>` instance, the
 :meth:`start` method is called to launch the client thread.  The
 :meth:`wait_protocol` method waits until katcp version information has been
 received from the server, allowing the KATCP version spoken by the server to be
-known. Once you have finished with the client, :meth:`stop` can be called to
-request that the thread shutdown. Finally, :meth:`join` is used to wait for the
-client thread to finish.
+known; server protocol iformation is stores in client.protocol_flags. Once you
+have finished with the client, :meth:`stop` can be called to request that the
+thread shutdown. Finally, :meth:`join` is used to wait for the client thread to
+finish.
 
 While the client is active the :meth:`blocking_request` method
 can be used to send messages to the KATCP server and wait for
@@ -184,6 +185,11 @@ messages is presented below::
     client.join()
 
 
+Client handler functions can use the :func:`unpack_message` decorator from
+:module:`kattypes` to unpack messages into function arguments in the same way
+the :func:`request` decorator is used in the server example below, except that
+the `req` parameter is omitted.
+
 Writing your own Server
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -194,89 +200,113 @@ sub-class in order to function.
 
 A very simple server example looks like::
 
-    from katcp import DeviceServer, Sensor, ProtocolFlags
-    from katcp.kattypes import (Str, Float, Timestamp, Discrete,
-                                request, return_reply)
-    import time
-    import random
+  from katcp import DeviceServer, Sensor, ProtocolFlags, AsyncReply
+  from katcp.kattypes import (Str, Float, Timestamp, Discrete,
+                              request, return_reply)
 
-    server_host = ""
-    server_port = 5000
+  import threading
+  import time
+  import random
 
-    class MyServer(DeviceServer):
+  server_host = ""
+  server_port = 5000
 
-        VERSION_INFO = ("example-api", 1, 0)
-        BUILD_INFO = ("example-implementation", 0, 1, "")
+  class MyServer(DeviceServer):
 
-        # Optionally set the KATCP dialect
-        PROTOCOL_INFO = ProtocolFlags(5, 0, set([
-            ProtocolFlags.MULTI_CLIENT,
-            ProtocolFlags.MESSAGE_IDS,
-        ]))
+      VERSION_INFO = ("example-api", 1, 0)
+      BUILD_INFO = ("example-implementation", 0, 1, "")
 
-        FRUIT = [
-            "apple", "banana", "pear", "kiwi",
-        ]
+      # Optionally set the KATCP protocol version and features. Defaults to
+      # the latest implemented version of KATCP, with all supported optional
+      # features
+      PROTOCOL_INFO = ProtocolFlags(5, 0, set([
+          ProtocolFlags.MULTI_CLIENT,
+          ProtocolFlags.MESSAGE_IDS,
+      ]))
 
-        def setup_sensors(self):
-            """Setup some server sensors."""
-            self._add_result = Sensor.float("add.result",
-                "Last ?add result.", "", [-10000, 10000])
+      FRUIT = [
+          "apple", "banana", "pear", "kiwi",
+      ]
 
-            self._time_result = Sensor.timestamp("time.result",
-                "Last ?time result.", "")
+      def setup_sensors(self):
+          """Setup some server sensors."""
+          self._add_result = Sensor.float("add.result",
+              "Last ?add result.", "", [-10000, 10000])
 
-            self._eval_result = Sensor.string("eval.result",
-                "Last ?eval result.", "")
+          self._time_result = Sensor.timestamp("time.result",
+              "Last ?time result.", "")
 
-            self._fruit_result = Sensor.discrete("fruit.result",
-                "Last ?pick-fruit result.", "", self.FRUIT)
+          self._eval_result = Sensor.string("eval.result",
+              "Last ?eval result.", "")
 
-            self.add_sensor(self._add_result)
-            self.add_sensor(self._time_result)
-            self.add_sensor(self._eval_result)
-            self.add_sensor(self._fruit_result)
+          self._fruit_result = Sensor.discrete("fruit.result",
+              "Last ?pick-fruit result.", "", self.FRUIT)
 
-        @request(Float(), Float())
-        @return_reply(Float())
-        def request_add(self, req, x, y):
-            """Add two numbers"""
-            r = x + y
-            self._add_result.set_value(r)
-            return ("ok", r)
+          self.add_sensor(self._add_result)
+          self.add_sensor(self._time_result)
+          self.add_sensor(self._eval_result)
+          self.add_sensor(self._fruit_result)
 
-        @request()
-        @return_reply(Timestamp())
-        def request_time(self, req):
-            """Return the current time in ms since the Unix Epoch."""
-            r = time.time()
-            self._time_result.set_value(r)
-            return ("ok", r)
+      @request(Float(), Float())
+      @return_reply(Float())
+      def request_add(self, req, x, y):
+          """Add two numbers"""
+          r = x + y
+          self._add_result.set_value(r)
+          return ("ok", r)
 
-        @request(Str())
-        @return_reply(Str())
-        def request_eval(self, req, expression):
-            """Evaluate a Python expression."""
-            r = str(eval(expression))
-            self._eval_result.set_value(r)
-            return ("ok", r)
+      @request()
+      @return_reply(Timestamp())
+      def request_time(self, req):
+          """Return the current time in ms since the Unix Epoch."""
+          r = time.time()
+          self._time_result.set_value(r)
+          return ("ok", r)
 
-        @request()
-        @return_reply(Discrete(FRUIT))
-        def request_pick_fruit(self, req):
-            """Pick a random fruit."""
-            r = random.choice(self.FRUIT + [None])
-            if r is None:
-                return ("fail", "No fruit.")
-            self._fruit_result.set_value(r)
-            return ("ok", r)
+      @request(Str())
+      @return_reply(Str())
+      def request_eval(self, req, expression):
+          """Evaluate a Python expression."""
+          r = str(eval(expression))
+          self._eval_result.set_value(r)
+          return ("ok", r)
 
-    if __name__ == "__main__":
+      @request()
+      @return_reply(Discrete(FRUIT))
+      def request_pick_fruit(self, req):
+          """Pick a random fruit."""
+          r = random.choice(self.FRUIT + [None])
+          if r is None:
+              return ("fail", "No fruit.")
+          delay = random.randrange(1,5)
+          req.inform("Picking will take %d seconds" % delay)
 
-        server = MyServer(server_host, server_port)
-        server.start()
-        server.join()
+          def pick_handler():
+              self._fruit_result.set_value(r)
+              req.reply("ok", r)
 
+          handle_timer = threading.Timer(delay, pick_handler)
+          handle_timer.start()
+
+          raise AsyncReply
+
+      def request_raw_reverse(self, req, msg):
+          """
+          A raw request handler to demonstrate the calling convention if
+          @request decoraters are not used. Reverses the message arguments.
+          """
+          # msg is a katcp.Message.request object
+          reversed_args = msg.arguments[::-1]
+          # req.make_reply() makes a katcp.Message.reply using the correct request
+          # name and message ID
+          return req.make_reply(*reversed_args)
+
+
+  if __name__ == "__main__":
+
+      server = MyServer(server_host, server_port)
+      server.start()
+      server.join()
 
 
 Notice that :class:`MyServer` has three special class attributes
@@ -290,7 +320,7 @@ that provides the device. Each device implementation should have a unique
 not specified, it defaults to the latest implemented version of KATCP, with all
 supported optional features. Using a version different from the default may
 change server behaviour; furthermore version info may need to be passed to the
-:function:`@request` and :function:`@return_reply` decorators.
+:func:`@request` and :func:`@return_reply` decorators.
 
 The :meth:`setup_sensors` method registers :class:`Sensor <katcp.Sensor>` objects with
 the device server. The base class uses this information to implement the :samp:`?sensor-list`,
@@ -315,3 +345,42 @@ values of the arguments and constructs a suitable reply message.
 
 Use of the :meth:`request` and :meth:`return_reply` decorators is encouraged but entirely
 optional.
+
+Message dispatch is handled in much the same way as described in the client
+example, with the exception that there are not :meth:`unhandled_request`,
+:meth:`unhandled_reply` or :meth:`unhandled_request` methods. Instead, the
+server will log an exception.
+
+Event Loops and Thread Safety
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Each client and each server starts a network event-loop in a new thread,
+although this design may change in the future. In the case of a purely
+network-event driven server or client, all user code would execute in the thread
+context of the server or client event loop. Therefore all handler functions must
+be non-blocking to prevent unresponsiveness. Unhandled exceptions raised by
+handlers running in the network event-thread are caught and logged; in the case
+of servers, an error reply including the traceback is sent over the network
+interface. Slow operations (such as picking fruit) may be delegated to another
+thread as shown in the request_pick_fruit() handler in the server example.
+
+If a device is linked to processing that occurs independently of network events,
+one approach would be a model thread running in the background. The KATCP
+handler code would then defer requests to the model. The model must provide a
+thread-safe interface to the KATCP code.
+
+All the public methods provided by this katcp library for sending `!replies` or
+`#informs` are thread safe. Furthermore, updates to :class:`Sensor` objects
+using the public setter methods are also thread-safe, provided that the same is
+true for all the observers attached to the sensor.
+
+In addition to the network event-loop, subclasses of :class:`DeviceServer` also
+start a sampling reactor thread. This is used to send sensor updates to clients
+on the basis of the requested sampling strategies. This means that subclasses of
+:class:`DeviceServer` automatically support all the sampling strategies
+specified by the KATCP spec.
+
+Backwards Compatibility
+^^^^^^^^^^^^^^^^^^^^^^^
+
+TODO Backwards compatibility with devices and clients speaking KATCP v4 or older.

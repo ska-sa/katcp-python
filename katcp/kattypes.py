@@ -8,6 +8,7 @@
    """
 
 import inspect
+from functools import partial
 import struct
 import re
 import logging
@@ -614,6 +615,10 @@ def request(*types, **options):
 """
     include_msg = options.pop('include_msg', False)
     major = options.pop('major', DEFAULT_KATCP_MAJOR)
+    check_req = options.pop('_check_req', True)
+    if len(options) > 0:
+        raise TypeError('does not take keyword argument(s) %r.'
+                        % options.keys())
     # Check that only the last type has multiple=True
     if len(types) > 1:
         for type_ in types[:-1]:
@@ -635,8 +640,8 @@ def request(*types, **options):
         # Slightly hacky way of determining whether there is a req
         # For backward-compatibility also check for 'sock' and handle it the
         # same as 'req'
-        has_req = len(all_argnames) > 1 and all_argnames[1] in ("req", "sock")
-
+        has_req = check_req and len(all_argnames) > 1 and all_argnames[1] in (
+                "req", "sock")
 
         params_start = 1
         if has_req:
@@ -671,13 +676,48 @@ def request(*types, **options):
 
     return decorator
 
-inform = request
+# Using partial with no extra parameters lets us 'copy' the function so that we
+# can change the docstring without affecting the original function's docstring
+inform = partial(request)
 inform.__doc__ = """Decorator for inform handler methods.
 
        This is currently identical to the request decorator, and is
        thus an alias.
        """
 
+unpack_message = partial(request, _check_req=False)
+unpack_message.__doc__ = (
+"""Decorator that unpacks katcp.Messages to function arguments
+
+The method being decorated should take arguments matching the list of types. The
+decorator will unpack the request message into the arguments.
+
+Parameters
+----------
+types : list of kattypes
+    The types of the request message parameters (in order). A type
+    with multiple=True has to be the last type.
+
+Keyword Arguments
+-----------------
+include_msg: bool, default: False
+    Pass the request message as the second parameter to the decorated request
+    handler function
+major : int. Defaults to latest implemented KATCP version (5)
+    Major version of KATCP to use when interpreting types
+
+Examples
+--------
+>>> class MyClient(DeviceClient):
+...     @unpack_message(Str(), Int(), Float(), Bool())
+...     def reply_myreq(self, status, my_int, my_float, my_bool):
+...         print 'myreq replied with ', (status, my_int, my_float, my_bool)
+...
+...     @unpack_message(Str(), Int(), include_msg=True)
+...     def inform_fruit_picked(self, msg, fruit, no_picked):
+...         print no_picked, 'of fruit ', fruit, ' picked.'
+...         print 'Raw inform message: ', str(msg)
+""")
 
 def return_reply(*types, **options):
     """Decorator for returning replies from request handler methods
