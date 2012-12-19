@@ -662,6 +662,9 @@ class DeviceClient(object):
         -------
         received : bool
             Whether protocol information was received
+
+        If this method returns True, the server's protocol information is
+        available in the ProtocolFlags instance self.protocol_flags.
         """
         self._received_protocol_info.wait(timeout)
         return self._received_protocol_info.isSet()

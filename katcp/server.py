@@ -64,8 +64,47 @@ class ClientConnectionTCP(object):
     # support serial connections cleanly
     def __init__(self, server, raw_socket):
         self.inform = partial(server.tcp_inform, raw_socket)
+        self.inform.__doc__ = (
+"""Send an inform message to a particular client.
+
+Should only be used for asynchronous informs. Informs
+that are part of the response to a request should use
+:meth:`reply_inform` so that the message identifier
+from the original request can be attached to the
+inform.
+
+Parameters
+----------
+msg : Message object
+    The inform message to send.
+    """)
         self.reply_inform = partial(server.tcp_reply_inform, raw_socket)
+        self.reply_inform.__doc__ = (
+"""Send an inform as part of the reply to an earlier request.
+
+Parameters
+----------
+inform : Message object
+    The inform message to send.
+orig_req : Message object
+    The request message being replied to. The inform message's
+    id is overridden with the id from orig_req before the
+    inform is sent.
+""")
         self.reply = partial(server.tcp_reply, raw_socket)
+        self.reply.__doc__ = (
+"""Send an asynchronous reply to an earlier request.
+
+Parameters
+----------
+reply : Message object
+    The reply message to send.
+orig_req : Message object
+    The request message being replied to. The reply message's
+    id is overridden with the id from orig_req before the
+    reply is sent.
+""")
+
 
 class ClientRequestConnection(object):
     def __init__(self, client_connection, req_msg):
@@ -464,7 +503,7 @@ class DeviceServerBase(object):
         connection.inform(msg)
 
     def tcp_inform(self, sock, msg):
-        """Send an inform messages to a particular client.
+        """Send an inform message to a particular TCP client.
 
         Should only be used for asynchronous informs. Informs
         that are part of the response to a request should use
@@ -820,6 +859,8 @@ class DeviceServer(DeviceServerBase):
       * sensor-sampling
       * sensor-value
       * watchdog
+      * version-list (only standard in KATCP v5 or later)
+      * sensor-sampling-clear (non-standard)
 
     .. [#restartf1] Restart relies on .set_restart_queue() being used to
       register a restart queue with the device. When the device needs to be

@@ -17,10 +17,10 @@
  * Refactor use of raw 'sock' object as a connection identifier
    * Abstract sock to a transport-neutral connection object
    * Pass a request-bound connection object to request handlers, rather than a
-     raw sock. Automatically use the right name and mid for informs and replies
+     raw socket. Automatically use the right name and mid for informs and replies
    * Deprecate use of self.reply(sock, ....) and self.reply_inform(sock,
-     ....). Rather use conn.reply(...), conn.reply_with_message(...),
-     conn.inform(...)
+     ....). Rather use req.reply(...), req.reply_with_message(...),
+     req.inform(...)
  * Renamed CallbackClient.request to callback_request to be more consistent with
    superclass API
  * Add sensor construction class methods, e.g. Sensor.integer(...), rather than
