@@ -93,6 +93,7 @@ class NumpyDocString(object):
             'Summary': [''],
             'Extended Summary': [],
             'Parameters': [],
+            'Keyword Arguments': [],
             'Informs': [],
             'Returns': [],
             'Raises': [],
@@ -284,8 +285,8 @@ class NumpyDocString(object):
         for (section,content) in self._read_sections():
             if not section.startswith('..'):
                 section = ' '.join([s.capitalize() for s in section.split(' ')])
-            if section in ('Parameters', 'Informs', 'Attributes', 'Methods',
-                           'Returns', 'Raises', 'Warns'):
+            if section in ('Parameters', 'Keyword Arguments', 'Informs',
+                           'Attributes','Methods', 'Returns', 'Raises', 'Warns'):
                 self[section] = self._parse_param_list(content)
             elif section.startswith('.. index::'):
                 self['index'] = self._parse_index(section, content)
@@ -381,7 +382,8 @@ class NumpyDocString(object):
         out += self._str_signature()
         out += self._str_summary()
         out += self._str_extended_summary()
-        for param_list in ('Parameters','Informs','Returns','Raises'):
+        for param_list in ('Parameters','Keyword Arguments',
+                           'Informs','Returns','Raises'):
             out += self._str_param_list(param_list)
         out += self._str_section('Warnings')
         out += self._str_see_also(func_role)

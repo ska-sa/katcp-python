@@ -590,7 +590,7 @@ def request(*types, **options):
 
     Keyword Arguments
     -----------------
-    include_msg: bool, default: False
+    include_msg : bool, default: False
         Pass the request message as the third parameter to the decorated request
         handler function
     major : int. Defaults to latest implemented KATCP version (5)

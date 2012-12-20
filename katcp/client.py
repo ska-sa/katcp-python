@@ -214,8 +214,8 @@ class DeviceClient(object):
         msg : katcp.Message request message
         use_mid : bool or None
 
-        Return Value
-        ------------
+        Returns
+        -------
 
         mid : string or None
             The message id, or None if no msg id is used

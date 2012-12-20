@@ -18,7 +18,7 @@ Important API changes
 ---------------------
 
 `CallbackClient.request`
-^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 Renamed :meth:`CallbackClient.request` to :meth:`callback_request` to be more
 consistent with superclass API
@@ -32,7 +32,7 @@ raw python socket object and msg is a katcp :class:`Message` object. The `sock`
 object was never used directly by the request handler, but was passed to methods
 on the server to send inform or reply messages.
 
-Before: ::
+Before:    ::
 
   class MyServer(DeviceServer):
       def request_echo(self, sock, msg):
@@ -45,7 +45,7 @@ katcp :class:`Message` object each time a reply is made. The new method passes a
 request-bound connection object that knows to what request it is replying, and
 that automatically constructs :class:`Message` objects.
 
-Now: ::
+Now:     ::
 
   class MyServer(DeviceServer):
       def request_echo(self, req, msg):

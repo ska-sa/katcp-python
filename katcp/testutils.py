@@ -1173,8 +1173,8 @@ class SensorTransitionWaiter(object):
         timeout : float seconds or None
             Time to wait for the transition. Wait forever if None
 
-        Return Value
-        ------------
+        Returns
+        -------
 
         Returns True if the sequence is matched within the
         timeout. Returns False if the sequence does not match or if

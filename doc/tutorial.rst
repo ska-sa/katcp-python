@@ -45,15 +45,15 @@ have finished with the client, :meth:`stop` can be called to request that the
 thread shutdown. Finally, :meth:`join` is used to wait for the client thread to
 finish.
 
-While the client is active the :meth:`blocking_request` method
-can be used to send messages to the KATCP server and wait for
-replies. If a reply is not received within the allowed time, a
-:exc:`RuntimeError` is raised.
+While the client is active the :meth:`blocking_request
+<katcp.BlockingClient.blocking_request>` method can be used to send messages to
+the KATCP server and wait for replies. If a reply is not received within the
+allowed time, a :exc:`RuntimeError` is raised.
 
-If a reply is received :meth:`blocking_request` returns two
-values. The first is the :class:`Message <katcp.Message>`
-containing the reply. The second is a list of messages
-containing any KATCP informs associated with the reply. 
+If a reply is received :meth:`blocking_request
+<katcp.BlockingClient.blocking_request>` returns two values. The first is the
+:class:`Message <katcp.Message>` containing the reply. The second is a list of
+messages containing any KATCP informs associated with the reply.
 
 
 Using the Callback Client
@@ -87,11 +87,11 @@ but doesn't want to wait for a reply, the
     client.stop()
     client.join()
 
-Note that the :func:`reply_cb` and :func:`inform_cb` callback
-functions are both called inside the clients' processing thread
-and so should not perform any operations that block. If needed,
-pass the data out to from the callback function to another
-thread using a :class:`Queue <Queue.Queue>` or similar structure.
+Note that the :func:`reply_cb` and :func:`inform_cb` callback functions are both
+called inside the client's event-loop thread so should not perform any
+operations that block. If needed, pass the data out to from the callback
+function to another thread using a :class:`Queue <Queue.Queue>` or similar
+structure.
 
 
 Writing your own Client
@@ -105,19 +105,23 @@ from which both are derived.
 
 :class:`DeviceClient` has two methods for sending messages:
 
-    * :meth:`request` for sending request :class:`Messages <katcp.Message>`
-    * :meth:`send_message` for sending arbitrary :class:`Messages <katcp.Message>`
+    * :meth:`request <katcp.DeviceClient.request>` for sending request
+      :class:`Messages <katcp.Message>`
+    * :meth:`send_message <katcp.DeviceClient.send_message>` for sending
+      arbitrary :class:`Messages <katcp.Message>`
 
-Internally :meth:`request` calls :meth:`send_message` to pass messages to
-the server.
+Internally :meth:`request <katcp.DeviceClient.request>` calls
+:meth:`send_message <katcp.DeviceClient.send_message>` to pass messages to the
+server.
 
 .. note::
 
-    The :meth:`send_message` method does not return an error code or raise an
-    exception if sending the message fails. Since the underlying protocol is
-    entirely asynchronous, the only means to check that a request was successful
-    is receive a reply message. One can check that the client is connected
-    before sending a message using :meth:`is_connected`.
+    The :meth:`send_message <katcp.DeviceClient.send_message>` method does not
+    return an error code or raise an exception if sending the message
+    fails. Since the underlying protocol is entirely asynchronous, the only
+    means to check that a request was successful is receive a reply message. One
+    can check that the client is connected before sending a message using
+    :meth:`is_connected`.
 
 When the :class:`DeviceClient` thread receives a completed message
 :meth:`handle_message` is called.  The default :meth:`handle_message`
@@ -185,10 +189,11 @@ messages is presented below::
     client.join()
 
 
-Client handler functions can use the :func:`unpack_message` decorator from
-:module:`kattypes` to unpack messages into function arguments in the same way
-the :func:`request` decorator is used in the server example below, except that
-the `req` parameter is omitted.
+Client handler functions can use the :func:`unpack_message
+<katcp.kattypes.unpack_message>` decorator from `kattypes` module to unpack
+messages into function arguments in the same way the :func:`request
+<katcp.kattypes.request>` decorator is used in the server example below, except
+that the `req` parameter is omitted.
 
 Writing your own Server
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -328,23 +333,26 @@ the device server. The base class uses this information to implement the :samp:`
 called once for each sensor the device should contain. You may create the sensor objects
 inside :meth:`setup_sensors` (as done in the example) or elsewhere if you wish.
 
-Request handlers are added to the server by creating methods whose names start with
-"request\_".  These methods take two arguments -- the client socket that the request
-came from and the request message.  Notice that the message argument is missing from the
-methods in the example. This is a result of the :meth:`request` decorator that has been
-applied to the methods.
+Request handlers are added to the server by creating methods whose names start
+with "request\_".  These methods take two arguments -- the client socket that
+the request came from and the request message.  Notice that the message argument
+is missing from the methods in the example. This is a result of the
+:meth:`request <katcp.kattypes.request>` decorator that has been applied to the
+methods.
 
-The :meth:`request` decorator takes a list of :class:`kattype <katcp.kattypes.KatcpType`
-objects describing the request arguments. Once the arguments have been checked they are
-passed in to the underlying request method as additional parameters instead of the request
+The :meth:`request <katcp.kattypes.request>` decorator takes a list of
+:class:`kattype <katcp.kattypes.KatcpType>` objects describing the request
+arguments. Once the arguments have been checked they are passed in to the
+underlying request method as additional parameters instead of the request
 message.
 
-The :meth:`return_reply` decorator performs a similar operation for replies. Once the
-request method returns a tuple (or list) of reply arguments, the decorator checks the
-values of the arguments and constructs a suitable reply message.
+The :meth:`return_reply <katcp.kattypes.return_reply>` decorator performs a
+similar operation for replies. Once the request method returns a tuple (or list)
+of reply arguments, the decorator checks the values of the arguments and
+constructs a suitable reply message.
 
-Use of the :meth:`request` and :meth:`return_reply` decorators is encouraged but entirely
-optional.
+Use of the :meth:`request <katcp.kattypes.request>` and :meth:`return_reply`
+decorators is encouraged but entirely optional.
 
 Message dispatch is handled in much the same way as described in the client
 example, with the exception that there are not :meth:`unhandled_request`,
@@ -362,7 +370,7 @@ be non-blocking to prevent unresponsiveness. Unhandled exceptions raised by
 handlers running in the network event-thread are caught and logged; in the case
 of servers, an error reply including the traceback is sent over the network
 interface. Slow operations (such as picking fruit) may be delegated to another
-thread as shown in the request_pick_fruit() handler in the server example.
+thread as shown in the `request_pick_fruit` handler in the server example.
 
 If a device is linked to processing that occurs independently of network events,
 one approach would be a model thread running in the background. The KATCP
@@ -374,10 +382,11 @@ All the public methods provided by this katcp library for sending `!replies` or
 using the public setter methods are also thread-safe, provided that the same is
 true for all the observers attached to the sensor.
 
-In addition to the network event-loop, subclasses of :class:`DeviceServer` also
-start a sampling reactor thread. This is used to send sensor updates to clients
-on the basis of the requested sampling strategies. This means that subclasses of
-:class:`DeviceServer` automatically support all the sampling strategies
+In addition to the network event-loop, subclasses of :class:`DeviceServer
+<katcp.DeviceServer>` also start a sampling reactor thread. This is used to send
+sensor updates to clients on the basis of the requested sampling
+strategies. This means that subclasses of :class:`DeviceServer
+<katcp.DeviceServer>` automatically support all the sampling strategies
 specified by the KATCP spec.
 
 Backwards Compatibility
