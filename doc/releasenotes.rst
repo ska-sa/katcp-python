@@ -8,10 +8,10 @@ Release Notes
 =======
 
 First alpha release supporting (a subset of) KATCP v5. The KATCP v5 spec brings
-a number of backward incompatible changes, and hence requires care. This katcp
-library implements support for both KATCP v5 and for the older dialect. Some API
-changes have also been made, mainly in aid of fool-proof support of the Message
-ID feature of KATCP v5. The changes do, however, also eliminate a category of
+a number of backward incompatible changes, and hence requires care. This library
+implements support for both KATCP v5 and for the older dialect. Some API changes
+have also been made, mainly in aid of fool-proof support of the Message ID
+feature of KATCP v5. The changes do, however, also eliminate a category of
 potential bugs for older versions of the spec. See also :download:`CHANGELOG`.
 
 Important API changes
@@ -20,8 +20,9 @@ Important API changes
 `CallbackClient.request`
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-Renamed :meth:`CallbackClient.request` to :meth:`callback_request` to be more
-consistent with superclass API
+Renamed :meth:`request` to :meth:`callback_request
+<katcp.CallbackClient.callback_request>` to be more consistent with superclass
+API
 
 Sending replies and informs in server request handlers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -52,11 +53,11 @@ Now:     ::
           req.inform(len(msg.arguments)))
           return req.make_reply('ok', *msg.arguments)
 
-A :meth:`req.reply()` method with the same signature as :meth:`req.make_reply()`
+A :meth:`req.reply` method with the same signature as :meth:`req.make_reply`
 is also available for asyncronous reply handlers, and
-:meth:`req.reply_with_message()` which takes a :class:`Message` instance rather
+:meth:`req.reply_with_message` which takes a :class:`Message` instance rather
 than message arguments. These methods replace the use of
-:meth:`DeviceServer.reply()`.
+:meth:`DeviceServer.reply`.
 
 The request object also contains the katcp request :class:`Message` object
 (`req.msg`), and the equivalent of a socket object
@@ -79,8 +80,8 @@ used. It also defines :meth:`inform`, :meth:`reply_inform` and :meth:`reply`
 methods for sending :class:`Message` objects to a client.
 
 
-Important KATCP V5 changes
---------------------------
+Backwards incompatible KATCP V5 changes
+---------------------------------------
 
 Timestamps
 ^^^^^^^^^^
@@ -112,4 +113,24 @@ also:
 
   If the request contained a message id each inform that forms part of the
   response should be marked with the original message id.
+
+Support for message IDs is optional. A properly implemented server should never
+use mids in replies unless the client request has an mid. Similarly, a client
+should be able to detect wether a server supports MIDs by checking the
+`#version-connect` informs sent by the server, or by doing a `!version-list`
+request. Furthermore, a KATCP v5 server should never send `#build-state` or
+`#version` informs.
+
+The :meth:`DeviceClient <katcp.DeviceClient>` client uses the presence of `#build-state` or
+`#version` informs as a heuristic to detect pre-v5 servers, and the presence of
+`#version-connect` informs to detect v5+ servers. If mixed messages are received
+the client gives up auto-detection and disconnects. In this case
+
+Level of KATCP support in this release
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This release implements the majority of the KATCP v5 spec; excluded parts are:
+
+* Support for optional warning/error range meta-information on sensors.
+* Differential-rate sensor strategy.
 
