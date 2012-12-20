@@ -111,7 +111,8 @@ class DeviceClient(object):
         """
         Preset server protocol flags.
 
-        Disables automatic server version detection
+        Sets the assumed server protocol flags and disables automatic server
+        version detection.
 
         Parameters
         ----------

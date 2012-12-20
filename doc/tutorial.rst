@@ -1,4 +1,4 @@
-.. Tutorial
+.. _Tutorial:
 
 ********
 Tutorial
@@ -392,4 +392,54 @@ specified by the KATCP spec.
 Backwards Compatibility
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-TODO Backwards compatibility with devices and clients speaking KATCP v4 or older.
+Server Backwards Compatibility
+------------------------------
+
+A minor modification of the first several lines of the example in
+`Writing your own Server`_ suffices to create a KATCP v4 server::
+
+  from katcp import DeviceServer, Sensor, ProtocolFlags, AsyncReply
+  from katcp.kattypes import (Str, Float, Timestamp, Discrete,
+                              request, return_reply)
+
+  from functools import partial
+  import threading
+  import time
+  import random
+
+  server_host = ""
+  server_port = 5000
+
+  # Bind the KATCP major version of the request and return_reply decorators
+  # to version 4
+  request = partial(request, major=4)
+  return_reply = partial(return_reply, major=4)
+
+  class MyServer(DeviceServer):
+
+      VERSION_INFO = ("example-api", 1, 0)
+      BUILD_INFO = ("example-implementation", 0, 1, "")
+
+      # Optionally set the KATCP protocol version as 4.
+      PROTOCOL_INFO = ProtocolFlags(4, 0, set([
+          ProtocolFlags.MULTI_CLIENT,
+      ]))
+
+The rest of the example follows as before.
+
+Client Backwards Compatibility
+------------------------------
+
+The :meth:`DeviceClient <katcp.DeviceClient>` client automatically detects the
+version of the server if it can, see :ref:`Server version auto detection in the
+release notes <release_notes_0_5_0a0_Server_Version_Auto_Detection>`. For a
+simple client this means that no changes are required to support different KATCP
+versions. However, the semantics of the messages might be different for
+different protocl versions. Using the :func:`unpack_message
+<katcp.kattypes.unpack_message>` decorator with `major=4` for reply or inform
+handlers might help here, although it could use some `improvement
+<https://github.com/ska-sa/katcp-python/issues/1>`_.
+
+In the case of version auto-dection failing for a given server, 
+:meth:`preset_protocol_flags <katcp.DeviceClient.preset_protocol_flags>` can be
+used to set the KATCP version before calling the client's :meth:`start` method.
