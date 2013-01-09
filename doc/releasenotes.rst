@@ -17,18 +17,18 @@ potential bugs for older versions of the spec. See also :download:`CHANGELOG`.
 Important API changes
 ---------------------
 
-`CallbackClient.request`
-^^^^^^^^^^^^^^^^^^^^^^^^
+`CallbackClient.request()`
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Renamed :meth:`request` to :meth:`callback_request
+Renamed :meth:`request` to :meth:`callback_request()
 <katcp.CallbackClient.callback_request>` to be more consistent with superclass
-API
+API.
 
 Sending replies and informs in server request handlers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The function signature used for request handler methods in previous versions of
-this library were meth:`request_requestname(self, sock, msg)`, where `sock` is a
+this library were `request_requestname(self, sock, msg)`, where `sock` is a
 raw python socket object and msg is a katcp :class:`Message` object. The `sock`
 object was never used directly by the request handler, but was passed to methods
 on the server to send inform or reply messages.
@@ -123,10 +123,12 @@ request. Furthermore, a KATCP v5 server should never send `#build-state` or
 
 .. release_notes_0_5_0a0 Server Version Auto Detection
 
-The :meth:`DeviceClient <katcp.DeviceClient>` client uses the presence of `#build-state` or
-`#version` informs as a heuristic to detect pre-v5 servers, and the presence of
-`#version-connect` informs to detect v5+ servers. If mixed messages are received
-the client gives up auto-detection and disconnects. In this case
+The :class:`DeviceClient <katcp.DeviceClient>` client uses the presence of
+`#build-state` or `#version` informs as a heuristic to detect pre-v5 servers,
+and the presence of `#version-connect` informs to detect v5+ servers. If mixed
+messages are received the client gives up auto-detection and disconnects. In
+this case :meth:`~katcp.DeviceClient.preset_protocol_flags` can be used to
+configure the client before calling :meth:`~katcp.DeviceClient.start`.
 
 Level of KATCP support in this release
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
