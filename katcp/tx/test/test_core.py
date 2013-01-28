@@ -1,22 +1,34 @@
-
 from katcp.tx.core import (ClientKatCPProtocol, DeviceServer, DeviceProtocol,
                            KatCPClientFactory)
 from katcp import Message, Sensor
 from katcp.tx.test.testserver import run_subprocess
-from twisted.trial.unittest import TestCase
+from twisted.trial.unittest import TestCase, SkipTest
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, DeferredList
 from twisted.internet.protocol import ClientCreator
+from twisted.python import log
 
 from katcp.core import FailReply
+from katcp.testutils import TestLogHandler
+
+import logging
 
 #DelayedCall.debug = True
 #Deferred.debug = True
 
 timeout = 5
 
+class PythonLoggingTestCase(TestCase):
+    """
+    Test class that sets up a python logging observer for the twisted logging
+    framework
+    """
+    def setUp(self):
+        log_observer = log.PythonLoggingObserver(loggerName='katcp')
+        log_observer.start()
+        self.addCleanup(log_observer.stop)
 
-class TestKatCP(TestCase):
+class TestKatCP(PythonLoggingTestCase):
     """ A tesited test case, run with trial testing
 
     Also note - don't forget to open a log file:
@@ -32,6 +44,8 @@ class TestKatCP(TestCase):
         return d
 
     def test_version_check(self):
+        raise SkipTest('This test should only be run for v4 servers. Should '
+                        'also add an updated test for v5 server')
         class TestKatCP(ClientKatCPProtocol):
             def inform_build_state(self, args):
                 ClientKatCPProtocol.inform_build_state(self, args)
@@ -44,7 +58,7 @@ class TestKatCP(TestCase):
 
     def test_help(self):
         def received_help((msgs, reply_msg), protocol):
-            assert len(msgs) == 9
+            assert len(msgs) == 11
             requests = set(msg.arguments[0] for msg in msgs)
             assert 'help' in requests
             assert 'sensor-list' in requests
@@ -64,7 +78,20 @@ class TestKatCP(TestCase):
 
         def connected(protocol):
             protocol.send_request('sensor-sampling', 'int_sensor',
-                                  'period', 10)
+                                  'period', 0.01)
+            reactor.callLater(0.3, check, protocol)
+
+        d, process = run_subprocess(connected, TestClientKatCP)
+        return d
+
+    def test_event_rate_sensor_sampling(self):
+        def check(protocol):
+            self.assertTrue(len(protocol.status_updates) in (30, 31))
+            protocol.send_request('halt')
+
+        def connected(protocol):
+            protocol.send_request('sensor-sampling', 'int_sensor',
+                                  'event-rate', 5./1000, 10./1000)
             reactor.callLater(0.3, check, protocol)
 
         d, process = run_subprocess(connected, TestClientKatCP)
@@ -179,7 +206,7 @@ class TestDeviceServer(TestCase):
 
     def test_run_basic_sensors(self):
         def sensor_value_replied((informs, reply), protocol):
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
@@ -199,9 +226,9 @@ class TestDeviceServer(TestCase):
 
     def test_all_sensor_values(self):
         def reply((informs, reply), protocol):
-            msg1 = Message.inform('sensor-value', '1000', '1', 'float_sensor',
+            msg1 = Message.inform('sensor-value', '1.000000', '1', 'float_sensor',
                                   'unknown', '0')
-            msg2 = Message.inform('sensor-value', '0', '1', 'int_sensor',
+            msg2 = Message.inform('sensor-value', '0.000000', '1', 'int_sensor',
                                   'unknown', '0')
             self.assertEquals(informs, [msg1, msg2])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '2'))
@@ -210,9 +237,9 @@ class TestDeviceServer(TestCase):
 
     def test_sensor_value_regex(self):
         def reply((informs, reply), protocol):
-            msg1 = Message.inform('sensor-value', '1000', '1', 'float_sensor',
+            msg1 = Message.inform('sensor-value', '1.000000', '1', 'float_sensor',
                                   'unknown', '0')
-            msg2 = Message.inform('sensor-value', '0', '1', 'int_sensor',
+            msg2 = Message.inform('sensor-value', '0.000000', '1', 'int_sensor',
                                   'unknown', '0')
             self.assertEquals(informs, [msg1, msg2])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '2'))
@@ -313,36 +340,33 @@ class TestDeviceServer(TestCase):
 
         def reply((informs, reply), protocol):
             self.assertEquals(informs, [])
-            self.assertEquals(reply, Message.reply('sensor-sampling', 'ok',
-                                                   'int_sensor', 'period',
-                                                   '10'))
+            self.assertEquals(reply, Message.reply(
+                'sensor-sampling', 'ok', 'int_sensor', 'period', '0.01'))
             reactor.callLater(0.3, called_later, protocol)
             return True
 
         return self._base_test(('sensor-sampling', 'int_sensor',
-                                'period', '10'), reply)
+                                'period', '0.01'), reply)
 
     def test_sensor_sampling_auto(self):
         def even_more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 2)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
-                                                       '1', 'int_sensor',
-                                                       'nominal', '5')])
+            self.assertEquals(informs, [Message.inform(
+                'sensor-value', '0.000000', '1', 'int_sensor', 'nominal', '5')])
             protocol.send_request('halt').addCallback(self._end_test)
 
         def more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
-                                                       '1', 'int_sensor',
-                                                       'nominal', '3')])
+            self.assertEquals(informs, [Message.inform(
+                'sensor-value', '0.000000', '1', 'int_sensor', 'nominal', '3')])
             self.factory.sensors['int_sensor'].set(0, Sensor.NOMINAL, 5)
             protocol.send_request('sensor-value', 'int_sensor').addCallback(
                     even_more, protocol)
 
         def reply((informs, reply), protocol):
             self.assertEquals(informs, [])
-            self.assertEquals(reply, Message.reply('sensor-sampling', 'ok',
-                                                   'int_sensor', 'auto'))
+            self.assertEquals(reply, Message.reply(
+                'sensor-sampling', 'ok', 'int_sensor', 'auto'))
             self.assertEquals(len(self.client.status_updates), 0)
 
             self.factory.sensors['int_sensor'].set(0, Sensor.NOMINAL, 3)
@@ -356,16 +380,14 @@ class TestDeviceServer(TestCase):
     def test_sensor_sampling_event(self):
         def even_more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
-                                                       '1', 'int_sensor',
-                                                       'nominal', '3')])
+            self.assertEquals(informs, [Message.inform(
+                'sensor-value', '0.000000', '1', 'int_sensor', 'nominal', '3')])
             protocol.send_request('halt').addCallback(self._end_test)
 
         def more((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
-                                                       '1', 'int_sensor',
-                                                       'nominal', '3')])
+            self.assertEquals(informs, [Message.inform(
+                'sensor-value', '0.000000', '1', 'int_sensor', 'nominal', '3')])
             self.factory.sensors['int_sensor'].set_value(3, timestamp=0)
             protocol.send_request('sensor-value', 'int_sensor').addCallback(
                     even_more, protocol)
@@ -387,7 +409,7 @@ class TestDeviceServer(TestCase):
     def test_sensor_sampling_differential(self):
         def first((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'nominal', '2')])
             self.factory.sensors['int_sensor'].set_value(5, timestamp=0)
@@ -396,7 +418,7 @@ class TestDeviceServer(TestCase):
 
         def second((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 1)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'nominal', '5')])
             self.factory.sensors['int_sensor'].set_value(10, timestamp=0)
@@ -405,7 +427,7 @@ class TestDeviceServer(TestCase):
 
         def third((informs, reply), protocol):
             self.assertEquals(len(self.client.status_updates), 2)
-            self.assertEquals(informs, [Message.inform('sensor-value', '0',
+            self.assertEquals(informs, [Message.inform('sensor-value', '0.000000',
                                                        '1', 'int_sensor',
                                                        'nominal', '10')])
             protocol.send_request('halt').addCallback(self._end_test)
@@ -507,13 +529,25 @@ class TestDeviceServer(TestCase):
         finish = Deferred()
         return finish
 
+    def test_version_list(self):
+        def reply((informs, reply), protocol):
+            self.assertEquals(reply, Message.reply('version-list', 'ok',
+                                                   len(informs)))
+            self.assertEquals([(m.name, m.arguments[0]) for m in informs], [
+                                  ("version-list", "katcp-protocol"),
+                                  ("version-list", "katcp-library"),
+                                  ("version-list", "katcp-device"),
+                              ])
+
+        return self._base_test(('version-list',), reply)
+
     def test_log_basic(self):
         class TestProtocol(ClientKatCPProtocol):
             def inform_log(self, msg):
                 got_log.callback(msg)
 
         def log_received(msg):
-            self.assertEquals(msg, Message.inform("log", "warn", "0", "root",
+            self.assertEquals(msg, Message.inform("log", "warn", "0.000000", "root",
                                                   "a warning"))
             self.factory.stop()
             finish.callback(None)
@@ -568,9 +602,8 @@ class TestDeviceServer(TestCase):
                                                            protocol)
 
         def log_level3((informs, reply), protocol):
-            self.assertEquals(protocol.msgs, [Message.inform("log", "debug",
-                                                             "0", "root",
-                                                             "foo")])
+            self.assertEquals(protocol.msgs, [
+                Message.inform("log", "debug", "0.000000", "root", "foo")])
             self.factory.stop()
             self.finish.callback(None)
 
@@ -603,8 +636,11 @@ class TestClient(TestCase):
 
 class TestMisc(TestCase):
     def test_requests(self):
+        # Test that the twisted DeviceProtocol has the same requests as the
+        # original katcp.server.DeviceServer
         from katcp.server import DeviceServer
         for name in dir(DeviceServer):
             if (name.startswith('request_') and
                 callable(getattr(DeviceServer, name))):
+                print name
                 assert hasattr(DeviceProtocol, name)

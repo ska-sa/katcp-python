@@ -133,7 +133,7 @@ class TestProxyBase(TestCase):
     def test_forwarding_sensors(self):
         def callback((informs, reply)):
             self.assertEquals(informs,
-                    [Message.inform('sensor-value', '1000', '1',
+                    [Message.inform('sensor-value', '1.000000', '1',
                                     'device.sensor1', 'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
 
@@ -142,9 +142,9 @@ class TestProxyBase(TestCase):
     def test_all_forwarded_sensors(self):
         def callback((informs, reply)):
             self.assertEquals(informs[2:],
-                  [Message.inform('sensor-value', '1000', '1',
+                  [Message.inform('sensor-value', '1.000000', '1',
                                   'device.sensor1', 'unknown', '0'),
-                   Message.inform('sensor-value', '0', '1', 'device.sensor2',
+                   Message.inform('sensor-value', '0.000000', '1', 'device.sensor2',
                                   'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '4'))
 
@@ -153,7 +153,7 @@ class TestProxyBase(TestCase):
     def test_all_forwarded_sensors_regex(self):
         def callback((informs, reply)):
             self.assertEquals(informs,
-                  [Message.inform('sensor-value', '1000', '1',
+                  [Message.inform('sensor-value', '1.000000', '1',
                                   'device.sensor1', 'unknown', '0')])
             self.assertEquals(reply, Message.reply('sensor-value', 'ok', '1'))
 
@@ -201,7 +201,7 @@ class TestProxyBase(TestCase):
 
         def callback(arg):
             d = self.proxy.devices['device'].send_request(
-                'sensor-sampling', 'sensor1', 'period', '10')
+                'sensor-sampling', 'sensor1', 'period', '0.01')
             d.addCallback(sampling_done)
             return True
         return self._base_test(None, callback)

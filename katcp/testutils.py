@@ -14,9 +14,33 @@ import time
 import Queue
 import threading
 import functools
-from .core import Sensor, Message
-from .server import DeviceServer, FailReply
+import mock
 
+from .core import Sensor, Message
+from .server import (DeviceServer, FailReply, ClientRequestConnection,
+                     ClientConnectionTCP)
+
+class ClientConnectionTest(object):
+    """
+    A version of katcp.server.ClientConnection* suitable for testing
+    Records all messages
+    """
+    def __init__(self):
+        self.messages = []
+
+    def inform(self, msg):
+        self.messages.append(msg)
+
+    def reply(self, msg, req_msg):
+        self.messages.append(msg)
+
+    @property
+    def informs(self):
+        return [m for m in self.messages if m.mtype == Message.INFORM]
+
+    @property
+    def replies(self):
+        return [m for m in self.messages if m.mtype == Message.REPLY]
 
 class TestLogHandler(logging.Handler):
     """A logger for KATCP tests."""
@@ -43,6 +67,95 @@ class DeviceTestSensor(Sensor):
         super(DeviceTestSensor, self).__init__(
             sensor_type, name, description, units, params)
         self.set(timestamp, status, value)
+
+
+class MessageRecorder(object):
+    """
+        Parameters
+        ----------
+        whitelist : list or tuple
+            Record only messages matching these names.  If the list is empty,
+            all received messages will be saved except any specified in the
+            blacklist.
+        blacklist : list or tuple
+            Ignore messages matching these names.  If any names appear both in
+            the whitelist and the blacklist, the whitelist will take
+            precedence.
+        regex_filter : str
+            Record only messages that matches this regexes. Applied to the
+            unescaped message string. Messages are pre-filtered by the whitelist
+            parameter, so only messages that match both this regexe and have
+            names listed in whitelist are recorded.
+        informs : boolean
+            Whether to record informs.  Default: True.
+        replies : boolean
+            Whether to record replies.  Default: False.
+    """
+
+    def __init__(self, msg_types, whitelist, regex_filter, blacklist):
+        self.msgs = []
+        self.msg_types = msg_types
+        self.whitelist = whitelist
+        self.blacklist = blacklist
+        self.regex_filter = re.compile(regex_filter) if regex_filter else None
+        self.msg_received = threading.Event()
+
+    def get_msgs(self, min_number=0, timeout=1):
+        """Return the messages recorded so far. and delete them
+
+        Parameters
+        ==========
+        number -- Minumum number of messages to return, else wait
+        timeout: int seconds or None -- Don't wait longer than this
+        """
+        self.wait_number(min_number, timeout)
+        msg_count = len(self.msgs)
+        msgs_copy = self.msgs[:msg_count]
+        del self.msgs[:msg_count]
+        return msgs_copy
+
+    __call__ = get_msgs           # For backwards compatibility
+
+    def wait_number(self, number, timeout=1):
+        """
+        Wait until at least certain number of messages have been recorded
+
+        Parameters
+        ==========
+        number -- Number of messages to wait for
+        timeout: int seconds or None -- Don't wait longer than this
+        """
+        start_time = time.time()
+        while True:
+            if len(self.msgs) >= number:
+                return True
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= timeout:
+                return None
+            self.msg_received.wait(timeout=timeout-elapsed_time)
+
+    def append_msg(self, msg):
+        """Append a message if it matches the criteria."""
+        if msg.mtype not in self.msg_types:
+            return
+        try:
+            if self._record_predicate(msg):
+                self.msgs.append(msg)
+                self.msg_received.set()
+        finally:
+            self.msg_received.clear()
+
+    def _record_predicate(self, msg):
+        if self.whitelist and msg.name not in self.whitelist:
+            return False
+        if self.regex_filter:
+            if self.regex_filter.match(str(msg)):
+                return True
+            else:
+                return False
+        if msg.name in self.blacklist:
+            return False
+        return True
 
 
 class BlockingTestClient(client.BlockingClient):
@@ -74,8 +187,8 @@ class BlockingTestClient(client.BlockingClient):
             append_msg(msg)
         return super(BlockingTestClient, self).handle_reply(msg)
 
-    def message_recorder(self, whitelist=(), blacklist=(), informs=True,
-                         replies=False):
+    def message_recorder(self, whitelist=(), blacklist=(), regex_filter=None,
+                         informs=True, replies=False):
         """Helper method for attaching a hook to selected received messages.
 
         Parameters
@@ -88,6 +201,11 @@ class BlockingTestClient(client.BlockingClient):
             Ignore messages matching these names.  If any names appear both in
             the whitelist and the blacklist, the whitelist will take
             precedence.
+        regex_filter : str
+            Record only messages that matches this regexes. Applied to the
+            unescaped message string. Messages are pre-filtered by the whitelist
+            parameter, so only messages that match both this regexe and have
+            names listed in whitelist are recorded.
         informs : boolean
             Whether to record informs.  Default: True.
         replies : boolean
@@ -95,9 +213,10 @@ class BlockingTestClient(client.BlockingClient):
 
         Return
         ------
-        get_msgs : function
-            Function that returns a list of messages that have matched so far.
-            Each call returns the list of message since the previous call.
+        get_msgs : object
+            Callable Instance of MessageRecorder. Returns a list of messages
+            that have matched so far.  Each call returns the list of message
+            since the previous call.
         """
         msg_types = set()
         if informs:
@@ -107,66 +226,7 @@ class BlockingTestClient(client.BlockingClient):
         whitelist = set(whitelist)
         blacklist = set(blacklist)
 
-
-        class MessageRecorder(object):
-            def __init__(self, msg_types, whitelist, blacklist):
-                self.msgs = []
-                self.msg_types = msg_types
-                self.whitelist = whitelist
-                self.blacklist = blacklist
-                self.msg_received = threading.Event()
-
-            def get_msgs(self, min_number=0, timeout=1):
-                """Return the messages recorded so far. and delete them
-
-                Parameters
-                ==========
-                number -- Minumum number of messages to return, else wait
-                timeout: int seconds or None -- Don't wait longer than this
-                """
-                self.wait_number(min_number, timeout)
-                msg_count = len(self.msgs)
-                msgs_copy = self.msgs[:msg_count]
-                del self.msgs[:msg_count]
-                return msgs_copy
-
-            __call__ = get_msgs           # For backwards compatibility
-
-            def wait_number(self, number, timeout=1):
-                """Wait until at least certain number of messages have been recorded
-
-                Parameters
-                ==========
-                number -- Number of messages to wait for
-                timeout: int seconds or None -- Don't wait longer than this
-                """
-                start_time = time.time()
-                while True:
-                    if len(self.msgs) >= number:
-                        return True
-                    elapsed_time = time.time() - start_time
-                    if elapsed_time >= timeout:
-                        return None
-                    self.msg_received.wait(timeout=timeout-elapsed_time)
-
-            def append_msg(self, msg):
-                """Append a message if it matches the criteria."""
-                if msg.mtype not in self.msg_types:
-                    return
-                try:
-                    if self.whitelist:
-                        if msg.name in whitelist:
-                            self.msgs.append(msg)
-                            self.msg_received.set()
-                    else:
-                        if msg.name not in self.blacklist:
-                            self.msgs.append(msg)
-                            self.msg_received.set()
-                finally:
-                    self.msg_received.clear()
-
-        mr = MessageRecorder(msg_types, whitelist, blacklist)
-
+        mr = MessageRecorder(msg_types, whitelist, regex_filter, blacklist)
         self._message_recorders[id(mr)] = mr.append_msg
 
         return mr
@@ -241,10 +301,10 @@ class BlockingTestClient(client.BlockingClient):
                 (status, sensorname))
 
         try:
-            timestamp = int(timestamp)
+            timestamp = float(timestamp)
         except ValueError, e:
             self.test.fail("Could not convert timestamp %r of sensor '%s' to"
-                           " type %r: %s" % (timestamp, sensorname, int, e))
+                           " type %r: %s" % (timestamp, sensorname, float, e))
 
         return value, status, timestamp
 
@@ -436,7 +496,7 @@ class BlockingTestClient(client.BlockingClient):
                                          msg=msg, places=places)
 
     def wait_until_sensor_equals(self, timeout, sensorname, value,
-                                 sensortype=str, places=7, pollfreq=0.1):
+                                 sensortype=str, places=7, pollfreq=0.02):
         """Wait until a sensor's value is equal to the given value, or time
         out.
 
@@ -456,6 +516,8 @@ class BlockingTestClient(client.BlockingClient):
         pollfreq : float, optional
             How frequently to poll for the sensor value. Default: 0.1.
         """
+
+        # TODO Should be changed to use some varient of SensorTransitionWaiter
 
         stoptime = time.time() + timeout
         success = False
@@ -824,33 +886,33 @@ class DeviceTestServer(DeviceServer):
             [-5, 5],
             timestamp=12345, status=Sensor.NOMINAL, value=3))
 
-    def request_new_command(self, sock, msg):
+    def request_new_command(self, req, msg):
         """A new command."""
         return Message.reply(msg.name, "ok", "param1", "param2")
 
-    def request_raise_exception(self, sock, msg):
+    def request_raise_exception(self, req, msg):
         """A handler which raises an exception."""
         raise Exception("An exception occurred!")
 
-    def request_raise_fail(self, sock, msg):
+    def request_raise_fail(self, req, msg):
         """A handler which raises a FailReply."""
         raise FailReply("There was a problem with your request.")
 
-    def request_slow_command(self, sock, msg):
+    def request_slow_command(self, req, msg):
         """A slow command, waits for msg.arguments[0] seconds"""
         self.slow_waiting = True
         self._cancel_slow_command.wait(float(msg.arguments[0]))
         self.slow_waiting = False
-        return Message.reply(msg.name, "ok", msgid=msg.mid)
+        return req.make_reply("ok")
 
-    def request_cancel_slow_command(self, sock, msg):
+    def request_cancel_slow_command(self, req, msg):
         """Cancel slow command request, resulting in it replying immedietely"""
         self._cancel_slow_command.set()
-        return Message.reply(msg.name, "ok", msgid=msg.mid)
+        return req.make_reply('ok')
 
-    def handle_message(self, sock, msg):
+    def handle_message(self, req, msg):
         self.__msgs.append(msg)
-        super(DeviceTestServer, self).handle_message(sock, msg)
+        super(DeviceTestServer, self).handle_message(req, msg)
 
     def messages(self):
         return self.__msgs
@@ -1111,8 +1173,8 @@ class SensorTransitionWaiter(object):
         timeout : float seconds or None
             Time to wait for the transition. Wait forever if None
 
-        Return Value
-        ------------
+        Returns
+        -------
 
         Returns True if the sequence is matched within the
         timeout. Returns False if the sequence does not match or if
@@ -1203,3 +1265,101 @@ def wait_sensor(sensor, value, timeout=5):
     return waiter.wait(timeout=timeout)
 
 
+def start_thread_with_cleanup(
+        test_instance, thread_object, timeout=1, start_timeout=None):
+    """Start thread_object and add cleanup functions to test_instance
+
+    thread_object.start() is called to start the thread.
+    thread_object.join(timeout=timeout) and thread_object.stop() is added to the
+    test instance cleanup
+    """
+    if start_timeout is not None:
+        thread_object.start(timeout=timeout)
+    else:
+        thread_object.start()
+    test_instance.addCleanup(thread_object.join, timeout=timeout)
+    test_instance.addCleanup(thread_object.stop)
+
+class WaitingMock(mock.Mock):
+    def __init__(self, *args, **kwargs):
+        super(WaitingMock, self).__init__(*args, **kwargs)
+        self._wait_call_count_event = threading.Event()
+        self._num_calls_waiting_for = None
+
+    def _mock_call(self, *args, **kwargs):
+        retval = super(WaitingMock, self)._mock_call(*args, **kwargs)
+        waiting_for = self._num_calls_waiting_for
+        if waiting_for and self.call_count >= waiting_for:
+            self._wait_call_count_event.set()
+        return retval
+
+    def assert_wait_call_count(self, count, timeout=1.):
+        """
+        Wait for mock to be called at least 'count' times within 'timeout' seconds
+
+        Raises AssertionError if the call count is not reached.
+        """
+        self._num_calls_waiting_for = count
+        self._wait_call_count_event.clear()
+        if self.call_count >= count:
+            return True
+        self._wait_call_count_event.wait(timeout=timeout)
+        assert(self._wait_call_count_event.isSet())
+
+def mock_req(req_name, *args, **kwargs):
+    """
+    Create a mock ClientRequestConnection object
+
+    Parameters
+    ----------
+
+    req_name : str
+        Name of the request
+    *args : obj
+        arguments for the request, used to construct a request Message object
+
+    Optional Keyword Arguments
+    --------------------------
+
+    server : obj
+       Used as the server instance when constructing a client_connection.
+       Cannot be specified together with client_conn
+    client_conn : obj
+       Used as the client_connection object when constructing mock
+       ClientReqeuestConnection object. Cannot be specified together with sock
+    sock : obj
+       Used as the socket object when constructing a server and client_connection
+
+    If server but not sock is specified, a mock sock and real a
+    ClientConnectionTCP instances are used. If client_conn is not specified, a
+    WaitingMock instance is used instead.
+
+    Returns
+    -------
+
+    req : WaitingMock instance
+        The `client_connection` and `msg` attributes are set. The
+        :meth:`make_reply()` method returns the appropriate request Message
+        object as a side effect.
+    """
+
+    server = kwargs.get('server')
+    client_conn = kwargs.get('client_conn')
+    sock = kwargs.get('sock')
+    if server and client_conn:
+        raise TypeError('Specify either server or client_conn, not both')
+    if client_conn and sock:
+        raise TypeError('Specify either client_conn or sock, not both')
+    if not sock:
+        sock = WaitingMock()
+    if server:
+        client_conn = ClientConnectionTCP(server, sock)
+    if not client_conn:
+        client_conn = WaitingMock()
+
+    req = WaitingMock()
+    req.client_connection = client_conn
+    req.msg = Message.request(req_name, *args)
+    req.make_reply.side_effect = lambda *args: Message.reply_to_request(
+        req.msg, *args)
+    return req

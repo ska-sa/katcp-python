@@ -165,8 +165,8 @@ class ProxyProtocol(DeviceProtocol):
         !device-list ok 2
         """
         for name in sorted(self.factory.devices):
-            self.send_message(Message.inform("device-list", name,
-                              self.factory.devices[name].TYPE))
+            self.send_reply_inform(Message.inform("device-list", name,
+                                   self.factory.devices[name].TYPE), reqmsg)
         return "ok", len(self.factory.devices)
 
     def request_sensor_list(self, msg):
@@ -235,13 +235,13 @@ class ProxyProtocol(DeviceProtocol):
             self.factory.sensors.iteritems() if name_re.search(name)])
 
         for name, sensor in sorted(sensors.items(), key=lambda x: x[0]):
-            self.send_message(Message.inform("sensor-list",
+            self.send_reply_inform(Message.inform("sensor-list",
                 name, sensor.description, sensor.units, sensor.stype,
-                *sensor.formatted_params))
+                *sensor.formatted_params), msg)
 
         return Message.reply(msg.name, "ok", len(sensors))
 
-    def _send_all_sensors(self, filter=None):
+    def _send_all_sensors(self, reqmsg, filter=None):
         """ Sends all sensor values with given filter (None = all)
         """
         counter = [0]  # this has to be a list or an object, thanks to
@@ -253,12 +253,13 @@ class ProxyProtocol(DeviceProtocol):
                 inform.arguments[2] = device.name + '.' + \
                                       inform.arguments[2]
                 if filter is None or re.match(filter, inform.arguments[2]):
-                    self.send_message(inform)
+                    self.send_reply_inform(inform, reqmsg)
                     counter[0] += 1
 
         def all_ok(_):
-            self.send_message(Message.reply('sensor-value', 'ok',
-                                            str(counter[0])))
+            self.send_reply(Message.reply('sensor-value', 'ok',
+                                          str(counter[0])),
+                            reqmsg)
 
         wait_for = []
         for device in self.factory.devices.itervalues():
@@ -274,10 +275,11 @@ class ProxyProtocol(DeviceProtocol):
                 if filter is None or re.match(filter, name):
                     timestamp_ms, status, value = sensor.read_formatted()
                     counter[0] += 1
-                    self.send_message(Message.inform('sensor-value',
-                                                     timestamp_ms, "1",
-                                                     name, status,
-                                                     value))
+                    self.send_reply_inform(Message.inform('sensor-value',
+                                                          timestamp_ms, "1",
+                                                          name, status,
+                                                          value),
+                                           reqmsg)
 
     def request_sensor_value(self, msg):
         """Poll a sensor value or value(s).
@@ -332,12 +334,12 @@ class ProxyProtocol(DeviceProtocol):
         !sensor-value ok 1
         """
         if not msg.arguments:
-            self._send_all_sensors()
+            self._send_all_sensors(msg)
             raise AsyncReply()
         name = msg.arguments[0]
         if len(name) >= 2 and name.startswith("/") and name.endswith("/"):
             # regex case
-            self._send_all_sensors(name[1:-1])
+            self._send_all_sensors(msg, name[1:-1])
             raise AsyncReply()
         else:
             return DeviceProtocol.request_sensor_value(self, msg)
@@ -346,7 +348,7 @@ class ProxyProtocol(DeviceProtocol):
         """ drops connection to specified device
         """
         def got_halt((informs, reply)):
-            self.send_message(Message.reply('halt', dev_name, 'ok'))
+            self.send_reply(Message.reply('halt', dev_name, 'ok'), msg)
 
         if not msg.arguments:
             return DeviceProtocol.halt(self, msg)
@@ -367,23 +369,25 @@ class ProxyProtocol(DeviceProtocol):
         # TODO: These proxied methods should appear in the ?help for the proxy
         # but currently don't.
 
-        def request_returned((informs, reply)):
+        def request_returned((informs, reply), reqmsg):
             assert informs == []  # for now
             # we *could* in theory just change message name, but let's copy
             # just in case
-            self.send_message(Message.reply(dev_name + "-" + req_name,
-                                            *reply.arguments))
+            self.send_reply(Message.reply(dev_name + "-" + req_name,
+                                          *reply.arguments), reqmsg)
 
-        def request_failed(failure):
-            self.send_message(Message.reply(dev_name + '-' + req_name,
-                                            "fail", failure.getErrorMessage()))
+        def request_failed(failure, reqmsg):
+            self.send_reply(Message.reply(dev_name + '-' + req_name,
+                                          "fail", failure.getErrorMessage()),
+                            reqmsg)
 
         def callback(msg):
             if device.state is device.UNSYNCED:
                 return Message.reply(dev_name + "-" + req_name, "fail",
                                      "Device not synced")
             d = device.send_request(req_name, *msg.arguments)
-            d.addCallbacks(request_returned, request_failed)
+            d.addCallbacks(request_returned, request_failed,
+                           callbackArgs=(msg,), errbackArgs=(msg,))
             raise AsyncReply()
 
         if not attr.startswith('request_'):

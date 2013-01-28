@@ -7,9 +7,10 @@
 """Tests for the katcp utilities module.
    """
 
-import unittest
+import unittest2 as unittest
 import logging
 import katcp
+from katcp.core import Sensor
 from katcp.testutils import TestLogHandler, DeviceTestSensor
 
 log_handler = TestLogHandler()
@@ -154,109 +155,173 @@ class TestMessageParser(unittest.TestCase):
         self.assertEqual(m.mid, "1234")
 
 
+class TestProtocolFlags(unittest.TestCase):
+    def test_parse_version(self):
+        PF = katcp.ProtocolFlags
+        self.assertEqual(PF.parse_version("foo"), PF(None, None, set()))
+        self.assertEqual(PF.parse_version("1.0"), PF(1, 0, set()))
+        self.assertEqual(PF.parse_version("5.0-MI"),
+                         PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS])))
+        # check an unknown flag
+        self.assertEqual(PF.parse_version("5.1-MIU"),
+                         PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS, 'U'])))
+
+    def test_str(self):
+        PF = katcp.ProtocolFlags
+        self.assertEqual(str(PF(1, 0, set())), "1.0")
+        self.assertEqual(str(PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS]))),
+                         "5.0-IM")
+        self.assertEqual(str(PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
+                                           "U"]))),
+                         "5.0-IMU")
+
+    def test_incompatible_options(self):
+        PF = katcp.ProtocolFlags
+        # Katcp v4 and below don't support message ids
+        with self.assertRaises(ValueError):
+            PF(4, 0, [PF.MESSAGE_IDS])
+
 class TestSensor(unittest.TestCase):
+
+    def test_default_descriptions(self):
+        s = Sensor(Sensor.INTEGER, 'a sens', params=[0,10])
+        self.assertEqual(s.description, "Integer sensor 'a sens' with no unit")
+        s = Sensor(Sensor.FLOAT, 'fsens', None, 'microseconds', params=[0,10])
+        self.assertEqual(s.description,
+                         "Float sensor 'fsens' in unit microseconds")
+
     def test_int_sensor(self):
         """Test integer sensor."""
-        s = DeviceTestSensor(
-                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
-                [-4, 3],
-                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
-        self.assertEqual(s.read_formatted(), ("12345000", "nominal", "3"))
+        s = Sensor.integer("an.int", "An integer.", "count", [-4, 3])
+        self.assertEqual(s.stype, 'integer')
+        s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
+        self.assertEqual(s.read_formatted(), ("12345.000000", "nominal", "3"))
         self.assertEquals(s.parse_value("3"), 3)
-        self.assertRaises(ValueError, s.parse_value, "4")
-        self.assertRaises(ValueError, s.parse_value, "-10")
+        self.assertEquals(s.parse_value("4"), 4)
+        self.assertEquals(s.parse_value("-10"), -10)
         self.assertRaises(ValueError, s.parse_value, "asd")
 
-        s = katcp.Sensor(katcp.Sensor.INTEGER, "an.int", "An integer.",
-                         "count", [-20, 20])
+        s = Sensor(Sensor.INTEGER, "an.int", "An integer.", "count", [-20, 20])
         self.assertEquals(s.value(), 0)
-        s = katcp.Sensor(katcp.Sensor.INTEGER, "an.int", "An integer.",
-                         "count", [2, 20])
+        s = Sensor(Sensor.INTEGER, "an.int", "An integer.", "count", [2, 20])
         self.assertEquals(s.value(), 2)
-        s = katcp.Sensor(katcp.Sensor.INTEGER, "an.int", "An integer.",
-                         "count", [2, 20], default=5)
+        s = Sensor.integer("an.int", "An integer.", "count", [2, 20], default=5)
         self.assertEquals(s.value(), 5)
 
     def test_float_sensor(self):
         """Test float sensor."""
-        s = DeviceTestSensor(
-                katcp.Sensor.FLOAT, "a.float", "A float.", "power",
-                [0.0, 5.0],
-                timestamp=12345, status=katcp.Sensor.WARN, value=3.0)
-        self.assertEqual(s.read_formatted(), ("12345000", "warn", "3"))
+        s = Sensor.float("a.float", "A float.", "power", [0.0, 5.0])
+        self.assertEqual(s.stype, 'float')
+        s.set(timestamp=12345, status=katcp.Sensor.WARN, value=3.0)
+        self.assertEqual(s.read_formatted(), ("12345.000000", "warn", "3"))
         self.assertEquals(s.parse_value("3"), 3.0)
-        self.assertRaises(ValueError, s.parse_value, "10")
-        self.assertRaises(ValueError, s.parse_value, "-10")
+        self.assertEquals(s.parse_value("10"), 10.0)
+        self.assertEquals(s.parse_value("-10"), -10.0)
         self.assertRaises(ValueError, s.parse_value, "asd")
 
-        s = katcp.Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "",
-                         [-20.0, 20.0])
+        s = Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "", [-20.0, 20.0])
         self.assertEquals(s.value(), 0.0)
-        s = katcp.Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "",
-                         [2.0, 20.0])
+        s = Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "", [2.0, 20.0])
         self.assertEquals(s.value(), 2.0)
-        s = katcp.Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "",
-                         [2.0, 20.0], default=5.0)
+        s = Sensor.float("a.float", "A float.", "", [2.0, 20.0], default=5.0)
         self.assertEquals(s.value(), 5.0)
 
     def test_boolean_sensor(self):
         """Test boolean sensor."""
-        s = DeviceTestSensor(
-                katcp.Sensor.BOOLEAN, "a.boolean", "A boolean.", "on/off",
-                None,
-                timestamp=12345, status=katcp.Sensor.UNKNOWN, value=True)
-        self.assertEqual(s.read_formatted(), ("12345000", "unknown", "1"))
+        s = Sensor.boolean("a.boolean", "A boolean.", "on/off", None)
+        self.assertEqual(s.stype, 'boolean')
+        s.set(timestamp=12345, status=katcp.Sensor.UNKNOWN, value=True)
+        self.assertEqual(s.read_formatted(), ("12345.000000", "unknown", "1"))
         self.assertEquals(s.parse_value("1"), True)
         self.assertEquals(s.parse_value("0"), False)
         self.assertRaises(ValueError, s.parse_value, "asd")
+        s = Sensor.boolean("a.boolean", "A boolean.", "on/off", default=True)
+        self.assertEqual(s._value, True)
+        s = Sensor.boolean("a.boolean", "A boolean.", "on/off", default=False)
+        self.assertEqual(s._value, False)
 
     def test_discrete_sensor(self):
         """Test discrete sensor."""
-        s = DeviceTestSensor(
-                katcp.Sensor.DISCRETE, "a.discrete", "A discrete sensor.",
-                "state", ["on", "off"],
-                timestamp=12345, status=katcp.Sensor.ERROR, value="on")
-        self.assertEqual(s.read_formatted(), ("12345000", "error", "on"))
+        s = Sensor.discrete(
+            "a.discrete", "A discrete sensor.", "state", ["on", "off"])
+        self.assertEqual(s.stype, 'discrete')
+        s.set(timestamp=12345, status=katcp.Sensor.ERROR, value="on")
+        self.assertEqual(s.read_formatted(), ("12345.000000", "error", "on"))
         self.assertEquals(s.parse_value("on"), "on")
         self.assertRaises(ValueError, s.parse_value, "fish")
+        s = Sensor.discrete("a.discrete", "A discrete sensor.", "state",
+                             ["on", "off"], default='on')
+        self.assertEqual(s._value, 'on')
+        s = Sensor.discrete("a.discrete", "A discrete sensor.", "state",
+                             ["on", "off"], default='off')
+        self.assertEqual(s._value, 'off')
 
     def test_lru_sensor(self):
         """Test LRU sensor."""
-        s = DeviceTestSensor(
-                katcp.Sensor.LRU, "an.lru", "An LRU sensor.", "state",
-                None,
-                timestamp=12345, status=katcp.Sensor.FAILURE,
-                value=katcp.Sensor.LRU_ERROR)
-        self.assertEqual(s.read_formatted(), ("12345000", "failure", "error"))
+        s = Sensor.lru("an.lru", "An LRU sensor.", "state", None)
+        self.assertEqual(s.stype, 'lru')
+        s.set(timestamp=12345, status=Sensor.FAILURE, value=Sensor.LRU_ERROR)
+        self.assertEqual(s.read_formatted(), ("12345.000000", "failure", "error"))
         self.assertEquals(s.parse_value("nominal"), katcp.Sensor.LRU_NOMINAL)
         self.assertRaises(ValueError, s.parse_value, "fish")
+        s = Sensor.lru(
+            "an.lru", "An LRU sensor.", "state", default=Sensor.LRU_ERROR)
+        self.assertEqual(s._value, Sensor.LRU_ERROR)
+        s = Sensor.lru(
+            "an.lru", "An LRU sensor.", "state", default=Sensor.LRU_NOMINAL)
+        self.assertEqual(s._value, Sensor.LRU_NOMINAL)
 
     def test_string_sensor(self):
         """Test string sensor."""
-        s = DeviceTestSensor(
-            katcp.Sensor.STRING, "a.string", "A string sensor.", "filename",
-            None,
-            timestamp=12345, status=katcp.Sensor.NOMINAL, value="zwoop")
-        self.assertEqual(s.read_formatted(), ("12345000", "nominal", "zwoop"))
+        s = Sensor.string("a.string", "A string sensor.", "filename", None)
+        self.assertEqual(s.stype, 'string')
+        s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value="zwoop")
+        self.assertEqual(s.read_formatted(), ("12345.000000", "nominal", "zwoop"))
         self.assertEquals(s.parse_value("bar foo"), "bar foo")
+        s = Sensor.string(
+            "a.string", "A string sensor.", "filename", default='baz')
+        self.assertEqual(s._value, 'baz')
 
     def test_timestamp_sensor(self):
         """Test timestamp sensor."""
-        s = DeviceTestSensor(
-            katcp.Sensor.TIMESTAMP, "a.timestamp", "A timestamp sensor.", "ms",
-            None,
-            timestamp=12345, status=katcp.Sensor.NOMINAL, value=1001.9)
+        s = Sensor.timestamp("a.timestamp", "A timestamp sensor.", "", None)
+        self.assertEqual(s.stype, 'timestamp')
+        s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value=1001.9)
         self.assertEqual(s.read_formatted(),
+                         ("12345.000000", "nominal", "1001.900000"))
+        # Test with katcp v4 parsing formatting
+        self.assertEqual(s.read_formatted(major=4),
                          ("12345000", "nominal", "1001900"))
-        self.assertAlmostEqual(s.parse_value("1002100"), 1002.1)
+        self.assertAlmostEqual(s.parse_value("1002.100"), 1002.1)
         self.assertRaises(ValueError, s.parse_value, "bicycle")
+        s = Sensor.timestamp(
+            "a.timestamp", "A timestamp sensor.", "", default=123)
+        self.assertEqual(s._value, 123)
+
+        s.set_formatted('12346.1', 'nominal', '12246.1')
+        self.assertEqual(s.read(), (12346.1, katcp.Sensor.NOMINAL, 12246.1))
+
+        # Test with katcp v4 parsing
+        s.set_formatted('12347100', 'nominal', '12247100', major=4)
+        self.assertEqual(s.read(), (12347.1, katcp.Sensor.NOMINAL, 12247.1))
+
+    def test_address_sensor(self):
+        """Test address sensor."""
+        s = Sensor.address("a.address", "An address sensor.", "", None)
+        self.assertEqual(s.stype, 'address')
+        s.set(timestamp=12345, status=Sensor.NOMINAL, value=("127.0.0.1", 80))
+        self.assertEqual(s.read_formatted(),
+                         ("12345.000000", "nominal", "127.0.0.1:80"))
+        self.assertEqual(s.parse_value("[::1]:80"), ("::1", 80))
+        self.assertRaises(ValueError, s.parse_value, "[::1]:foo")
+        s = Sensor.address("a.address", "An address sensor.", "",
+                           default=('192.168.101.1', 81))
+        self.assertEqual(s._value, ('192.168.101.1', 81))
 
     def test_set_and_get_value(self):
         """Test getting and setting a sensor value."""
-        s = DeviceTestSensor(
-                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
-                [-4, 3],
-                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
+        s = Sensor.integer("an.int", "An integer.", "count", [-4, 3])
+        s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
 
         self.assertEqual(s.value(), 3)
 
@@ -266,4 +331,37 @@ class TestSensor(unittest.TestCase):
         s.set_value(3, timestamp=12345)
         self.assertEqual(s.read(), (12345, katcp.Sensor.NOMINAL, 3))
 
-        self.assertRaises(ValueError, s.set_value, 5)
+        s.set_value(5, timestamp=12345)
+        self.assertEqual(s.read(), (12345, katcp.Sensor.NOMINAL, 5))
+
+        s.set_formatted('12346.1', 'nominal', '-2')
+        self.assertEqual(s.read(), (12346.1, katcp.Sensor.NOMINAL, -2))
+
+        # Test setting with katcp v4 parsing
+        s.set_formatted('12347100', 'warn', '-3', major=4)
+        self.assertEqual(s.read(), (12347.1, katcp.Sensor.WARN, -3))
+
+    def test_statuses(self):
+        # Test that the status constants are all good
+        valid_statuses = set(['unknown', 'nominal', 'warn', 'error',
+                               'failure', 'unreachable', 'inactive'])
+        status_vals_set = set()
+        status_vals_dict = {}
+        for st in valid_statuses:
+            # Check that a capitalised attribute exists for each status
+            st_val = getattr(Sensor, st.upper(), 'OOPS')
+            self.assertNotEqual(st_val, 'OOPS')
+            # Check that the status to name lookup dict is correct
+            self.assertEqual(Sensor.STATUSES[st_val], st)
+            # Check that the name to value lookup dict is correct
+            self.assertEqual(st, Sensor.STATUSES[st_val])
+            status_vals_set.add(st_val)
+            status_vals_dict[st] = st_val
+
+        # Check that the status values are all unique
+        self.assertEqual(len(status_vals_set), len(valid_statuses))
+        # Check that there are not extra entries in the forward/backward name
+        # lookup dicts
+        self.assertEqual(len(Sensor.STATUSES), len(valid_statuses))
+        self.assertEqual(len(Sensor.STATUS_NAMES), len(valid_statuses))
+

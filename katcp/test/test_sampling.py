@@ -12,7 +12,7 @@ import time
 import logging
 import katcp
 from katcp.testutils import TestLogHandler, DeviceTestSensor
-from katcp import sampling
+from katcp import sampling, Sensor
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -24,13 +24,14 @@ class TestSampling(unittest.TestCase):
         """Set up for test."""
         # test sensor
         self.sensor = DeviceTestSensor(
-                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
+                Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
-                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
+                timestamp=12345, status=Sensor.NOMINAL, value=3)
 
         # test callback
-        def inform(msg):
-            self.calls.append(msg)
+        def inform(sensor_name, timestamp, status, value):
+            self.calls.append(sampling.format_inform_v5(
+                sensor_name, timestamp, status, value) )
 
         self.calls = []
         self.inform = inform
@@ -47,7 +48,7 @@ class TestSampling(unittest.TestCase):
         self.assertRaises(ValueError, sampling.SampleNone, None, s, "foo")
         self.assertRaises(ValueError, sampling.SampleAuto, None, s, "bar")
         self.assertRaises(ValueError, sampling.SamplePeriod, None, s)
-        self.assertRaises(ValueError, sampling.SamplePeriod, None, s, "1.5")
+        self.assertRaises(ValueError, sampling.SamplePeriod, None, s, "0")
         self.assertRaises(ValueError, sampling.SamplePeriod, None, s, "-1")
         self.assertRaises(ValueError, sampling.SampleEvent, None, s, "foo")
         self.assertRaises(ValueError, sampling.SampleDifferential, None, s)
@@ -71,6 +72,9 @@ class TestSampling(unittest.TestCase):
     def test_event(self):
         """Test SampleEvent strategy."""
         event = sampling.SampleEvent(self.inform, self.sensor)
+        self.assertEqual(event.get_sampling_formatted(),
+                         ('event', []) )
+
         self.assertEqual(self.calls, [])
 
         event.attach()
@@ -78,22 +82,6 @@ class TestSampling(unittest.TestCase):
 
         self.sensor.set_value(2)
         self.assertEqual(len(self.calls), 2)
-
-    def test_event_with_rate_limit(self):
-        """Test SampleEvent strategy with a rate limit."""
-        event = sampling.SampleEvent(self.inform, self.sensor, 100)
-        self.assertEqual(self.calls, [])
-
-        event.attach()
-        self.assertEqual(len(self.calls), 1)
-
-        for i in [-4, -3, -2, -1, 0, 1, 2, 3]:
-            self.sensor.set_value(i)
-        self.assertEqual(len(self.calls), 1)
-
-        time.sleep(0.1)
-        self.sensor.set_value(3)
-        self.assertEqual(len(self.calls), 1)
 
     def test_differential(self):
         """Test SampleDifferential strategy."""
@@ -103,24 +91,97 @@ class TestSampling(unittest.TestCase):
         diff.attach()
         self.assertEqual(len(self.calls), 1)
 
+    def test_differential_timestamp(self):
+        # Test that the timetamp differential is stored correctly as
+        # seconds. This is mainly to check the conversion of the katcp spec from
+        # milliseconds to seconds for katcp v5 spec.
+        time_diff = 4.12                  # Time differential in seconds
+        ts_sensor = Sensor(Sensor.TIMESTAMP, 'ts', 'ts sensor', '')
+        diff = sampling.SampleDifferential(self.inform, ts_sensor, time_diff)
+        self.assertEqual(diff._threshold, time_diff)
+
     def test_periodic(self):
         """Test SamplePeriod strategy."""
-        # period = 10s
-        period = sampling.SamplePeriod(self.inform, self.sensor, 10000)
+        sample_p = 10                            # sample period in seconds
+        period = sampling.SamplePeriod(self.inform, self.sensor, sample_p)
         self.assertEqual(self.calls, [])
 
         period.attach()
         self.assertEqual(self.calls, [])
 
-        period.periodic(1)
+        next_p = period.periodic(1)
+        self.assertEqual(next_p, 1 + sample_p)
         self.assertEqual(len(self.calls), 1)
 
-        period.periodic(11)
+        next_p = period.periodic(11)
         self.assertEqual(len(self.calls), 2)
+        self.assertEqual(next_p, 11 + sample_p)
 
-        period.periodic(12)
+        next_p = period.periodic(12)
+        self.assertEqual(next_p, 12 + sample_p)
         self.assertEqual(len(self.calls), 3)
 
+    def test_event_rate(self):
+        """Test SampleEventRate strategy."""
+        shortest = 10
+        longest = 20
+        evrate = sampling.SampleEventRate(self.inform, self.sensor, shortest,
+                                          longest)
+        now = [1]
+        evrate._time = lambda: now[0]
+        self.assertEqual(self.calls, [])
+
+        evrate.attach()
+        self.assertEqual(len(self.calls), 1)
+
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 1)
+
+        now[0] = 11
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 2)
+
+        evrate.periodic(12)
+        self.assertEqual(len(self.calls), 2)
+        evrate.periodic(13)
+        self.assertEqual(len(self.calls), 2)
+        evrate.periodic(31)
+        self.assertEqual(len(self.calls), 3)
+
+        now[0] = 32
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 3)
+
+        now[0] = 41
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 4)
+
+    def test_event_rate_fractions(self):
+        # Test SampleEventRate strategy in the presence of fractional seconds --
+        # mainly to catch bugs when it was converted to taking seconds instead of
+        # milliseconds, since the previous implementation used an integer number
+        # of milliseconds
+        shortest = 3./8
+        longest = 6./8
+        evrate = sampling.SampleEventRate(self.inform, self.sensor, shortest,
+                                          longest)
+        now = [0]
+        evrate._time = lambda: now[0]
+
+        evrate.attach()
+        self.assertEqual(len(self.calls), 1)
+
+        now[0] = 0.999*shortest
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 1)
+
+        now[0] = shortest
+        self.sensor.set_value(1)
+        self.assertEqual(len(self.calls), 2)
+
+        next_time = evrate.periodic(now[0] + 0.99*shortest)
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(next_time, now[0] + longest)
 
 class TestReactor(unittest.TestCase):
 
@@ -128,13 +189,14 @@ class TestReactor(unittest.TestCase):
         """Set up for test."""
         # test sensor
         self.sensor = DeviceTestSensor(
-                katcp.Sensor.INTEGER, "an.int", "An integer.", "count",
+                Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
-                timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
+                timestamp=12345, status=Sensor.NOMINAL, value=3)
 
         # test callback
-        def inform(msg):
-            self.calls.append(msg)
+        def inform(sensor_name, timestamp, status, value):
+            self.calls.append(sampling.format_inform_v5(
+                sensor_name, timestamp, status, value) )
 
         # test reactor
         self.reactor = sampling.SampleReactor()
@@ -150,7 +212,7 @@ class TestReactor(unittest.TestCase):
 
     def test_periodic(self):
         """Test reactor with periodic sampling."""
-        period = sampling.SamplePeriod(self.inform, self.sensor, 10)
+        period = sampling.SamplePeriod(self.inform, self.sensor, 10./1000)
         start = time.time()
         self.reactor.add_strategy(period)
         time.sleep(0.1)

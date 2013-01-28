@@ -97,7 +97,7 @@ class Factory(KatCPClientFactory):
         return result
 
 
-def run_subprocess(connected, ClientClass):
+def run_subprocess(connected, ClientClass, timeout=1.):
     factory = Factory(connected)
 
     def failed_to_run(error):
