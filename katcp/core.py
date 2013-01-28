@@ -14,6 +14,29 @@ import re
 import time
 import warnings
 
+SEC_TO_MS_FAC = 1000
+MS_TO_SEC_FAC = 1./1000
+DEFAULT_KATCP_MAJOR = 5
+# First major version to use seconds (in stead of milliseconds) for timestamps
+SEC_TS_KATCP_MAJOR = 5
+# First major version to support message IDs
+MID_KATCP_MAJOR = 5
+# First major version to support #version-connect informs
+VERSION_CONNECT_KATCP_MAJOR = 5
+# First major version to support #interface-changed informs
+INTERFACE_CHANGED_KATCP_MAJOR = 5
+
+class KatcpSyntaxError(ValueError):
+    """Exception raised by parsers on encountering syntax errors."""
+
+class KatcpClientError(Exception):
+    """Raised by KATCP clients when errors occur."""
+
+class KatcpVersionError(KatcpClientError):
+    """
+    Exception raised when a katcp feature not supported by the katcp version
+    of the server/client is requested
+    """
 
 class Message(object):
     """Represents a KAT device control language message.
@@ -218,7 +241,10 @@ class Message(object):
         args : list of strings
             The message arguments.
         """
-        return cls(cls.REQUEST, name, args, kwargs.get('mid'))
+        mid = kwargs.pop('mid', None)
+        if len(kwargs) > 0:
+            raise TypeError('Invalid keyword argument(s): %r' % kwargs)
+        return cls(cls.REQUEST, name, args, mid)
 
     @classmethod
     def reply(cls, name, *args, **kwargs):
@@ -231,7 +257,26 @@ class Message(object):
         args : list of strings
             The message arguments.
         """
-        return cls(cls.REPLY, name, args, kwargs.get('mid'))
+        mid = kwargs.pop('mid', None)
+        if len(kwargs) > 0:
+            raise TypeError('Invalid keyword argument(s): %r' % kwargs)
+        return cls(cls.REPLY, name, args, mid)
+
+    @classmethod
+    def reply_to_request(cls, req_msg, *args):
+        """Helper method for creating reply messages to a specific request.
+
+        Copies the message name and message identifier from the request message
+
+        Parameters
+        ----------
+        req_msg : katcp.core.Message instance
+            The request message that this inform if in reply to
+        args : list of strings
+            The message arguments.
+        """
+        return cls(cls.REPLY, req_msg.name, args, req_msg.mid)
+
 
     @classmethod
     def inform(cls, name, *args, **kwargs):
@@ -244,14 +289,27 @@ class Message(object):
         args : list of strings
             The message arguments.
         """
-        return cls(cls.INFORM, name, args, kwargs.get('mid'))
+        mid = kwargs.pop('mid', None)
+        if len(kwargs) > 0:
+            raise TypeError('Invalid keyword argument(s): %r' % kwargs)
+        return cls(cls.INFORM, name, args, mid)
+
+    @classmethod
+    def reply_inform(cls, req_msg, *args):
+        """Helper method for creating inform messages in reply to a request.
+
+        Copies the message name and message identifier from the request message
+
+        Parameters
+        ----------
+        req_msg : katcp.core.Message instance
+            The request message that this inform if in reply to
+        args : list of strings
+            The message arguments except name
+        """
+        return cls(cls.INFORM, req_msg.name, args, req_msg.mid)
 
     # pylint: enable-msg = W0142
-
-
-class KatcpSyntaxError(ValueError):
-    """Exception raised by parsers on encountering syntax errors."""
-    pass
 
 
 class MessageParser(object):
@@ -342,6 +400,100 @@ class MessageParser(object):
         return Message(mtype, name, arguments, mid)
 
 
+class ProtocolFlags(object):
+    """Utility class for handling KATCP protocol flags.
+
+    .. note::
+
+       This class was introduced in katcp version 0.4.
+
+    Currently understood flags are:
+
+    * M - server supports multiple clients
+    * I - server supports message identifiers
+
+    Parameters
+    ----------
+    major : int
+        Major version number.
+    minor : int
+        Minor version number.
+    flags : set
+        Set of supported flags.
+
+    Attributes
+    ----------
+    multi_client : bool
+        Whether the server the version string came from supports
+        multiple clients.
+    message_ids : bool
+        Whether the server the version string came from supports
+        message ids.
+    """
+
+    VERSION_RE = re.compile(r"^(?P<major>\d+)\.(?P<minor>\d+)"
+                            r"(-(?P<flags>.*))?$")
+
+    # flags
+
+    MULTI_CLIENT = 'M'
+    MESSAGE_IDS = 'I'
+
+    STRATEGIES_V4 = frozenset(['none', 'auto', 'period', 'event', 'differential'])
+    STRATEGIES_V5 = STRATEGIES_V4 | frozenset(
+        ['event-rate', 'differential-rate'])
+
+    STRATEGIES_ALLOWED_BY_MAJOR_VERSION = {
+        4: STRATEGIES_V4,
+        5: STRATEGIES_V5
+        }
+
+    def __init__(self, major, minor, flags):
+        self.major = major
+        self.minor = minor
+        self.flags = set(list(flags))
+        self.multi_client = self.MULTI_CLIENT in self.flags
+        self.message_ids = self.MESSAGE_IDS in self.flags
+        if self.message_ids and self.major < MID_KATCP_MAJOR:
+            raise ValueError(
+                'MESSAGE_IDS is only supported in katcp v5 and newer')
+
+    def strategy_allowed(self, strategy):
+        return strategy in self.STRATEGIES_ALLOWED_BY_MAJOR_VERSION[self.major]
+
+    def __eq__(self, other):
+        if not isinstance(other, ProtocolFlags):
+            return NotImplemented
+        return (self.major == other.major and self.minor == other.minor
+                and self.flags == other.flags)
+
+    def __str__(self):
+        flag_str = self.flags and ("-" + "".join(sorted(self.flags))) or ""
+        return "%d.%d%s" % (self.major, self.minor, flag_str)
+
+    def supports(self, flag):
+        return flag in self.flags
+
+    @classmethod
+    def parse_version(cls, version_str):
+        """Create a :class:`ProtocolFlags` object from a version string.
+
+        Parameters
+        ----------
+        version_str : str
+            The version string from a #version-connect katcp-protocol
+            message.
+        """
+        match = cls.VERSION_RE.match(version_str)
+        if match:
+            major = int(match.group('major'))
+            minor = int(match.group('minor'))
+            flags = set(match.group('flags') or '')
+        else:
+            major, minor, flags = None, None, set()
+        return cls(major, minor, flags)
+
+
 class DeviceMetaclass(type):
     """Metaclass for DeviceServer and DeviceClient classes.
 
@@ -386,7 +538,9 @@ class DeviceMetaclass(type):
                 inform_name = convert("inform_", name)
                 mcs._inform_handlers[inform_name] = getattr(mcs, name)
                 assert(mcs._inform_handlers[inform_name].__doc__ is not None)
-            elif name.startswith("reply_"):
+                # There is a bit of a name colission between the reply_*
+                # convention and the server reply_inform() method
+            elif name.startswith("reply_") and name != 'reply_inform':
                 reply_name = convert("reply_", name)
                 mcs._reply_handlers[reply_name] = getattr(mcs, name)
                 assert(mcs._reply_handlers[reply_name].__doc__ is not None)
@@ -413,7 +567,7 @@ class FailReply(Exception):
     Examples
     --------
     >>> class MyDevice(DeviceServer):
-    ...     def request_myreq(self, sock, msg):
+    ...     def request_myreq(self, req, msg):
     ...         raise FailReply("This request always fails.")
     ...
     """
@@ -431,7 +585,7 @@ class AsyncReply(Exception):
     Examples
     --------
     >>> class MyDevice(DeviceServer):
-    ...     def request_myreq(self, sock, msg):
+    ...     def request_myreq(self, req, msg):
     ...         self.callback_client.request(
     ...             Message.request("otherreq"),
     ...             reply_cb=self._send_reply,
@@ -440,11 +594,6 @@ class AsyncReply(Exception):
     ...
 
     """
-    pass
-
-
-class KatcpClientError(Exception):
-    """Raised by KATCP clients when errors occur."""
     pass
 
 
@@ -484,7 +633,7 @@ class ExcepthookThread(threading.Thread):
                 raise
 
 
-from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp
+from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp, Address
 
 
 class Sensor(object):
@@ -494,6 +643,14 @@ class Sensor(object):
     be one of the sensor type constants. The list params if set will
     have its values formatter by the type formatter for the given
     sensor type.
+
+    .. note::
+
+       The LRU sensor type was deprecated in katcp 0.4.
+
+    .. note::
+
+       The ADDRESS sensor type was added in katcp 0.4.
 
     Parameters
     ----------
@@ -534,7 +691,8 @@ class Sensor(object):
     # parse as arguments
     #
     # type -> (name, formatter, parser)
-    INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE, STRING, TIMESTAMP = range(7)
+    (INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE, STRING, TIMESTAMP,
+     ADDRESS) = range(8)
 
     ## @brief Mapping from sensor type to tuple containing the type name,
     #  a kattype with functions to format and parse a value and a
@@ -547,6 +705,7 @@ class Sensor(object):
         DISCRETE: (Discrete, "unknown"),
         STRING: (Str, ""),
         TIMESTAMP: (Timestamp, 0.0),
+        ADDRESS: (Address, Address.NULL),
     }
 
     SENSOR_SHORTCUTS = {
@@ -560,7 +719,7 @@ class Sensor(object):
     SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
 
     # Sensor status constants
-    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE = range(5)
+    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE, INACTIVE = range(7)
 
     ## @brief Mapping from sensor status to status name.
     STATUSES = {
@@ -569,6 +728,8 @@ class Sensor(object):
         WARN: 'warn',
         ERROR: 'error',
         FAILURE: 'failure',
+        UNREACHABLE: 'unreachable',
+        INACTIVE: 'inactive',
     }
 
     ## @brief Mapping from status name to sensor status.
@@ -587,9 +748,6 @@ class Sensor(object):
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
 
     # pylint: enable-msg = E0602
-
-    ## @brief Number of milliseconds in a second.
-    MILLISECOND = 1000
 
     ## @brief kattype Timestamp instance for encoding and decoding timestamps
     TIMESTAMP_TYPE = Timestamp()
@@ -610,7 +768,7 @@ class Sensor(object):
     # @brief List of strings containing the additional parameters (length and
     #        interpretation are specific to the sensor type)
 
-    def __init__(self, sensor_type, name, description, units, params=None,
+    def __init__(self, sensor_type, name, description=None, units='', params=None,
                  default=None):
         if params is None:
             params = []
@@ -623,13 +781,21 @@ class Sensor(object):
         typeclass, default_value = self.SENSOR_TYPES[sensor_type]
 
         if self._sensor_type in [Sensor.INTEGER, Sensor.FLOAT]:
-            if not params[0] <= default_value <= params[1]:
-                default_value = params[0]
-            self._kattype = typeclass(params[0], params[1])
+            # as of version 5 of the guidelines, integer and float
+            # ranges are optional and informational
+            if len(params) == 2:
+                if not params[0] <= default_value <= params[1]:
+                    default_value = params[0]
+            self._kattype = typeclass()
         elif self._sensor_type == Sensor.DISCRETE:
             default_value = params[0]
             self._kattype = typeclass(params)
         else:
+            if self._sensor_type == Sensor.TIMESTAMP and units:
+                raise ValueError(
+                    'Units cannot be specified for TIMESTAMP sensors since '
+                    'their units is defined by the KATCP spec as either '
+                    'seconds or, for katcp versions 4 and below, milliseconds')
             self._kattype = typeclass()
 
         if default is not None:
@@ -648,6 +814,11 @@ class Sensor(object):
         self.stype = self._kattype.name
 
         self.name = name
+        if description is None:
+            description = '%(type)s sensor %(name)r %(unit_description)s' % dict(
+               type=self.stype.capitalize(), name=self.name,
+               unit_description=('in unit '+units if units else 'with no unit'))
+
         self.description = description
         self.units = units
         self.params = params
@@ -674,6 +845,152 @@ class Sensor(object):
         cls = self.__class__
         return "<%s.%s object name=%r at 0x%x>" % \
                (cls.__module__, cls.__name__, self.name, id(self))
+
+    @classmethod
+    def integer(cls, name, description=None, unit='', params=None, default=None):
+        """
+        Instantiate a new integer sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        params : list
+            [min, max] -- miniumum and maximum values of the sensor
+        default : int
+            An initial value for the sensor. Defaults to 0.
+        """
+        return cls(cls.INTEGER, name, description, unit, params, default)
+
+    @classmethod
+    def float(cls, name, description=None, unit='', params=None, default=None):
+        """
+        Instantiate a new float sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        params : list
+            [min, max] -- miniumum and maximum values of the sensor
+        default : float
+            An initial value for the sensor. Defaults to 0.0.
+        """
+        return cls(cls.FLOAT, name, description, unit, params, default)
+
+    @classmethod
+    def boolean(cls, name, description=None, unit='', default=None):
+        """
+        Instantiate a new boolean sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        default : bool
+            An initial value for the sensor. Defaults to False.
+        """
+        return cls(cls.BOOLEAN, name, description, unit, None, default)
+
+    @classmethod
+    def lru(cls, name, description=None, unit='', default=None):
+        """
+        Instantiate a new lru sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        default : enum, Sensor.LRU_*
+            An initial value for the sensor. Defaults to self.LRU_NOMINAL
+        """
+        return cls(cls.LRU, name, description, unit, None, default)
+
+    @classmethod
+    def string(cls, name, description=None, unit='', default=None):
+        """
+        Instantiate a new string sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        default : string
+            An initial value for the sensor. Defaults to the empty string.
+        """
+        return cls(cls.STRING, name, description, unit, None, default)
+
+    @classmethod
+    def discrete(cls, name, description=None, unit='', params=None, default=None):
+        """
+        Instantiate a new discrete sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        params : [str]
+            Sequence of all allowable discrete sensor states
+        default : str
+            An initial value for the sensor. Defaults to the first item
+            of params
+        """
+        return cls(cls.DISCRETE, name, description, unit, params, default)
+
+    @classmethod
+    def timestamp(cls, name, description=None, unit='seconds', default=None):
+        """
+        Instantiate a new timestamp sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units. Defaults to 'seconds'.
+        default : string
+            An initial value for the sensor in seconds since the Unix Epoch.
+            Defaults to 0.
+        """
+        return cls(cls.TIMESTAMP, name, description, unit, None, default)
+
+    @classmethod
+    def address(cls, name, description=None, unit='', default=None):
+        """
+        Instantiate a new IP address sensor object.
+
+        name : str
+            The name of the sensor.
+        description : str
+            A short description of the sensor.
+        units : str
+            The units of the sensor value. May be the empty string
+            if there are no applicable units.
+        default : (string, int)
+            An initial value for the sensor. Tuple contaning (host, port).
+            default is ("0.0.0.0", None)
+        """
+        return cls(cls.ADDRESS, name, description, unit, None, default)
+
 
     def attach(self, observer):
         """Attach an observer to this sensor.
@@ -705,7 +1022,7 @@ class Sensor(object):
         for o in list(self._observers):
             o.update(self)
 
-    def parse_value(self, s_value):
+    def parse_value(self, s_value, katcp_major=DEFAULT_KATCP_MAJOR):
         """Parse a value from a string.
 
         Parameters
@@ -719,7 +1036,7 @@ class Sensor(object):
         value : object
             A value of a type appropriate to the sensor.
         """
-        return self._parser(s_value)
+        return self._parser(s_value, katcp_major)
 
     def set(self, timestamp, status, value):
         """Set the current value of the sensor.
@@ -737,7 +1054,8 @@ class Sensor(object):
         self._value_tuple = (timestamp, status, value)
         self.notify()
 
-    def set_formatted(self, raw_timestamp, raw_status, raw_value):
+    def set_formatted(self, raw_timestamp, raw_status, raw_value,
+                      major=DEFAULT_KATCP_MAJOR):
         """Set the current value of the sensor.
 
         Parameters
@@ -748,17 +1066,24 @@ class Sensor(object):
             KATCP formatted sensor status string
         value : str
             KATCP formatted sensor value
+        major : int, default = 5
+            KATCP major version to use for interpreting the raw values
         """
-        timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp)
+        timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp, major)
         status = self.STATUS_NAMES[raw_status]
-        value = self.parse_value(raw_value)
+        value = self.parse_value(raw_value, major)
         self.set(timestamp, status, value)
 
-    def read_formatted(self):
-        """Read the sensor and return a timestamp_ms, status, value tuple.
+    def read_formatted(self, major=DEFAULT_KATCP_MAJOR):
+        """Read the sensor and return a timestamp, status, value tuple.
 
         All values are strings formatted as specified in the Sensor Type
         Formats in the katcp specification.
+
+        Parameters
+        ----------
+        major : int. Defaults to latest implemented KATCP version (5)
+            Major version of KATCP to use when interpreting types
 
         Returns
         -------
@@ -770,9 +1095,9 @@ class Sensor(object):
             KATCP formatted sensor value
         """
         timestamp, status, value = self.read()
-        return (self.TIMESTAMP_TYPE.encode(timestamp),
+        return (self.TIMESTAMP_TYPE.encode(timestamp, major),
                 self.STATUSES[status],
-                self._formatter(value, True))
+                self._formatter(value, True, major))
 
     def read(self):
         """Read the sensor and return a timestamp, status, value tuple.
@@ -789,7 +1114,8 @@ class Sensor(object):
         """
         return self._value_tuple
 
-    def set_value(self, value, status=NOMINAL, timestamp=None):
+    def set_value(self, value, status=NOMINAL, timestamp=None,
+                  major=DEFAULT_KATCP_MAJOR):
         """Check and then set the value of the sensor.
 
         Parameters
@@ -798,10 +1124,13 @@ class Sensor(object):
             Value of the appropriate type for the sensor.
         status : Sensor status constant
             Whether the value represents an error condition or not.
-        timestamp : float in seconds
-           The time at which the sensor value was determined.
+        timestamp : float in seconds or None
+           The time at which the sensor value was determined. Uses current time
+           if None.
+        major : int. Defaults to latest implemented KATCP version (5)
+            Major version of KATCP to use when interpreting types
         """
-        self._kattype.check(value)
+        self._kattype.check(value, major)
         if timestamp is None:
             timestamp = time.time()
         self.set(timestamp, status, value)
@@ -838,7 +1167,8 @@ class Sensor(object):
                                    type_string)
 
     @classmethod
-    def parse_params(cls, sensor_type, formatted_params):
+    def parse_params(cls, sensor_type, formatted_params,
+                     major=DEFAULT_KATCP_MAJOR):
         """Parse KATCP formatted parameters into Python values.
 
         Parameters
@@ -847,6 +1177,8 @@ class Sensor(object):
             The type of sensor the parameters are for.
         formatted_params : list of strings
             The formatted parameters that should be parsed.
+        major : int. Defaults to latest implemented KATCP version (5)
+            Major version of KATCP to use when interpreting types
 
         Returns
         -------
@@ -858,4 +1190,4 @@ class Sensor(object):
             kattype = typeclass([])
         else:
             kattype = typeclass()
-        return [kattype.decode(x) for x in formatted_params]
+        return [kattype.decode(x, major) for x in formatted_params]

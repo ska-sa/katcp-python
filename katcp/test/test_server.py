@@ -7,20 +7,244 @@
 """Tests for the server module.
    """
 
-import unittest
+import unittest2 as unittest
 import katcp
 import time
 import logging
 import threading
-from katcp.testutils import TestLogHandler, \
-    BlockingTestClient, DeviceTestServer, TestUtilMixin
+import mock
+from collections import defaultdict
+
+from katcp.testutils import (
+    TestLogHandler, BlockingTestClient, DeviceTestServer, TestUtilMixin,
+    start_thread_with_cleanup, WaitingMock, ClientConnectionTest, mock_req)
+from katcp.core import FailReply
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 
-NO_HELP_MESSAGES = 14         # Number of requests on DeviceTestServer
+NO_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
 
-class TestDeviceServer(unittest.TestCase, TestUtilMixin):
+class test_ClientConnectionTCP(unittest.TestCase):
+    def test_init(self):
+        # Test that the ClientConnection methods are correctly bound to the
+        # server methods
+        server = mock.Mock()
+        raw_socket = 'raw_socket'
+        DUT = katcp.server.ClientConnectionTCP(server, raw_socket)
+        DUT.inform('inf_arg')
+        server.tcp_inform.assert_called_once_with(raw_socket, 'inf_arg')
+        DUT.reply_inform('rif_arg')
+        server.tcp_reply_inform.assert_called_once_with(raw_socket, 'rif_arg')
+        DUT.reply('rep_arg')
+        server.tcp_reply.assert_called_once_with(raw_socket, 'rep_arg')
+
+
+class test_ClientRequestConnection(unittest.TestCase):
+    def setUp(self):
+        self.client_connection = mock.Mock()
+        self.req_msg = katcp.Message.request(
+            'test-request', 'parm1', 'parm2', mid=42)
+        self.DUT = katcp.server.ClientRequestConnection(
+            self.client_connection, self.req_msg)
+
+    def test_inform(self):
+        arguments = ('inf1', 'inf2')
+        self.DUT.inform(*arguments)
+        self.assertEqual(self.client_connection.inform.call_count, 1)
+        (inf_msg,), kwargs = self.client_connection.inform.call_args
+        self.assertSequenceEqual(inf_msg.arguments, arguments)
+        self.assertEqual(inf_msg.name, 'test-request')
+        self.assertEqual(inf_msg.mid, '42')
+        self.assertEqual(inf_msg.mtype, katcp.Message.INFORM)
+
+    def test_reply(self):
+        arguments = ('inf1', 'inf2')
+        self.DUT.reply(*arguments)
+        self.assertEqual(self.client_connection.reply.call_count, 1)
+        (rep_msg, req_msg), kwargs = self.client_connection.reply.call_args
+        self.assertIs(req_msg, self.req_msg)
+        self.assertSequenceEqual(rep_msg.arguments, arguments)
+        self.assertEqual(rep_msg.name, 'test-request')
+        self.assertEqual(rep_msg.mid, '42')
+        self.assertEqual(rep_msg.mtype, katcp.Message.REPLY)
+        # Test that we can't reply twice
+        with self.assertRaises(RuntimeError):
+            self.DUT.reply(*arguments)
+
+    def test_reply_with_msg(self):
+        wrong_rep_msg = katcp.Message.reply('wrong-request', 'inf1', 'inf2')
+        with self.assertRaises(AssertionError):
+            self.DUT.reply_with_message(wrong_rep_msg)
+        rep_msg = katcp.Message.reply('test-request', 'inf1', 'inf2')
+        self.DUT.reply_with_message(rep_msg.copy())
+        self.assertEqual(self.client_connection.reply.call_count, 1)
+        (actual_rep_msg, req_msg), kwargs = self.client_connection.reply.call_args
+        self.assertIs(req_msg, self.req_msg)
+        self.assertEqual(actual_rep_msg, rep_msg)
+        # Test that we can't reply twice
+        with self.assertRaises(RuntimeError):
+            self.DUT.reply_with_message(rep_msg)
+
+    def test_reply_message(self):
+        arguments = ('inf1', 'inf2')
+        rep_msg = self.DUT.make_reply(*arguments)
+        self.assertSequenceEqual(rep_msg.arguments, arguments)
+        self.assertEqual(rep_msg.name, 'test-request')
+        self.assertEqual(rep_msg.mid, '42')
+        self.assertEqual(rep_msg.mtype, katcp.Message.REPLY)
+
+class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
+
+    class DeviceTestServerV4(DeviceTestServer):
+        ## Protocol versions and flags for a katcp v4 server
+        PROTOCOL_INFO = katcp.ProtocolFlags(4, 0, set([
+            katcp.ProtocolFlags.MULTI_CLIENT,
+            ]))
+
+    def setUp(self):
+        self.server = self.DeviceTestServerV4('', 0)
+
+    def test_log(self):
+        self.server.mass_inform = mock.Mock()
+        self.server.log.warn('A warning', timestamp=1234)
+        self.assertEqual(self.server.mass_inform.call_count, 1)
+        (msg, ), _ = self.server.mass_inform.call_args
+        level, timestamp, name, log_message = msg.arguments
+        self.assertEqual(msg.name, 'log')
+        self.assertIs(msg.mid, None)
+        # Timestamp should be in miliseconds
+        self.assertEqual(timestamp, '1234000')
+        self.assertIn('A warning', log_message)
+
+    def test_on_client_connect(self):
+        conn = katcp.server.ClientConnectionTCP(self.server, 'fake-sock')
+        m_sm = self.server._send_message = mock.Mock()
+        self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
+        self.server.VERSION_INFO = ('deviceapi', 5, 6)
+        self.server.on_client_connect(conn)
+        # we are expecting 2 inform messages
+        no_msgs = 2
+        self.assertEqual(m_sm.call_count, no_msgs)
+        # Check that calls were syntactically valid
+        self.assertEqual(m_sm.call_args_list,
+                         [mock.call('fake-sock', mock.ANY)]*no_msgs)
+        # Get all the messages sent to _send_message
+        msgs = [str(call[0][1]) for call in m_sm.call_args_list]
+        self._assert_msgs_equal(msgs, (
+            r'#version deviceapi-5.6',
+            r'#build-state buildy-1.2g') )
+
+    def test_sensor_sampling(self):
+        start_thread_with_cleanup(self, self.server)
+        s = katcp.Sensor.boolean('a-sens')
+        s.set(1234, katcp.Sensor.NOMINAL, True)
+        self.server.add_sensor(s)
+        self.server._send_message = WaitingMock()
+        self.server.wait_running(timeout=1.)
+        self.assertTrue(self.server.running())
+        self.server._strategies = defaultdict(lambda : {})
+        req = mock_req('sensor-sampling', 'a-sens', 'event')
+        self.server.request_sensor_sampling(req, req.msg)
+        inf = req.client_connection.inform
+        inf.assert_wait_call_count(count=1)
+        (inf_msg, ) = inf.call_args[0]
+        self._assert_msgs_equal([inf_msg], (
+            r'#sensor-status 1234000 1 a-sens nominal 1',))
+        req = mock_req('sensor-sampling', 'a-sens', 'period', 1000)
+        self.server.request_sensor_sampling(req, req.msg)
+        client = req.client_connection
+        strat = self.server._strategies[client][s]
+        # Test that the periodic update period is converted to seconds
+        self.assertEqual(strat._period, 1.)
+        # test that parameters returned by the request matches v4 format.
+        #
+        # We need to pass in the same client_conn as used by the previous
+        # request since strategies are bound to specific connections
+        req = mock_req('sensor-sampling', 'a-sens', client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg)
+        self._assert_msgs_equal([reply],
+                                ['!sensor-sampling ok a-sens period 1000'])
+        # event-rate is not an allowed v4 strategy
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, katcp.Message.request(
+                'sensor-sampling', 'a-sens', 'event-rate', 1000, 2000))
+        # differential-rate is not an allowed v4 strategy
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, katcp.Message.request(
+             'sensor-sampling', 'a-sens', 'differential-rate', 1, 1000, 2000))
+
+
+    def test_sensor_value(self):
+        s = katcp.Sensor.boolean('a-sens')
+        s.set(1234, katcp.Sensor.NOMINAL, True)
+        self.server.add_sensor(s)
+        client_conn = ClientConnectionTest()
+        self.server.handle_message(client_conn, katcp.Message.request(
+            'sensor-value', 'a-sens'))
+        self._assert_msgs_equal(client_conn.messages, [
+            '#sensor-value 1234000 1 a-sens nominal 1',
+            '!sensor-value ok 1'])
+
+class TestVersionCompatibility(unittest.TestCase):
+    def test_wrong_version(self):
+        class DeviceTestServerWrong(DeviceTestServer):
+            ## Protocol versions and flags for a katcp v4 server
+            PROTOCOL_INFO = katcp.ProtocolFlags(3, 0, set([
+                katcp.ProtocolFlags.MULTI_CLIENT,
+                ]))
+
+        # Only major versions 4 and 5 are supported
+        with self.assertRaises(ValueError):
+            DeviceTestServerWrong('', 0)
+        DeviceTestServerWrong.PROTOCOL_INFO.major = 6
+        with self.assertRaises(ValueError):
+            DeviceTestServerWrong('', 0)
+
+
+class test_DeviceServer(unittest.TestCase, TestUtilMixin):
+    def setUp(self):
+        self.server = DeviceTestServer('', 0)
+
+    def test_on_client_connect(self):
+        conn = katcp.server.ClientConnectionTCP(self.server, 'fake-sock')
+        m_sm = self.server._send_message = mock.Mock()
+        self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
+        self.server.VERSION_INFO = ('deviceapi', 5, 6)
+        self.server.on_client_connect(conn)
+        # we are expecting 3 inform messages
+        no_msgs = 3
+        self.assertEqual(m_sm.call_count, no_msgs)
+        # Check that calls were syntactically valid
+        self.assertEqual(m_sm.call_args_list,
+                         [mock.call('fake-sock', mock.ANY)]*no_msgs)
+        # Get all the messages sent to _send_message
+        msgs = [str(call[0][1]) for call in m_sm.call_args_list]
+        self._assert_msgs_equal(msgs, (
+            r'#version-connect katcp-protocol 5.0-IM',
+            # Will have to be updated for every library version bump
+            r'#version-connect katcp-library katcp-python-0.5.0a0',
+            r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g') )
+
+    def test_request_sensor_sampling_clear(self):
+        self.server.clear_strategies = mock.Mock()
+        client_connection = ClientConnectionTest()
+        self.server.handle_message(
+            client_connection, katcp.Message.request('sensor-sampling-clear'))
+        self._assert_msgs_equal(client_connection.messages, [
+            '!sensor-sampling-clear ok'])
+        self.server.clear_strategies.assert_called_once_with(client_connection)
+
+    def test_has_sensor(self):
+        self.assertFalse(self.server.has_sensor('blaah'))
+        self.server.add_sensor(katcp.Sensor.boolean('blaah', 'blaah sens'))
+        self.assertTrue(self.server.has_sensor('blaah'))
+
+
+class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
+
+    BLACKLIST = ("version-connect", "version", "build-state")
+
     def setUp(self):
         self.server = DeviceTestServer('', 0)
         self.server.start(timeout=0.1)
@@ -29,6 +253,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
         self.client = BlockingTestClient(self, host, port)
         self.client.start(timeout=0.1)
+        self.assertTrue(self.client.wait_protocol(timeout=0.1))
 
     def tearDown(self):
         if self.client.running():
@@ -38,12 +263,25 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             self.server.stop()
             self.server.join()
 
+    def test_log(self):
+        get_msgs = self.client.message_recorder(
+                blacklist=self.BLACKLIST,
+                replies=True)
+
+        with mock.patch('katcp.server.time.time') as m_time:
+            m_time.return_value = 1234
+            self.server.log.error('An error')
+        get_msgs.wait_number(1)
+        self._assert_msgs_equal(
+            get_msgs(), [r"#log error 1234.000000 root An\_error"])
+
     def test_simple_connect(self):
         """Test a simple server setup and teardown with client connect."""
         get_msgs = self.client.message_recorder(
-                blacklist=("version", "build-state"), replies=True)
+                blacklist=self.BLACKLIST,
+                replies=True)
         # basic send
-        self.client.request(katcp.Message.request("foo"))
+        self.client.request(katcp.Message.request("foo"), use_mid=False)
 
         # pipe-lined send
         self.client.raw_send("?bar-boom\r\n?baz\r")
@@ -65,10 +303,11 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
     def test_bad_requests(self):
         """Test request failure paths in device server."""
         get_msgs = self.client.message_recorder(
-                blacklist=("version", "build-state"), replies=True)
+                blacklist=self.BLACKLIST, replies=True)
         self.client.raw_send("bad msg\n")
         # wait for reply
-        self.client.blocking_request(katcp.Message.request("watchdog"))
+        self.client.blocking_request(
+            katcp.Message.request("watchdog"), use_mid=False)
 
         self._assert_msgs_like(get_msgs(), [
             (r"#log error", "KatcpSyntaxError:"
@@ -79,7 +318,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
     def test_server_ignores_informs_and_replies(self):
         """Test server ignores informs and replies."""
         get_msgs = self.client.message_recorder(
-                blacklist=("version", "build-state"), replies=True)
+                blacklist=self.BLACKLIST, replies=True)
         self.client.raw_send("#some inform\n")
         self.client.raw_send("!some reply\n")
 
@@ -90,7 +329,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
     def test_standard_requests(self):
         """Test standard request and replies."""
         get_msgs = self.client.message_recorder(
-                blacklist=("version", "build-state"), replies=True)
+                blacklist=self.BLACKLIST, replies=True)
         self.client.request(katcp.Message.request("watchdog"))
         self.client.request(katcp.Message.request("restart"))
         self.client.request(katcp.Message.request("log-level"))
@@ -100,6 +339,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("help", "watchdog"))
         self.client.request(katcp.Message.request("help", "unknown-request"))
         self.client.request(katcp.Message.request("client-list"))
+        self.client.request(katcp.Message.request("version-list"))
         self.client.request(katcp.Message.request("sensor-list"))
         self.client.request(katcp.Message.request("sensor-list", "an.int"))
         self.client.request(katcp.Message.request("sensor-list", "an.unknown"))
@@ -113,9 +353,8 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("sensor-sampling"))
         self.client.request(katcp.Message.request("sensor-sampling",
                                                   "an.unknown", "auto"))
-        self.client.blocking_request(katcp.Message.request("sensor-sampling",
-                                                           "an.int",
-                                                           "unknown"))
+        self.client.blocking_request(katcp.Message.request(
+            "sensor-sampling", "an.int", "unknown"))
 
         time.sleep(0.1)
 
@@ -130,48 +369,54 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
         self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
         self._assert_msgs_like(get_msgs(), [
-            (r"!watchdog ok", ""),
-            (r"!restart ok", ""),
-            (r"!log-level ok warn", ""),
-            (r"!log-level ok trace", ""),
-            (r"!log-level fail Unknown\_logging\_level\_name\_'unknown'", ""),
-            (r"#help cancel-slow-command Cancel\_slow\_command\_request,\_"
+            (r"!watchdog[1] ok", ""),
+            (r"!restart[2] ok", ""),
+            (r"!log-level[3] ok warn", ""),
+            (r"!log-level[4] ok trace", ""),
+            (r"!log-level[5] fail Unknown\_logging\_level\_name\_'unknown'", ""),
+            (r"#help[6] cancel-slow-command Cancel\_slow\_command\_request,\_"
              "resulting\_in\_it\_replying\_immedietely", ""),
-            (r"#help client-list", ""),
-            (r"#help halt", ""),
-            (r"#help help", ""),
-            (r"#help log-level", ""),
-            (r"#help new-command", ""),
-            (r"#help raise-exception", ""),
-            (r"#help raise-fail", ""),
-            (r"#help restart", ""),
-            (r"#help sensor-list", ""),
-            (r"#help sensor-sampling", ""),
-            (r"#help sensor-value", ""),
-            (r"#help slow-command", ""),
-            (r"#help watchdog", ""),
-            (r"!help ok %d" % NO_HELP_MESSAGES, ""),
-            (r"#help watchdog", ""),
-            (r"!help ok 1", ""),
-            (r"!help fail", ""),
-            (r"#client-list", ""),
-            (r"!client-list ok 1", ""),
-            (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
-            (r"!sensor-list ok 1", ""),
-            (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
-            (r"!sensor-list ok 1", ""),
-            (r"!sensor-list fail", ""),
-            (r"#sensor-value 12345000 1 an.int nominal 3", ""),
-            (r"!sensor-value ok 1", ""),
-            (r"#sensor-value 12345000 1 an.int nominal 3", ""),
-            (r"!sensor-value ok 1", ""),
-            (r"!sensor-value fail", ""),
-            (r"!sensor-sampling ok an.int none", ""),
-            (r"#sensor-status 12345000 1 an.int nominal 3", ""),
-            (r"!sensor-sampling ok an.int differential 2", ""),
-            (r"!sensor-sampling fail No\_sensor\_name\_given.", ""),
-            (r"!sensor-sampling fail Unknown\_sensor\_name.", ""),
-            (r"!sensor-sampling fail Unknown\_strategy\_name.", ""),
+            (r"#help[6] client-list", ""),
+            (r"#help[6] halt", ""),
+            (r"#help[6] help", ""),
+            (r"#help[6] log-level", ""),
+            (r"#help[6] new-command", ""),
+            (r"#help[6] raise-exception", ""),
+            (r"#help[6] raise-fail", ""),
+            (r"#help[6] restart", ""),
+            (r"#help[6] sensor-list", ""),
+            (r"#help[6] sensor-sampling", ""),
+            (r"#help[6] sensor-sampling-clear", ""),
+            (r"#help[6] sensor-value", ""),
+            (r"#help[6] slow-command", ""),
+            (r"#help[6] version-list", ""),
+            (r"#help[6] watchdog", ""),
+            (r"!help[6] ok %d" % NO_HELP_MESSAGES, ""),
+            (r"#help[7] watchdog", ""),
+            (r"!help[7] ok 1", ""),
+            (r"!help[8] fail", ""),
+            (r"#client-list[9]", ""),
+            (r"!client-list[9] ok 1", ""),
+            (r"#version-list[10] katcp-protocol", ""),
+            (r"#version-list[10] katcp-library", ""),
+            (r"#version-list[10] katcp-device", ""),
+            (r"!version-list[10] ok 3", ""),
+            (r"#sensor-list[11] an.int An\_Integer. count integer -5 5", ""),
+            (r"!sensor-list[11] ok 1", ""),
+            (r"#sensor-list[12] an.int An\_Integer. count integer -5 5", ""),
+            (r"!sensor-list[12] ok 1", ""),
+            (r"!sensor-list[13] fail", ""),
+            (r"#sensor-value[14] 12345.000000 1 an.int nominal 3", ""),
+            (r"!sensor-value[14] ok 1", ""),
+            (r"#sensor-value[15] 12345.000000 1 an.int nominal 3", ""),
+            (r"!sensor-value[15] ok 1", ""),
+            (r"!sensor-value[16] fail", ""),
+            (r"!sensor-sampling[17] ok an.int none", ""),
+            (r"#sensor-status 12345.000000 1 an.int nominal 3", ""),
+            (r"!sensor-sampling[18] ok an.int differential 2", ""),
+            (r"!sensor-sampling[19] fail No\_sensor\_name\_given.", ""),
+            (r"!sensor-sampling[20] fail Unknown\_sensor\_name.", ""),
+            (r"!sensor-sampling[21] fail Unknown\_strategy\_name.", ""),
             (r"#log trace", r"root trace-msg"),
             (r"#log debug", r"root debug-msg"),
             (r"#log info", r"root info-msg"),
@@ -183,13 +428,13 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
     def test_standard_requests_with_ids(self):
         """Test standard request and replies with message ids."""
         get_msgs = self.client.message_recorder(
-                blacklist=("version", "build-state"), replies=True)
+                blacklist=self.BLACKLIST, replies=True)
 
         current_id = [0]
 
         def mid():
             current_id[0] += 1
-            return current_id[0]
+            return str(current_id[0])
 
         self.client.request(katcp.Message.request("watchdog", mid=mid()))
         self.client.request(katcp.Message.request("restart", mid=mid()))
@@ -204,6 +449,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("help", "unknown-request",
                                                   mid=mid()))
         self.client.request(katcp.Message.request("client-list", mid=mid()))
+        self.client.request(katcp.Message.request("version-list", mid=mid()))
         self.client.request(katcp.Message.request("sensor-list", mid=mid()))
         self.client.request(katcp.Message.request("sensor-list", "an.int",
                                                   mid=mid()))
@@ -214,21 +460,16 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
                                                   mid=mid()))
         self.client.request(katcp.Message.request("sensor-value", "an.unknown",
                                                   mid=mid()))
-        self.client.blocking_request(katcp.Message.request("sensor-sampling",
-                                                           "an.int",
-                                                           mid=mid()))
-        self.client.blocking_request(katcp.Message.request("sensor-sampling",
-                                                           "an.int",
-                                                           "differential", "2",
-                                                           mid=mid()))
-        self.client.blocking_request(katcp.Message.request("sensor-sampling",
-                                                           mid=mid()))
-        self.client.blocking_request(katcp.Message.request("sensor-sampling",
-                                                           "an.unknown",
-                                                           "auto", mid=mid()))
-        self.client.blocking_request(katcp.Message.request("sensor-sampling",
-                                                           "an.int", "unknown",
-                                                           mid=mid()))
+        self.client._next_id = mid  # mock our mid generator for testing
+        self.client.blocking_request(katcp.Message.request(
+            "sensor-sampling", "an.int"))
+        self.client.blocking_request(katcp.Message.request(
+            "sensor-sampling", "an.int", "differential", "2"))
+        self.client.blocking_request(katcp.Message.request("sensor-sampling"))
+        self.client.blocking_request(katcp.Message.request(
+            "sensor-sampling", "an.unknown", "auto"))
+        self.client.blocking_request(katcp.Message.request(
+            "sensor-sampling", "an.int", "unknown"))
 
         self.server.log.trace("trace-msg")
         self.server.log.debug("debug-msg")
@@ -260,8 +501,10 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"#help[6] restart", ""),
             (r"#help[6] sensor-list", ""),
             (r"#help[6] sensor-sampling", ""),
+            (r"#help[6] sensor-sampling-clear", ""),
             (r"#help[6] sensor-value", ""),
             (r"#help[6] slow-command", ""),
+            (r"#help[6] version-list", ""),
             (r"#help[6] watchdog", ""),
             (r"!help[6] ok %d" % NO_HELP_MESSAGES, ""),
             (r"#help[7] watchdog", ""),
@@ -269,22 +512,26 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
             (r"!help[8] fail", ""),
             (r"#client-list[9]", ""),
             (r"!client-list[9] ok 1", ""),
-            (r"#sensor-list[10] an.int An\_Integer. count integer -5 5", ""),
-            (r"!sensor-list[10] ok 1", ""),
+            (r"#version-list[10] katcp-protocol", ""),
+            (r"#version-list[10] katcp-library", ""),
+            (r"#version-list[10] katcp-device", ""),
+            (r"!version-list[10] ok 3", ""),
             (r"#sensor-list[11] an.int An\_Integer. count integer -5 5", ""),
             (r"!sensor-list[11] ok 1", ""),
-            (r"!sensor-list[12] fail", ""),
-            (r"#sensor-value[13] 12345000 1 an.int nominal 3", ""),
-            (r"!sensor-value[13] ok 1", ""),
-            (r"#sensor-value[14] 12345000 1 an.int nominal 3", ""),
+            (r"#sensor-list[12] an.int An\_Integer. count integer -5 5", ""),
+            (r"!sensor-list[12] ok 1", ""),
+            (r"!sensor-list[13] fail", ""),
+            (r"#sensor-value[14] 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-value[14] ok 1", ""),
-            (r"!sensor-value[15] fail", ""),
-            (r"!sensor-sampling[16] ok an.int none", ""),
-            (r"#sensor-status 12345000 1 an.int nominal 3", ""),
-            (r"!sensor-sampling[17] ok an.int differential 2", ""),
-            (r"!sensor-sampling[18] fail No\_sensor\_name\_given.", ""),
-            (r"!sensor-sampling[19] fail Unknown\_sensor\_name.", ""),
-            (r"!sensor-sampling[20] fail Unknown\_strategy\_name.", ""),
+            (r"#sensor-value[15] 12345.000000 1 an.int nominal 3", ""),
+            (r"!sensor-value[15] ok 1", ""),
+            (r"!sensor-value[16] fail", ""),
+            (r"!sensor-sampling[17] ok an.int none", ""),
+            (r"#sensor-status 12345.000000 1 an.int nominal 3", ""),
+            (r"!sensor-sampling[18] ok an.int differential 2", ""),
+            (r"!sensor-sampling[19] fail No\_sensor\_name\_given.", ""),
+            (r"!sensor-sampling[20] fail Unknown\_sensor\_name.", ""),
+            (r"!sensor-sampling[21] fail Unknown\_strategy\_name.", ""),
             (r"#log trace", r"root trace-msg"),
             (r"#log debug", r"root debug-msg"),
             (r"#log info", r"root info-msg"),
@@ -295,50 +542,62 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
 
     def test_sensor_list_regex(self):
         reply, informs = self.client.blocking_request(katcp.Message.request(
-                "sensor-list", "/a.*/"))
+                "sensor-list", "/a.*/"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
             r"#sensor-list an.int An\_Integer. count integer -5 5",
             r"!sensor-list ok 1",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
-                "sensor-list", "//"))
+                "sensor-list", "//"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
             r"#sensor-list an.int An\_Integer. count integer -5 5",
             r"!sensor-list ok 1",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
-                "sensor-list", "/^int/"))
+                "sensor-list", "/^int/"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
             r"!sensor-list ok 0",
         ])
 
     def test_sensor_value_regex(self):
         reply, informs = self.client.blocking_request(katcp.Message.request(
-                "sensor-value", "/a.*/"))
+                "sensor-value", "/a.*/"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
-            r"#sensor-value 12345000 1 an.int nominal 3",
+            r"#sensor-value 12345.000000 1 an.int nominal 3",
             r"!sensor-value ok 1",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
-                "sensor-value", "//"))
+                "sensor-value", "//"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
-            r"#sensor-value 12345000 1 an.int nominal 3",
+            r"#sensor-value 12345.000000 1 an.int nominal 3",
             r"!sensor-value ok 1",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
-                "sensor-value", "/^int/"))
+                "sensor-value", "/^int/"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
             r"!sensor-value ok 0",
         ])
 
+    def test_client_list(self):
+        reply, informs = self.client.blocking_request(
+            katcp.Message.request('client-list'), use_mid=False)
+        self.assertEqual(str(reply), '!client-list ok 1')
+        self.assertEqual(len(informs), 1)
+        inform = str(informs[0])
+        self.assertTrue(inform.startswith('#client-list 127.0.0.1:'))
+        _, addr = inform.split()
+        host, port = addr.split(':')
+        port = int(port)
+        self.assertEqual((host, port), self.client._sock.getsockname())
+
     def test_halt_request(self):
         """Test halt request."""
         get_msgs = self.client.message_recorder(
-                blacklist=("version", "build-state"), replies=True)
+                blacklist=self.BLACKLIST, replies=True)
         self.client.request(katcp.Message.request("halt"))
         # hack to hide re-connect exception
         self.client.connect = lambda: None
@@ -346,7 +605,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         time.sleep(0.1)
 
         self._assert_msgs_equal(get_msgs(), [
-            r"!halt ok",
+            r"!halt[1] ok",
             r"#disconnect Device\_server\_shutting\_down.",
         ])
 
@@ -355,7 +614,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         try:
 
             class BadServer(katcp.DeviceServer):
-                def request_baz(self, sock, msg):
+                def request_baz(self, req, msg):
                     pass
 
         except AssertionError:
@@ -366,7 +625,7 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         try:
 
             class BadServer(katcp.DeviceServer):
-                def inform_baz(self, sock, msg):
+                def inform_baz(self, req, msg):
                     pass
 
         except AssertionError:
@@ -384,7 +643,8 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
     def test_handler_exceptions(self):
         """Test handling of failure replies and other exceptions."""
         get_msgs = self.client.message_recorder(
-                blacklist=("version", "build-state"), replies=True)
+                blacklist=self.BLACKLIST, replies=True)
+        self.assertTrue(self.client.wait_protocol(timeout=1))
 
         self.client.request(katcp.Message.request("raise-exception"))
         self.client.request(katcp.Message.request("raise-fail"))
@@ -392,8 +652,8 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
         time.sleep(0.1)
 
         self._assert_msgs_like(get_msgs(), [
-            (r"!raise-exception fail Traceback", ""),
-            (r"!raise-fail fail There\_was\_a\_problem\_with\_your\_request.",
+            (r"!raise-exception[1] fail Traceback", ""),
+            (r"!raise-fail[2] fail There\_was\_a\_problem\_with\_your\_request.",
              ""),
         ])
 
@@ -495,27 +755,47 @@ class TestDeviceServer(unittest.TestCase, TestUtilMixin):
     def test_sampling(self):
         """Test sensor sampling."""
         get_msgs = self.client.message_recorder(
-                blacklist=("version", "build-state"), replies=True)
-        self.client.request(katcp.Message.request("sensor-sampling", "an.int",
-                                                  "period", 100))
-        time.sleep(1.0)
-        self.client.request(katcp.Message.request("sensor-sampling", "an.int",
-                                                  "none"))
-        time.sleep(0.5)
+                blacklist=self.BLACKLIST, replies=True)
+        self.client.wait_protocol(timeout=1)
+        self.client.request(katcp.Message.request(
+            "sensor-sampling", "an.int", "period", 1/32.))
 
+        # Wait for the request reply and for the sensor update messages to
+        # arrive. We expect update one the moment the sensor-sampling request is
+        # made, then four more over 4/32. of a second, resutling in 6
+        # messages. Wait half a period longer just to be sure we get everything.
+
+        self.assertTrue(get_msgs.wait_number(6, timeout=4.5/32.))
+        self.client.assert_request_succeeds("sensor-sampling", "an.int", "none")
+        # Wait for reply to above request
+        get_msgs.wait_number(7)
         msgs = get_msgs()
         updates = [x for x in msgs if x.name == "sensor-status"]
         others = [x for x in msgs if x.name != "sensor-status"]
-        self.assertTrue(abs(len(updates) - 12) < 2,
-                        "Expected 12 informs, saw %d." % len(updates))
+        self.assertTrue(abs(len(updates) - 5) < 2,
+                        "Expected 5 informs, saw %d." % len(updates))
 
         self._assert_msgs_equal(others, [
-            r"!sensor-sampling ok an.int period 100",
-            r"!sensor-sampling ok an.int none",
+            r"!sensor-sampling[1] ok an.int period %s" % (1/32.),
+            r"!sensor-sampling[2] ok an.int none",
         ])
 
         self.assertEqual(updates[0].arguments[1:],
                          ["1", "an.int", "nominal", "3"])
+
+        ## Now clear the strategies on this sensor
+        # There should only be on connection to the server, so it should be
+        # the test client
+        client_conn = self.server._sock_connections.values()[0]
+        self.server.clear_strategies(client_conn)
+        self.client.assert_request_succeeds("sensor-sampling", "an.int",
+                                            args_equal=["an.int", "none"])
+
+        # Check that we did not accidentally clobber the strategy datastructure
+        # in the proccess
+        self.client.assert_request_succeeds(
+            "sensor-sampling", "an.int", "period", 0.125)
+
 
     def test_add_remove_sensors(self):
         """Test adding and removing sensors from a running device."""

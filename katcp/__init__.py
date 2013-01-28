@@ -21,7 +21,7 @@ del logging, NullHandler
 from .core import Message, KatcpSyntaxError, MessageParser, \
                   DeviceMetaclass, ExcepthookThread, FailReply, \
                   AsyncReply, KatcpDeviceError, KatcpClientError, \
-                  Sensor
+                  Sensor, ProtocolFlags
 
 from .server import DeviceServerBase, DeviceServer, DeviceLogger
 

@@ -7,12 +7,14 @@ from twisted.internet.protocol import ClientCreator, ReconnectingClientFactory
 from twisted.internet.protocol import Factory
 from twisted.python import log
 from twisted.internet.interfaces import IPushProducer
+import logging
 
 from katcp import MessageParser, Message, AsyncReply
-from katcp.core import FailReply
+from katcp.core import FailReply, ProtocolFlags
 from katcp.server import DeviceLogger, construct_name_filter
+from katcp.version import VERSION, VERSION_STR
 from katcp.tx.sampling import (DifferentialStrategy, AutoStrategy,
-    EventStrategy, NoStrategy, PeriodicStrategy)
+    EventStrategy, NoStrategy, PeriodicStrategy, EventRateStrategy)
 
 import sys
 import traceback
@@ -115,6 +117,9 @@ class KatCP(LineReceiver):
         if msg.arguments:
             self.build_state = msg.arguments[0]
 
+    def inform_version_connect(self, msg):
+        pass  # TODO: should probably save this somewhere
+
     def inform_disconnect(self, args):
         pass  # unnecessary, we have a callback on loseConnection
 
@@ -147,9 +152,9 @@ class KatCP(LineReceiver):
                 raise ShouldReturnMessage('request_' + name + ' should return'
                                           ' a message or raise AsyncReply,'
                                           ' instead it returned %r' % rep_msg)
-            self.send_message(rep_msg)
+            self.send_reply(rep_msg, msg)
         except FailReply, fr:
-            self.send_message(Message.reply(name, "fail", str(fr)))
+            self.send_reply(Message.reply(name, "fail", str(fr)), msg)
         except AsyncReply:
             return
         except Exception:
@@ -158,7 +163,7 @@ class KatCP(LineReceiver):
             reason = "\n".join(traceback.format_exception(
                 e_type, e_value, trace, TB_LIMIT))
 
-            self.send_message(Message.reply(msg.name, "fail", reason))
+            self.send_reply(Message.reply(msg.name, "fail", reason), msg)
 
     def handle_reply(self, msg):
         if not self.queries:
@@ -182,6 +187,18 @@ class KatCP(LineReceiver):
             self.transport.write(str(msg) + self.delimiter)
         self.queue = []
         self.producing = True
+
+    def send_reply(self, reply, orig_req):
+        """Send a reply, setting the message id from the original request."""
+        assert (reply.mtype == Message.REPLY)
+        reply.mid = orig_req.mid
+        self.send_message(reply)
+
+    def send_reply_inform(self, inform, orig_req):
+        """Send a reply inform, setting the message if from the request."""
+        assert (inform.mtype == Message.INFORM)
+        inform.mid = orig_req.mid
+        self.send_message(inform)
 
     def send_message(self, msg):
         # just serialize a message
@@ -209,16 +226,40 @@ class ClientKatCPProtocol(KatCP):
         """
         pass
 
+    def send_message(self, msg):
+        """
+        Serialize and send a message, and also log it at debug level
+        """
+        # Log all sent messages here so no one else has to.
+        log.msg(str(msg), logLevel=logging.DEBUG)
+        return KatCP.send_message(self, msg)
+
+    def lineReceived(self, line):
+        log.msg(line, logLevel=logging.DEBUG)
+        return KatCP.lineReceived(self, line)
+
 
 class ServerKatCPProtocol(KatCP):
     VERSION = ("device_stub", 0, 1)
     BUILD_STATE = ("name", 0, 1, "")
+    PROTOCOL_INFO = ProtocolFlags(5, 0, set([
+        ProtocolFlags.MULTI_CLIENT,
+        ProtocolFlags.MESSAGE_IDS,
+        ]))
 
     def connectionMade(self):
         """ Called when connection is made. Send default informs - version
         and build data
         """
         self.transport.registerProducer(self, True)
+
+        self.send_message(Message.inform("version-connect", "katcp-protocol",
+                                         self.PROTOCOL_INFO))
+        self.send_message(Message.inform("version-connect", "katcp-library",
+                                         "katcp-python-tx-%d.%d" % VERSION[:2],
+                                         VERSION_STR))
+        self.send_message(Message.inform("version-connect", "katcp-device",
+                                         self.version(), self.build_state()))
         self.send_message(Message.inform("version", self.version()))
         self.send_message(Message.inform("build-state", self.build_state()))
 
@@ -280,7 +321,7 @@ class ServerKatCPProtocol(KatCP):
             doc = meth.__doc__
             if doc is not None:
                 doc = doc.strip()
-            self.send_message(Message.inform('help', name, doc))
+            self.send_reply_inform(Message.inform('help', name, doc), msg)
             return Message.reply('help', 'ok', '1')
         count = 0
         for name in dir(self.__class__):
@@ -290,7 +331,7 @@ class ServerKatCPProtocol(KatCP):
                 doc = item.__doc__
                 if doc is not None:
                     doc = doc.strip()
-                self.send_message(Message.inform('help', sname, doc))
+                self.send_reply_inform(Message.inform('help', sname, doc), msg)
                 count += 1
         return Message.reply(msg.name, "ok", str(count))
 
@@ -342,11 +383,13 @@ class DeviceProtocol(ServerKatCPProtocol):
                            'none': NoStrategy,
                            'auto': AutoStrategy,
                            'event': EventStrategy,
-                           'differential': DifferentialStrategy}
+                           'differential': DifferentialStrategy,
+                           'event-rate': EventRateStrategy}
 
     def __init__(self, *args, **kwds):
         KatCP.__init__(self, *args, **kwds)
         self.strategies = {}
+        self.extra_versions = {}
 
     def connectionLost(self, _):
         self.factory.deregister_client(self.transport.client)
@@ -441,17 +484,19 @@ class DeviceProtocol(ServerKatCPProtocol):
             return Message.reply(msg.name, "fail", "Unknown sensor name.")
 
         def one_ok(sensor, timestamp_ms, status, value):
-            self.send_message(Message.inform(msg.name, timestamp_ms, "1",
-                                             sensor.name, status, value))
+            self.send_reply_inform(Message.inform(msg.name, timestamp_ms, "1",
+                                                  sensor.name, status, value),
+                                   msg)
 
         def one_fail(failure, sensor):
-            self.send_message(Message.inform(msg.name, sensor.name,
-                                             "Sensor reading failed."))
+            self.send_reply_inform(Message.inform(msg.name, sensor.name,
+                                                  "Sensor reading failed."),
+                                   msg)
 
         def all_finished(lst):
             # XXX write a test where lst is not-empty so we can fail
-            self.send_message(Message.reply(msg.name, "ok",
-                                            len(sensors)))
+            self.send_reply(Message.reply(msg.name, "ok",
+                                          len(sensors)), msg)
 
         lst = []
         for name, sensor in sensors:
@@ -520,10 +565,10 @@ class DeviceProtocol(ServerKatCPProtocol):
             return Message.reply(msg.name, "fail", "Unknown sensor name.")
 
         for name, sensor in sensors:
-            self.send_message(Message.inform(msg.name, name,
+            self.send_reply_inform(Message.inform(msg.name, name,
                                              sensor.description, sensor.units,
                                              sensor.stype,
-                                             *sensor.formatted_params))
+                                             *sensor.formatted_params), msg)
         return Message.reply(msg.name, "ok", len(sensors))
 
     def request_sensor_sampling(self, msg):
@@ -546,8 +591,7 @@ class DeviceProtocol(ServerKatCPProtocol):
             For the differential strategy, the parameter is an integer or float
             giving the amount by which the sensor value may change before an
             updated value is sent. For the period strategy, the parameter is
-            the period to sample at in milliseconds. For the event strategy, an
-            optional minimum time between updates in milliseconds may be given.
+            the period to sample at in seconds.
 
         Returns
         -------
@@ -567,8 +611,8 @@ class DeviceProtocol(ServerKatCPProtocol):
             ?sensor-sampling cpu.power.on
             !sensor-sampling ok cpu.power.on none
 
-            ?sensor-sampling cpu.power.on period 500
-            !sensor-sampling ok cpu.power.on period 500
+            ?sensor-sampling cpu.power.on period 5
+            !sensor-sampling ok cpu.power.on period 5
         """
         if not msg.arguments:
             return Message.reply(msg.name, "fail", "No sensor name given.")
@@ -595,6 +639,22 @@ class DeviceProtocol(ServerKatCPProtocol):
             msg.arguments.append('none')
         return Message.reply(msg.name, "ok", *msg.arguments)
 
+    def request_sensor_sampling_clear(self, msg):
+        """Set all sampling strategies for this client to none.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the list of devices succeeded.
+
+        Examples
+        --------
+        ?sensor-sampling-clear
+        !sensor-sampling-clear ok
+        """
+        return Message.reply_to_request(msg, 'fail', 'Not implemented for '
+                                        'twisted server')
+
     def request_halt(self, msg):
         """Halt the device server.
 
@@ -610,7 +670,7 @@ class DeviceProtocol(ServerKatCPProtocol):
             ?halt
             !halt ok
         """
-        self.send_message(Message.reply("halt", "ok"))
+        self.send_reply(Message.reply("halt", "ok"), msg)
         self.factory.stop()
         raise AsyncReply()
 
@@ -676,8 +736,61 @@ class DeviceProtocol(ServerKatCPProtocol):
             !client-list ok 1
         """
         for ip, port in self.factory.clients:
-            self.send_message(Message.inform(msg.name, "%s:%s" % (ip, port)))
+            self.send_reply_inform(Message.inform(msg.name,
+                                                  "%s:%s" % (ip, port)),
+                                   msg)
         return Message.reply(msg.name, "ok", len(self.factory.clients))
+
+    def request_version_list(self, msg):
+        """Request the list of versions of roles and subcomponents.
+
+        Informs
+        -------
+        name : str
+            Name of the role or component.
+        version : str
+            A string identifying the version of the component. Individual
+            components may define the structure of this argument as they
+            choose. In the absence of other information clients should
+            treat it as an opaque string.
+        build_state_or_serial_number : str
+            A unique identifier for a particular instance of a component.
+            This should change whenever the component is replaced or updated.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the version list succeeded.
+        informs : int
+            Number of #version-list inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?version-list
+            #version-list katcp-protocol 5.0-MI
+            #version-list katcp-library katcp-python-tx-0.4 katcp-python-0.4.1
+            #version-list katcp-device foodevice-1.0 foodevice-1.0.0rc1
+            !version-list ok 3
+        """
+        versions = [
+            ("katcp-protocol", (self.PROTOCOL_INFO, None)),
+            ("katcp-library", ("katcp-python-tx-%d.%d" % VERSION[:2],
+                               VERSION_STR)),
+            ("katcp-device", (self.version(), self.build_state())),
+            ]
+        extra_versions = sorted(self.extra_versions.items())
+
+        for name, (version, build_state) in versions + extra_versions:
+            if build_state is None:
+                inform = Message.inform(msg.name, name, version)
+            else:
+                inform = Message.inform(msg.name, name, version, build_state)
+            self.send_reply_inform(inform, msg)
+
+        num_versions = len(versions) + len(extra_versions)
+        return Message.reply(msg.name, "ok", str(num_versions))
 
     def request_log_level(self, msg):
         """Query or set the current logging level.
@@ -743,7 +856,7 @@ class DeviceServer(KatCPServer):
             timestamp = time.time()
         return Message.inform("log",
                 level_name,
-                str(int(timestamp * 1000.0)),  # time since epoch in ms
+                '%.6f' % timestamp,  # time since epoch in ms
                 name,
                 msg,
         )

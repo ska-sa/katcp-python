@@ -12,11 +12,22 @@ import threading
 import time
 import logging
 import heapq
-from .core import Message, Sensor, ExcepthookThread
+from .core import Message, Sensor, ExcepthookThread, SEC_TO_MS_FAC, MS_TO_SEC_FAC
+
 
 log = logging.getLogger("katcp.sampling")
 
+
 # pylint: disable-msg=W0142
+
+def format_inform_v4(sensor_name, timestamp, status, value):
+    timestamp = int(float(timestamp) * SEC_TO_MS_FAC)
+    return Message.inform(
+        "sensor-status", timestamp, "1", sensor_name, status, value)
+
+def format_inform_v5(sensor_name, timestamp, status, value):
+    return Message.inform(
+        "sensor-status", timestamp, "1", sensor_name, status, value)
 
 
 class SampleStrategy(object):
@@ -34,7 +45,7 @@ class SampleStrategy(object):
     """
 
     # Sampling strategy constants
-    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL = range(5)
+    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL, EVENT_RATE = range(6)
 
     ## @brief Mapping from strategy constant to strategy name.
     SAMPLING_LOOKUP = {
@@ -43,6 +54,7 @@ class SampleStrategy(object):
         PERIOD: "period",
         EVENT: "event",
         DIFFERENTIAL: "differential",
+        EVENT_RATE: "event-rate",
     }
 
     # SAMPLING_LOOKUP not found by pylint
@@ -94,6 +106,8 @@ class SampleStrategy(object):
             return SampleDifferential(inform_callback, sensor, *params)
         elif strategyType == cls.PERIOD:
             return SamplePeriod(inform_callback, sensor, *params)
+        elif strategyType == cls.EVENT_RATE:
+            return SampleEventRate(inform_callback, sensor, *params)
 
     def update(self, sensor):
         """Callback used by the sensor's notify method.
@@ -135,9 +149,8 @@ class SampleStrategy(object):
 
     def inform(self):
         """Inform strategy creator of the sensor status."""
-        timestamp_ms, status, value = self._sensor.read_formatted()
-        self._inform_callback(Message.inform("sensor-status",
-                    timestamp_ms, "1", self._sensor.name, status, value))
+        timestamp, status, value = self._sensor.read_formatted()
+        self._inform_callback(self._sensor.name, timestamp, status, value)
 
     def get_sampling(self):
         """Return the Strategy constant for this sampling strategy.
@@ -180,50 +193,6 @@ class SampleStrategy(object):
         self._sensor.detach(self)
 
 
-class SampleEvent(SampleStrategy):
-    """Strategy which sends updates when the sensor value or status changes.
-
-       This implementation of the event strategy extends the KATCP guidelines
-       to allow an optional minimum time between updates (in millseconds) to
-       be specified as a parameter. If further sensor updates occur before
-       this time has elapsed, no additional events are sent out.
-       """
-
-    def __init__(self, inform_callback, sensor, *params):
-        SampleStrategy.__init__(self, inform_callback, sensor, *params)
-        if len(params) > 1:
-            raise ValueError("The 'event' strategy takes one or"
-                             " zero parameters.")
-        elif len(params) == 1:
-            self._minTimeSep = float(params[0]) / 1000.0
-        else:
-            self._minTimeSep = None
-        self._lastStatus = None
-        self._lastValue = None
-        self._nextTime = None
-
-    def update(self, sensor):
-        now = time.time()
-
-        if self._nextTime is not None and (self._nextTime > now):
-            return
-
-        _timestamp, status, value = sensor.read()
-        if status != self._lastStatus or value != self._lastValue:
-            self._lastStatus = status
-            self._lastValue = value
-            if self._minTimeSep:
-                self._nextTime = now + self._minTimeSep
-            self.inform()
-
-    def get_sampling(self):
-        return SampleStrategy.EVENT
-
-    def attach(self):
-        self.update(self._sensor)
-        super(SampleEvent, self).attach()
-
-
 class SampleAuto(SampleStrategy):
     """Strategy which sends updates whenever the sensor itself is updated."""
 
@@ -261,7 +230,6 @@ class SampleDifferential(SampleStrategy):
     Sends updates only when the value has changed by more than some
     specified threshold, or the status changes.
     """
-
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
@@ -281,10 +249,14 @@ class SampleDifferential(SampleStrategy):
                 raise ValueError("The diff amount must be a positive float.")
         else:
             # _sensor_type must be Sensor.TIMESTAMP
-            self._threshold = int(params[0]) / 1000.0  # convert threshold to s
+
+            # There is a potential snafu here if katcpv4 server is used, since
+            # the timestamp sensor type should be in milliseconds. For now, just
+            # ignore this eventuality, and fix if anyone actually needs this
+            self._threshold = float(params[0])
             if self._threshold <= 0:
                 raise ValueError("The diff amount must be a positive number"
-                                 " of milliseconds.")
+                                 " of seconds.")
         self._lastStatus = None
         self._lastValue = None
 
@@ -310,17 +282,14 @@ class SamplePeriod(SampleStrategy):
     For periodic sampling of any sensor.
     """
 
-    ## @brief Number of milliseconds in a second (as a float).
-    MILLISECOND = 1e3
-
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
             raise ValueError("The 'period' strategy takes one parameter.")
-        period_ms = int(params[0])
-        if period_ms <= 0:
-            raise ValueError("The period must be a positive integer in ms.")
-        self._period = period_ms / SamplePeriod.MILLISECOND
+        period = float(params[0])
+        if period <= 0:
+            raise ValueError("The period must be a float in seconds.")
+        self._period = period
 
     def periodic(self, timestamp):
         self.inform()
@@ -329,6 +298,80 @@ class SamplePeriod(SampleStrategy):
     def get_sampling(self):
         return SampleStrategy.PERIOD
 
+
+class SampleEventRate(SampleStrategy):
+    """Event rate sampling strategy.
+
+    Report the sensor value whenever it changes or if more than
+    longest_period milliseconds have passed since the last reported
+    update. However, do not report the value if less than
+    shortest_period milliseconds have passed since the last reported
+    update.
+    """
+
+    def __init__(self, inform_callback, sensor, *params):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+        if len(params) != 2:
+            raise ValueError("The 'event-rate' strategy takes two parameters.")
+        shortest_period = float(params[0])
+        longest_period = float(params[1])
+        if not 0 <= shortest_period <= longest_period:
+            raise ValueError("The longest and shortest periods must"
+                             " satisfy 0 <= shorest_period <= longest_period")
+        self._shortest_period = shortest_period
+        self._longest_period = longest_period
+        # don't send updates before _last_plus_shortest
+        self._last_plus_shortest = 0
+        # time between _last_plus_shortest and next required update
+        self._longest_minus_shortest = (self._longest_period -
+                                        self._shortest_period)
+        self._time = time.time
+
+    def update(self, sensor, now=None):
+        if now is None:
+            now = self._time()
+        if now < self._last_plus_shortest:
+            return
+        self._last_plus_shortest = now + self._shortest_period
+        self.inform()
+
+    def periodic(self, timestamp):
+        self.update(self._sensor, now=timestamp)
+        return self._last_plus_shortest + self._longest_minus_shortest
+
+    def get_sampling(self):
+        return SampleStrategy.EVENT_RATE
+
+    def attach(self):
+        self.update(self._sensor)
+        super(SampleEventRate, self).attach()
+
+
+class SampleEvent(SampleEventRate):
+    """
+    Strategy which sends updates when the sensor value or status changes.
+
+    This implementation of the event strategy extends the KATCP guidelines
+    to allow an optional minimum time between updates (in millseconds) to
+    be specified as a parameter. If further sensor updates occur before
+    this time has elapsed, no additional events are sent out.
+    """
+
+    # Since SampleEvent is just a special case of SampleEventRate, we use
+    # SampleEventRate with the appropriate default values to implement
+    # SampleEvent
+
+    def __init__(self, inform_callback, sensor, *params):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+        if len(params) > 0:
+            raise ValueError("The 'event' strategy takes no parameters.")
+        super(SampleEvent, self).__init__(inform_callback, sensor, 0, 1e99)
+        # Fix up the parameters so we don't see the extra parameters that were
+        # passed to SampleEventRate
+        self._params = params
+
+    def get_sampling(self):
+        return SampleStrategy.EVENT
 
 class SampleReactor(ExcepthookThread):
     """SampleReactor manages sampling strategies.
