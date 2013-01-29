@@ -20,6 +20,17 @@ from .core import Sensor, Message
 from .server import (DeviceServer, FailReply, ClientRequestConnection,
                      ClientConnectionTCP)
 
+logger = logging.getLogger(__name__)
+
+def add_mid_to_msg_str(msg_str, mid):
+    if mid:
+        msg_parts = msg_str.split(' ')
+        msg_parts[0] += '[%s]' % mid
+        return ' '.join(msg_parts)
+    else:
+        return msg_str
+
+
 class ClientConnectionTest(object):
     """
     A version of katcp.server.ClientConnection* suitable for testing
@@ -939,14 +950,17 @@ class TestUtilMixin(object):
             self.assertEqual(num_msgs, expected_number,
                              "Too many messages received.")
 
-    def _assert_msgs_equal(self, actual_msgs, expected_msgs):
+    def _assert_msgs_equal(self, actual_msgs, expected_msgs, mid=None):
         """Assert that the actual and expected messages are equal.
 
            actual_msgs: list of message objects received
            expected_msgs: expected message strings
+           mid: Add message identifier to message if not None
            """
         for msg, msg_str in zip(actual_msgs, expected_msgs):
-            self.assertEqual(str(msg), msg_str)
+            desired_msg_str = add_mid_to_msg_str(msg_str, mid)
+            logger.debug('actual: %r, desired: %r' % (str(msg), msg_str))
+            self.assertEqual(str(msg), desired_msg_str)
         self._assert_msgs_length(actual_msgs, len(expected_msgs))
 
     def _assert_msgs_match(self, actual_msgs, expected):
@@ -962,15 +976,18 @@ class TestUtilMixin(object):
                             (pattern, msg))
         self._assert_msgs_length(actual_msgs, len(expected))
 
-    def _assert_msgs_like(self, actual_msgs, expected):
+    def _assert_msgs_like(self, actual_msgs, expected, mid=None):
         """Assert that the actual messages start and end with
            the expected strings.
 
            actual_msgs: list of message objects received
            expected_msgs: tuples of (expected_prefix, expected_suffix)
+           mid: Add message identifier to message if not None
            """
         for msg, (prefix, suffix) in zip(actual_msgs, expected):
             str_msg = str(msg)
+
+            prefix = add_mid_to_msg_str(prefix, mid)
 
             if prefix and not str_msg.startswith(prefix):
                 self.assertEqual(str_msg, prefix,
