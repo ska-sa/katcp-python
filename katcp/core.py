@@ -16,6 +16,7 @@ import warnings
 
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
+# The major version of the katcp protocol that is used by default
 DEFAULT_KATCP_MAJOR = 5
 # First major version to use seconds (in stead of milliseconds) for timestamps
 SEC_TS_KATCP_MAJOR = 5
@@ -956,7 +957,7 @@ class Sensor(object):
         return cls(cls.DISCRETE, name, description, unit, params, default)
 
     @classmethod
-    def timestamp(cls, name, description=None, unit='seconds', default=None):
+    def timestamp(cls, name, description=None, unit='', default=None):
         """
         Instantiate a new timestamp sensor object.
 
@@ -965,8 +966,8 @@ class Sensor(object):
         description : str
             A short description of the sensor.
         units : str
-            The units of the sensor value. May be the empty string
-            if there are no applicable units. Defaults to 'seconds'.
+            The units of the sensor value. For timestamp sensor may only be the
+            empty string.
         default : string
             An initial value for the sensor in seconds since the Unix Epoch.
             Defaults to 0.
