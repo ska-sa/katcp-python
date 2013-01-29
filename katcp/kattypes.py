@@ -118,7 +118,10 @@ class KatcpType(object):
         if packed_value is None:
             value = self.get_default()
         else:
-            value = self.decode(packed_value, major)
+            try:
+                value = self.decode(packed_value, major)
+            except Exception:
+                raise
         if value is not None:
             self.check(value, major)
         return value
@@ -570,7 +573,6 @@ class Parameter(object):
         except ValueError, message:
             raise FailReply("Error in parameter %s (%s): %s" %
                             (self.position, self.name, message))
-
 
 ## request, return_reply and inform method decorators
 #
