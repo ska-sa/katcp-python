@@ -4,7 +4,13 @@
 Release Notes
 *************
 
-5.0.0a0
+0.5.0
+=====
+
+First stable release supporting (a subset of) KATCP v5. No updates apart from
+documentation since 0.5.0a0; please refer to the 0.5.0a release notes below.
+
+0.5.0a0
 =======
 
 First alpha release supporting (a subset of) KATCP v5. The KATCP v5 spec brings

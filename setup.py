@@ -17,7 +17,7 @@ setup (
     download_url='http://pypi.python.org/pypi/katcp',
     license="BSD",
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
