@@ -1,3 +1,7 @@
+29 January 2012 (0.5.0)
+ * Minor documentation updates
+ * Version 0.5.0 relesed
+
 13 December 2012 (0.5.0a0)
  * Add support for protocol flags to katcp.core -- a standard
    data structure for storing KATCP versions and capabilities
