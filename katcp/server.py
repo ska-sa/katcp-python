@@ -306,8 +306,8 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        sock : socket.socket object
-            The socket the message was from.
+        client_conn : ClientConnectionTCP object
+            The client connection the message was from.
         msg : Message object
             The message to process.
         """
