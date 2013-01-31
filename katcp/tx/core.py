@@ -11,6 +11,8 @@ import logging
 
 from katcp import MessageParser, Message, AsyncReply
 from katcp.core import FailReply, ProtocolFlags
+from katcp.core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
+                        VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR)
 from katcp.server import DeviceLogger, construct_name_filter
 from katcp.version import VERSION, VERSION_STR
 from katcp.tx.sampling import (DifferentialStrategy, AutoStrategy,
@@ -118,7 +120,12 @@ class KatCP(LineReceiver):
             self.build_state = msg.arguments[0]
 
     def inform_version_connect(self, msg):
-        pass  # TODO: should probably save this somewhere
+        if len(msg.arguments) < 2:
+            return
+        if  msg.arguments[0] == 'katcp-device':
+            self.version = msg.arguments[1]
+        if len(msg.arguments) >= 3:
+            self.build_state = msg.arguments[2]
 
     def inform_disconnect(self, args):
         pass  # unnecessary, we have a callback on loseConnection
@@ -253,15 +260,17 @@ class ServerKatCPProtocol(KatCP):
         """
         self.transport.registerProducer(self, True)
 
-        self.send_message(Message.inform("version-connect", "katcp-protocol",
-                                         self.PROTOCOL_INFO))
-        self.send_message(Message.inform("version-connect", "katcp-library",
-                                         "katcp-python-tx-%d.%d" % VERSION[:2],
-                                         VERSION_STR))
-        self.send_message(Message.inform("version-connect", "katcp-device",
-                                         self.version(), self.build_state()))
-        self.send_message(Message.inform("version", self.version()))
-        self.send_message(Message.inform("build-state", self.build_state()))
+        katcp_version = self.PROTOCOL_INFO.major
+        if katcp_version >= VERSION_CONNECT_KATCP_MAJOR:
+            self.send_message(Message.inform(
+                "version-connect", "katcp-protocol", self.PROTOCOL_INFO))
+            self.send_message(Message.inform("version-connect", "katcp-library",
+                                             "katcp-python-tx-%s" % VERSION_STR))
+            self.send_message(Message.inform("version-connect", "katcp-device",
+                                             self.version(), self.build_state()))
+        else:
+            self.send_message(Message.inform("version", self.version()))
+            self.send_message(Message.inform("build-state", self.build_state()))
 
     def build_state(self):
         """Return a build state string in the form
