@@ -1291,7 +1291,7 @@ def start_thread_with_cleanup(
     test instance cleanup
     """
     if start_timeout is not None:
-        thread_object.start(timeout=timeout)
+        thread_object.start(timeout=start_timeout)
     else:
         thread_object.start()
     test_instance.addCleanup(thread_object.join, timeout=timeout)
