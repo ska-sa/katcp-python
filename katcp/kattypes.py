@@ -20,10 +20,6 @@ logger = logging.getLogger(__name__)
 # KATCP Type Classes
 #
 
-# XXX how about a mapping from python types -> kattypes, so creating
-#     a sensor would not require importing kattypes
-
-
 class KatcpType(object):
     """Class representing a KATCP type.
 
