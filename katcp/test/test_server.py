@@ -14,6 +14,7 @@ import logging
 import threading
 import mock
 from collections import defaultdict
+from functools import partial
 
 from katcp.testutils import (
     TestLogHandler, BlockingTestClient, DeviceTestServer, TestUtilMixin,
@@ -330,31 +331,32 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test standard request and replies."""
         get_msgs = self.client.message_recorder(
                 blacklist=self.BLACKLIST, replies=True)
-        self.client.request(katcp.Message.request("watchdog"))
-        self.client.request(katcp.Message.request("restart"))
-        self.client.request(katcp.Message.request("log-level"))
-        self.client.request(katcp.Message.request("log-level", "trace"))
-        self.client.request(katcp.Message.request("log-level", "unknown"))
-        self.client.request(katcp.Message.request("help"))
-        self.client.request(katcp.Message.request("help", "watchdog"))
-        self.client.request(katcp.Message.request("help", "unknown-request"))
-        self.client.request(katcp.Message.request("client-list"))
-        self.client.request(katcp.Message.request("version-list"))
-        self.client.request(katcp.Message.request("sensor-list"))
-        self.client.request(katcp.Message.request("sensor-list", "an.int"))
-        self.client.request(katcp.Message.request("sensor-list", "an.unknown"))
-        self.client.request(katcp.Message.request("sensor-value"))
-        self.client.request(katcp.Message.request("sensor-value", "an.int"))
-        self.client.request(katcp.Message.request("sensor-value",
+        nomid_req = partial(self.client.request, use_mid=False)
+        nomid_req(katcp.Message.request("watchdog"), use_mid=False)
+        nomid_req(katcp.Message.request("restart"))
+        nomid_req(katcp.Message.request("log-level"))
+        nomid_req(katcp.Message.request("log-level", "trace"))
+        nomid_req(katcp.Message.request("log-level", "unknown"))
+        nomid_req(katcp.Message.request("help"))
+        nomid_req(katcp.Message.request("help", "watchdog"))
+        nomid_req(katcp.Message.request("help", "unknown-request"))
+        nomid_req(katcp.Message.request("client-list"))
+        nomid_req(katcp.Message.request("version-list"))
+        nomid_req(katcp.Message.request("sensor-list"))
+        nomid_req(katcp.Message.request("sensor-list", "an.int"))
+        nomid_req(katcp.Message.request("sensor-list", "an.unknown"))
+        nomid_req(katcp.Message.request("sensor-value"))
+        nomid_req(katcp.Message.request("sensor-value", "an.int"))
+        nomid_req(katcp.Message.request("sensor-value",
                                                   "an.unknown"))
-        self.client.request(katcp.Message.request("sensor-sampling", "an.int"))
-        self.client.request(katcp.Message.request("sensor-sampling", "an.int",
+        nomid_req(katcp.Message.request("sensor-sampling", "an.int"))
+        nomid_req(katcp.Message.request("sensor-sampling", "an.int",
                                                   "differential", "2"))
-        self.client.request(katcp.Message.request("sensor-sampling"))
-        self.client.request(katcp.Message.request("sensor-sampling",
+        nomid_req(katcp.Message.request("sensor-sampling"))
+        nomid_req(katcp.Message.request("sensor-sampling",
                                                   "an.unknown", "auto"))
         self.client.blocking_request(katcp.Message.request(
-            "sensor-sampling", "an.int", "unknown"))
+            "sensor-sampling", "an.int", "unknown"), use_mid=False)
 
         time.sleep(0.1)
 
@@ -369,54 +371,54 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
         self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
         self._assert_msgs_like(get_msgs(), [
-            (r"!watchdog[1] ok", ""),
-            (r"!restart[2] ok", ""),
-            (r"!log-level[3] ok warn", ""),
-            (r"!log-level[4] ok trace", ""),
-            (r"!log-level[5] fail Unknown\_logging\_level\_name\_'unknown'", ""),
-            (r"#help[6] cancel-slow-command Cancel\_slow\_command\_request,\_"
+            (r"!watchdog ok", ""),
+            (r"!restart ok", ""),
+            (r"!log-level ok warn", ""),
+            (r"!log-level ok trace", ""),
+            (r"!log-level fail Unknown\_logging\_level\_name\_'unknown'", ""),
+            (r"#help cancel-slow-command Cancel\_slow\_command\_request,\_"
              "resulting\_in\_it\_replying\_immedietely", ""),
-            (r"#help[6] client-list", ""),
-            (r"#help[6] halt", ""),
-            (r"#help[6] help", ""),
-            (r"#help[6] log-level", ""),
-            (r"#help[6] new-command", ""),
-            (r"#help[6] raise-exception", ""),
-            (r"#help[6] raise-fail", ""),
-            (r"#help[6] restart", ""),
-            (r"#help[6] sensor-list", ""),
-            (r"#help[6] sensor-sampling", ""),
-            (r"#help[6] sensor-sampling-clear", ""),
-            (r"#help[6] sensor-value", ""),
-            (r"#help[6] slow-command", ""),
-            (r"#help[6] version-list", ""),
-            (r"#help[6] watchdog", ""),
-            (r"!help[6] ok %d" % NO_HELP_MESSAGES, ""),
-            (r"#help[7] watchdog", ""),
-            (r"!help[7] ok 1", ""),
-            (r"!help[8] fail", ""),
-            (r"#client-list[9]", ""),
-            (r"!client-list[9] ok 1", ""),
-            (r"#version-list[10] katcp-protocol", ""),
-            (r"#version-list[10] katcp-library", ""),
-            (r"#version-list[10] katcp-device", ""),
-            (r"!version-list[10] ok 3", ""),
-            (r"#sensor-list[11] an.int An\_Integer. count integer -5 5", ""),
-            (r"!sensor-list[11] ok 1", ""),
-            (r"#sensor-list[12] an.int An\_Integer. count integer -5 5", ""),
-            (r"!sensor-list[12] ok 1", ""),
-            (r"!sensor-list[13] fail", ""),
-            (r"#sensor-value[14] 12345.000000 1 an.int nominal 3", ""),
-            (r"!sensor-value[14] ok 1", ""),
-            (r"#sensor-value[15] 12345.000000 1 an.int nominal 3", ""),
-            (r"!sensor-value[15] ok 1", ""),
-            (r"!sensor-value[16] fail", ""),
-            (r"!sensor-sampling[17] ok an.int none", ""),
+            (r"#help client-list", ""),
+            (r"#help halt", ""),
+            (r"#help help", ""),
+            (r"#help log-level", ""),
+            (r"#help new-command", ""),
+            (r"#help raise-exception", ""),
+            (r"#help raise-fail", ""),
+            (r"#help restart", ""),
+            (r"#help sensor-list", ""),
+            (r"#help sensor-sampling", ""),
+            (r"#help sensor-sampling-clear", ""),
+            (r"#help sensor-value", ""),
+            (r"#help slow-command", ""),
+            (r"#help version-list", ""),
+            (r"#help watchdog", ""),
+            (r"!help ok %d" % NO_HELP_MESSAGES, ""),
+            (r"#help watchdog", ""),
+            (r"!help ok 1", ""),
+            (r"!help fail", ""),
+            (r"#client-list", ""),
+            (r"!client-list ok 1", ""),
+            (r"#version-list katcp-protocol", ""),
+            (r"#version-list katcp-library", ""),
+            (r"#version-list katcp-device", ""),
+            (r"!version-list ok 3", ""),
+            (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
+            (r"!sensor-list ok 1", ""),
+            (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
+            (r"!sensor-list ok 1", ""),
+            (r"!sensor-list fail", ""),
+            (r"#sensor-value 12345.000000 1 an.int nominal 3", ""),
+            (r"!sensor-value ok 1", ""),
+            (r"#sensor-value 12345.000000 1 an.int nominal 3", ""),
+            (r"!sensor-value ok 1", ""),
+            (r"!sensor-value fail", ""),
+            (r"!sensor-sampling ok an.int none", ""),
             (r"#sensor-status 12345.000000 1 an.int nominal 3", ""),
-            (r"!sensor-sampling[18] ok an.int differential 2", ""),
-            (r"!sensor-sampling[19] fail No\_sensor\_name\_given.", ""),
-            (r"!sensor-sampling[20] fail Unknown\_sensor\_name.", ""),
-            (r"!sensor-sampling[21] fail Unknown\_strategy\_name.", ""),
+            (r"!sensor-sampling ok an.int differential 2", ""),
+            (r"!sensor-sampling fail No\_sensor\_name\_given.", ""),
+            (r"!sensor-sampling fail Unknown\_sensor\_name:\_an.unknown.", ""),
+            (r"!sensor-sampling fail Unknown\_strategy\_name:\_unknown.", ""),
             (r"#log trace", r"root trace-msg"),
             (r"#log debug", r"root debug-msg"),
             (r"#log info", r"root info-msg"),
@@ -436,39 +438,34 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             current_id[0] += 1
             return str(current_id[0])
 
-        self.client.request(katcp.Message.request("watchdog", mid=mid()))
-        self.client.request(katcp.Message.request("restart", mid=mid()))
-        self.client.request(katcp.Message.request("log-level", mid=mid()))
-        self.client.request(katcp.Message.request("log-level", "trace",
-                                                  mid=mid()))
-        self.client.request(katcp.Message.request("log-level", "unknown",
-                                                  mid=mid()))
-        self.client.request(katcp.Message.request("help", mid=mid()))
-        self.client.request(katcp.Message.request("help", "watchdog",
-                                                  mid=mid()))
-        self.client.request(katcp.Message.request("help", "unknown-request",
-                                                  mid=mid()))
-        self.client.request(katcp.Message.request("client-list", mid=mid()))
-        self.client.request(katcp.Message.request("version-list", mid=mid()))
-        self.client.request(katcp.Message.request("sensor-list", mid=mid()))
-        self.client.request(katcp.Message.request("sensor-list", "an.int",
-                                                  mid=mid()))
-        self.client.request(katcp.Message.request("sensor-list", "an.unknown",
-                                                  mid=mid()))
-        self.client.request(katcp.Message.request("sensor-value", mid=mid()))
-        self.client.request(katcp.Message.request("sensor-value", "an.int",
-                                                  mid=mid()))
-        self.client.request(katcp.Message.request("sensor-value", "an.unknown",
-                                                  mid=mid()))
+        def mid_req(*args):
+            return katcp.Message.request(*args, mid=mid())
+
+
+        self.client.request(mid_req("watchdog"))
+        self.client.request(mid_req("restart"))
+        self.client.request(mid_req("log-level"))
+        self.client.request(mid_req("log-level", "trace"))
+        self.client.request(mid_req("log-level", "unknown"))
+        self.client.request(mid_req("help"))
+        self.client.request(mid_req("help", "watchdog"))
+        self.client.request(mid_req("help", "unknown-request"))
+        self.client.request(mid_req("client-list"))
+        self.client.request(mid_req("version-list"))
+        self.client.request(mid_req("sensor-list"))
+        self.client.request(mid_req("sensor-list", "an.int"))
+        self.client.request(mid_req("sensor-list", "an.unknown"))
+        self.client.request(mid_req("sensor-value"))
+        self.client.request(mid_req("sensor-value", "an.int"))
+        self.client.request(mid_req("sensor-value", "an.unknown"))
         self.client._next_id = mid  # mock our mid generator for testing
-        self.client.blocking_request(katcp.Message.request(
-            "sensor-sampling", "an.int"))
-        self.client.blocking_request(katcp.Message.request(
+        self.client.blocking_request(mid_req("sensor-sampling", "an.int"))
+        self.client.blocking_request(mid_req(
             "sensor-sampling", "an.int", "differential", "2"))
-        self.client.blocking_request(katcp.Message.request("sensor-sampling"))
-        self.client.blocking_request(katcp.Message.request(
+        self.client.blocking_request(mid_req("sensor-sampling"))
+        self.client.blocking_request(mid_req(
             "sensor-sampling", "an.unknown", "auto"))
-        self.client.blocking_request(katcp.Message.request(
+        self.client.blocking_request(mid_req(
             "sensor-sampling", "an.int", "unknown"))
 
         self.server.log.trace("trace-msg")
@@ -530,8 +527,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#sensor-status 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-sampling[18] ok an.int differential 2", ""),
             (r"!sensor-sampling[19] fail No\_sensor\_name\_given.", ""),
-            (r"!sensor-sampling[20] fail Unknown\_sensor\_name.", ""),
-            (r"!sensor-sampling[21] fail Unknown\_strategy\_name.", ""),
+            (r"!sensor-sampling[20] fail Unknown\_sensor\_name:\_an.unknown.", ""),
+            (r"!sensor-sampling[21] fail Unknown\_strategy\_name:\_unknown.", ""),
             (r"#log trace", r"root trace-msg"),
             (r"#log debug", r"root debug-msg"),
             (r"#log info", r"root info-msg"),
