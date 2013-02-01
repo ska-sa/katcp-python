@@ -1533,7 +1533,7 @@ class DeviceServer(DeviceServerBase):
         name = msg.arguments[0]
 
         if name not in self._sensors:
-            raise FailReply("Unknown sensor name.")
+            raise FailReply("Unknown sensor name: %s." % name)
 
         sensor = self._sensors[name]
         # The client connection that is not specific to this request context
@@ -1546,19 +1546,19 @@ class DeviceServer(DeviceServerBase):
             params = msg.arguments[2:]
 
             if strategy not in SampleStrategy.SAMPLING_LOOKUP_REV:
-                raise FailReply("Unknown strategy name.")
+                raise FailReply("Unknown strategy name: %s." % strategy)
 
             if not self.PROTOCOL_INFO.strategy_allowed(strategy):
-                raise FailReply("Strategy not allowed for version %d of katcp"
-                                % katcp_version)
+                raise FailReply("Strategy %s not allowed for version %d of katcp"
+                                % (strategy, katcp_version) )
 
             format_inform = (format_inform_v5 if katcp_version >= SEC_TS_KATCP_MAJOR
                              else format_inform_v4)
 
             def inform_callback(sensor_name, timestamp, status, value):
+                """Inform callback for sensor strategy."""
                 cb_msg = format_inform(
                 sensor_name, timestamp, status, value)
-                """Inform callback for sensor strategy."""
                 client.inform(cb_msg)
 
             if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
