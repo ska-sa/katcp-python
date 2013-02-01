@@ -127,7 +127,10 @@ should be able to detect wether a server supports MIDs by checking the
 request. Furthermore, a KATCP v5 server should never send `#build-state` or
 `#version` informs.
 
-.. release_notes_0_5_0a0 Server Version Auto Detection
+.. _release_notes_0_5_0a0_server_version_auto_detection:
+
+Server KATCP Version Auto-detection
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The :class:`DeviceClient <katcp.DeviceClient>` client uses the presence of
 `#build-state` or `#version` informs as a heuristic to detect pre-v5 servers,

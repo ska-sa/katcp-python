@@ -431,9 +431,9 @@ Client Backwards Compatibility
 ------------------------------
 
 The :meth:`DeviceClient <katcp.DeviceClient>` client automatically detects the
-version of the server if it can, see :ref:`Server version auto detection in the
-release notes <release_notes_0_5_0a0_Server_Version_Auto_Detection>`. For a
-simple client this means that no changes are required to support different KATCP
+version of the server if it can, see
+:ref:`release_notes_0_5_0a0_server_version_auto_detection`. For a simple client
+this means that no changes are required to support different KATCP
 versions. However, the semantics of the messages might be different for
 different protocl versions. Using the :func:`unpack_message
 <katcp.kattypes.unpack_message>` decorator with `major=4` for reply or inform
