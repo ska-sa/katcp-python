@@ -315,29 +315,39 @@ class SampleEventRate(SampleStrategy):
             raise ValueError("The 'event-rate' strategy takes two parameters.")
         shortest_period = float(params[0])
         longest_period = float(params[1])
+        self._lastStatus = None
+        self._lastValue = None
+
         if not 0 <= shortest_period <= longest_period:
             raise ValueError("The longest and shortest periods must"
                              " satisfy 0 <= shorest_period <= longest_period")
         self._shortest_period = shortest_period
         self._longest_period = longest_period
-        # don't send updates before _last_plus_shortest
-        self._last_plus_shortest = 0
-        # time between _last_plus_shortest and next required update
-        self._longest_minus_shortest = (self._longest_period -
-                                        self._shortest_period)
+        # don't send updates until timestamp _not_before
+        self._not_before = 0
+        # time between _not_before and next required update
+        self._not_after_delta = (self._longest_period - self._shortest_period)
         self._time = time.time
 
     def update(self, sensor, now=None):
         if now is None:
             now = self._time()
-        if now < self._last_plus_shortest:
+        if now < self._not_before:
             return
-        self._last_plus_shortest = now + self._shortest_period
-        self.inform()
+
+        past_longest = now >= self._not_before + self._not_after_delta
+        _, status, value = sensor.read()
+        sensor_changed = status != self._lastStatus or value != self._lastValue
+
+        if past_longest or sensor_changed:
+            self._not_before = now + self._shortest_period
+            self._lastStatus = status
+            self._lastValue = value
+            self.inform()
 
     def periodic(self, timestamp):
         self.update(self._sensor, now=timestamp)
-        return self._last_plus_shortest + self._longest_minus_shortest
+        return self._not_before + self._not_after_delta
 
     def get_sampling(self):
         return SampleStrategy.EVENT_RATE
