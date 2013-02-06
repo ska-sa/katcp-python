@@ -80,8 +80,18 @@ class TestSampling(unittest.TestCase):
         event.attach()
         self.assertEqual(len(self.calls), 1)
 
-        self.sensor.set_value(2)
+        self.sensor.set_value(2, status=Sensor.NOMINAL)
         self.assertEqual(len(self.calls), 2)
+
+        # Test that an update is suppressed if the sensor value is unchanged
+        self.sensor.set_value(2, status=Sensor.NOMINAL)
+        self.assertEqual(len(self.calls), 2)
+
+        # Test that an update happens if the status changes even if the value is
+        # unchanged
+        self.sensor.set_value(2, status=Sensor.WARN)
+        self.assertEqual(len(self.calls), 3)
+
 
     def test_differential(self):
         """Test SampleDifferential strategy."""
@@ -125,8 +135,8 @@ class TestSampling(unittest.TestCase):
         """Test SampleEventRate strategy."""
         shortest = 10
         longest = 20
-        evrate = sampling.SampleEventRate(self.inform, self.sensor, shortest,
-                                          longest)
+        evrate = sampling.SampleEventRate(
+            self.inform, self.sensor, shortest, longest)
         now = [1]
         evrate._time = lambda: now[0]
         self.assertEqual(self.calls, [])
@@ -138,7 +148,7 @@ class TestSampling(unittest.TestCase):
         self.assertEqual(len(self.calls), 1)
 
         now[0] = 11
-        self.sensor.set_value(1)
+        self.sensor.set_value(2)
         self.assertEqual(len(self.calls), 2)
 
         evrate.periodic(12)
@@ -149,7 +159,7 @@ class TestSampling(unittest.TestCase):
         self.assertEqual(len(self.calls), 3)
 
         now[0] = 32
-        self.sensor.set_value(1)
+        self.sensor.set_value(3)
         self.assertEqual(len(self.calls), 3)
 
         now[0] = 41
