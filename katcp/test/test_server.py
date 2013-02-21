@@ -8,11 +8,15 @@
    """
 
 import unittest2 as unittest
-import katcp
+import socket
+import errno
 import time
 import logging
 import threading
+
+import katcp
 import mock
+
 from collections import defaultdict
 from functools import partial
 
@@ -249,8 +253,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
         self.server.start(timeout=0.1)
-
         host, port = self.server._sock.getsockname()
+        self.server_addr = (host, port)
 
         self.client = BlockingTestClient(self, host, port)
         self.client.start(timeout=0.1)
@@ -315,6 +319,27 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
                             "\_Bad\_type\_character\_'b'.\\n"),
             (r"!watchdog ok", ""),
         ])
+
+    def test_slow_client(self):
+        # Test that server does not choke sending messages to slow clients
+        self.server.send_timeout = 0.1    # Set a short sending timeout
+
+        self.client.wait_protocol(1)
+        slow_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        slow_sock.connect(self.server_addr)
+        slow_sock.settimeout(0.1)
+        # Send a bunch of request to the server, but don't read anything from
+        # the server
+        try:
+            slow_sock.sendall('?help\n'*100000)
+        except socket.timeout:
+            pass
+
+        t0 = time.time()
+        # Request should not have taken a very long time.
+        self.client.assert_request_succeeds('help', informs_count=NO_HELP_MESSAGES)
+        self.assertTrue(time.time() - t0 < 1)
+
 
     def test_server_ignores_informs_and_replies(self):
         """Test server ignores informs and replies."""
