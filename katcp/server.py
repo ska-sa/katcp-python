@@ -192,6 +192,7 @@ class DeviceServerBase(object):
         self._thread = None
         self._logger = logger
         self._deferred_queue = Queue.Queue(maxsize=self.MAX_DEFERRED_QUEUE_SIZE)
+        self.send_timeout = 5 # Timeout to catch spinning sends
 
         # sockets and data
         self._data_lock = threading.Lock()
@@ -232,7 +233,11 @@ class DeviceServerBase(object):
         if hasattr(socket, 'TCP_NODELAY'):
             # our message packets are small, don't delay sending them.
             sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
-        sock.bind(bindaddr)
+        try:
+            sock.bind(bindaddr)
+        except Exception, e:
+            self._logger.exception("Unable to bind to %s" % str(bindaddr))
+            raise
         sock.listen(5)
         return sock
 
@@ -446,6 +451,7 @@ class DeviceServerBase(object):
         # do not do anything inside here which could call send_message!
         send_failed = False
         lock.acquire()
+        t0 = time.time()
         try:
             while totalsent < datalen:
                 try:
@@ -458,6 +464,10 @@ class DeviceServerBase(object):
                         break
 
                 if sent == 0:
+                    send_failed = True
+                    break
+                if time.time()-t0 > self.send_timeout:
+                    self._logger.error('server._send_msg() timing out after %fs, sent %d/%d bytes') % (TIMEOUT, totalsent, datalen)
                     send_failed = True
                     break
 
