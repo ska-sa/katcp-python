@@ -296,15 +296,18 @@ class DeviceServerBase(object):
                         reason, full_line))
                     self.tcp_inform(sock, self._log_msg("error", reason, "root"))
                 else:
-                    client_conn = self._sock_connections[sock]
-                    self.handle_message(client_conn, msg)
+                    try:
+                        client_conn = self._sock_connections[sock]
+                    except KeyError:
+                        self._logger.warn(
+                        'Client disconnected while handling received message: %r'
+                        % sock)
+                    else:
+                        self.handle_message(client_conn, msg)
 
-        self._data_lock.acquire()
-        try:
+        with self._data_lock:
             if sock in self._waiting_chunks:
                 self._waiting_chunks[sock] = waiting_chunk + lines[-1]
-        finally:
-            self._data_lock.release()
 
     def handle_message(self, client_conn, msg):
         """Handle messages of all types from clients.
@@ -454,6 +457,12 @@ class DeviceServerBase(object):
         t0 = time.time()
         try:
             while totalsent < datalen:
+                if time.time()-t0 > self.send_timeout:
+                    self._logger.error(
+                        'server._send_msg() timing out after %fs, sent %d/%d bytes'
+                        % (self.send_timeout, totalsent, datalen) )
+                    send_failed = True
+                    break
                 try:
                     sent = sock.send(data[totalsent:])
                 except socket.error, e:
@@ -464,10 +473,6 @@ class DeviceServerBase(object):
                         break
 
                 if sent == 0:
-                    send_failed = True
-                    break
-                if time.time()-t0 > self.send_timeout:
-                    self._logger.error('server._send_msg() timing out after %fs, sent %d/%d bytes') % (TIMEOUT, totalsent, datalen)
                     send_failed = True
                     break
 
