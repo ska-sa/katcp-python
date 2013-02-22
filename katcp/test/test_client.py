@@ -8,6 +8,7 @@
    """
 
 import unittest2 as unittest
+import socket
 import mock
 import time
 import logging
@@ -16,7 +17,7 @@ import katcp
 from katcp.core import ProtocolFlags
 
 from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
-                             counting_callback)
+                             counting_callback, start_thread_with_cleanup)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -291,24 +292,36 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
             self.client._running = old_running
 
 
+class TestSlowServerReceive(unittest.TestCase):
+    # Test that sending a request does not spin forever if a timeout is set and
+    # the server is not receiving data (i.e. the socket keeps raising EAGAIN)
+    def setUp(self):
+        self.serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.serversocket.bind(('', 0))
+        self.serversocket.listen(0)
+        self.server_addr = self.serversocket.getsockname()
+        self.addCleanup(self.serversocket.close)
+
+    def test_request(self):
+        client = katcp.DeviceClient(*self.server_addr)
+        start_thread_with_cleanup(self, client, start_timeout=1)
+        t0 = time.time()
+        client.request(
+            katcp.Message.request('stupidlongrequest'*1000000), timeout=0.1)
+        # If the send_message() call is in an EAGAIN spinning loop it will never
+        # return, so getting here at all is a good sign :)
+        self.assertLess(time.time() - t0, 1)
+
 class TestBlockingClient(unittest.TestCase):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
-        self.server.start(timeout=0.1)
+        start_thread_with_cleanup(self, self.server, start_timeout=0.1)
 
         host, port = self.server._sock.getsockname()
 
         self.client = katcp.BlockingClient(host, port)
-        self.client.start(timeout=0.1)
+        start_thread_with_cleanup(self, self.client, start_timeout=0.1)
         self.assertTrue(self.client.wait_protocol(timeout=1))
-
-    def tearDown(self):
-        if self.client.running():
-            self.client.stop()
-            self.client.join()
-        if self.server.running():
-            self.server.stop()
-            self.server.join()
 
     def test_blocking_request(self):
         """Test blocking_request."""
@@ -800,7 +813,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
     def test_request_fail_on_raise(self):
         """Test that the callback is called even if send_message raises
            KatcpClientError."""
-        def raise_error(msg):
+        def raise_error(msg, timeout=None):
             raise katcp.KatcpClientError("Error %s" % msg.name)
         self.client.send_message = raise_error
 

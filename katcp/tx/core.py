@@ -251,7 +251,6 @@ class ServerKatCPProtocol(KatCP):
     BUILD_STATE = ("name", 0, 1, "")
     PROTOCOL_INFO = ProtocolFlags(5, 0, set([
         ProtocolFlags.MULTI_CLIENT,
-        ProtocolFlags.MESSAGE_IDS,
         ]))
 
     def connectionMade(self):
