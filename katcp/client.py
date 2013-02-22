@@ -206,14 +206,16 @@ class DeviceClient(object):
         else:
             return msg.mid
 
-    def request(self, msg, use_mid=None):
+    def request(self, msg, use_mid=None, timeout=None):
         """
         Send a request message, automatically assign a message ID if requested
 
         Parameters
         ----------
         msg : katcp.Message request message
-        use_mid : bool or None
+        use_mid : bool or None, default=None
+        timeout : float or None, default=None
+            Set timeout for sending request message, or None for no timeout
 
         Returns
         -------
@@ -230,29 +232,33 @@ class DeviceClient(object):
         """
 
         mid = self._get_mid_and_update_msg(msg, use_mid)
-        self.send_request(msg)
+        self.send_request(msg, timeout=timeout)
         return mid
 
-    def send_request(self, msg):
+    def send_request(self, msg, timeout=None):
         """Send a request messsage.
 
         Parameters
         ----------
         msg : Message object
             The request Message to send.
+        timeout : float or None, default=None
+            Set timeout for sending request message, or None for no timeout
         """
         assert(msg.mtype == Message.REQUEST)
         if msg.mid and not self._server_supports_ids:
             raise KatcpVersionError
-        self.send_message(msg)
+        self.send_message(msg, timeout=timeout)
 
-    def send_message(self, msg):
+    def send_message(self, msg, timeout=None):
         """Send any kind of message.
 
         Parameters
         ----------
         msg : Message object
             The message to send.
+        timeout : float or None, default=None
+            Set timeout for sending request message, or None for no timeout.
         """
         # TODO: should probably implement this as a queue of sockets and
         #       messages to send and have the queue processed in the main loop
@@ -267,11 +273,16 @@ class DeviceClient(object):
         # do not do anything inside here which could call send_message!
         send_failed = False
         self._send_lock.acquire()
+        t0 = time.time()
         try:
             if sock is None:
                 raise KatcpClientError("Client not connected")
 
             while totalsent < datalen:
+                if timeout is not None and time.time() - t0 > timeout:
+                    self._logger.warn('Timeout sending message')
+                    send_failed = True
+                    break
                 try:
                     sent = sock.send(data[totalsent:])
                 except socket.error, e:
@@ -785,7 +796,7 @@ class BlockingClient(DeviceClient):
         try:
             self._get_mid_and_update_msg(msg, use_mid)
             self._current_msg_id = msg.mid
-            self.send_request(msg)
+            self.send_request(msg, timeout=timeout)
             while True:
                 self._request_end.wait(timeout)
                 if self._request_end.isSet() or not keepalive:
@@ -1029,7 +1040,7 @@ class CallbackClient(DeviceClient):
             timer.start()
 
         try:
-            self.send_request(msg)
+            self.send_request(msg, timeout=timeout)
         except KatcpClientError, e:
             error_reply = Message.request(msg.name, "fail", str(e))
             error_reply.mid = mid
