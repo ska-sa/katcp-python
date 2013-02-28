@@ -812,7 +812,7 @@ def send_reply(*types, **options):
     Examples
     --------
     >>> class MyDevice(DeviceServer):
-    ...     @send_reply('myreq', Int(), Float())
+    ...     @send_reply(Int(), Float())
     ...     def my_callback(self, req):
     ...         return (req, "ok", 5, 2.0)
     ...
