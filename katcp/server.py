@@ -485,7 +485,7 @@ class DeviceServerBase(object):
                 client_name = sock.getpeername()
             except socket.error:
                 client_name = "<disconnected client>"
-            msg = "Failed to send message to client %s (%s)" % (client_name, e)
+            msg = "Failed to send message to client %s" % (client_name,)
             self._logger.error(msg)
             # Need to get connection before calling _remove_socket()
             conn = self._sock_connections[sock]
