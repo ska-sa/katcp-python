@@ -405,10 +405,10 @@ class AggregateSensorTree(GenericSensorTree):
         child : :class:`katcp.Sensor`
             A child sensor required by one or more delayed aggregate sensors.
         """
-        if child.name in self._registered_sensors:
+        child_name = self._get_sensor_reference(child)
+        if child_name in self._registered_sensors:
             raise ValueError("Sensor %r already registered with aggregate"
                              " tree" % child)
-        child_name = child.name
         self._registered_sensors[child_name] = child
         completed = []
         for parent, (_rule, names, sensors) in \
@@ -424,6 +424,48 @@ class AggregateSensorTree(GenericSensorTree):
             del self._incomplete_aggregates[parent]
             self.add(parent, rule_function, sensors)
 
+    def deregister_sensor(self, child):
+        child_name = self._get_sensor_reference(child)
+        if child_name not in self._registered_sensors:
+            raise ValueError("Sensor %r not registered with aggregate"
+                             " tree" % child_name)
+        child = self._registered_sensors[child_name]
+        del self._registered_sensors[child_name]
+        try:
+            parents = self.parents(child)
+            for parent in parents:
+                if parent in self._incomplete_aggregates:
+                    (rule, names, sensors) = self._incomplete_aggregates[parent]
+                    names.add(child_name)
+                else:
+                    (rule, sensors) = self._aggregates[parent]
+                    names = set()
+                    names.add(child_name)
+                sensors.discard(child)
+                self._incomplete_aggregates[parent] = (rule, names, sensors)
+                self.remove_links(parent, [child])
+                self.remove(parent)
+                if parent.stype == 'bool':
+                    parent.set_value(False)
+        except ValueError:
+            pass
+
+    def _child_from_reference(self, reference):
+        """Returns the child sensor from its reference.
+
+        Parameters
+        ----------
+        reference : str
+
+        Returns
+        -------
+        child : :class:`katcp.Sensor`
+            A child sensor linked to one or more aggregate sensors.
+        """
+        for child in self._child_to_parents:
+            if self._get_sensor_reference(child) == reference:
+                return child
+
     def remove(self, parent):
         """Remove an aggregation rule.
 
@@ -436,7 +478,10 @@ class AggregateSensorTree(GenericSensorTree):
             raise ValueError("Sensor %r does not have an aggregate rule"
                              " associated" % parent)
         children = self.children(parent)
-        self.remove_links(parent, children)
+        try:
+            self.remove_links(parent, children)
+        except Exception:
+            pass
         del self._aggregates[parent]
 
     def fetch(self, parent):
@@ -469,3 +514,16 @@ class AggregateSensorTree(GenericSensorTree):
         """
         rule_function, children = self._aggregates[parent]
         rule_function(parent, children)
+
+    def _get_sensor_reference(self, sensor):
+        """Returns sensor name as reference for sensors to be registered by.
+
+        Parameters
+        ----------
+        sensor : :class:`katcp.Sensor`
+
+        Returns
+        -------
+        reference : str
+        """
+        return sensor.name

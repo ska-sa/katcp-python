@@ -151,6 +151,29 @@ class TestAggregateSensorTree(BaseTreeTest):
         s1.set_value(7)
         self.assertSensorValues(sensors, (5, 7, 1, 2))
 
+    def test_adding_and_removing_sensors(self):
+        tree = katcp.AggregateSensorTree()
+        s0, s1 = sensors = self.make_sensors(2, katcp.Sensor.INTEGER,
+                                                     params=[-100, 100])
+        # add s0 aggregate sensor and s1 child sensor pair with rule
+        tree.add(s0, self._add_rule, (s1,))
+        self.assertSensorValues(sensors, (0, 0))
+
+        # check s0 aggregate sensor is updated
+        s1.set_value(1)
+        self.assertSensorValues(sensors, (1, 1))
+
+        # remove s1 child sensor
+        tree.remove_links(s0, [s1])
+
+        # add s1 child sensor again
+        tree.add_links(s0, [s1])
+        self.assertSensorValues(sensors, (1, 1))
+
+        # check s0 aggregate sensor is updated
+        s1.set_value(2)
+        self.assertSensorValues(sensors, (2, 2))
+
     def test_double_add(self):
         tree = katcp.AggregateSensorTree()
         s0, s1 = self.make_sensors(2, katcp.Sensor.INTEGER, params=[-100, 100])
@@ -163,6 +186,44 @@ class TestAggregateSensorTree(BaseTreeTest):
         tree.add(s0, self._add_rule, (s1,))
         tree.remove(s0)
         self.assertRaises(ValueError, tree.remove, s0)
+
+    def test_removing_and_adding_registered_sensors(self):
+        """Test removing the links of some or all child sensors of an aggregate
+        sensor, and adding them to the aggregate sensor again.  The sensors are
+        registered after add_delayed."""
+        tree = katcp.AggregateSensorTree()
+        s0, s1, s2 = sensors = self.make_sensors(3, katcp.Sensor.INTEGER,
+                                                     params=[-100, 100])
+        tree.add_delayed(s0, self._add_rule, (s1.name, s2.name))
+        self.assertSensorValues(sensors, (0, 0, 0))
+        tree.register_sensor(s1)
+        tree.register_sensor(s2)
+        s1.set_value(9)
+        s2.set_value(9)
+        self.assertSensorValues(sensors, (18, 9, 9))
+        # remove s1
+        tree.deregister_sensor(s1)
+        self.assertSensorValues(sensors, (9, 9, 9))
+        s1.set_value(100)
+        self.assertSensorValues(sensors, (9, 100, 9))
+        s2.set_value(22)
+        self.assertSensorValues(sensors, (9, 100, 22))
+        # add s1
+        tree.register_sensor(s1)
+        s1.set_value(10)
+        self.assertSensorValues(sensors, (32, 10, 22))
+        # remove s1 and s2
+        tree.deregister_sensor(s1)
+        tree.deregister_sensor(s2)
+        s1.set_value(100)
+        s2.set_value(100)
+        self.assertSensorValues(sensors, (22, 100, 100))
+        # add s1 and s2
+        tree.register_sensor(s1)
+        tree.register_sensor(s2)
+        s1.set_value(1)
+        s2.set_value(1)
+        self.assertSensorValues(sensors, (2, 1, 1))
 
     def test_delayed(self):
         tree = katcp.AggregateSensorTree()
