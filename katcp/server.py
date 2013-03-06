@@ -488,9 +488,12 @@ class DeviceServerBase(object):
             msg = "Failed to send message to client %s" % (client_name,)
             self._logger.error(msg)
             # Need to get connection before calling _remove_socket()
-            conn = self._sock_connections[sock]
+            conn = self._sock_connections.get(sock)
             self._remove_socket(sock)
-            self.on_client_disconnect(conn, msg, False)
+            # Don't run on_client_disconnect if another thread has beaten us to
+            # the punch of removing the connection object
+            if conn:
+                self.on_client_disconnect(conn, msg, False)
 
     def inform(self, connection, msg):
         """Send an inform message to a particular client.
@@ -718,9 +721,12 @@ class DeviceServerBase(object):
                 else:
                     # client socket died, remove it
                     # Need to get connection before calling _remove_socket()
-                    conn = self._sock_connections[sock]
+                    conn = self._sock_connections.get(sock)
                     self._remove_socket(sock)
-                    self.on_client_disconnect(conn, "Client socket died", False)
+                    # Don't call on_client_disconnect if the connection has
+                    # already been removed in another thread
+                    if conn:
+                        self.on_client_disconnect(conn, "Client socket died", False)
 
             for sock in readers:
                 if sock is self._sock:
@@ -729,7 +735,13 @@ class DeviceServerBase(object):
                     self.mass_inform(Message.inform("client-connected",
                         "New client connected from %s" % (addr,)))
                     self._add_socket(client)
-                    self.on_client_connect(self._sock_connections[client])
+                    conn = self._sock_connections.get(client)
+                    if client:
+                        self.on_client_connect(conn)
+                    else:
+                        self._logger.warn(
+                            'Client connection for socket %s dissappeared before '
+                            'on_client_connect could be called' % (client,))
                 else:
                     try:
                         chunk = sock.recv(4096)
@@ -742,14 +754,19 @@ class DeviceServerBase(object):
                     else:
                         # no data, assume socket EOF
                         # Need to get connection before calling _remove_socket()
-                        conn = self._sock_connections[sock]
+                        conn = self._sock_connections.get(sock)
                         self._remove_socket(sock)
-                        self.on_client_disconnect(conn, "Socket EOF", False)
+                        # Don't run on_client_disconnect if another thread has
+                        # beaten us to the punch of removing the connection
+                        # object
+                        if conn:
+                            self.on_client_disconnect(conn, "Socket EOF", False)
 
         for sock in list(self._socks):
-            conn = self._sock_connections[sock]
-            self.on_client_disconnect(
-                conn, "Device server shutting down.", True)
+            conn = self._sock_connections.get(sock)
+            if conn:
+                self.on_client_disconnect(
+                    conn, "Device server shutting down.", True)
             self._process_deferred_queue()
             self._remove_socket(sock)
 
