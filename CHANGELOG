@@ -1,3 +1,22 @@
+8 March 2012 (0.5.1)
+ * Minor code comment cleanups
+ * Minor documentation and docstring updates
+ * Fix twisted katcp server's on-connect inform messages to be consistent
+   with the selected katcp version
+ * Improve error messages when an invalid sensor sampling strategy is set
+ * Fix bug in event-rate sampling strategy where events were sent whenever a sensor
+   object is updated, even if the value is unchanged. Also fixes same
+   bug for the event sampling strategy, since it uses the event-rate
+   code for its implementation
+ * Work around potential CPU livelock when sending messages and the network
+   buffers are full by using timeouts. Problem will be properly solved when the
+   current networking code is replaced by twisted.
+ * Fixed some buggy logger calls
+ * Improve the handling of sensor removal from the sensor tree
+ * made server main event loop robust against disconnect race-conditions when
+   looking up the client connection object
+
+
 29 January 2012 (0.5.0)
  * Minor documentation updates
  * Version 0.5.0 relesed
