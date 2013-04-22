@@ -12,6 +12,9 @@ import threading
 import time
 import logging
 import heapq
+import Queue
+import os
+
 from .core import Message, Sensor, ExcepthookThread, SEC_TO_MS_FAC, MS_TO_SEC_FAC
 
 
@@ -285,10 +288,12 @@ class SamplePeriod(SampleStrategy):
     def __init__(self, inform_callback, sensor, *params):
         SampleStrategy.__init__(self, inform_callback, sensor, *params)
         if len(params) != 1:
-            raise ValueError("The 'period' strategy takes one parameter.")
+            raise ValueError("The 'period' strategy takes one parameter. "
+                             "Parameters passed: %r, in pid : %s" % (params, os.getpid()))
         period = float(params[0])
         if period <= 0:
-            raise ValueError("The period must be a float in seconds.")
+            raise ValueError("The period must be a positive float in seconds. "
+                             "Parameters passed: %r, in pid : %s" % (params,os.getpid()))
         self._period = period
 
     def periodic(self, timestamp):
@@ -401,6 +406,7 @@ class SampleReactor(ExcepthookThread):
         self._stopEvent = threading.Event()
         self._wakeEvent = threading.Event()
         self._heap = []
+        self._removal_events = Queue.Queue()
         self._logger = logger
         # set daemon True so that the app can stop even if the thread
         # is running
@@ -439,6 +445,9 @@ class SampleReactor(ExcepthookThread):
         """
         strategy.detach()
         self._strategies.remove(strategy)
+        self._removal_events.put(strategy)
+        self._wakeEvent.set()
+
 
     def stop(self):
         """Send event to processing thread and wait for it to stop."""
@@ -459,8 +468,10 @@ class SampleReactor(ExcepthookThread):
         _currentThread = threading.currentThread
         _push = heapq.heappush
         _pop = heapq.heappop
+        self._heapify = heapq.heapify
 
         while not self._stopEvent.isSet():
+            self._remove_dead_events()
             wake.clear()
             if heap:
                 next_time, strategy = _pop(heap)
@@ -485,3 +496,31 @@ class SampleReactor(ExcepthookThread):
 
         self._stopEvent.clear()
         self._logger.debug("Stopping thread %s" % (_currentThread().getName()))
+
+    def _remove_dead_events(self):
+        """Remove event from event heap to prevent memory leaks caused by
+        far-future-dated sampling events"""
+        # Find strateg(ies) in sampling heap, set to (None, None) so that it
+        # will sort to the top and re-heapify. Next run through the reactor loop
+        # should discard the item.
+
+        # XX TODO O(n), but oh well. Also happens in the sampling event loop, so
+        # may affect sampling accuracy while strategies are being set by
+        # increasing the latency of the loop. Might need to use a different data
+        # structure in the future, but it should also be fixed if we use the
+        # twisted reactor :)
+
+        heap = self._heap
+        removals = []
+        while True:
+            try:
+                removals.append(self._removal_events.get_nowait())
+            except Queue.Empty:
+                break
+
+        removals = set(removals)
+        for i in range(len(heap)):
+            if heap[i][1] in removals:
+                heap[i] = (None, None)
+
+        self._heapify(self._heap)
