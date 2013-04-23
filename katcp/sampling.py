@@ -517,6 +517,8 @@ class SampleReactor(ExcepthookThread):
                 removals.append(self._removal_events.get_nowait())
             except Queue.Empty:
                 break
+        if not removals:
+            return
 
         removals = set(removals)
         for i in range(len(heap)):
