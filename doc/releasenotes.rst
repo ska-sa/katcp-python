@@ -4,6 +4,22 @@
 Release Notes
 *************
 
+0.5.3
+=====
+
+Add "meth:`convert_seconds` method to katcp client classes that converts seconds
+into the device timestamp format.
+
+0.5.2
+=====
+
+Fix memory leak in sample reactor, other minor fixes.
+
+0.5.1
+=====
+
+Minor bugfixes and stability improvements
+
 0.5.0
 =====
 
