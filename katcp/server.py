@@ -475,10 +475,6 @@ class DeviceServerBase(object):
                 if sent == 0:
                     send_failed = True
                     break
-                if time.time()-t0 > self.send_timeout:
-                    self._logger.error('server._send_msg() timing out after %fs, sent %d/%d bytes') % (TIMEOUT, totalsent, datalen)
-                    send_failed = True
-                    break
 
                 totalsent += sent
         finally:
