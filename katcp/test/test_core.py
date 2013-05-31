@@ -318,6 +318,18 @@ class TestSensor(unittest.TestCase):
                            default=('192.168.101.1', 81))
         self.assertEqual(s._value, ('192.168.101.1', 81))
 
+    def test_address_sensor(self):
+        """Test address sensor."""
+        s = DeviceTestSensor(
+            katcp.Sensor.ADDRESS, "a.address", "An address sensor.", "",
+            None,
+            timestamp=12345, status=katcp.Sensor.NOMINAL,
+            value=("127.0.0.1", 80))
+        self.assertEqual(s.read_formatted(),
+                         ("12345000", "nominal", "127.0.0.1:80"))
+        self.assertEqual(s.parse_value("[::1]:80"), ("::1", 80))
+        self.assertRaises(ValueError, s.parse_value, "[::1]:foo")
+
     def test_set_and_get_value(self):
         """Test getting and setting a sensor value."""
         s = Sensor.integer("an.int", "An integer.", "count", [-4, 3])
