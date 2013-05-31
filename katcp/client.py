@@ -16,8 +16,10 @@ import select
 import time
 import logging
 import errno
-from .core import DeviceMetaclass, MessageParser, Message, ExcepthookThread, \
-                   KatcpClientError, KatcpVersionError, ProtocolFlags
+from .core import (DeviceMetaclass, MessageParser, Message, ExcepthookThread,
+                   KatcpClientError, KatcpVersionError, ProtocolFlags,
+                   SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
+
 
 #logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp")
@@ -97,6 +99,19 @@ class DeviceClient(object):
         self._server_supports_ids = self.protocol_flags.supports(
             ProtocolFlags.MESSAGE_IDS)
         self._received_protocol_info.set()
+
+    def convert_seconds(self, time_seconds):
+        """Convert a time in seconds to the device timestamp units
+
+        KATCP v4 and earlier, specified all timestamps in milliseconds. Since
+        KATCP v5, all timestamps are in seconds. If the device KATCP version has
+        been detected, this method converts a value in seconds to the
+        appropriate (seconds or milliseconds) quantity
+        """
+        if self.protocol_flags.major >= SEC_TS_KATCP_MAJOR:
+            return time_seconds
+        else:
+            return time_seconds * SEC_TO_MS_FAC
 
     def _next_id(self):
         """Return the next available message id."""

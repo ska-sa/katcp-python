@@ -45,6 +45,7 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
         self.assertTrue(pf.supports(pf.MESSAGE_IDS))
         self.assertTrue(self.client._server_supports_ids)
         self.assertEqual(pf.major, 5)
+        self.assertEqual(self.client.convert_seconds(1), 1)
 
     def test_valid_v5(self):
         self.client.handle_message(self.v5_version_connect_mid)
@@ -56,6 +57,7 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
         self.assertFalse(pf.supports(pf.MESSAGE_IDS))
         self.assertFalse(self.client._server_supports_ids)
         self.assertEqual(pf.major, 4)
+        self.assertEqual(self.client.convert_seconds(1), 1000)
 
     def test_valid_v4_version_first(self):
         self.client.handle_message(self.v4_version)

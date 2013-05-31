@@ -122,7 +122,7 @@ also:
 
 Support for message IDs is optional. A properly implemented server should never
 use mids in replies unless the client request has an mid. Similarly, a client
-should be able to detect wether a server supports MIDs by checking the
+should be able to detect whether a server supports MIDs by checking the
 `#version-connect` informs sent by the server, or by doing a `!version-list`
 request. Furthermore, a KATCP v5 server should never send `#build-state` or
 `#version` informs.
