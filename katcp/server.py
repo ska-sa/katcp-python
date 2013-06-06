@@ -1526,17 +1526,25 @@ class DeviceServer(DeviceServerBase):
         name : str
             Name of the sensor whose sampling strategy to query or configure.
         strategy : {'none', 'auto', 'event', 'differential', \
-                    'period'}, optional
+                    'period', 'event-rate'}, optional
             Type of strategy to use to report the sensor value. The
             differential strategy type may only be used with integer or float
-            sensors.
+            sensors. If this parameter is supplied, it sets the new strategy.
         params : list of str, optional
             Additional strategy parameters (dependent on the strategy type).
             For the differential strategy, the parameter is an integer or float
             giving the amount by which the sensor value may change before an
-            updated value is sent. For the period strategy, the parameter is
-            the period to sample at in milliseconds. For the event strategy, an
-            optional minimum time between updates in milliseconds may be given.
+            updated value is sent.
+            For the period strategy, the parameter is the sampling period
+            in float seconds.
+            The event strategy has no parameters. Note that this has changed
+            from KATCPv4,
+            For the event-rate strategy, a minimum period between updates and
+            a maximum period between updates (both in float seconds) must be
+            given. If the event occurs more than once within the minimum period,
+            only one update will occur. Whether or not the event occurs, the
+            sensor value will be updated at least once per maximum period.
+            The differential-rate strategy is not supported in this release.
 
         Returns
         -------
@@ -1594,10 +1602,9 @@ class DeviceServer(DeviceServerBase):
                 client.inform(cb_msg)
 
             if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
-                # Slightly nasty hack, but since period is the only strategy
-                # involves timestamps for v4 is period it's not _too_ nasty :)
-                params = [float(params[0])* MS_TO_SEC_FAC] + params[1:]
-
+                # Slightly nasty hack, but since period is the only v4 strategy
+                # involving timestamps it's not _too_ nasty :)
+                params = [float(params[0]) * MS_TO_SEC_FAC] + params[1:]
             new_strategy = SampleStrategy.get_strategy(
                 strategy, inform_callback, sensor, *params)
 
@@ -1622,9 +1629,9 @@ class DeviceServer(DeviceServerBase):
                 "none", lambda msg: None, sensor)
 
         strategy, params = current_strategy.get_sampling_formatted()
-        if katcp_version <= 4 and strategy == 'period':
-            # Another slightly nasty hack, but since period is the only strategy
-            # involves timestamps for v4 is period it's not _too_ nasty :)
+        if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
+            # Another slightly nasty hack, but since period is the only
+            # v4 strategy involving timestamps it's not _too_ nasty :)
             params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
         return req.make_reply("ok", name, strategy, *params)
 

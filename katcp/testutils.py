@@ -917,7 +917,7 @@ class DeviceTestServer(DeviceServer):
         return req.make_reply("ok")
 
     def request_cancel_slow_command(self, req, msg):
-        """Cancel slow command request, resulting in it replying immedietely"""
+        """Cancel slow command request, resulting in it replying immediately"""
         self._cancel_slow_command.set()
         return req.make_reply('ok')
 

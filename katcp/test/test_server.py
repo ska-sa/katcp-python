@@ -377,6 +377,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         nomid_req(katcp.Message.request("sensor-sampling", "an.int"))
         nomid_req(katcp.Message.request("sensor-sampling", "an.int",
                                                   "differential", "2"))
+        nomid_req(katcp.Message.request("sensor-sampling", "an.int",
+                                                  "event-rate", "2", "3"))
         nomid_req(katcp.Message.request("sensor-sampling"))
         nomid_req(katcp.Message.request("sensor-sampling",
                                                   "an.unknown", "auto"))
@@ -402,7 +404,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!log-level ok trace", ""),
             (r"!log-level fail Unknown\_logging\_level\_name\_'unknown'", ""),
             (r"#help cancel-slow-command Cancel\_slow\_command\_request,\_"
-             "resulting\_in\_it\_replying\_immedietely", ""),
+             "resulting\_in\_it\_replying\_immediately", ""),
             (r"#help client-list", ""),
             (r"#help halt", ""),
             (r"#help help", ""),
@@ -441,6 +443,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!sensor-sampling ok an.int none", ""),
             (r"#sensor-status 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-sampling ok an.int differential 2", ""),
+            (r"#sensor-status 12345.000000 1 an.int nominal 3", ""),
+            (r"!sensor-sampling ok an.int event-rate 2 3", ""),
             (r"!sensor-sampling fail No\_sensor\_name\_given.", ""),
             (r"!sensor-sampling fail Unknown\_sensor\_name:\_an.unknown.", ""),
             (r"!sensor-sampling fail Unknown\_strategy\_name:\_unknown.", ""),
@@ -487,6 +491,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.blocking_request(mid_req("sensor-sampling", "an.int"))
         self.client.blocking_request(mid_req(
             "sensor-sampling", "an.int", "differential", "2"))
+        self.client.blocking_request(mid_req(
+            "sensor-sampling", "an.int", "event-rate", "2", "3")),
         self.client.blocking_request(mid_req("sensor-sampling"))
         self.client.blocking_request(mid_req(
             "sensor-sampling", "an.unknown", "auto"))
@@ -503,8 +509,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         time.sleep(0.1)
 
         self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
-        msgs = get_msgs()
-        self._assert_msgs_like(msgs, [
+        self._assert_msgs_like(get_msgs(), [
             (r"!watchdog[1] ok", ""),
             (r"!restart[2] ok", ""),
             (r"!log-level[3] ok warn", ""),
@@ -512,7 +517,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!log-level[5] fail Unknown\_logging\_level\_name\_'unknown'",
              ""),
             (r"#help[6] cancel-slow-command Cancel\_slow\_command\_request,\_"
-             "resulting\_in\_it\_replying\_immedietely", ""),
+             "resulting\_in\_it\_replying\_immediately", ""),
             (r"#help[6] client-list", ""),
             (r"#help[6] halt", ""),
             (r"#help[6] help", ""),
@@ -551,9 +556,11 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!sensor-sampling[17] ok an.int none", ""),
             (r"#sensor-status 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-sampling[18] ok an.int differential 2", ""),
-            (r"!sensor-sampling[19] fail No\_sensor\_name\_given.", ""),
-            (r"!sensor-sampling[20] fail Unknown\_sensor\_name:\_an.unknown.", ""),
-            (r"!sensor-sampling[21] fail Unknown\_strategy\_name:\_unknown.", ""),
+            (r"#sensor-status 12345.000000 1 an.int nominal 3", ""),
+            (r"!sensor-sampling[19] ok an.int event-rate 2 3", ""),
+            (r"!sensor-sampling[20] fail No\_sensor\_name\_given.", ""),
+            (r"!sensor-sampling[21] fail Unknown\_sensor\_name:\_an.unknown.", ""),
+            (r"!sensor-sampling[22] fail Unknown\_strategy\_name:\_unknown.", ""),
             (r"#log trace", r"root trace-msg"),
             (r"#log debug", r"root debug-msg"),
             (r"#log info", r"root info-msg"),

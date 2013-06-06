@@ -324,8 +324,8 @@ class SampleEventRate(SampleStrategy):
         self._lastValue = None
 
         if not 0 <= shortest_period <= longest_period:
-            raise ValueError("The longest and shortest periods must"
-                             " satisfy 0 <= shorest_period <= longest_period")
+            raise ValueError("The shortest and longest periods must"
+                             " satisfy 0 <= shortest_period <= longest_period")
         self._shortest_period = shortest_period
         self._longest_period = longest_period
         # don't send updates until timestamp _not_before
