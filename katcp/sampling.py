@@ -335,8 +335,9 @@ class SampleEventRate(SampleStrategy):
             raise ValueError("The 'event-rate' strategy takes two parameters.")
         shortest_period = float(params[0])
         longest_period = float(params[1])
-        self._lastStatus = None
-        self._lastValue = None
+        self._last_status = None
+        self._last_value = None
+        self._next_periodic = 0
 
         if not 0 <= shortest_period <= longest_period:
             raise ValueError("The longest and shortest periods must"
@@ -352,18 +353,36 @@ class SampleEventRate(SampleStrategy):
     def update(self, sensor, now=None):
         if now is None:
             now = self._time()
+
         if now < self._not_before:
+            # if self._next_periodic != self._not_before:
+            #     # If you get an AttributeError here it's because
+            #     # set_reperiod_callback() should have been called
+            #     self._reperiod_callback(self)
             return
 
-        past_longest = now >= self._not_before + self._not_after_delta
         _, status, value = sensor.read()
-        sensor_changed = status != self._lastStatus or value != self._lastValue
+        sensor_changed = status != self._last_status or value != self._last_value
+        past_longest = now >= self._not_before + self._not_after_delta
 
         if past_longest or sensor_changed:
             self._not_before = now + self._shortest_period
-            self._lastStatus = status
-            self._lastValue = value
+            self._last_status = status
+            self._last_value = value
             self.inform()
+
+    # def periodic(self, timestamp):
+    #     if timestamp < self._not_before:
+    #         if self._next_periodic == self._not_before:
+    #             return None
+    #         else:
+    #             self._next_periodic = self._not_before
+    #     else:
+    #         self._next_periodic = self._not_before + self._not_after_delta
+
+    #     self.update(self._sensor, now=timestamp)
+    #     return self._next_periodic
+
 
     def periodic(self, timestamp):
         self.update(self._sensor, now=timestamp)
@@ -451,7 +470,11 @@ class SampleReactor(ExcepthookThread):
             self._wakeEvent.set()
 
     def reperiod_strategy(self, strategy):
-        """A"""
+        """Called by a strategy if it needs to have an periodic update adjusted"""
+        next_time = strategy.periodic(time.time())
+        if next_time is not None:
+            self._adding_events.put((next_time, strategy))
+            self._wakeEvent.set()
 
     def remove_strategy(self, strategy):
         """Remove a strategy from the reactor.
@@ -511,7 +534,8 @@ class SampleReactor(ExcepthookThread):
 
                 try:
                     next_time = strategy.periodic(next_time)
-                    _push(heap, (next_time, strategy))
+                    if next_time is not None:
+                        _push(heap, (next_time, strategy))
                 except Exception, e:
                     self._logger.exception(e)
                     # push ten seconds into the future and hope whatever was

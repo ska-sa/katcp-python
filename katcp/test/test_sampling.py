@@ -199,12 +199,13 @@ class TestSampling(unittest.TestCase):
         self.assertEqual(next_time, now[0] + longest)
 
 class FakeEvent(object):
-    def __init__(self, waited_callback=None):
+    def __init__(self, time_source, wait_called_callback=None, waited_callback=None):
         self._event = threading.Event()
-        self.waits = Queue.Queue()
         self._set = False
         self._set_lock = threading.Lock()
+        self.wait_called_callback = wait_called_callback
         self.waited_callback = waited_callback
+        self._time_source = time_source
 
     def set(self):
         with self._set_lock:
@@ -223,15 +224,18 @@ class FakeEvent(object):
     is_set = isSet
 
     def wait(self, timeout=None):
-        self.waits.put(timeout)
+        if self.wait_called_callback:
+            self.wait_called_callback(timeout)
         self._event.wait()
+        start_time = self._time_source()
         with self._set_lock:
             if not self._set:
                 self._event.clear()
             isset = self._set
+        now = self._time_source()
 
         if self.waited_callback:
-            self.waited_callback(timeout)
+            self.waited_callback(start_time, now, timeout)
         return isset
 
     def break_wait(self):
@@ -243,6 +247,8 @@ class TestReactorIntegration(unittest.TestCase):
         # test sensor
         # self._print_lock = threading.Lock()
         self._time_lock = threading.Lock()
+        self._next_wakeup = 1e99
+        self.wake_waits = Queue.Queue()
         self.sensor = DeviceTestSensor(
                 Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
@@ -253,24 +259,27 @@ class TestReactorIntegration(unittest.TestCase):
         self.inform_called = threading.Event()
         def inform(sensor_name, timestamp, status, value):
             self.inform_called.set()
-            self.calls.append((self.time(), sampling.format_inform_v5(
-                sensor_name, timestamp, status, value)) )
+            self.calls.append((self.time(),
+                               (sensor_name, float(timestamp), status, value)) )
 
-        def waited_callback(timeout):
+        def next_wakeup_callback(timeout):
+            with self._time_lock:
+                if timeout is not None:
+                    next_wake = self.time() + timeout
+                    self._next_wakeup = min(self._next_wakeup, next_wake)
+            self.wake_waits.put(timeout)
+
+        def waited_callback(start, end, timeout):
             # A callback that updates 'simulated time' whenever wake.wait() is
             # called
-            if timeout:
-                with self._time_lock:
+            with self._time_lock:
+                if timeout and start == end:
+                    # Implies no time-warps happened while waiting
                     self.time.return_value += timeout
+                self._next_wakeup = 1e99
 
         # test reactor
         self.reactor = sampling.SampleReactor()
-
-        # Add a mock-spy to the reactor wake event
-        self.reactor._wakeEvent = self.wake = wake = FakeEvent(waited_callback)
-        orig_wait = wake.wait
-        wake.wait = mock.Mock()
-        wake.wait.side_effect = orig_wait
 
         # Patch time.time so that we can lie about time.
         self.time_patcher = mock.patch('katcp.sampling.time')
@@ -278,23 +287,43 @@ class TestReactorIntegration(unittest.TestCase):
         self.addCleanup(self.time_patcher.stop)
         self.time = mtime.time
         self.start_time = self.time.return_value = time.time()
+
+        # Add a mock-spy to the reactor wake event
+        self.reactor._wakeEvent = self.wake = wake = FakeEvent(
+            self.time, next_wakeup_callback, waited_callback)
+        orig_wait = wake.wait
+        wake.wait = mock.Mock()
+        wake.wait.side_effect = orig_wait
+
         start_thread_with_cleanup(self, self.reactor)
         # Wait for the event loop to reach its first wake.wait()
-        self.wake.waits.get(timeout=1)
+        self.wake_waits.get(timeout=1)
 
         self.calls = []
         self.inform = inform
 
     def _add_strategy(self, strat, wait_initial=True):
         # Add strategy to test reactor while taking care to mock time.time as
-        # needed, and waits for the initial update (all strategies except None should send an initial update)
+        # needed, and waits for the initial update (all strategies except None
+        # should send an initial update)
 
         self.reactor.add_strategy(strat)
 
         if wait_initial:
             self.inform_called.wait(1)
             self.inform_called.clear()
-            self.wake.waits.get(timeout=1)
+            self.wake_waits.get(timeout=1)
+
+    def timewarp(self, jump):
+        with self._time_lock:
+            new_time = self.time.return_value + jump
+            if new_time >= self._next_wakeup:
+                self.time.return_value = self._next_wakeup
+                self.wake.break_wait()
+                # Give other threads time to do some work before time is warped
+                time.sleep(0.001)
+            self.time.return_value = new_time
+
 
     def test_periodic(self):
         """Test reactor with periodic sampling."""
@@ -307,7 +336,7 @@ class TestReactorIntegration(unittest.TestCase):
             self.wake.break_wait()
             self.inform_called.wait(1)
             self.inform_called.clear()
-            self.wake.waits.get(timeout=1)
+            self.wake_waits.get(timeout=1)
 
         self.reactor.remove_strategy(period_strat)
 
@@ -332,7 +361,7 @@ class TestReactorIntegration(unittest.TestCase):
             self.wake.break_wait()
             self.inform_called.wait(1)
             self.inform_called.clear()
-            self.wake.waits.get(timeout=1)
+            self.wake_waits.get(timeout=1)
 
         call_times = [t for t, vals in self.calls]
         self.assertEqual(len(self.calls), no_max_periods + 1)
@@ -345,9 +374,19 @@ class TestReactorIntegration(unittest.TestCase):
         # Now do a sensor update without moving time along, should not result in
         # any additional updates
         update_time = self.time()
-        self.sensor.set_value(1, self.sensor.NOMINAL, update_time)
-        
+        self.sensor.set_value(2, self.sensor.NOMINAL, update_time)
         self.assertEqual(len(self.calls), 0)
+
+        # Move time beyond minimum step
+        self.timewarp(min_period*1.00001)
+        send_time = self.time()
+        # self.wake_waits.get(timeout=1)
+        # # self.sensor.set_value(2, self.sensor.NOMINAL, update_time)
+        # self.assertEqual(len(self.calls), 1)
+        # self.assertEqual(self.calls,
+        #                  [(send_time,
+        #                    (self.sensor.name, update_time, 'nominal', '2'))])
+
         self.reactor.remove_strategy(event_rate_strat)
 
 
