@@ -142,7 +142,7 @@ class TestSampling(unittest.TestCase):
         longest = 20
         evrate = sampling.SampleEventRate(
             self.inform, self.sensor, shortest, longest)
-        evrate._reperiod_callback = mock.Mock()
+        evrate._new_period_callback = mock.Mock()
 
         now = [1]
         evrate._time = lambda: now[0]
@@ -182,7 +182,7 @@ class TestSampling(unittest.TestCase):
         longest = 6./8
         evrate = sampling.SampleEventRate(self.inform, self.sensor, shortest,
                                           longest)
-        evrate._reperiod_callback = mock.Mock()
+        evrate._new_period_callback = mock.Mock()
 
         now = [0]
         evrate._time = lambda: now[0]
@@ -222,8 +222,7 @@ class FakeEvent(object):
             self._event.clear()
 
     def isSet(self):
-        with self._set_lock:
-            return self._set
+        return self._set
 
     is_set = isSet
 
@@ -290,14 +289,11 @@ class TestReactorIntegration(unittest.TestCase):
         mtime = self.time_patcher.start()
         self.addCleanup(self.time_patcher.stop)
         self.time = mtime.time
-        self.start_time = self.time.return_value = time.time()
+        self.start_time = self.time.return_value = 0
 
-        # Add a mock-spy to the reactor wake event
+        # Replace the reactor wake Event with a time-warping mock Event
         self.reactor._wakeEvent = self.wake = wake = FakeEvent(
             self.time, next_wakeup_callback, waited_callback)
-        orig_wait = wake.wait
-        wake.wait = mock.Mock()
-        wake.wait.side_effect = orig_wait
 
         start_thread_with_cleanup(self, self.reactor)
         # Wait for the event loop to reach its first wake.wait()
@@ -318,22 +314,38 @@ class TestReactorIntegration(unittest.TestCase):
             self.inform_called.clear()
             self.wake_waits.get(timeout=1)
 
-    def timewarp(self, jump, wait_wait=True, wait_on_and_clear=None):
+    def timewarp(self, jump, wait_for_waitstate=True, event_to_await=None):
+        """
+        Timewarp simulation time by `jump` seconds
+
+        Arguments
+        ---------
+
+        jump: float
+            Number of seconds to time-warp by
+        wait_for_waitstate: bool, default True
+            Wait until the simulated loop again enters a wait state that times
+            out beyond the current time-warp end-time. Will wake up the simulated
+            loop as many times as necessary.
+        event_to_await: Event or None, default None
+            If an Event object is passed, wait for it to be set after
+            time-warping, and then clear it.
+        """
+
         start_time = self.time.return_value
         end_time = start_time + jump
         while end_time >= self._next_wakeup:
             with self._time_lock:
                 self.time.return_value = self._next_wakeup
             self.wake.break_wait()
-            if wait_wait:
+            if wait_for_waitstate:
                 wait_timeout = self.wake_waits.get(timeout=1)
             else:
                 break
-            if end_time < self._next_wakeup:
-                break
-        if wait_on_and_clear:
-            wait_on_and_clear.wait(1)
-            wait_on_and_clear.clear()
+
+        if event_to_await:
+            event_to_await.wait(1)
+            event_to_await.clear()
         with self._time_lock:
             self.time.return_value = end_time
 
@@ -346,7 +358,7 @@ class TestReactorIntegration(unittest.TestCase):
         self._add_strategy(period_strat)
 
         for i in range(no_periods):
-            self.timewarp(period, wait_on_and_clear=self.inform_called)
+            self.timewarp(period, event_to_await=self.inform_called)
 
         self.reactor.remove_strategy(period_strat)
 
@@ -368,7 +380,7 @@ class TestReactorIntegration(unittest.TestCase):
 
         # Do some 'max period' updates where the sensor has not changed
         for i in range(no_max_periods):
-            self.timewarp(max_period, wait_on_and_clear=self.inform_called)
+            self.timewarp(max_period, event_to_await=self.inform_called)
 
         call_times = [t for t, vals in self.calls]
         self.assertEqual(len(self.calls), no_max_periods + 1)
@@ -392,7 +404,7 @@ class TestReactorIntegration(unittest.TestCase):
         self.timewarp(min_period*0.6)
 
         # Move time beyond minimum step
-        self.timewarp(min_period*1.01, wait_on_and_clear=self.inform_called)
+        self.timewarp(min_period*1.01, event_to_await=self.inform_called)
 
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(self.calls,
@@ -406,7 +418,7 @@ class TestReactorIntegration(unittest.TestCase):
         expected_send_time += max_period
         # Timewarp past the next expected max-period sample time
         self.timewarp(max_period + min_period*0.01,
-                      wait_wait=True, wait_on_and_clear=self.inform_called)
+                      event_to_await=self.inform_called)
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(self.calls[0][0], expected_send_time)
         self.reactor._debug_now = False

@@ -597,7 +597,7 @@ class DeviceServerBase(object):
             reply is sent.
         """
         assert (reply.mtype == Message.REPLY)
-        # TODO The Message-id copying thould be handled by the
+        # TODO The Message-id copying should be handled by the
         # ClientConnClientConnectionTCP class
         reply.mid = orig_req.mid
         self._send_message(sock, reply)
@@ -641,7 +641,7 @@ class DeviceServerBase(object):
             inform is sent.
         """
         assert (inform.mtype == Message.INFORM)
-        # TODO The Message-id copying thould be handled by the
+        # TODO The Message-id copying should be handled by the
         # ClientConnClientConnectionTCP class
         inform.mid = orig_req.mid
         self._send_message(sock, inform)

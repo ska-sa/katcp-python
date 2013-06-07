@@ -14,7 +14,6 @@ import logging
 import heapq
 import Queue
 import os
-import traceback
 
 from functools import partial
 from .core import Message, Sensor, ExcepthookThread, SEC_TO_MS_FAC, MS_TO_SEC_FAC
@@ -157,13 +156,13 @@ class SampleStrategy(object):
         timestamp, status, value = self._sensor.read_formatted()
         self._inform_callback(self._sensor.name, timestamp, status, value)
 
-    def set_reperiod_callback(self, reperiod_callback):
-        """Set a function that will be called whenever a period needs to be updated
+    def set_new_period_callback(self, new_period_callback):
+        """Set a function that will be called whenever a new period callback needs to be set
 
         Arguments
         ---------
 
-        reperiod_callback(strategy) -- Callback function that takes a strategy
+        new_period_callback(strategy, next_time) -- Callback function that takes a strategy
             to be re-periodeded as parameter.
 
         It is epxected that the reactor will not remove other periodic entries
@@ -171,7 +170,7 @@ class SampleStrategy(object):
         suppress spurious updates.
         """
 
-        self._reperiod_callback = partial(reperiod_callback, self)
+        self._new_period_callback = partial(new_period_callback, self)
 
     def get_sampling(self):
         """Return the Strategy constant for this sampling strategy.
@@ -342,7 +341,7 @@ class SampleEventRate(SampleStrategy):
         self._next_periodic = 1e99
 
         if not 0 <= shortest_period <= longest_period:
-            raise ValueError("The longest and shortest periods must"
+            raise ValueError("The shortest and longest periods must"
                              " satisfy 0 <= shortest_period <= longest_period")
         self._shortest_period = shortest_period
         self._longest_period = longest_period
@@ -363,9 +362,9 @@ class SampleEventRate(SampleStrategy):
         if now < self._not_before:
             if self._next_periodic != self._not_before and sensor_changed:
                 # If you get an AttributeError here it's because
-                # set_reperiod_callback() should have been called
+                # set_new_period_callback() should have been called
                 self._next_periodic = self._not_before
-                self._reperiod_callback(self._not_before)
+                self._new_period_callback(self._not_before)
             return
 
         past_longest = now >= self._not_before + self._not_after_delta
@@ -377,8 +376,10 @@ class SampleEventRate(SampleStrategy):
 
     def periodic(self, timestamp):
         self.update(self._sensor, now=timestamp)
-        self._next_periodic = self._not_before + self._not_after_delta
-        return self._next_periodic
+        np = self._next_periodic = self._not_before + self._not_after_delta
+        # Don't bother with a next update if it is going to be beyond the
+        # approximate age of the universe
+        return np if np < 4.32329886e17 else None
 
     def get_sampling(self):
         return SampleStrategy.EVENT_RATE
@@ -453,7 +454,7 @@ class SampleReactor(ExcepthookThread):
             The sampling strategy to add to the reactor.
         """
         self._strategies.add(strategy)
-        strategy.set_reperiod_callback(self.reperiod_strategy)
+        strategy.set_new_period_callback(self.adjust_strategy_update_time)
         strategy.attach()
 
         next_time = strategy.periodic(time.time())
@@ -461,8 +462,8 @@ class SampleReactor(ExcepthookThread):
             self._adding_events.put((next_time, strategy))
             self._wakeEvent.set()
 
-    def reperiod_strategy(self, strategy, next_time):
-        """Called by a strategy if it needs to have an periodic update adjusted"""
+    def adjust_strategy_update_time(self, strategy, next_time):
+        """Called by a strategy if it needs to have a periodic update time adjusted"""
         if next_time is not None:
             self._adding_events.put((next_time, strategy))
             self._wakeEvent.set()
