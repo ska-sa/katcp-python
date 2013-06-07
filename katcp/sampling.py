@@ -155,6 +155,22 @@ class SampleStrategy(object):
         timestamp, status, value = self._sensor.read_formatted()
         self._inform_callback(self._sensor.name, timestamp, status, value)
 
+    def set_reperiod_callback(self, reperiod_callback):
+        """Set a function that will be called whenever a period needs to be updated
+
+        Arguments
+        ---------
+
+        reperiod_callback(strategy) -- Callback function that takes a strategy
+            to be re-periodeded as parameter.
+
+        It is epxected that the reactor will not remove other periodic entries
+        that were previously created, so the period() update logic should
+        suppress spurious updates.
+        """
+
+        self._reperiod_callback = reperiod_callback
+
     def get_sampling(self):
         """Return the Strategy constant for this sampling strategy.
 
@@ -277,7 +293,6 @@ class SampleDifferential(SampleStrategy):
     def attach(self):
         self.update(self._sensor)
         super(SampleDifferential, self).attach()
-
 
 class SamplePeriod(SampleStrategy):
     """Periodic sampling strategy.
@@ -407,6 +422,7 @@ class SampleReactor(ExcepthookThread):
         self._wakeEvent = threading.Event()
         self._heap = []
         self._removal_events = Queue.Queue()
+        self._adding_events = Queue.Queue()
         self._logger = logger
         # set daemon True so that the app can stop even if the thread
         # is running
@@ -426,12 +442,16 @@ class SampleReactor(ExcepthookThread):
             The sampling strategy to add to the reactor.
         """
         self._strategies.add(strategy)
+        strategy.set_reperiod_callback(self.reperiod_strategy)
         strategy.attach()
 
         next_time = strategy.periodic(time.time())
         if next_time is not None:
-            heapq.heappush(self._heap, (next_time, strategy))
+            self._adding_events.put((next_time, strategy))
             self._wakeEvent.set()
+
+    def reperiod_strategy(self, strategy):
+        """A"""
 
     def remove_strategy(self, strategy):
         """Remove a strategy from the reactor.
@@ -471,6 +491,12 @@ class SampleReactor(ExcepthookThread):
         self._heapify = heapq.heapify
 
         while not self._stopEvent.isSet():
+            # Push new events into the heap
+            while True:
+                try:
+                    _push(heap, self._adding_events.get(block=False))
+                except Queue.Empty:
+                    break
             self._remove_dead_events()
             wake.clear()
             if heap:
@@ -478,8 +504,6 @@ class SampleReactor(ExcepthookThread):
                 if strategy not in self._strategies:
                     continue
 
-                # with self._print_lock:
-                #     print 'wait1'
                 wake.wait(next_time - _time())
                 if wake.isSet():
                     _push(heap, (next_time, strategy))
@@ -494,8 +518,6 @@ class SampleReactor(ExcepthookThread):
                     # wrong sorts itself out
                     _push(heap, (next_time + 10.0, strategy))
             else:
-                # with self._print_lock:
-                #     print 'wait2'
                 wake.wait()
 
         self._stopEvent.clear()

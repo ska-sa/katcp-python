@@ -14,7 +14,6 @@ import logging
 import katcp
 import mock
 import Queue
-import contextlib
 
 from katcp.testutils import (
     TestLogHandler, DeviceTestSensor, start_thread_with_cleanup)
@@ -274,32 +273,23 @@ class TestReactorIntegration(unittest.TestCase):
         wake.wait.side_effect = orig_wait
 
         # Patch time.time so that we can lie about time.
-        with mock.patch('katcp.sampling.time') as mtime:
-            self.time = mtime.time
-            self.start_time = self.time.return_value = time.time()
-            start_thread_with_cleanup(self, self.reactor)
-            # Wait for the event loop to reach its first wake.wait()
-            self.wake.waits.get(timeout=1)
+        self.time_patcher = mock.patch('katcp.sampling.time')
+        mtime = self.time_patcher.start()
+        self.addCleanup(self.time_patcher.stop)
+        self.time = mtime.time
+        self.start_time = self.time.return_value = time.time()
+        start_thread_with_cleanup(self, self.reactor)
+        # Wait for the event loop to reach its first wake.wait()
+        self.wake.waits.get(timeout=1)
 
         self.calls = []
         self.inform = inform
-
-    @contextlib.contextmanager
-    def patched_time(self):
-        with mock.patch('katcp.sampling.time') as mtime:
-            mtime.time = self.time
-            try:
-                yield
-            finally:
-                pass
 
     def _add_strategy(self, strat, wait_initial=True):
         # Add strategy to test reactor while taking care to mock time.time as
         # needed, and waits for the initial update (all strategies except None should send an initial update)
 
-        # Patch time.time so that we can lie about time.
-        with self.patched_time():
-            self.reactor.add_strategy(strat)
+        self.reactor.add_strategy(strat)
 
         if wait_initial:
             self.inform_called.wait(1)
@@ -331,25 +321,34 @@ class TestReactorIntegration(unittest.TestCase):
     def test_event_rate(self):
         max_period = 10.
         min_period = 1.
-        with self.patched_time():
-            event_rate_strat = sampling.SampleEventRate(
-                self.inform, self.sensor, min_period, max_period)
+        event_rate_strat = sampling.SampleEventRate(
+            self.inform, self.sensor, min_period, max_period)
         self._add_strategy(event_rate_strat)
 
         no_max_periods = 3
 
+        # Do some 'max period' updates where the sensor has not changed
         for i in range(no_max_periods):
             self.wake.break_wait()
             self.inform_called.wait(1)
             self.inform_called.clear()
             self.wake.waits.get(timeout=1)
 
-        self.reactor.remove_strategy(event_rate_strat)
-
         call_times = [t for t, vals in self.calls]
         self.assertEqual(len(self.calls), no_max_periods + 1)
         self.assertEqual(call_times,
                          [self.start_time + i*max_period
                           for i in range(no_max_periods + 1)])
+
+        del self.calls[:]
+
+        # Now do a sensor update without moving time along, should not result in
+        # any additional updates
+        update_time = self.time()
+        self.sensor.set_value(1, self.sensor.NOMINAL, update_time)
+        
+        self.assertEqual(len(self.calls), 0)
+        self.reactor.remove_strategy(event_rate_strat)
+
 
 
