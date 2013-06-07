@@ -142,6 +142,8 @@ class TestSampling(unittest.TestCase):
         longest = 20
         evrate = sampling.SampleEventRate(
             self.inform, self.sensor, shortest, longest)
+        evrate._reperiod_callback = mock.Mock()
+
         now = [1]
         evrate._time = lambda: now[0]
         self.assertEqual(self.calls, [])
@@ -180,6 +182,8 @@ class TestSampling(unittest.TestCase):
         longest = 6./8
         evrate = sampling.SampleEventRate(self.inform, self.sensor, shortest,
                                           longest)
+        evrate._reperiod_callback = mock.Mock()
+
         now = [0]
         evrate._time = lambda: now[0]
 
@@ -226,8 +230,9 @@ class FakeEvent(object):
     def wait(self, timeout=None):
         if self.wait_called_callback:
             self.wait_called_callback(timeout)
-        self._event.wait()
         start_time = self._time_source()
+        if not self._set and (timeout is None or timeout >= 0):
+            self._event.wait()
         with self._set_lock:
             if not self._set:
                 self._event.clear()
@@ -267,15 +272,14 @@ class TestReactorIntegration(unittest.TestCase):
                 if timeout is not None:
                     next_wake = self.time() + timeout
                     self._next_wakeup = min(self._next_wakeup, next_wake)
+                else:
+                    self._next_wakeup = 1e99
             self.wake_waits.put(timeout)
 
         def waited_callback(start, end, timeout):
             # A callback that updates 'simulated time' whenever wake.wait() is
             # called
             with self._time_lock:
-                if timeout and start == end:
-                    # Implies no time-warps happened while waiting
-                    self.time.return_value += timeout
                 self._next_wakeup = 1e99
 
         # test reactor
@@ -314,15 +318,24 @@ class TestReactorIntegration(unittest.TestCase):
             self.inform_called.clear()
             self.wake_waits.get(timeout=1)
 
-    def timewarp(self, jump):
-        with self._time_lock:
-            new_time = self.time.return_value + jump
-            if new_time >= self._next_wakeup:
+    def timewarp(self, jump, wait_wait=True, wait_on_and_clear=None):
+        start_time = self.time.return_value
+        end_time = start_time + jump
+        while end_time >= self._next_wakeup:
+            with self._time_lock:
                 self.time.return_value = self._next_wakeup
-                self.wake.break_wait()
-                # Give other threads time to do some work before time is warped
-                time.sleep(0.001)
-            self.time.return_value = new_time
+            self.wake.break_wait()
+            if wait_wait:
+                wait_timeout = self.wake_waits.get(timeout=1)
+            else:
+                break
+            if end_time < self._next_wakeup:
+                break
+        if wait_on_and_clear:
+            wait_on_and_clear.wait(1)
+            wait_on_and_clear.clear()
+        with self._time_lock:
+            self.time.return_value = end_time
 
 
     def test_periodic(self):
@@ -333,10 +346,7 @@ class TestReactorIntegration(unittest.TestCase):
         self._add_strategy(period_strat)
 
         for i in range(no_periods):
-            self.wake.break_wait()
-            self.inform_called.wait(1)
-            self.inform_called.clear()
-            self.wake_waits.get(timeout=1)
+            self.timewarp(period, wait_on_and_clear=self.inform_called)
 
         self.reactor.remove_strategy(period_strat)
 
@@ -358,14 +368,10 @@ class TestReactorIntegration(unittest.TestCase):
 
         # Do some 'max period' updates where the sensor has not changed
         for i in range(no_max_periods):
-            self.wake.break_wait()
-            self.inform_called.wait(1)
-            self.inform_called.clear()
-            self.wake_waits.get(timeout=1)
+            self.timewarp(max_period, wait_on_and_clear=self.inform_called)
 
         call_times = [t for t, vals in self.calls]
         self.assertEqual(len(self.calls), no_max_periods + 1)
-        #import IPython ; IPython.embed()
         self.assertEqual(call_times,
                          [self.start_time + i*max_period
                           for i in range(no_max_periods + 1)])
@@ -375,20 +381,35 @@ class TestReactorIntegration(unittest.TestCase):
         # Now do a sensor update without moving time along, should not result in
         # any additional updates
         update_time = self.time()
+        expected_send_time = self.time() + min_period
         self.sensor.set_value(2, self.sensor.NOMINAL, update_time)
+        # There should, however, be a wake-wait event
+        self.wake_waits.get(timeout=1)
+
         self.assertEqual(len(self.calls), 0)
+        # Timewarp less than min update period, should not result in an inform
+        # callback
+        self.timewarp(min_period*0.6)
 
         # Move time beyond minimum step
-        self.timewarp(min_period*1.00001)
-        send_time = self.time()
-        # self.wake_waits.get(timeout=1)
-        # # self.sensor.set_value(2, self.sensor.NOMINAL, update_time)
-        # self.assertEqual(len(self.calls), 1)
-        # self.assertEqual(self.calls,
-        #                  [(send_time,
-        #                    (self.sensor.name, update_time, 'nominal', '2'))])
+        self.timewarp(min_period*1.01, wait_on_and_clear=self.inform_called)
 
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.calls,
+                         [(expected_send_time,
+                           (self.sensor.name, update_time, 'nominal', '2'))])
+        # Should not be any outstanding wake-waits
+        self.assertEqual(self.wake_waits.qsize(), 0)
+
+        del self.calls[:]
+        # Time we expect the next max-period sample
+        expected_send_time += max_period
+        # Timewarp past the next expected max-period sample time
+        self.timewarp(max_period + min_period*0.01,
+                      wait_wait=True, wait_on_and_clear=self.inform_called)
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.calls[0][0], expected_send_time)
+        self.reactor._debug_now = False
         self.reactor.remove_strategy(event_rate_strat)
-
 
 

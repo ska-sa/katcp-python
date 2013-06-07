@@ -16,6 +16,7 @@ import Queue
 import os
 import traceback
 
+from functools import partial
 from .core import Message, Sensor, ExcepthookThread, SEC_TO_MS_FAC, MS_TO_SEC_FAC
 
 
@@ -170,7 +171,7 @@ class SampleStrategy(object):
         suppress spurious updates.
         """
 
-        self._reperiod_callback = reperiod_callback
+        self._reperiod_callback = partial(reperiod_callback, self)
 
     def get_sampling(self):
         """Return the Strategy constant for this sampling strategy.
@@ -364,7 +365,7 @@ class SampleEventRate(SampleStrategy):
                 # If you get an AttributeError here it's because
                 # set_reperiod_callback() should have been called
                 self._next_periodic = self._not_before
-                self._reperiod_callback(self, self._not_before)
+                self._reperiod_callback(self._not_before)
             return
 
         past_longest = now >= self._not_before + self._not_after_delta
