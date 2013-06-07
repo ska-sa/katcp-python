@@ -365,6 +365,7 @@ class TestReactorIntegration(unittest.TestCase):
 
         call_times = [t for t, vals in self.calls]
         self.assertEqual(len(self.calls), no_max_periods + 1)
+        #import IPython ; IPython.embed()
         self.assertEqual(call_times,
                          [self.start_time + i*max_period
                           for i in range(no_max_periods + 1)])

@@ -14,6 +14,7 @@ import logging
 import heapq
 import Queue
 import os
+import traceback
 
 from .core import Message, Sensor, ExcepthookThread, SEC_TO_MS_FAC, MS_TO_SEC_FAC
 
@@ -335,9 +336,9 @@ class SampleEventRate(SampleStrategy):
             raise ValueError("The 'event-rate' strategy takes two parameters.")
         shortest_period = float(params[0])
         longest_period = float(params[1])
-        self._last_status = None
-        self._last_value = None
-        self._next_periodic = 0
+        # Last sensor status / value, used to determine if it has changed
+        self._last_sv = (None, None)
+        self._next_periodic = 1e99
 
         if not 0 <= shortest_period <= longest_period:
             raise ValueError("The longest and shortest periods must"
@@ -354,39 +355,29 @@ class SampleEventRate(SampleStrategy):
         if now is None:
             now = self._time()
 
+        _, status, value = sensor.read()
+        last_s, last_v = self._last_sv
+        sensor_changed = status != last_s or value != last_v
+
         if now < self._not_before:
-            # if self._next_periodic != self._not_before:
-            #     # If you get an AttributeError here it's because
-            #     # set_reperiod_callback() should have been called
-            #     self._reperiod_callback(self)
+            if self._next_periodic != self._not_before and sensor_changed:
+                # If you get an AttributeError here it's because
+                # set_reperiod_callback() should have been called
+                self._next_periodic = self._not_before
+                self._reperiod_callback(self, self._not_before)
             return
 
-        _, status, value = sensor.read()
-        sensor_changed = status != self._last_status or value != self._last_value
         past_longest = now >= self._not_before + self._not_after_delta
 
         if past_longest or sensor_changed:
             self._not_before = now + self._shortest_period
-            self._last_status = status
-            self._last_value = value
+            self._last_sv = (status, value)
             self.inform()
-
-    # def periodic(self, timestamp):
-    #     if timestamp < self._not_before:
-    #         if self._next_periodic == self._not_before:
-    #             return None
-    #         else:
-    #             self._next_periodic = self._not_before
-    #     else:
-    #         self._next_periodic = self._not_before + self._not_after_delta
-
-    #     self.update(self._sensor, now=timestamp)
-    #     return self._next_periodic
-
 
     def periodic(self, timestamp):
         self.update(self._sensor, now=timestamp)
-        return self._not_before + self._not_after_delta
+        self._next_periodic = self._not_before + self._not_after_delta
+        return self._next_periodic
 
     def get_sampling(self):
         return SampleStrategy.EVENT_RATE
@@ -469,9 +460,8 @@ class SampleReactor(ExcepthookThread):
             self._adding_events.put((next_time, strategy))
             self._wakeEvent.set()
 
-    def reperiod_strategy(self, strategy):
+    def reperiod_strategy(self, strategy, next_time):
         """Called by a strategy if it needs to have an periodic update adjusted"""
-        next_time = strategy.periodic(time.time())
         if next_time is not None:
             self._adding_events.put((next_time, strategy))
             self._wakeEvent.set()
