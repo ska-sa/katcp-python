@@ -20,6 +20,8 @@ MS_TO_SEC_FAC = 1./1000
 DEFAULT_KATCP_MAJOR = 5
 # First major version to use seconds (in stead of milliseconds) for timestamps
 SEC_TS_KATCP_MAJOR = 5
+# First major version to allow floating point values for timestamps
+FLOAT_TS_KATCP_MAJOR = 4
 # First major version to support message IDs
 MID_KATCP_MAJOR = 5
 # First major version to support #version-connect informs

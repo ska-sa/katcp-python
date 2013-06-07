@@ -324,7 +324,7 @@ class SampleEventRate(SampleStrategy):
         self._lastValue = None
 
         if not 0 <= shortest_period <= longest_period:
-            raise ValueError("The shortest and longest periods must"
+            raise ValueError("The longest and shortest periods must"
                              " satisfy 0 <= shortest_period <= longest_period")
         self._shortest_period = shortest_period
         self._longest_period = longest_period
@@ -478,6 +478,8 @@ class SampleReactor(ExcepthookThread):
                 if strategy not in self._strategies:
                     continue
 
+                # with self._print_lock:
+                #     print 'wait1'
                 wake.wait(next_time - _time())
                 if wake.isSet():
                     _push(heap, (next_time, strategy))
@@ -492,6 +494,8 @@ class SampleReactor(ExcepthookThread):
                     # wrong sorts itself out
                     _push(heap, (next_time + 10.0, strategy))
             else:
+                # with self._print_lock:
+                #     print 'wait2'
                 wake.wait()
 
         self._stopEvent.clear()

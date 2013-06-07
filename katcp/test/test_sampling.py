@@ -8,10 +8,16 @@
    """
 
 import unittest
+import threading
 import time
 import logging
 import katcp
-from katcp.testutils import TestLogHandler, DeviceTestSensor
+import mock
+import Queue
+import contextlib
+
+from katcp.testutils import (
+    TestLogHandler, DeviceTestSensor, start_thread_with_cleanup)
 from katcp import sampling, Sensor
 
 log_handler = TestLogHandler()
@@ -193,45 +199,157 @@ class TestSampling(unittest.TestCase):
         self.assertEqual(len(self.calls), 2)
         self.assertEqual(next_time, now[0] + longest)
 
-class TestReactor(unittest.TestCase):
+class FakeEvent(object):
+    def __init__(self, waited_callback=None):
+        self._event = threading.Event()
+        self.waits = Queue.Queue()
+        self._set = False
+        self._set_lock = threading.Lock()
+        self.waited_callback = waited_callback
 
+    def set(self):
+        with self._set_lock:
+            self._set = True
+            self.break_wait()
+
+    def clear(self):
+        with self._set_lock:
+            self._set = False
+            self._event.clear()
+
+    def isSet(self):
+        with self._set_lock:
+            return self._set
+
+    is_set = isSet
+
+    def wait(self, timeout=None):
+        self.waits.put(timeout)
+        self._event.wait()
+        with self._set_lock:
+            if not self._set:
+                self._event.clear()
+            isset = self._set
+
+        if self.waited_callback:
+            self.waited_callback(timeout)
+        return isset
+
+    def break_wait(self):
+        self._event.set()
+
+class TestReactorIntegration(unittest.TestCase):
     def setUp(self):
         """Set up for test."""
         # test sensor
+        # self._print_lock = threading.Lock()
+        self._time_lock = threading.Lock()
         self.sensor = DeviceTestSensor(
                 Sensor.INTEGER, "an.int", "An integer.", "count",
                 [-4, 3],
                 timestamp=12345, status=Sensor.NOMINAL, value=3)
 
+
         # test callback
+        self.inform_called = threading.Event()
         def inform(sensor_name, timestamp, status, value):
-            self.calls.append(sampling.format_inform_v5(
-                sensor_name, timestamp, status, value) )
+            self.inform_called.set()
+            self.calls.append((self.time(), sampling.format_inform_v5(
+                sensor_name, timestamp, status, value)) )
+
+        def waited_callback(timeout):
+            # A callback that updates 'simulated time' whenever wake.wait() is
+            # called
+            if timeout:
+                with self._time_lock:
+                    self.time.return_value += timeout
 
         # test reactor
         self.reactor = sampling.SampleReactor()
-        self.reactor.start()
+
+        # Add a mock-spy to the reactor wake event
+        self.reactor._wakeEvent = self.wake = wake = FakeEvent(waited_callback)
+        orig_wait = wake.wait
+        wake.wait = mock.Mock()
+        wake.wait.side_effect = orig_wait
+
+        # Patch time.time so that we can lie about time.
+        with mock.patch('katcp.sampling.time') as mtime:
+            self.time = mtime.time
+            self.start_time = self.time.return_value = time.time()
+            start_thread_with_cleanup(self, self.reactor)
+            # Wait for the event loop to reach its first wake.wait()
+            self.wake.waits.get(timeout=1)
 
         self.calls = []
         self.inform = inform
 
-    def tearDown(self):
-        """Clean up after test."""
-        self.reactor.stop()
-        self.reactor.join(1.0)
+    @contextlib.contextmanager
+    def patched_time(self):
+        with mock.patch('katcp.sampling.time') as mtime:
+            mtime.time = self.time
+            try:
+                yield
+            finally:
+                pass
+
+    def _add_strategy(self, strat, wait_initial=True):
+        # Add strategy to test reactor while taking care to mock time.time as
+        # needed, and waits for the initial update (all strategies except None should send an initial update)
+
+        # Patch time.time so that we can lie about time.
+        with self.patched_time():
+            self.reactor.add_strategy(strat)
+
+        if wait_initial:
+            self.inform_called.wait(1)
+            self.inform_called.clear()
+            self.wake.waits.get(timeout=1)
 
     def test_periodic(self):
         """Test reactor with periodic sampling."""
-        period = sampling.SamplePeriod(self.inform, self.sensor, 10./1000)
-        start = time.time()
-        self.reactor.add_strategy(period)
-        time.sleep(0.1)
-        self.reactor.remove_strategy(period)
-        end = time.time()
+        period = 10.
+        no_periods = 5
+        period_strat = sampling.SamplePeriod(self.inform, self.sensor, period)
+        self._add_strategy(period_strat)
 
-        expected = int(round((end - start) / 0.01))
-        emax, emin = expected + 1, expected - 1
+        for i in range(no_periods):
+            self.wake.break_wait()
+            self.inform_called.wait(1)
+            self.inform_called.clear()
+            self.wake.waits.get(timeout=1)
 
-        self.assertTrue(emin <= len(self.calls) <= emax,
-                        "Expect %d to %d informs, got:\n  %s" %
-                        (emin, emax, "\n  ".join(str(x) for x in self.calls)))
+        self.reactor.remove_strategy(period_strat)
+
+        call_times = [t for t, vals in self.calls]
+        self.assertEqual(len(self.calls), no_periods + 1)
+        self.assertEqual(call_times,
+                         [self.start_time + i*period
+                          for i in range(no_periods + 1)])
+
+
+    def test_event_rate(self):
+        max_period = 10.
+        min_period = 1.
+        with self.patched_time():
+            event_rate_strat = sampling.SampleEventRate(
+                self.inform, self.sensor, min_period, max_period)
+        self._add_strategy(event_rate_strat)
+
+        no_max_periods = 3
+
+        for i in range(no_max_periods):
+            self.wake.break_wait()
+            self.inform_called.wait(1)
+            self.inform_called.clear()
+            self.wake.waits.get(timeout=1)
+
+        self.reactor.remove_strategy(event_rate_strat)
+
+        call_times = [t for t, vals in self.calls]
+        self.assertEqual(len(self.calls), no_max_periods + 1)
+        self.assertEqual(call_times,
+                         [self.start_time + i*max_period
+                          for i in range(no_max_periods + 1)])
+
+

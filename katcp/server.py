@@ -344,6 +344,8 @@ class DeviceServerBase(object):
             The request message to process.
         """
         send_reply = True
+        # TODO Should check presence of Message-ids against protocol flags and
+        # raise an error as needed.
         if msg.name in self._request_handlers:
             req_conn = ClientRequestConnection(connection, msg)
             try:
@@ -514,7 +516,7 @@ class DeviceServerBase(object):
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
                 'Deprecation warning: do not use self.inform() '
-                'within a reply handler context -- use conn.reply()\n'
+                'within a reply handler context -- use req.reply()\n'
                 'Traceback:\n %s', "".join(traceback.format_stack() ))
             # Get the underlying ClientConnectionTCP instance
             connection = connection.client_connection
@@ -573,8 +575,8 @@ class DeviceServerBase(object):
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
                 'Deprecation warning: do not use self.reply() '
-                'within a reply handler context -- use conn.reply(*msg_args)\n'
-                'or conn.reply_with_message(msg) Traceback:\n %s',
+                'within a reply handler context -- use req.reply(*msg_args)\n'
+                'or req.reply_with_message(msg) Traceback:\n %s',
                 "".join(traceback.format_stack() ))
             # Get the underlying ClientConnectionTCP instance
             connection = connection.client_connection
@@ -595,6 +597,8 @@ class DeviceServerBase(object):
             reply is sent.
         """
         assert (reply.mtype == Message.REPLY)
+        # TODO The Message-id copying thould be handled by the
+        # ClientConnClientConnectionTCP class
         reply.mid = orig_req.mid
         self._send_message(sock, reply)
 
@@ -616,7 +620,7 @@ class DeviceServerBase(object):
             self._logger.warn(
                 'Deprecation warning: do not use self.reply_inform() '
                 'within a reply handler context -- '
-                'use conn.inform(*inform_arguments)\n'
+                'use req.inform(*inform_arguments)\n'
                 'Traceback:\n %s', "".join(traceback.format_stack() ))
             # Get the underlying ClientConnectionTCP instance
             connection = connection.client_connection
@@ -637,6 +641,8 @@ class DeviceServerBase(object):
             inform is sent.
         """
         assert (inform.mtype == Message.INFORM)
+        # TODO The Message-id copying thould be handled by the
+        # ClientConnClientConnectionTCP class
         inform.mid = orig_req.mid
         self._send_message(sock, inform)
 

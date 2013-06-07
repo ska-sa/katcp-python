@@ -1286,9 +1286,11 @@ def start_thread_with_cleanup(
         test_instance, thread_object, timeout=1, start_timeout=None):
     """Start thread_object and add cleanup functions to test_instance
 
-    thread_object.start() is called to start the thread.
+    thread_object.start() is called to start the thread, or thread_object.start(
+    timeout=start_timeout if the starte_timeout parameter is not None.
+
     thread_object.join(timeout=timeout) and thread_object.stop() is added to the
-    test instance cleanup
+    test instance cleanup. Parameter timeout defaults to 1.
     """
     if start_timeout is not None:
         thread_object.start(timeout=start_timeout)
