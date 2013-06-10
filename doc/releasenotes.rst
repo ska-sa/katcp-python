@@ -4,6 +4,14 @@
 Release Notes
 *************
 
+0.5.4
+=====
+
+* Change event-rate strategy to always send an update if the sensor has
+  changed and shortest-period has passed.
+* Add differential-rate strategy.
+
+
 0.5.3
 =====
 

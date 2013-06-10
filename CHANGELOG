@@ -1,3 +1,8 @@
+10 June 2013 (0.5.4)
+ * Change event-rate strategy to always send an update if the sensor has
+   changed and shortest-period has passed
+ * Add differential-rate strategy
+
 31 August 2013 (0.5.3)
  * Add convert_seconds() method to katcp client classes that converts
    seconds into the device timestamp format.
