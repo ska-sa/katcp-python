@@ -140,38 +140,104 @@ class TestSampling(unittest.TestCase):
         """Test SampleEventRate strategy."""
         shortest = 10
         longest = 20
+        patcher = mock.patch('katcp.sampling.time')
+        mtime = patcher.start()
+        self.addCleanup(patcher.stop)
+        time_ = mtime.time
+        time_.return_value = 1
         evrate = sampling.SampleEventRate(
             self.inform, self.sensor, shortest, longest)
-        evrate._new_period_callback = mock.Mock()
+        new_period = mock.Mock()
+        evrate.set_new_period_callback(new_period)
 
-        now = [1]
-        evrate._time = lambda: now[0]
+        time_.return_value = 1
+
         self.assertEqual(self.calls, [])
 
         evrate.attach()
+        # Check initial update
         self.assertEqual(len(self.calls), 1)
 
+        # Too soon, should not send update
         self.sensor.set_value(1)
         self.assertEqual(len(self.calls), 1)
+        # but should have requested a future update at now + shortest-time
+        new_period.assert_called_once_with(evrate, 11)
+        new_period.reset_mock()
 
-        now[0] = 11
-        self.sensor.set_value(2)
+        time_.return_value = 11
+        next_p = evrate.periodic(11)
         self.assertEqual(len(self.calls), 2)
+        self.assertEqual(new_period.called, False)
 
         evrate.periodic(12)
         self.assertEqual(len(self.calls), 2)
+        self.assertEqual(new_period.called, False)
         evrate.periodic(13)
         self.assertEqual(len(self.calls), 2)
+        self.assertEqual(new_period.called, False)
+
         evrate.periodic(31)
         self.assertEqual(len(self.calls), 3)
 
-        now[0] = 32
-        self.sensor.set_value(3)
+        time_.return_value = 32
         self.assertEqual(len(self.calls), 3)
 
-        now[0] = 41
-        self.sensor.set_value(1)
+        time_.return_value = 41
+        self.sensor.set_value(2)
         self.assertEqual(len(self.calls), 4)
+
+    def test_differential_rate(self):
+        difference = 2
+        shortest = 10
+        longest = 20
+        patcher = mock.patch('katcp.sampling.time')
+        mtime = patcher.start()
+        self.addCleanup(patcher.stop)
+        time_ = mtime.time
+        time_.return_value = 0
+        drate = sampling.SampleDifferentialRate(
+            self.inform, self.sensor, difference, shortest, longest)
+        self.assertEqual(
+            drate.get_sampling(), sampling.SampleStrategy.DIFFERENTIAL_RATE)
+
+        new_period = mock.Mock()
+        drate.set_new_period_callback(new_period)
+
+        self.assertEqual(len(self.calls), 0)
+        drate.attach()
+        self.assertEqual(len(self.calls), 1)
+        # Bigger than `difference`, but too soon
+        self.sensor.set_value(0)
+        # Should not have added a call
+        self.assertEqual(len(self.calls), 1)
+        # Should have requested a future update at shortest-time
+        new_period.assert_called_once_with(drate, 10)
+        new_period.reset_mock()
+
+        # call before shortest update period
+        drate.periodic(7)
+        # Should not have added a call
+        self.assertEqual(len(self.calls), 1)
+        # Call at next period, should call, and schedule a periodic update
+        # `longest` later
+        next_p = drate.periodic(10)
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(next_p, 30)
+        next_p = drate.periodic(30)
+        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(next_p, 50)
+
+        # Update with a too-small difference in value, should not send an
+        # update, nor should it schedule a shortest-time future-update
+        self.sensor.set_value(-1)
+        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(new_period.called, False)
+
+        next_p = drate.periodic(50)
+        self.assertEqual(len(self.calls), 4)
+        self.assertEqual(next_p, 70)
+
 
     def test_event_rate_fractions(self):
         # Test SampleEventRate strategy in the presence of fractional seconds --
@@ -182,7 +248,7 @@ class TestSampling(unittest.TestCase):
         longest = 6./8
         evrate = sampling.SampleEventRate(self.inform, self.sensor, shortest,
                                           longest)
-        evrate._new_period_callback = mock.Mock()
+        evrate.set_new_period_callback(mock.Mock())
 
         now = [0]
         evrate._time = lambda: now[0]
@@ -255,7 +321,7 @@ class TestReactorIntegration(unittest.TestCase):
         self.wake_waits = Queue.Queue()
         self.sensor = DeviceTestSensor(
                 Sensor.INTEGER, "an.int", "An integer.", "count",
-                [-4, 3],
+        [-4, 3],
                 timestamp=12345, status=Sensor.NOMINAL, value=3)
 
 
@@ -393,7 +459,7 @@ class TestReactorIntegration(unittest.TestCase):
         # Now do a sensor update without moving time along, should not result in
         # any additional updates
         update_time = self.time()
-        expected_send_time = self.time() + min_period
+        expected_send_time = update_time + min_period
         self.sensor.set_value(2, self.sensor.NOMINAL, update_time)
         # There should, however, be a wake-wait event
         self.wake_waits.get(timeout=1)
@@ -423,5 +489,74 @@ class TestReactorIntegration(unittest.TestCase):
         self.assertEqual(self.calls[0][0], expected_send_time)
         self.reactor._debug_now = False
         self.reactor.remove_strategy(event_rate_strat)
+
+
+    def test_differential_rate(self):
+        max_period = 10.
+        min_period = 1.
+        difference = 2
+        differential_rate_strat = sampling.SampleDifferentialRate(
+            self.inform, self.sensor, difference, min_period, max_period)
+        self._add_strategy(differential_rate_strat)
+
+        no_max_periods = 3
+
+        # Do some 'max period' updates where the sensor has not changed
+        for i in range(no_max_periods):
+            self.timewarp(max_period, event_to_await=self.inform_called)
+
+        call_times = [t for t, vals in self.calls]
+        self.assertEqual(len(self.calls), no_max_periods + 1)
+        self.assertEqual(call_times,
+                         [self.start_time + i*max_period
+                          for i in range(no_max_periods + 1)])
+
+        del self.calls[:]
+
+        # Now do a sensor update by more than `difference` without moving time
+        # along, should not result in any additional updates
+        update_time = self.time()
+        expected_send_time = update_time + min_period
+        # Intial value = 3, difference = 2, 3-2 = 1, but sensor must differ by
+        # _more_ than difference, so choose 0
+        self.sensor.set_value(0, self.sensor.NOMINAL, update_time)
+        # There should, however, be a wake-wait event
+        self.wake_waits.get(timeout=1)
+
+        self.assertEqual(len(self.calls), 0)
+        # Timewarp less than min update period, should not result in an inform
+        # callback
+        self.timewarp(min_period*0.6)
+        self.assertEqual(len(self.calls), 0)
+
+        # Move time beyond minimum step
+        self.timewarp(min_period*1.01, event_to_await=self.inform_called)
+
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.calls,
+                         [(expected_send_time,
+                           (self.sensor.name, update_time, 'nominal', '0'))])
+        # Should not be any outstanding wake-waits
+        self.assertEqual(self.wake_waits.qsize(), 0)
+
+        del self.calls[:]
+
+        # Do a sensor update by less than `difference`
+        self.sensor.set_value(1, self.sensor.NOMINAL, update_time)
+        # Time we expect the next max-period sample
+        expected_send_time += max_period
+        update_time = self.time()
+
+        # Move time beyond minimum step, should not send an update, since the
+        # sensor changed by less than `difference`
+        self.timewarp(min_period*1.1)
+        # Timewarp past the next expected max-period sample time
+        self.timewarp(max_period - min_period,
+                      event_to_await=self.inform_called)
+
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.calls[0][0], expected_send_time)
+        self.reactor._debug_now = False
+        self.reactor.remove_strategy(differential_rate_strat)
 
 

@@ -49,7 +49,7 @@ class SampleStrategy(object):
     """
 
     # Sampling strategy constants
-    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL, EVENT_RATE = range(6)
+    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL, EVENT_RATE, DIFFERENTIAL_RATE = range(7)
 
     ## @brief Mapping from strategy constant to strategy name.
     SAMPLING_LOOKUP = {
@@ -59,6 +59,7 @@ class SampleStrategy(object):
         EVENT: "event",
         DIFFERENTIAL: "differential",
         EVENT_RATE: "event-rate",
+        DIFFERENTIAL_RATE: "differential-rate",
     }
 
     # SAMPLING_LOOKUP not found by pylint
@@ -112,6 +113,8 @@ class SampleStrategy(object):
             return SamplePeriod(inform_callback, sensor, *params)
         elif strategyType == cls.EVENT_RATE:
             return SampleEventRate(inform_callback, sensor, *params)
+        elif strategyType == cls.DIFFERENTIAL_RATE:
+            return SampleDifferentialRate(inform_callback, sensor, *params)
 
     def update(self, sensor):
         """Callback used by the sensor's notify method.
@@ -324,9 +327,9 @@ class SampleEventRate(SampleStrategy):
     """Event rate sampling strategy.
 
     Report the sensor value whenever it changes or if more than
-    longest_period milliseconds have passed since the last reported
+    longest_period seconds have passed since the last reported
     update. However, do not report the value if less than
-    shortest_period milliseconds have passed since the last reported
+    shortest_period seconds have passed since the last reported
     update.
     """
 
@@ -414,6 +417,85 @@ class SampleEvent(SampleEventRate):
 
     def get_sampling(self):
         return SampleStrategy.EVENT
+
+class SampleDifferentialRate(SampleStrategy):
+    """Event rate sampling strategy.
+
+    Report the value whenever it changes by more than `difference` from the last
+    reported value or if more than longest-period seconds have passed since the
+    last reported update. However, do not report the value until shortest-period
+    seconds have passed since the last reported update. The behaviour if
+    shortest-period is greater than longest-period is undefined. May only be
+    implemented for float and integer sensors.
+    """
+
+    def __init__(self, inform_callback, sensor, *params):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+        if len(params) != 3:
+            raise ValueError("The 'differential-rate' strategy takes three parameters.")
+        difference = params[0]
+        if sensor.stype ==  'integer':
+            difference = int(difference)
+        elif sensor.stype == 'float':
+            difference = float(difference)
+        else:
+            raise ValueError('The differential-rate strategy can only be defined '
+                             'for integer or float sensors')
+        shortest_period = float(params[1])
+        longest_period = float(params[2])
+        # Last sensor status / value, used to determine if it has changed
+        self._last_sv = (None, None)
+        self._next_periodic = 1e99
+
+        if not 0 <= shortest_period <= longest_period:
+            raise ValueError("The shortest and longest periods must"
+                             " satisfy 0 <= shortest_period <= longest_period")
+        self._shortest_period = shortest_period
+        self._longest_period = longest_period
+        self.difference = difference
+        # don't send updates until timestamp _not_before
+        self._not_before = 0
+        # time between _not_before and next required update
+        self._not_after_delta = (self._longest_period - self._shortest_period)
+        self._time = time.time
+
+    def update(self, sensor, now=None):
+        if now is None:
+            now = self._time()
+
+        _, status, value = sensor.read()
+        last_s, last_v = self._last_sv
+        sensor_changed = (status != last_s or
+                          abs(value - last_v) > self.difference)
+
+        if now < self._not_before:
+            if self._next_periodic != self._not_before and sensor_changed:
+                # If you get an AttributeError here it's because
+                # set_new_period_callback() should have been called
+                self._next_periodic = self._not_before
+                self._new_period_callback(self._not_before)
+            return
+
+        past_longest = now >= self._not_before + self._not_after_delta
+
+        if past_longest or sensor_changed:
+            self._not_before = now + self._shortest_period
+            self._last_sv = (status, value)
+            self.inform()
+
+    def periodic(self, timestamp):
+        self.update(self._sensor, now=timestamp)
+        np = self._next_periodic = self._not_before + self._not_after_delta
+        # Don't bother with a next update if it is going to be beyond the
+        # approximate age of the universe
+        return np if np < 4.32329886e17 else None
+
+    def get_sampling(self):
+        return SampleStrategy.DIFFERENTIAL_RATE
+
+    def attach(self):
+        self.update(self._sensor)
+        super(SampleDifferentialRate, self).attach()
 
 class SampleReactor(ExcepthookThread):
     """SampleReactor manages sampling strategies.
