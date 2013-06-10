@@ -7,7 +7,7 @@
 """Tests for the katcp.sampling module.
    """
 
-import unittest
+import unittest2 as unittest
 import threading
 import time
 import logging
