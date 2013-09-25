@@ -29,6 +29,8 @@ VERSION_CONNECT_KATCP_MAJOR = 5
 # First major version to support #interface-changed informs
 INTERFACE_CHANGED_KATCP_MAJOR = 5
 
+
+
 class KatcpSyntaxError(ValueError):
     """Exception raised by parsers on encountering syntax errors."""
 
