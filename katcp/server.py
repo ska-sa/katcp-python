@@ -320,7 +320,7 @@ class DeviceServerBase(object):
             The message to process.
         """
         # log messages received so that no one else has to
-        self._logger.debug(msg)
+        self._logger.debug(str(msg))
 
         if msg.mtype == msg.REQUEST:
             self.handle_request(client_conn, msg)

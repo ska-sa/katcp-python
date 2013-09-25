@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 # KATCP Type Classes
 #
+# TODO (NM) Consider a 'validate_only' flag where a type is only validated, but
+# not encoded when sent through to a handler.
 
 class KatcpType(object):
     """Class representing a KATCP type.
