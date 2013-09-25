@@ -7,7 +7,7 @@
 """katcp version information.
    """
 
-VERSION = (0, 5, 4, 'final', 0)
+VERSION = (0, 5, 5, 'alpha', 0)
 
 BASE_VERSION_STR = '.'.join([str(x) for x in VERSION[:3]])
 VERSION_STR = {
