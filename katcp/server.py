@@ -24,11 +24,25 @@ from .core import (DeviceMetaclass, ExcepthookThread, Message, MessageParser,
 from .sampling import SampleReactor, SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
 from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
-                   VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR)
+                   VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR,
+                   convert_method_name)
 from .version import VERSION, VERSION_STR
 from .kattypes import (request, return_reply)
 
 log = logging.getLogger("katcp")
+
+# BASE_REQUESTS is populated using the _base_request decorator on request handlers
+BASE_REQUESTS = set([])
+"List of basic KATCP request that a minimal device server should implement"
+
+
+def _base_request(handler):
+    """Decorator to indicate a request handler is a 'base' katcp request
+
+    Registers the request name in the BASE_REQUESTS set
+    """
+    BASE_REQUESTS.add(convert_method_name)
+    return handler
 
 def construct_name_filter(pattern):
     """Return a function for filtering sensor names based on a pattern.
@@ -1872,3 +1886,4 @@ class DeviceLogger(object):
                     "warn": logging.WARN,
                     "error": logging.ERROR,
                     "fatal": logging.FATAL}[level], log_string)
+

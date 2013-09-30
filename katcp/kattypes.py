@@ -13,7 +13,8 @@ import struct
 import re
 import logging
 from .core import (Message, FailReply, DEFAULT_KATCP_MAJOR,
-                   SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC, MS_TO_SEC_FAC)
+                   SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC, MS_TO_SEC_FAC,
+                   convert_method_name)
 
 logger = logging.getLogger(__name__)
 
@@ -767,7 +768,7 @@ def return_reply(*types, **options):
         if not handler.__name__.startswith("request_"):
             raise ValueError("This decorator can only be used on a katcp"
                              " request handler.")
-        msgname = handler.__name__[8:].replace("_", "-")
+        msgname = convert_method_name('request_', handler.__name__)
 
         def raw_handler(self, *args):
             reply_args = handler(self, *args)

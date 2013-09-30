@@ -29,6 +29,9 @@ VERSION_CONNECT_KATCP_MAJOR = 5
 # First major version to support #interface-changed informs
 INTERFACE_CHANGED_KATCP_MAJOR = 5
 
+def convert_method_name(prefix, name):
+    """Convert a method name to the corresponding command name."""
+    return name[len(prefix):].replace("_", "-")
 
 
 class KatcpSyntaxError(ValueError):
@@ -528,25 +531,21 @@ class DeviceMetaclass(type):
         mcs._inform_handlers = {}
         mcs._reply_handlers = {}
 
-        def convert(prefix, name):
-            """Convert a method name to the corresponding command name."""
-            return name[len(prefix):].replace("_", "-")
-
         for name in dir(mcs):
             if not callable(getattr(mcs, name)):
                 continue
             if name.startswith("request_"):
-                request_name = convert("request_", name)
+                request_name = convert_method_name("request_", name)
                 mcs._request_handlers[request_name] = getattr(mcs, name)
                 assert(mcs._request_handlers[request_name].__doc__ is not None)
             elif name.startswith("inform_"):
-                inform_name = convert("inform_", name)
+                inform_name = convert_method_name("inform_", name)
                 mcs._inform_handlers[inform_name] = getattr(mcs, name)
                 assert(mcs._inform_handlers[inform_name].__doc__ is not None)
                 # There is a bit of a name colission between the reply_*
                 # convention and the server reply_inform() method
             elif name.startswith("reply_") and name != 'reply_inform':
-                reply_name = convert("reply_", name)
+                reply_name = convert_method_name("reply_", name)
                 mcs._reply_handlers[reply_name] = getattr(mcs, name)
                 assert(mcs._reply_handlers[reply_name].__doc__ is not None)
 
