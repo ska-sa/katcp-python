@@ -1299,18 +1299,54 @@ def start_thread_with_cleanup(
     test_instance.addCleanup(thread_object.join, timeout=timeout)
     test_instance.addCleanup(thread_object.stop)
 
+import threading
+from peak.util.proxies import ObjectWrapper
+
+
+class AtomicIaddCallback(ObjectWrapper):
+    # Attributes must be in the class definition, or else they will be proxied to
+    # __subject__
+    _mutex = None
+    _callback = None
+
+    def __init__(self, ob, callback=lambda x: x, mutex=None):
+        self._callback = callback
+        self._mutex = mutex if mutex else threading.RLock()
+        super(AtomicIaddCallback, self).__init__(ob)
+
+    def __iadd__(self, other):
+        with self._mutex:
+            self.__subject__ += other
+            val = self.__subject__
+        self._callback(val)
+        return self
+
 class WaitingMock(mock.Mock):
     def __init__(self, *args, **kwargs):
         super(WaitingMock, self).__init__(*args, **kwargs)
-        self._wait_call_count_event = threading.Event()
-        self._num_calls_waiting_for = None
+        self._counted_queue = Queue.Queue(maxsize=1)
+        # Replace the underlying value for self.call_count with a proxied int that uses a
+        # threading.RLock to allow atomic incrementation in case multiple threads are
+        # calling the mock, and does a callback as soon as the value is updated. This is
+        # needed in case the side_effect function is blocking. The original
+        # mock.CallableMixin._mock_call() updates the call_count before calling
+        # side_effect(). This means we can notify someone waiting on
+        # self.assert_wait_call_count in another thread as soon as the call is made, even
+        # if side_effect blocks
+        self.call_count = AtomicIaddCallback(0, callback=self._call_count_callback)
 
-    def _mock_call(self, *args, **kwargs):
-        retval = super(WaitingMock, self)._mock_call(*args, **kwargs)
-        waiting_for = self._num_calls_waiting_for
-        if waiting_for and self.call_count >= waiting_for:
-            self._wait_call_count_event.set()
-        return retval
+    def _call_count_callback(self, call_count):
+        try:
+            self._counted_queue.put_nowait(call_count)
+        except Queue.Full:
+            pass
+
+    def reset_mock(self):
+        # Re-set call_count as an AtomicIaddCallback instance since the reset_mock()
+        # super-method does self.call_count=0
+        super(WaitingMock, self).reset_mock()
+        self.call_count = AtomicIaddCallback(
+            self.call_count, callback=self._call_count_callback)
 
     def assert_wait_call_count(self, count, timeout=1.):
         """
@@ -1318,12 +1354,18 @@ class WaitingMock(mock.Mock):
 
         Raises AssertionError if the call count is not reached.
         """
-        self._num_calls_waiting_for = count
-        self._wait_call_count_event.clear()
+        t0 = time.time()
+        to_wait = timeout
         if self.call_count >= count:
             return True
-        self._wait_call_count_event.wait(timeout=timeout)
-        assert(self._wait_call_count_event.isSet())
+        while to_wait >= 0 and self.call_count < count:
+            try:
+                self._counted_queue.get(timeout=to_wait)
+            except Queue.Empty:
+                pass
+            to_wait = timeout - (time.time() - t0)
+
+        assert(self.call_count >= count)
 
 def mock_req(req_name, *args, **kwargs):
     """
