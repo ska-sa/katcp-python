@@ -416,7 +416,8 @@ class DeviceClient(object):
             The Message to dispatch to the handler methods.
         """
         # log messages received so that no one else has to
-        self._logger.debug(msg)
+        if self._logger.isEnabledFor(logging.DEBUG):
+            self._logger.debug(str(msg))
 
         if msg.mtype == Message.INFORM:
             self.handle_inform(msg)

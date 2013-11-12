@@ -1800,6 +1800,8 @@ class DeviceLogger(object):
             The value to set the logging level to.
         """
         self._log_level = level
+        if self._python_logger:
+            self._python_logger.setLevel(level)
 
     def set_log_level_by_name(self, level_name):
         """Set the logging level using a level name.
@@ -1809,7 +1811,7 @@ class DeviceLogger(object):
         level_name : str
             The name of the logging level.
         """
-        self._log_level = self.level_from_name(level_name)
+        self.set_log_level(self.level_from_name(level_name))
 
     def log(self, level, msg, *args, **kwargs):
         """Log a message and inform all clients.
