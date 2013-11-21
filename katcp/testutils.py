@@ -118,7 +118,7 @@ class MessageRecorder(object):
 
         Parameters
         ==========
-        number -- Minumum number of messages to return, else wait
+        min_number -- Minumum number of messages to return, else wait
         timeout: int seconds or None -- Don't wait longer than this
         """
         self.wait_number(min_number, timeout)
