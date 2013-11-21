@@ -84,11 +84,13 @@ class MessageRecorder(object):
     """
         Parameters
         ----------
-        whitelist : list or tuple
+        msg_types : container supporting `in` operator
+            Record only message of these types (eg. [Message.REQUEST])
+        whitelist : container supporting `in` operator
             Record only messages matching these names.  If the list is empty,
             all received messages will be saved except any specified in the
             blacklist.
-        blacklist : list or tuple
+        blacklist : container supporting `in` operator
             Ignore messages matching these names.  If any names appear both in
             the whitelist and the blacklist, the whitelist will take
             precedence.
