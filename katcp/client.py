@@ -293,6 +293,7 @@ class DeviceClient(object):
         send_failed = False
         self._send_lock.acquire()
         t0 = time.time()
+        e = 'unknown error'
         try:
             if sock is None:
                 raise KatcpClientError("Client not connected")
@@ -301,6 +302,8 @@ class DeviceClient(object):
                 if timeout is not None and time.time() - t0 > timeout:
                     self._logger.warn('Timeout sending message')
                     send_failed = True
+                    e = 'Could not send  message withing timeout {0}'.format(
+                        timeout)
                     break
                 try:
                     sent = sock.send(data[totalsent:])

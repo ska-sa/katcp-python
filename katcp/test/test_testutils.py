@@ -9,7 +9,7 @@ from katcp import Sensor
 from katcp import testutils
 
 
-class SensorTransitionWaiter(unittest.TestCase):
+class test_SensorTransitionWaiter(unittest.TestCase):
     def _get_sensor(self, sensor_type, name=None):
         if name is None:
             name = 'test_%s_sensor' % sensor_type
