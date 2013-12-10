@@ -1426,3 +1426,27 @@ def mock_req(req_name, *args, **kwargs):
     req.make_reply.side_effect = lambda *args: Message.reply_to_request(
         req.msg, *args)
     return req
+
+def handle_mock_req(dev, req):
+    """Instrument a real not-started server.DeviceServer subclass to handle a mock request
+
+    Parameters
+    ----------
+
+    dev : a katcp.server.DeviceServer instance that has not neccesarily been started
+    req : a mock request created with katcp.testutils.mock_req()
+
+    Example
+    -------
+    dev = katcp.server.DeviceServer(...)
+    req = katcp.testutils.mock_request('help')
+    handle_mock_req(dev, req)
+    # All replies / informs can now be asserted on the mock request
+    req.reply.assert_called_once_with('ok')
+    """
+    client_connection = req.client_connection
+    # Hook up client_connection reply so that it logs the reply on the mock request obj
+    client_connection.reply.side_effect = lambda rep_msg, _: req.reply(*rep_msg.arguments)
+    with mock.patch('katcp.server.ClientRequestConnection') as CRC:
+        CRC.return_value = req
+        dev.handle_request(req.client_connection, req.msg)
