@@ -100,6 +100,10 @@ class DeviceClient(object):
             ProtocolFlags.MESSAGE_IDS)
         self._received_protocol_info.set()
 
+    @property
+    def bindaddr(self):
+        return self._bindaddr
+
     def convert_seconds(self, time_seconds):
         """Convert a time in seconds to the device timestamp units
 
@@ -1275,3 +1279,48 @@ class CallbackClient(DeviceClient):
                 if timer is not None:
                     timer.join(timeout=timeout)
         super(CallbackClient, self).join(timeout=timeout)
+
+def request_check(client, exception, *msg_parms, **kwargs):
+    """Make a blocking_request to DeviceClient and raise an exception if reply is not ok
+
+    Parameters
+    ==========
+
+    client : DeviceClient instance
+    exception: Exception class to raise
+    *msg_parms : Message parameters sent to the Message.request() call
+    **kwargs : Keyword arguments
+        Uses kwargs['timeout'], passed as timeout kwarg to client.blocking_request()
+        Forwards kwargs['mid'] to the Message.request() call kwargs
+
+    Return Value
+    ============
+
+    reply, informs, as returned by client.blocking_request
+
+    Raises
+    ======
+
+    <exception> as in the parameters.
+        <exception>('Unexpected failure with <client.name> <req message> request'
+        is raised if reply.reply_ok() is False
+
+    Notes
+    =====
+
+    A typical use-case for this function is to use functools.partial() to bind a
+    particular client and exception. The resulting function can then be used instead of
+    direct client.blocking_request() calls to automate error handling.
+    """
+    timeout = kwargs.get('timeout', None)
+    req_msg = Message.request(*msg_parms)
+    if timeout is not None:
+        reply, informs = client.blocking_request(req_msg, timeout=timeout)
+    else:
+        reply, informs = client.blocking_request(req_msg)
+
+    if not reply.reply_ok():
+        raise exception('Unexpected failure reply "{2}"\n with device at {0}, '
+                        'request \n"{1}"'
+                        .format(':'.join(client.bindaddr), req_msg, reply))
+    return reply, informs
