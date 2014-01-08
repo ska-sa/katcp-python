@@ -1322,5 +1322,5 @@ def request_check(client, exception, *msg_parms, **kwargs):
     if not reply.reply_ok():
         raise exception('Unexpected failure reply "{2}"\n with device at {0}, '
                         'request \n"{1}"'
-                        .format(':'.join(client.bindaddr), req_msg, reply))
+                        .format(':'.join(str(x) for x in client.bindaddr), req_msg, reply))
     return reply, informs
