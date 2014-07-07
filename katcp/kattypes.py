@@ -212,7 +212,8 @@ class Bool(KatcpType):
 
     def decode(self, value, major):
         if value not in ("0", "1"):
-            raise ValueError("Boolean value must be 0 or 1.")
+            raise ValueError("Boolean value must be '0' or '1' but is '%s'."
+                % (value,))
         return value == "1"
 
 
