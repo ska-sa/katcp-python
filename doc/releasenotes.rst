@@ -4,7 +4,7 @@
 Release Notes
 *************
 
-See also :download:`CHANGELOG` for more details on chages.
+See also :download:`CHANGELOG.txt` for more details on chages.
 
 0.5.5
 =====
