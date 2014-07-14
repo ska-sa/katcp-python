@@ -9,7 +9,7 @@
 
 import pkg_resources
 
-VERSION = (0, 5, 5, 'alpha', 0)
+VERSION = (0, 5, 5, 'final', 0)
 
 BASE_VERSION_STR = '.'.join([str(x) for x in VERSION[:3]])
 VERSION_STR = {

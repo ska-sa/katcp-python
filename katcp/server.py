@@ -533,7 +533,7 @@ class DeviceServerBase(object):
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
                 'Deprecation warning: do not use self.inform() '
-                'within a reply handler context -- use req.reply()\n'
+                'within a reply handler context -- use req.inform()\n'
                 'Traceback:\n %s', "".join(traceback.format_stack() ))
             # Get the underlying ClientConnectionTCP instance
             connection = connection.client_connection

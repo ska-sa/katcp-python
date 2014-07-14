@@ -1,3 +1,18 @@
+14 July 2014 (0.5.5)
+ * Add utility code to katcp.version.py that other modules can use to parse svn
+   or git revisions for use in build-state informs or sensors
+ * Add katcp.client.request_check: a convenience function for making KATCP
+   requests and raising an exception if there is an error.
+ * Add katcp.testutils.handle_mock_req() to allow mocked testing of server request
+   handlers and dispatch, removing the need to start() a DeviceServer for
+   handler tests.
+ * Make katcp.testutils.WaitingMock robust against race conditions
+ * Explicitly list set of base KATCP requests in katcp.server.BASE_REQUESTS
+ * Make method-name to KATCP-name function available outside KATCP server
+   meta-class
+ * Improvements to logging (i.a. prevents issues when using SocketHandler)
+ * Docstring cleanups
+
 10 June 2013 (0.5.4)
  * Change event-rate strategy to always send an update if the sensor has
    changed and shortest-period has passed

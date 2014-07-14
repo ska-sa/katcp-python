@@ -4,6 +4,16 @@
 Release Notes
 *************
 
+See also :download:`CHANGELOG` for more details on chages.
+
+0.5.5
+=====
+
+* Various cleanups (logging, docstrings, base request set, minor refactoring)
+* Improvements to testing utilities
+* Convenience utility functions in `katcp.version`, `katcp.client`,
+  `katcp.testutils`.
+
 0.5.4
 =====
 
@@ -15,7 +25,7 @@ Release Notes
 0.5.3
 =====
 
-Add "meth:`convert_seconds` method to katcp client classes that converts seconds
+Add :meth:`convert_seconds` method to katcp client classes that converts seconds
 into the device timestamp format.
 
 0.5.2
@@ -42,7 +52,7 @@ a number of backward incompatible changes, and hence requires care. This library
 implements support for both KATCP v5 and for the older dialect. Some API changes
 have also been made, mainly in aid of fool-proof support of the Message ID
 feature of KATCP v5. The changes do, however, also eliminate a category of
-potential bugs for older versions of the spec. See also :download:`CHANGELOG`.
+potential bugs for older versions of the spec. 
 
 Important API changes
 ---------------------

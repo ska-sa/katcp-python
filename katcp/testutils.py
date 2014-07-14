@@ -1420,6 +1420,13 @@ def mock_req(req_name, *args, **kwargs):
     if not client_conn:
         client_conn = WaitingMock()
 
+    # TODO Consider making the mocks autospecced from the real classes to test somewhat
+    # more strictly.
+
+    # TODO Consider making .reply_msg and .inform_msgs attributes containing the actualy
+    # reply/inform Message objects that would have been sent. May make certain kinds of
+    # test comparisons easier.
+
     req = WaitingMock()
     req.client_connection = client_conn
     req.msg = Message.request(req_name, *args)
