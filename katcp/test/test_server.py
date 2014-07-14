@@ -228,7 +228,7 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_equal(msgs, (
             r'#version-connect katcp-protocol 5.0-IM',
             # Will have to be updated for every library version bump
-            r'#version-connect katcp-library katcp-python-0.5.5',
+            r'#version-connect katcp-library katcp-python-0.5.6a0',
             r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g') )
 
     def test_request_sensor_sampling_clear(self):

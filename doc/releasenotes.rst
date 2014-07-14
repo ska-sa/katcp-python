@@ -181,3 +181,41 @@ This release implements the majority of the KATCP v5 spec; excluded parts are:
 * Support for optional warning/error range meta-information on sensors.
 * Differential-rate sensor strategy.
 
+Releasing
+---------
+
+Notes for whomever becomes the release manager in the future. This assumes that
+you have `git@github.com:ska-sa/katcp-python.git` (or the https equivalent) as
+your git origin.
+
+* Edit CHANGELOG with the details of the changes, and doc/releasenotes.rst (this
+  file) with the change summary.
+
+* Update version.py::
+
+    VERSION = (0, X, Y, 'final', 0)
+
+  Then run tests update the test that fails because the version inform changed.
+
+* Commit and tag the final changes::
+
+    git commit -a -m'Final updates for release 0.X.Y
+    git tag -a v0.X.Y -m "Version 0.X.Y Stable"
+    git push --tags
+
+* Execute this the first time you do a release::
+
+    pip install sphinx-pypi-upload
+    python setup.py register
+
+* Next execute::
+
+   python setup.py sdist upload
+   python setup.py build_sphinx upload_sphinx --upload-dir=build/sphinx/html
+
+* Check the pypi page to see that the upload and doc build was successful.
+
+* Good, it seems you have managed to release katcp! Now bump the version.py for
+  the next develpment release::
+
+    VERSION = (0, X, Y+1, 'alpha', 0)
