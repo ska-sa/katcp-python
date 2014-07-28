@@ -94,7 +94,7 @@ class TCPServer(object):
                         e_type, e_value, trace, self._tb_limit))
                     self._logger.error("BAD COMMAND: %s in line %r" % (
                         reason, full_line))
-                    self.tcp_inform(sock, self._log_msg("error", reason, "root"))
+                    self.tcp_inform(sock, self._device._log_msg("error", reason, "root"))
                 else:
                     try:
                         client_conn = self._sock_connections[sock]
@@ -592,8 +592,6 @@ class DeviceServerBase(object):
                 msg,
         )
 
-
-
     def handle_message(self, client_conn, msg):
         """Handle messages of all types from clients.
 
@@ -737,7 +735,7 @@ class DeviceServerBase(object):
             The inform message to send.
         """
         assert (msg.mtype == Message.INFORM)
-        self._server.mass_inform(self, msg)
+        self._server.mass_inform(msg)
 
 
     def reply(self, connection, reply, orig_req):
@@ -892,3 +890,834 @@ class DeviceServerBase(object):
         pass
 
 
+class DeviceServer(DeviceServerBase):
+    """Implements some standard messages on top of DeviceServerBase.
+
+    Inform messages handled are:
+
+      * version (sent on connect)
+      * build-state (sent on connect)
+      * log (via self.log.warn(...), etc)
+      * disconnect
+      * client-connected
+
+    Requests handled are:
+
+      * halt
+      * help
+      * log-level
+      * restart [#restartf1]_
+      * client-list
+      * sensor-list
+      * sensor-sampling
+      * sensor-value
+      * watchdog
+      * version-list (only standard in KATCP v5 or later)
+      * sensor-sampling-clear (non-standard)
+
+    .. [#restartf1] Restart relies on .set_restart_queue() being used to
+      register a restart queue with the device. When the device needs to be
+      restarted, it will be added to the restart queue.  The queue should
+      be a Python Queue.Queue object without a maximum size.
+
+    Unhandled standard requests are:
+
+      * configure
+      * mode
+
+    Subclasses can define the tuple VERSION_INFO to set the interface
+    name, major and minor version numbers. The BUILD_INFO tuple can
+    be defined to give a string describing a particular interface
+    instance and may have a fourth element containing additional
+    version information (e.g. rc1).
+
+    Subclasses may manipulate the versions returned by the ?version-list
+    command by editing .extra_versions which is a dictionary mapping
+    role or component names to (version, build_state_or_serial_no) tuples.
+    The build_state_or_serial_no may be None.
+
+    Subclasses must override the .setup_sensors() method. If they
+    have no sensors to register, the method should just be a pass.
+    """
+
+    # DeviceServer has a lot of methods because there is a method
+    # per request type and it's an abstract class which is only
+    # used outside this module
+    # pylint: disable-msg = R0904
+
+    ## @brief Interface version information.
+    VERSION_INFO = ("device_stub", 0, 1)
+
+    ## @brief Device server build / instance information.
+    BUILD_INFO = ("name", 0, 1, "")
+
+    UNSUPPORTED_REQUESTS_BY_MAJOR_VERSION = {
+        4: set(['version-list']),
+        }
+
+    SUPPORTED_PROTOCOL_MAJOR_VERSIONS = (4,5)
+
+    ## @var log
+    # @brief DeviceLogger instance for sending log messages to the client.
+
+    # * and ** magic fine here
+    # pylint: disable-msg = W0142
+
+    def __init__(self, *args, **kwargs):
+        if self.PROTOCOL_INFO.major not in self.SUPPORTED_PROTOCOL_MAJOR_VERSIONS:
+            raise ValueError(
+        'Device server only supports katcp procotol versions %r, not '
+        '%r as specified in self.PROTOCOL_INFO' % (
+            self.SUPPORTED_PROTOCOL_MAJOR_VERSIONS, self.PROTOCOL_INFO.major) )
+        super(DeviceServer, self).__init__(*args, **kwargs)
+        self.log = DeviceLogger(self, python_logger=self._logger)
+        # map names to (version, build state/serial no.) tuples.
+        #   None may used to indicate no build state or serial no.
+        self.extra_versions = {}
+        self._restart_queue = None
+        self._sensors = {}  # map names to sensor objects
+        self._reactor = None  # created in run
+        # map client sockets to map of sensors -> sampling strategies
+        self._strategies = {}
+        # strat lock (should be held for updates to _strategies)
+        self._strat_lock = threading.Lock()
+        self.setup_sensors()
+
+    # pylint: enable-msg = W0142
+
+    def on_client_connect(self, client_conn):
+        """Inform client of build state and version on connect.
+
+        Parameters
+        ----------
+        client_conn : ClientConnectionTCP object
+            The client connection that has been successfully established.
+        """
+        with self._strat_lock:
+            self._strategies[client_conn] = {}  # map sensors -> sampling strategies
+
+        katcp_version = self.PROTOCOL_INFO.major
+        if katcp_version >= VERSION_CONNECT_KATCP_MAJOR:
+            client_conn.inform(Message.inform(
+                "version-connect", "katcp-protocol", self.PROTOCOL_INFO))
+            client_conn.inform(Message.inform(
+                "version-connect", "katcp-library",
+                "katcp-python-%s" % VERSION_STR))
+            client_conn.inform(Message.inform(
+                "version-connect", "katcp-device",
+                self.version(), self.build_state() ))
+        else:
+            client_conn.inform(Message.inform("version", self.version()))
+            client_conn.inform(Message.inform("build-state", self.build_state()))
+
+    def clear_strategies(self, client_conn, remove_client=False):
+        """
+        Clear the sensor strategies of a client connection
+
+        Parameters
+        ----------
+        client_connection : ClientConnectionTCP instance
+            The connection that should have its sampling strategies cleared
+        remove_client : bool, default=False
+            Remove the client connection from the strategies datastructure.
+            Usefull for clients that disconnect.
+        """
+        with self._strat_lock:
+            getter = (self._strategies.pop if remove_client
+                      else self._strategies.get)
+            strategies = getter(client_conn, None)
+            if strategies is not None:
+                for sensor, strategy in list(strategies.items()):
+                    del strategies[sensor]
+                    self._reactor.remove_strategy(strategy)
+
+    def on_client_disconnect(self, client_conn, msg, connection_valid):
+        """Inform client it is about to be disconnected.
+
+        Parameters
+        ----------
+        client_conn : ClientConnectionTCP object
+            The client connection being disconnected.
+        msg : str
+            Reason client is being disconnected.
+        connection_valid : boolean
+            True if connection is still open for sending,
+            False otherwise.
+        """
+
+        def remove_strategies():
+            self.clear_strategies(client_conn, remove_client=True)
+            if connection_valid:
+                self.inform(client_conn, Message.inform("disconnect", msg))
+
+        try:
+            self._deferred_queue.put_nowait(remove_strategies)
+        except Queue.Full:
+            self._logger.error(
+                'Deferred queue full when trying to add sensor '
+                'strategy de-registration task for client %r' % conn)
+
+    def build_state(self):
+        """Return a build state string in the form
+        name-major.minor[(a|b|rc)n]
+        """
+        return "%s-%s.%s%s" % self.BUILD_INFO
+
+    def version(self):
+        """Return a version string of the form type-major.minor."""
+        return "%s-%s.%s" % self.VERSION_INFO
+
+    def add_sensor(self, sensor):
+        """Add a sensor to the device.
+
+        Usually called inside .setup_sensors() but may be called from
+        elsewhere.
+
+        Parameters
+        ----------
+        sensor : Sensor object
+            The sensor object to register with the device server.
+        """
+        self._sensors[sensor.name] = sensor
+
+    def has_sensor(self, sensor_name):
+        """Whether a sensor_name is known."""
+        return sensor_name in self._sensors
+
+    def remove_sensor(self, sensor):
+        """Remove a sensor from the device.
+
+        Also deregisters all clients observing the sensor.
+
+        Parameters
+        ----------
+        sensor : Sensor object or name string
+            The sensor object (or name of sensor) to remove from the device server.
+        """
+        if isinstance(sensor, basestring):
+            sensor_name = sensor
+        else:
+            sensor_name = sensor.name
+        del self._sensors[sensor_name]
+
+        self._strat_lock.acquire()
+        try:
+            for strategies in self._strategies.values():
+                for other_sensor, strategy in list(strategies.items()):
+                    if other_sensor.name == sensor_name:
+                        del strategies[other_sensor]
+                        self._reactor.remove_strategy(strategy)
+        finally:
+            self._strat_lock.release()
+
+    def get_sensor(self, sensor_name):
+        """Fetch the sensor with the given name.
+
+        Parameters
+        ----------
+        sensor_name : str
+            Name of the sensor to retrieve.
+
+        Returns
+        -------
+        sensor : Sensor object
+            The sensor with the given name.
+        """
+        sensor = self._sensors.get(sensor_name, None)
+        if not sensor:
+            raise ValueError("Unknown sensor '%s'." % (sensor_name,))
+        return sensor
+
+    def get_sensors(self):
+        """Fetch a list of all sensors
+
+        Returns
+        -------
+        sensors : list of Sensor objects
+            The list of sensors registered with the device server.
+        """
+        return self._sensors.values()
+
+    def set_restart_queue(self, restart_queue):
+        """Set the restart queue.
+
+        When the device server should be restarted, it will be added to the
+        queue.
+
+        Parameters
+        ----------
+        restart_queue : Queue.Queue object
+            The queue to add the device server to when it should be restarted.
+        """
+        self._restart_queue = restart_queue
+
+    def setup_sensors(self):
+        """Populate the dictionary of sensors.
+
+        Unimplemented by default -- subclasses should add their sensors
+        here or pass if there are no sensors.
+
+        Examples
+        --------
+        >>> class MyDevice(DeviceServer):
+        ...     def setup_sensors(self):
+        ...         self.add_sensor(Sensor(...))
+        ...         self.add_sensor(Sensor(...))
+        ...
+        """
+        raise NotImplementedError("Device server subclasses must implement"
+                                    " setup_sensors.")
+
+    # request implementations
+
+    # all requests take req and msg arguments regardless of whether
+    # they're used
+    # pylint: disable-msg = W0613
+
+    def request_halt(self, req, msg):
+        """Halt the device server.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether scheduling the halt succeeded.
+
+        Examples
+        --------
+        ::
+
+            ?halt
+            !halt ok
+        """
+        self.stop()
+        # this message makes it through because stop
+        # only registers in .run(...) after the reply
+        # has been sent.
+        return req.make_reply("ok")
+
+    def request_help(self, req, msg):
+        """Return help on the available requests.
+
+        Return a description of the available requests using a seqeunce of
+        #help informs.
+
+        Parameters
+        ----------
+        request : str, optional
+            The name of the request to return help for (the default is to
+            return help for all requests).
+
+        Informs
+        -------
+        request : str
+            The name of a request.
+        description : str
+            Documentation for the named request.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the help succeeded.
+        informs : int
+            Number of #help inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?help
+            #help halt ...description...
+            #help help ...description...
+            ...
+            !help ok 5
+
+            ?help halt
+            #help halt ...description...
+            !help ok 1
+        """
+        if not msg.arguments:
+            for name, method in sorted(self._request_handlers.items()):
+                doc = method.__doc__
+                req.inform(name, doc)
+            num_methods = len(self._request_handlers)
+            return req.make_reply("ok", str(num_methods))
+        else:
+            name = msg.arguments[0]
+            if name in self._request_handlers:
+                method = self._request_handlers[name]
+                doc = method.__doc__.strip()
+                req.inform(name, doc)
+                return req.make_reply("ok", "1")
+            return req.make_reply("fail", "Unknown request method.")
+
+    def request_log_level(self, req, msg):
+        """Query or set the current logging level.
+
+        Parameters
+        ----------
+        level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', \
+                 'off'}, optional
+            Name of the logging level to set the device server to (the default
+            is to leave the log level unchanged).
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether the request succeeded.
+        level : {'all', 'trace', 'debug', 'info', 'warn', 'error', 'fatal', \
+                 'off'}
+            The log level after processing the request.
+
+        Examples
+        --------
+        ::
+
+            ?log-level
+            !log-level ok warn
+
+            ?log-level info
+            !log-level ok info
+        """
+        if msg.arguments:
+            try:
+                self.log.set_log_level_by_name(msg.arguments[0])
+            except ValueError, e:
+                raise FailReply(str(e))
+        return req.make_reply("ok", self.log.level_name())
+
+    def request_restart(self, req, msg):
+        """Restart the device server.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether scheduling the restart succeeded.
+
+        Examples
+        --------
+        ::
+
+            ?restart
+            !restart ok
+        """
+        if self._restart_queue is None:
+            raise FailReply("No restart queue registered -- cannot restart.")
+        # .put should never block because the queue should have no size limit.
+        self._restart_queue.put(self)
+        # this message makes it through because stop
+        # only registers in .run(...) after the reply
+        # has been sent.
+        return req.make_reply("ok")
+
+    def request_client_list(self, req, msg):
+        """Request the list of connected clients.
+
+        The list of clients is sent as a sequence of #client-list informs.
+
+        Informs
+        -------
+        addr : str
+            The address of the client as host:port with host in dotted quad
+            notation. If the address of the client could not be determined
+            (because, for example, the client disconnected suddenly) then
+            a unique string representing the client is sent instead.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the client list succeeded.
+        informs : int
+            Number of #client-list inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?client-list
+            #client-list 127.0.0.1:53600
+            !client-list ok 1
+        """
+        # TODO Get list of ClientConnection* instances, and implement a standard
+        # 'address-print' method in the ClientConnection class
+        clients = self.get_sockets()
+        num_clients = len(clients)
+        for client in clients:
+            try:
+                addr = ":".join(str(part) for part in client.getpeername())
+            except socket.error:
+                # client may be gone, in which case just send a description
+                addr = repr(client)
+            req.inform(addr)
+        return req.make_reply('ok', str(num_clients))
+
+    def request_version_list(self, req, msg):
+        """Request the list of versions of roles and subcomponents.
+
+        Informs
+        -------
+        name : str
+            Name of the role or component.
+        version : str
+            A string identifying the version of the component. Individual
+            components may define the structure of this argument as they
+            choose. In the absence of other information clients should
+            treat it as an opaque string.
+        build_state_or_serial_number : str
+            A unique identifier for a particular instance of a component.
+            This should change whenever the component is replaced or updated.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the version list succeeded.
+        informs : int
+            Number of #version-list inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?version-list
+            #version-list katcp-protocol 5.0-MI
+            #version-list katcp-library katcp-python-0.4 katcp-python-0.4.1-py2
+            #version-list katcp-device foodevice-1.0 foodevice-1.0.0rc1
+            !version-list ok 3
+        """
+        versions = [
+            ("katcp-protocol", (self.PROTOCOL_INFO, None)),
+            ("katcp-library", ("katcp-python-%d.%d" % VERSION[:2],
+                               VERSION_STR)),
+            ("katcp-device", (self.version(), self.build_state())),
+            ]
+        extra_versions = sorted(self.extra_versions.items())
+
+        for name, (version, build_state) in versions + extra_versions:
+            if build_state is None:
+                inform_args = (name, version)
+            else:
+                inform_args = (name, version, build_state)
+            req.inform(*inform_args)
+
+        num_versions = len(versions) + len(extra_versions)
+        return req.make_reply("ok", str(num_versions))
+
+    def request_sensor_list(self, req, msg):
+        """Request the list of sensors.
+
+        The list of sensors is sent as a sequence of #sensor-list informs.
+
+        Parameters
+        ----------
+        name : str, optional
+            Name of the sensor to list (the default is to list all sensors).
+            If name starts and ends with '/' it is treated as a regular
+            expression and all sensors whose names contain the regular
+            expression are returned.
+
+        Informs
+        -------
+        name : str
+            The name of the sensor being described.
+        description : str
+            Description of the named sensor.
+        units : str
+            Units for the value of the named sensor.
+        type : str
+            Type of the named sensor.
+        params : list of str, optional
+            Additional sensor parameters (type dependent). For integer and
+            float sensors the additional parameters are the minimum and maximum
+            sensor value. For discrete sensors the additional parameters are
+            the allowed values. For all other types no additional parameters
+            are sent.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the sensor list succeeded.
+        informs : int
+            Number of #sensor-list inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?sensor-list
+            #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
+            #sensor-list cpu.status CPU\_status. \@ discrete on off error
+            ...
+            !sensor-list ok 5
+
+            ?sensor-list cpu.power.on
+            #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
+            !sensor-list ok 1
+
+            ?sensor-list /voltage/
+            #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
+            #sensor-list cpu.voltage CPU\_voltage. V float 0.0 3.0
+            !sensor-list ok 2
+
+        """
+        exact, name_filter = construct_name_filter(msg.arguments[0]
+                    if msg.arguments else None)
+        sensors = [(name, sensor) for name, sensor in
+                    sorted(self._sensors.iteritems()) if name_filter(name)]
+
+        if exact and not sensors:
+            return req.make_reply("fail", "Unknown sensor name.")
+
+        self._send_sensor_value_informs(req, sensors)
+        return req.make_reply("ok", str(len(sensors)))
+
+    def _send_sensor_value_informs(self, req, sensors):
+        for name, sensor in sensors:
+            req.inform(name, sensor.description, sensor.units, sensor.stype,
+                        *sensor.formatted_params)
+
+    def request_sensor_value(self, req, msg):
+        """Request the value of a sensor or sensors.
+
+        A list of sensor values as a sequence of #sensor-value informs.
+
+        Parameters
+        ----------
+        name : str, optional
+            Name of the sensor to poll (the default is to send values for all
+            sensors). If name starts and ends with '/' it is treated as a
+            regular expression and all sensors whose names contain the regular
+            expression are returned.
+
+        Informs
+        -------
+        timestamp : float
+            Timestamp of the sensor reading in seconds since the Unix
+            epoch, or milliseconds for katcp versions <= 4.
+        count : {1}
+            Number of sensors described in this #sensor-value inform. Will
+            always be one. It exists to keep this inform compatible with
+            #sensor-status.
+        name : str
+            Name of the sensor whose value is being reported.
+        value : object
+            Value of the named sensor. Type depends on the type of the sensor.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the list of values succeeded.
+        informs : int
+            Number of #sensor-value inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?sensor-value
+            #sensor-value 1244631611.415231 1 psu.voltage 4.5
+            #sensor-value 1244631611.415200 1 cpu.status off
+            ...
+            !sensor-value ok 5
+
+            ?sensor-value cpu.power.on
+            #sensor-value 1244631611.415231 1 cpu.power.on 0
+            !sensor-value ok 1
+        """
+        exact, name_filter = construct_name_filter(msg.arguments[0]
+                    if msg.arguments else None)
+        sensors = [(name, sensor) for name, sensor in
+                    sorted(self._sensors.iteritems()) if name_filter(name)]
+
+        if exact and not sensors:
+            return req.make_reply("fail", "Unknown sensor name.")
+
+        katcp_version = self.PROTOCOL_INFO.major
+        for name, sensor in sensors:
+            timestamp, status, value = sensor.read_formatted()
+            if katcp_version <= 4:
+                timestamp = int(SEC_TO_MS_FAC*float(timestamp))
+            req.inform(timestamp, "1", name, status, value)
+        return req.make_reply("ok", str(len(sensors)))
+
+    def request_sensor_sampling(self, req, msg):
+        """Configure or query the way a sensor is sampled.
+
+        Sampled values are reported asynchronously using the #sensor-status
+        message.
+
+        Parameters
+        ----------
+        name : str
+            Name of the sensor whose sampling strategy to query or configure.
+        strategy : {'none', 'auto', 'event', 'differential', \
+                    'period', 'event-rate'}, optional
+            Type of strategy to use to report the sensor value. The
+            differential strategy type may only be used with integer or float
+            sensors. If this parameter is supplied, it sets the new strategy.
+        params : list of str, optional
+            Additional strategy parameters (dependent on the strategy type).
+            For the differential strategy, the parameter is an integer or float
+            giving the amount by which the sensor value may change before an
+            updated value is sent.
+            For the period strategy, the parameter is the sampling period
+            in float seconds.
+            The event strategy has no parameters. Note that this has changed
+            from KATCPv4,
+            For the event-rate strategy, a minimum period between updates and
+            a maximum period between updates (both in float seconds) must be
+            given. If the event occurs more than once within the minimum period,
+            only one update will occur. Whether or not the event occurs, the
+            sensor value will be updated at least once per maximum period.
+            The differential-rate strategy is not supported in this release.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether the sensor-sampling request succeeded.
+        name : str
+            Name of the sensor queried or configured.
+        strategy : {'none', 'auto', 'event', 'differential', 'period'}
+            Name of the new or current sampling strategy for the sensor.
+        params : list of str
+            Additional strategy parameters (see description under Parameters).
+
+        Examples
+        --------
+        ::
+
+            ?sensor-sampling cpu.power.on
+            !sensor-sampling ok cpu.power.on none
+
+            ?sensor-sampling cpu.power.on period 500
+            !sensor-sampling ok cpu.power.on period 500
+        """
+        if not msg.arguments:
+            raise FailReply("No sensor name given.")
+
+        name = msg.arguments[0]
+
+        if name not in self._sensors:
+            raise FailReply("Unknown sensor name: %s." % name)
+
+        sensor = self._sensors[name]
+        # The client connection that is not specific to this request context
+        client = req.client_connection
+        katcp_version = self.PROTOCOL_INFO.major
+
+        if len(msg.arguments) > 1:
+            # attempt to set sampling strategy
+            strategy = msg.arguments[1]
+            params = msg.arguments[2:]
+
+            if strategy not in SampleStrategy.SAMPLING_LOOKUP_REV:
+                raise FailReply("Unknown strategy name: %s." % strategy)
+
+            if not self.PROTOCOL_INFO.strategy_allowed(strategy):
+                raise FailReply("Strategy %s not allowed for version %d of katcp"
+                                % (strategy, katcp_version) )
+
+            format_inform = (format_inform_v5 if katcp_version >= SEC_TS_KATCP_MAJOR
+                             else format_inform_v4)
+
+            def inform_callback(sensor_name, timestamp, status, value):
+                """Inform callback for sensor strategy."""
+                cb_msg = format_inform(
+                sensor_name, timestamp, status, value)
+                client.inform(cb_msg)
+
+            if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
+                # Slightly nasty hack, but since period is the only v4 strategy
+                # involving timestamps it's not _too_ nasty :)
+                params = [float(params[0]) * MS_TO_SEC_FAC] + params[1:]
+            new_strategy = SampleStrategy.get_strategy(
+                strategy, inform_callback, sensor, *params)
+
+            with self._strat_lock:
+                old_strategy = self._strategies[client].get(sensor, None)
+                if old_strategy is not None:
+                    self._reactor.remove_strategy(old_strategy)
+
+                # todo: replace isinstance check with something better
+                if isinstance(new_strategy, SampleNone):
+                    if sensor in self._strategies[client]:
+                        del self._strategies[client][sensor]
+                else:
+                    self._strategies[client][sensor] = new_strategy
+                    # reactor.add_strategy() sends out an inform
+                    # which is not great while the lock is held.
+                    self._reactor.add_strategy(new_strategy)
+
+        current_strategy = self._strategies[client].get(sensor, None)
+        if not current_strategy:
+            current_strategy = SampleStrategy.get_strategy(
+                "none", lambda msg: None, sensor)
+
+        strategy, params = current_strategy.get_sampling_formatted()
+        if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
+            # Another slightly nasty hack, but since period is the only
+            # v4 strategy involving timestamps it's not _too_ nasty :)
+            params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
+        return req.make_reply("ok", name, strategy, *params)
+
+    @request()
+    @return_reply()
+    def request_sensor_sampling_clear(self, req):
+        """Set all sampling strategies for this client to none.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the list of devices succeeded.
+
+        Examples
+        --------
+        ?sensor-sampling-clear
+        !sensor-sampling-clear ok
+        """
+        self.clear_strategies(req.client_connection)
+
+        return ["ok"]
+
+
+    def request_watchdog(self, req, msg):
+        """Check that the server is still alive.
+
+        Returns
+        -------
+            success : {'ok'}
+
+        Examples
+        --------
+        ::
+
+            ?watchdog
+            !watchdog ok
+        """
+        # not a function, just doesn't use self
+        # pylint: disable-msg = R0201
+        return req.make_reply("ok")
+
+    # pylint: enable-msg = W0613
+
+    def start(self, timeout=None, daemon=None, excepthook=None):
+        """Start the server in a new thread.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Time to wait for server thread to start.
+        daemon : boolean
+            If not None, the thread's setDaemon method is called with this
+            parameter before the thread is started.
+        excepthook : function
+            Function to call if the client throws an exception. Signature
+            is as for sys.excepthook.
+        """
+        self._reactor = SampleReactor()
+        self._reactor.start()
+        super(DeviceServer, self).start(timeout, daemon, excepthook)
+
+    def stop(self, timeout=None):
+        self._reactor.stop()
+        self._reactor.join(timeout=0.5)
+        self._reactor = None
+        super(DeviceServer, self).stop(timeout)
