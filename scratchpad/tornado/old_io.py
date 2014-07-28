@@ -94,7 +94,8 @@ class TCPServer(object):
                         e_type, e_value, trace, self._tb_limit))
                     self._logger.error("BAD COMMAND: %s in line %r" % (
                         reason, full_line))
-                    self.tcp_inform(sock, self._device._log_msg("error", reason, "root"))
+                    self.tcp_inform(
+                        sock, self._device._log_msg("error", reason, "root"))
                 else:
                     try:
                         client_conn = self._sock_connections[sock]
@@ -443,7 +444,18 @@ class ClientConnectionTCP(object):
     # spews katcp messages and ClientConnection* objects onto the katcp
     # server. This will allow us to abstract out the connection and allow us to
     # support serial connections cleanly
+
+    @property
+    def address(self):
+        try:
+            addr = ":".join(str(part) for part in self._raw_socket.getpeername())
+        except socket.error:
+            # client may be gone, in which case just send a description
+            addr = repr(self._raw_socket)
+        return addr
+
     def __init__(self, server, raw_socket):
+        self._raw_socket = raw_socket
         self.inform = partial(server.tcp_inform, raw_socket)
         self.inform.__doc__ = (
 """Send an inform message to a particular client.
@@ -981,6 +993,9 @@ class DeviceServer(DeviceServerBase):
         self._strategies = {}
         # strat lock (should be held for updates to _strategies)
         self._strat_lock = threading.Lock()
+        # For holding ClientCoClientConnection* instances of active connections
+        self._client_conns = set()
+
         self.setup_sensors()
 
     # pylint: enable-msg = W0142
@@ -993,6 +1008,7 @@ class DeviceServer(DeviceServerBase):
         client_conn : ClientConnectionTCP object
             The client connection that has been successfully established.
         """
+        self._client_conns.add(client_conn)
         with self._strat_lock:
             self._strategies[client_conn] = {}  # map sensors -> sampling strategies
 
@@ -1049,6 +1065,8 @@ class DeviceServer(DeviceServerBase):
             self.clear_strategies(client_conn, remove_client=True)
             if connection_valid:
                 self.inform(client_conn, Message.inform("disconnect", msg))
+
+        self._client_conns.remove(client_conn)
 
         try:
             self._deferred_queue.put_nowait(remove_strategies)
@@ -1339,14 +1357,15 @@ class DeviceServer(DeviceServerBase):
         """
         # TODO Get list of ClientConnection* instances, and implement a standard
         # 'address-print' method in the ClientConnection class
-        clients = self.get_sockets()
+        clients = self._client_conns
         num_clients = len(clients)
-        for client in clients:
-            try:
-                addr = ":".join(str(part) for part in client.getpeername())
-            except socket.error:
-                # client may be gone, in which case just send a description
-                addr = repr(client)
+        for conn in clients:
+            addr = conn.address
+            # try:
+            #     addr = ":".join(str(part) for part in client.getpeername())
+            # except socket.error:
+            #     # client may be gone, in which case just send a description
+            #     addr = repr(client)
             req.inform(addr)
         return req.make_reply('ok', str(num_clients))
 
