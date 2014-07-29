@@ -2,7 +2,6 @@ from katcp.server import *
 
 
 class TCPServer(object):
-
     def __init__(self, device, host, port, tb_limit=20, logger=log):
         self._device = device
         self._parser = MessageParser()

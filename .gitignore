@@ -6,7 +6,7 @@
 *~
 .ropeproject
 # /docs/
-/docs/_build
+/doc/_build
 
 # /katcore/
 /katcore/*.pyc
