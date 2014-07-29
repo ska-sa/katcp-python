@@ -30,20 +30,58 @@ logging.getLogger("katcp").addHandler(log_handler)
 
 NO_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
 
-class test_ClientConnectionTCP(unittest.TestCase):
+class test_ClientConnection(unittest.TestCase):
     def test_init(self):
         # Test that the ClientConnection methods are correctly bound to the
         # server methods
-        server = mock.Mock()
-        raw_socket = 'raw_socket'
-        DUT = katcp.server.ClientConnectionTCP(server, raw_socket)
-        DUT.inform('inf_arg')
-        server.tcp_inform.assert_called_once_with(raw_socket, 'inf_arg')
-        DUT.reply_inform('rif_arg')
-        server.tcp_reply_inform.assert_called_once_with(raw_socket, 'rif_arg')
-        DUT.reply('rep_arg')
-        server.tcp_reply.assert_called_once_with(raw_socket, 'rep_arg')
 
+        # Check standard async inform
+        server = mock.Mock(spec=katcp.server.KATCPServer(mock.Mock(), '', 0))
+        raw_socket = 'raw_socket'
+        DUT = katcp.server.ClientConnection(server, raw_socket)
+        inf_arg = katcp.Message.inform('infarg')
+        DUT.inform(inf_arg)
+        server.send_message.assert_called_once_with(raw_socket, inf_arg)
+
+        # Check reply-inform
+        server.send_message.reset_mock()
+        mid = '5'
+        rif_req = katcp.Message.request('rif', mid=mid)
+        rif_inf = katcp.Message.inform('rif')
+        # Double-check that the mid's don't match before the call
+        self.assertNotEqual(rif_inf.mid, mid)
+        DUT.reply_inform(rif_inf, rif_req)
+        # Check correct message sent
+        server.send_message.assert_called_once_with(raw_socket, rif_inf)
+        # Check that mid is copied over
+        self.assertEqual(rif_inf.mid, mid)
+
+        # Check that an assert is raised the original request and inform names don't match
+        server.send_message.reset_mock()
+        rif_req = katcp.Message.request('riffy')
+        with self.assertRaises(Exception):
+            DUT.reply_inform(rif_inf, rif_req)
+        self.assertFalse(server.send_message.called)
+
+        # Check reply
+        server.send_message.reset_mock()
+        mid = '7'
+        rep_req = katcp.Message.request('rep-req', mid=mid)
+        rep_rep = katcp.Message.reply('rep-req')
+        # Double-check that the mid's don't match before the call
+        self.assertNotEqual(rep_rep.mid, mid)
+        DUT.reply(rep_rep, rep_req)
+        # Check correct message sent
+        server.send_message.assert_called_once_with(raw_socket, rep_rep)
+        # Check that the mid was copied over
+        self.assertEqual(rep_rep.mid, mid)
+
+        # Check that an assert is raised the original request and reply names don't match
+        server.send_message.reset_mock()
+        rep_rep = katcp.Message.request('reppy')
+        with self.assertRaises(Exception):
+            DUT.reply(rep_rep, rep_req)
+        self.assertFalse(server.send_message.called)
 
 class test_ClientRequestConnection(unittest.TestCase):
     def setUp(self):
@@ -78,9 +116,6 @@ class test_ClientRequestConnection(unittest.TestCase):
             self.DUT.reply(*arguments)
 
     def test_reply_with_msg(self):
-        wrong_rep_msg = katcp.Message.reply('wrong-request', 'inf1', 'inf2')
-        with self.assertRaises(AssertionError):
-            self.DUT.reply_with_message(wrong_rep_msg)
         rep_msg = katcp.Message.reply('test-request', 'inf1', 'inf2')
         self.DUT.reply_with_message(rep_msg.copy())
         self.assertEqual(self.client_connection.reply.call_count, 1)
@@ -123,19 +158,17 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         self.assertIn('A warning', log_message)
 
     def test_on_client_connect(self):
-        conn = katcp.server.ClientConnectionTCP(self.server, 'fake-sock')
-        m_sm = self.server._send_message = mock.Mock()
+        fake_sock = mock.Mock()
+        conn = katcp.server.ClientConnection(self.server._server, fake_sock)
+        mock_conn = mock.Mock(spec=conn)
         self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
         self.server.VERSION_INFO = ('deviceapi', 5, 6)
-        self.server.on_client_connect(conn)
+        self.server.on_client_connect(mock_conn)
         # we are expecting 2 inform messages
         no_msgs = 2
-        self.assertEqual(m_sm.call_count, no_msgs)
-        # Check that calls were syntactically valid
-        self.assertEqual(m_sm.call_args_list,
-                         [mock.call('fake-sock', mock.ANY)]*no_msgs)
-        # Get all the messages sent to _send_message
-        msgs = [str(call[0][1]) for call in m_sm.call_args_list]
+        self.assertEqual(mock_conn.inform.call_count, no_msgs)
+        # Get all the inform messages
+        msgs = [str(call[0][0]) for call in mock_conn.inform.call_args_list]
         self._assert_msgs_equal(msgs, (
             r'#version deviceapi-5.6',
             r'#build-state buildy-1.2g') )
@@ -212,19 +245,17 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self.server = DeviceTestServer('', 0)
 
     def test_on_client_connect(self):
-        conn = katcp.server.ClientConnectionTCP(self.server, 'fake-sock')
-        m_sm = self.server._send_message = mock.Mock()
+        fake_sock = mock.Mock()
+        mock_conn = mock.Mock(
+            spec=katcp.server.ClientConnection(self.server._server, fake_sock))
         self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
         self.server.VERSION_INFO = ('deviceapi', 5, 6)
-        self.server.on_client_connect(conn)
+        self.server.on_client_connect(mock_conn)
         # we are expecting 3 inform messages
         no_msgs = 3
-        self.assertEqual(m_sm.call_count, no_msgs)
-        # Check that calls were syntactically valid
-        self.assertEqual(m_sm.call_args_list,
-                         [mock.call('fake-sock', mock.ANY)]*no_msgs)
+        self.assertEqual(mock_conn.inform.call_count, no_msgs)
         # Get all the messages sent to _send_message
-        msgs = [str(call[0][1]) for call in m_sm.call_args_list]
+        msgs = [str(call[0][0]) for call in mock_conn.inform.call_args_list]
         self._assert_msgs_equal(msgs, (
             r'#version-connect katcp-protocol 5.0-IM',
             # Will have to be updated for every library version bump
@@ -253,7 +284,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
         self.server.start(timeout=0.1)
-        host, port = self.server._sock.getsockname()
+        host, port = self.server.bind_address
         self.server_addr = (host, port)
 
         self.client = BlockingTestClient(self, host, port)
@@ -690,8 +721,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test stopping and restarting the device server."""
         self.server.stop(timeout=0.1)
         self.server.join(timeout=1.0)
-        self.assertEqual(self.server._thread, None)
-        self.assertFalse(self.server._running.isSet())
+        self.assertEqual(self.server._server._thread, None)
+        self.assertFalse(self.server._server._running.isSet())
         self.server.start(timeout=1.0)
 
     def test_bad_client_socket(self):
@@ -701,14 +732,14 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
         # close socket while the server isn't looking
         # then wait for the server to notice
-        sock = self.server._socks[0]
+        sock = self.server._server._socks[0]
         sock.close()
         time.sleep(0.75)
 
         # check that client was removed
-        self.assertTrue(sock not in self.server._socks,
+        self.assertTrue(sock not in self.server._server._socks,
                         "Expected %r to not be in %r" %
-                        (sock, self.server._socks))
+                        (sock, self.server._server._socks))
 
     def test_bad_server_socket(self):
         """Test what happens when select is called on a dead server socket."""
@@ -717,15 +748,15 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
         # close socket while the server isn't looking
         # then wait for the server to notice
-        sock = self.server._sock
+        sock = self.server._server._sock
         sockname = sock.getsockname()
         sock.close()
         time.sleep(0.75)
 
         # check that server restarted
-        self.assertTrue(sock is not self.server._sock,
-                        "Expected %r to not be %r" % (sock, self.server._sock))
-        self.assertEqual(sockname, self.server._sock.getsockname())
+        self.assertTrue(sock is not self.server._server._sock,
+                        "Expected %r to not be %r" % (sock, self.server._server._sock))
+        self.assertEqual(sockname, self.server.bind_address)
 
     def test_daemon_value(self):
         """Test passing in a daemon value to server start method."""
@@ -733,7 +764,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.server.join(timeout=1.0)
 
         self.server.start(timeout=0.1, daemon=True)
-        self.assertTrue(self.server._thread.isDaemon())
+        self.assertTrue(self.server._server._thread.isDaemon())
 
     def test_excepthook(self):
         """Test passing in an excepthook to server start method."""
@@ -750,16 +781,16 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
         self.server.start(timeout=0.1, excepthook=excepthook)
         # force exception by deleteing _running
-        old_running = self.server._running
+        old_running = self.server._server._running
         try:
-            del self.server._running
+            del self.server._server._running
             except_event.wait(1.5)
             self.assertEqual(exceptions, [AttributeError])
         finally:
-            self.server._running = old_running
+            self.server._server._running = old_running
 
         # close socket -- server didn't shut down correctly
-        self.server._sock.close()
+        self.server._server._sock.close()
         self.server.stop(timeout=0.1)
         self.server.join(timeout=1.5)
 
@@ -779,7 +810,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             reactor._stopEvent = old_stop
 
         # close socket -- server didn't shut down correctly
-        self.server._sock.close()
+        self.server._server._sock.close()
 
     def test_sampling(self):
         """Test sensor sampling."""
@@ -815,7 +846,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         ## Now clear the strategies on this sensor
         # There should only be on connection to the server, so it should be
         # the test client
-        client_conn = self.server._sock_connections.values()[0]
+        client_conn = list(self.server._client_conns)[0]
         self.server.clear_strategies(client_conn)
         self.client.assert_request_succeeds("sensor-sampling", "an.int",
                                             args_equal=["an.int", "none"])

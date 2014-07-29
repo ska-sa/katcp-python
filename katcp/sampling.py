@@ -509,8 +509,8 @@ class SampleReactor(ExcepthookThread):
     logger : logging.Logger object
         Python logger to write logs to.
     """
-    def __init__(self, logger=log):
-        super(SampleReactor, self).__init__()
+    def __init__(self, logger=log, excepthook=None):
+        super(SampleReactor, self).__init__(excepthook=excepthook)
         self._strategies = set()
         self._stopEvent = threading.Event()
         self._wakeEvent = threading.Event()

@@ -173,7 +173,7 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.server = DeviceTestServer('', 0)
         self.server.start(timeout=0.1)
 
-        host, port = self.server._sock.getsockname()
+        host, port = self.server.bind_address
 
         self.client = katcp.DeviceClient(host, port)
         self.client.start(timeout=0.1)
@@ -319,7 +319,7 @@ class TestBlockingClient(unittest.TestCase):
         self.server = DeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server, start_timeout=0.1)
 
-        host, port = self.server._sock.getsockname()
+        host, port = self.server.bind_address
 
         self.client = katcp.BlockingClient(host, port)
         start_thread_with_cleanup(self, self.client, start_timeout=0.1)
@@ -420,7 +420,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.server = DeviceTestServer('', 0)
         self.server.start(timeout=0.1)
 
-        host, port = self.server._sock.getsockname()
+        host, port = self.server.bind_address
 
         self.client = katcp.CallbackClient(host, port)
         self.client.start(timeout=0.1)
