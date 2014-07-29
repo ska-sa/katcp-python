@@ -1,5 +1,6 @@
 from katcp.server import *
 
+
 class TCPServer(object):
 
     def __init__(self, device, host, port, tb_limit=20, logger=log):
@@ -19,7 +20,7 @@ class TCPServer(object):
         self._socks = []  # list of client sockets
         self._waiting_chunks = {}  # map from client sockets to messages pieces
         self._sock_locks = {}  # map from client sockets to sending locks
-        # map from sockets to ClientConnectionTCP objects
+        # map from sockets to ClientConnection objects
         self._sock_connections = {}
 
     def _bind(self, bindaddr):
@@ -46,7 +47,7 @@ class TCPServer(object):
             self._socks.append(sock)
             self._waiting_chunks[sock] = ""
             self._sock_locks[sock] = threading.Lock()
-            self._sock_connections[sock] = ClientConnectionTCP(self, sock)
+            self._sock_connections[sock] = ClientConnection(self, sock)
 
     def _remove_socket(self, sock):
         """Remove a client socket from the socket and chunk lists."""
@@ -60,17 +61,6 @@ class TCPServer(object):
                 del self._sock_connections[sock]
         finally:
             self._data_lock.release()
-
-    def get_sockets(self):
-        """Return the complete list of current client socket.
-
-        Returns
-        -------
-        sockets : list of socket.socket objects
-            A list of connected client sockets.
-        """
-        return list(self._socks)
-
 
     def _handle_chunk(self, sock, chunk):
         """Handle a chunk of data for socket sock."""
@@ -94,7 +84,7 @@ class TCPServer(object):
                         e_type, e_value, trace, self._tb_limit))
                     self._logger.error("BAD COMMAND: %s in line %r" % (
                         reason, full_line))
-                    self.tcp_inform(
+                    self.send_message(
                         sock, self._device._log_msg("error", reason, "root"))
                 else:
                     try:
@@ -109,160 +99,6 @@ class TCPServer(object):
         with self._data_lock:
             if sock in self._waiting_chunks:
                 self._waiting_chunks[sock] = waiting_chunk + lines[-1]
-
-    def _send_message(self, sock, msg):
-        """Send an arbitrary message to a particular client.
-
-        Note that failed sends disconnect the client sock and call
-        on_client_disconnect. They do not raise exceptions.
-
-        Parameters
-        ----------
-        sock : socket.socket object
-            The socket to send the message to.
-        msg : Message object
-            The message to send.
-        """
-        # TODO: should probably implement this as a queue of sockets and
-        #       messages to send and have the queue processed in the main
-        #       loop.
-        data = str(msg) + "\n"
-        datalen = len(data)
-        totalsent = 0
-
-        # Log all sent messages here so no one else has to.
-        self._logger.debug(data)
-
-        # sends are locked per-socket -- i.e. only one send per socket at
-        # a time
-        lock = self._sock_locks.get(sock)
-        if lock is None:
-            try:
-                client_name = sock.getpeername()
-            except socket.error:
-                client_name = "<disconnected client>"
-            msg = "Attempt to send to a socket %s which is no longer a" \
-                " client." % (client_name,)
-            self._logger.warn(msg)
-            return
-
-        # do not do anything inside here which could call send_message!
-        send_failed = False
-        lock.acquire()
-        t0 = time.time()
-        try:
-            while totalsent < datalen:
-                if time.time()-t0 > self.send_timeout:
-                    self._logger.error(
-                        'server._send_msg() timing out after %fs, sent %d/%d bytes'
-                        % (self.send_timeout, totalsent, datalen) )
-                    send_failed = True
-                    break
-                try:
-                    sent = sock.send(data[totalsent:])
-                except socket.error, e:
-                    if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
-                        continue
-                    else:
-                        send_failed = True
-                        break
-
-                if sent == 0:
-                    send_failed = True
-                    break
-
-                totalsent += sent
-        finally:
-            lock.release()
-
-        if send_failed:
-            try:
-                client_name = sock.getpeername()
-            except socket.error:
-                client_name = "<disconnected client>"
-            msg = "Failed to send message to client %s" % (client_name,)
-            self._logger.error(msg)
-            # Need to get connection before calling _remove_socket()
-            conn = self._sock_connections.get(sock)
-            self._remove_socket(sock)
-            # Don't run on_client_disconnect if another thread has beaten us to
-            # the punch of removing the connection object
-            if conn:
-                self._device.on_client_disconnect(conn, msg, False)
-
-    def tcp_inform(self, sock, msg):
-        """Send an inform message to a particular TCP client.
-
-        Should only be used for asynchronous informs. Informs
-        that are part of the response to a request should use
-        :meth:`reply_inform` so that the message identifier
-        from the original request can be attached to the
-        inform.
-
-        Parameters
-        ----------
-        sock : socket.socket object
-            The client to send the message to.
-        msg : Message object
-            The inform message to send.
-        """
-        # could be a function but we don't want it to be
-        # pylint: disable-msg = R0201
-        assert (msg.mtype == Message.INFORM)
-        self._send_message(sock, msg)
-
-    def mass_inform(self, msg):
-        """Send an inform message to all clients.
-
-        Parameters
-        ----------
-        msg : Message object
-            The inform message to send.
-        """
-        for sock in list(self._socks):
-            if sock is self._sock:
-                continue
-            self.tcp_inform(sock, msg)
-
-    def tcp_reply(self, sock, reply, orig_req):
-        """Send an asynchronous reply to an earlier request for a tcp socket.
-
-        Parameters
-        ----------
-        sock : socket.socket object
-            The client to send the reply to.
-        reply : Message object
-            The reply message to send.
-        orig_req : Message object
-            The request message being replied to. The reply message's
-            id is overridden with the id from orig_req before the
-            reply is sent.
-        """
-        assert (reply.mtype == Message.REPLY)
-        # TODO The Message-id copying should be handled by the
-        # ClientConnClientConnectionTCP class
-        reply.mid = orig_req.mid
-        self._send_message(sock, reply)
-
-    def tcp_reply_inform(self, sock, inform, orig_req):
-        """Send an inform as part of the reply to an earlier request.
-
-        Parameters
-        ----------
-        sock : socket.socket object
-            The client to send the inform to.
-        inform : Message object
-            The inform message to send.
-        orig_req : Message object
-            The request message being replied to. The inform message's
-            id is overridden with the id from orig_req before the
-            inform is sent.
-        """
-        assert (inform.mtype == Message.INFORM)
-        # TODO The Message-id copying should be handled by the
-        # ClientConnClientConnectionTCP class
-        inform.mid = orig_req.mid
-        self._send_message(sock, inform)
 
     def run(self):
         """Listen for clients and process their requests."""
@@ -332,7 +168,7 @@ class TCPServer(object):
                 if sock is self._sock:
                     client, addr = sock.accept()
                     client.setblocking(0)
-                    self.mass_inform(Message.inform("client-connected",
+                    self.mass_send_message(Message.inform("client-connected",
                         "New client connected from %s" % (addr,)))
                     self._add_socket(client)
                     conn = self._sock_connections.get(client)
@@ -434,69 +270,172 @@ class TCPServer(object):
         """Wait until the server is running"""
         return self._running.wait(timeout=timeout)
 
+    def send_message(self, sock, msg):
+        """Send an arbitrary message to a particular client.
 
+        Note that failed sends disconnect the client sock and call
+        on_client_disconnect. They do not raise exceptions.
 
+        Parameters
+        ----------
+        sock : socket.socket object
+            The socket to send the message to.
+        msg : Message object
+            The message to send.
+        """
+        data = str(msg) + "\n"
+        datalen = len(data)
+        totalsent = 0
 
+        # Log all sent messages here so no one else has to.
+        self._logger.debug(data)
 
-class ClientConnectionTCP(object):
-    # XXX TODO We should factor the whole TCP select loop (or future twisted
-    # implementation?) out of the server class and into a Connection class that
-    # spews katcp messages and ClientConnection* objects onto the katcp
-    # server. This will allow us to abstract out the connection and allow us to
-    # support serial connections cleanly
+        # sends are locked per-socket -- i.e. only one send per socket at
+        # a time
+        lock = self._sock_locks.get(sock)
+        if lock is None:
+            try:
+                client_name = sock.getpeername()
+            except socket.error:
+                client_name = "<disconnected client>"
+            msg = "Attempt to send to a socket %s which is no longer a" \
+                " client." % (client_name,)
+            self._logger.warn(msg)
+            return
+
+        # do not do anything inside here which could call send_message!
+        send_failed = False
+        lock.acquire()
+        t0 = time.time()
+        try:
+            while totalsent < datalen:
+                if time.time()-t0 > self.send_timeout:
+                    self._logger.error(
+                        'server._send_msg() timing out after %fs, sent %d/%d bytes'
+                        % (self.send_timeout, totalsent, datalen) )
+                    send_failed = True
+                    break
+                try:
+                    sent = sock.send(data[totalsent:])
+                except socket.error, e:
+                    if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
+                        continue
+                    else:
+                        send_failed = True
+                        break
+
+                if sent == 0:
+                    send_failed = True
+                    break
+
+                totalsent += sent
+        finally:
+            lock.release()
+
+        if send_failed:
+            try:
+                client_name = sock.getpeername()
+            except socket.error:
+                client_name = "<disconnected client>"
+            msg = "Failed to send message to client %s" % (client_name,)
+            self._logger.error(msg)
+            # Need to get connection before calling _remove_socket()
+            conn = self._sock_connections.get(sock)
+            self._remove_socket(sock)
+            # Don't run on_client_disconnect if another thread has beaten us to
+            # the punch of removing the connection object
+            if conn:
+                self._device.on_client_disconnect(conn, msg, False)
+
+    def mass_send_message(self, msg):
+        """Send a message to all connected clients"""
+        for sock in list(self._socks):
+            if sock is self._sock:
+                continue
+            self.send_message(sock, msg)
+
+    def get_address(self, sock):
+        """Text representation of the network address of a socket"""
+        try:
+            addr = ":".join(str(part) for part in sock.getpeername())
+        except socket.error:
+            # client may be gone, in which case just send a description
+            addr = repr(sock)
+        return addr
+
+class ClientConnection(object):
 
     @property
     def address(self):
-        try:
-            addr = ":".join(str(part) for part in self._raw_socket.getpeername())
-        except socket.error:
-            # client may be gone, in which case just send a description
-            addr = repr(self._raw_socket)
-        return addr
+        return self._get_address()
 
-    def __init__(self, server, raw_socket):
-        self._raw_socket = raw_socket
-        self.inform = partial(server.tcp_inform, raw_socket)
-        self.inform.__doc__ = (
-"""Send an inform message to a particular client.
+    def __init__(self, server, conn_key):
+        self._server = server
+        self._conn_key = conn_key
+        self._get_address = partial(server.get_address, conn_key)
+        self._send_message = partial(server.send_message, conn_key)
+        self._mass_send_message = server.mass_send_message
 
-Should only be used for asynchronous informs. Informs
-that are part of the response to a request should use
-:meth:`reply_inform` so that the message identifier
-from the original request can be attached to the
-inform.
+    def inform(self, msg):
+        """Send an inform message to a particular client.
 
-Parameters
-----------
-msg : Message object
-    The inform message to send.
-    """)
-        self.reply_inform = partial(server.tcp_reply_inform, raw_socket)
-        self.reply_inform.__doc__ = (
-"""Send an inform as part of the reply to an earlier request.
+        Should only be used for asynchronous informs. Informs
+        that are part of the response to a request should use
+        :meth:`reply_inform` so that the message identifier
+        from the original request can be attached to the
+        inform.
 
-Parameters
-----------
-inform : Message object
-    The inform message to send.
-orig_req : Message object
-    The request message being replied to. The inform message's
-    id is overridden with the id from orig_req before the
-    inform is sent.
-""")
-        self.reply = partial(server.tcp_reply, raw_socket)
-        self.reply.__doc__ = (
-"""Send an asynchronous reply to an earlier request.
+        Parameters
+        ----------
+        msg : Message object
+            The inform message to send.
+        """
 
-Parameters
-----------
-reply : Message object
-    The reply message to send.
-orig_req : Message object
-    The request message being replied to. The reply message's
-    id is overridden with the id from orig_req before the
-    reply is sent.
-""")
+        assert (msg.mtype == Message.INFORM)
+        self._send_message(msg)
+
+    def reply_inform(self, inform, orig_req):
+        """Send an inform as part of the reply to an earlier request.
+
+        Parameters
+        ----------
+        inform : Message object
+            The inform message to send.
+        orig_req : Message object
+            The request message being replied to. The inform message's
+            id is overridden with the id from orig_req before the
+            inform is sent.
+        """
+        assert (inform.mtype == Message.INFORM)
+        inform.mid = orig_req.mid
+        self._send_message(inform)
+
+    def mass_inform(self, msg):
+        """Send an inform message to all clients.
+
+        Parameters
+        ----------
+        msg : Message object
+            The inform message to send.
+        """
+        assert (inform.mtype == Message.INFORM)
+        self._mass_send_message(msg)
+
+    def reply(self, reply, orig_req):
+        """Send an asynchronous reply to an earlier request.
+
+        Parameters
+        ----------
+        reply : Message object
+            The reply message to send.
+        orig_req : Message object
+            The request message being replied to. The reply message's
+            id is overridden with the id from orig_req before the
+            reply is sent.
+        """
+        assert (reply.mtype == Message.REPLY)
+        reply.mid = orig_req.mid
+        self._send_message(reply)
 
 
 class ClientRequestConnection(object):
@@ -504,6 +443,7 @@ class ClientRequestConnection(object):
         self.client_connection = client_connection
         assert(req_msg.mtype == Message.REQUEST)
         self.msg = req_msg
+        self.mass_inform = client_connection.mass_inform
 
     def inform(self, *args):
         inf_msg = Message.reply_inform(self.msg, *args)
@@ -609,7 +549,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        client_conn : ClientConnectionTCP object
+        client_conn : ClientConnection object
             The client connection the message was from.
         msg : Message object
             The message to process.
@@ -633,7 +573,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        connection : ClientConnectionTCP object
+        connection : ClientConnection object
             The client connection the message was from.
         msg : Message object
             The request message to process.
@@ -675,7 +615,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        connection : ClientConnectionTCP object
+        connection : ClientConnection object
             The client connection the message was from.
         msg : Message object
             The inform message to process.
@@ -696,7 +636,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        connection : ClientConnectionTCP object
+        connection : ClientConnection object
             The client connection the message was from.
         msg : Message object
             The reply message to process.
@@ -724,7 +664,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        connection : ClientConnectionTCP object
+        connection : ClientConnection object
             The client to send the message to.
         msg : Message object
             The inform message to send.
@@ -734,7 +674,7 @@ class DeviceServerBase(object):
                 'Deprecation warning: do not use self.inform() '
                 'within a reply handler context -- use req.inform()\n'
                 'Traceback:\n %s', "".join(traceback.format_stack() ))
-            # Get the underlying ClientConnectionTCP instance
+            # Get the underlying ClientConnection instance
             connection = connection.client_connection
         connection.inform(msg)
 
@@ -755,7 +695,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        connection : ClientConnectionTCP object
+        connection : ClientConnection object
             The client to send the reply to.
         reply : Message object
             The reply message to send.
@@ -770,7 +710,7 @@ class DeviceServerBase(object):
                 'within a reply handler context -- use req.reply(*msg_args)\n'
                 'or req.reply_with_message(msg) Traceback:\n %s',
                 "".join(traceback.format_stack() ))
-            # Get the underlying ClientConnectionTCP instance
+            # Get the underlying ClientConnection instance
             connection = connection.client_connection
         connection.reply(reply, orig_req)
 
@@ -779,7 +719,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        connection : ClientConnectionTCP object
+        connection : ClientConnection object
             The client to send the inform to.
         inform : Message object
             The inform message to send.
@@ -794,7 +734,7 @@ class DeviceServerBase(object):
                 'within a reply handler context -- '
                 'use req.inform(*inform_arguments)\n'
                 'Traceback:\n %s', "".join(traceback.format_stack() ))
-            # Get the underlying ClientConnectionTCP instance
+            # Get the underlying ClientConnection instance
             connection = connection.client_connection
         connection.reply_inform(inform, orig_req)
 
@@ -875,7 +815,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        conn : ClientConnectionTCP object
+        conn : ClientConnection object
             The client connection that has been successfully established.
         """
         pass
@@ -891,7 +831,7 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        conn : ClientConnectionTCP object
+        conn : ClientConnection object
             Client connection being disconnected.
         msg : str
             Reason client is being disconnected.
@@ -1005,7 +945,7 @@ class DeviceServer(DeviceServerBase):
 
         Parameters
         ----------
-        client_conn : ClientConnectionTCP object
+        client_conn : ClientConnection object
             The client connection that has been successfully established.
         """
         self._client_conns.add(client_conn)
@@ -1032,7 +972,7 @@ class DeviceServer(DeviceServerBase):
 
         Parameters
         ----------
-        client_connection : ClientConnectionTCP instance
+        client_connection : ClientConnection instance
             The connection that should have its sampling strategies cleared
         remove_client : bool, default=False
             Remove the client connection from the strategies datastructure.
@@ -1052,7 +992,7 @@ class DeviceServer(DeviceServerBase):
 
         Parameters
         ----------
-        client_conn : ClientConnectionTCP object
+        client_conn : ClientConnection object
             The client connection being disconnected.
         msg : str
             Reason client is being disconnected.
