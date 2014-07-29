@@ -1,7 +1,7 @@
 from katcp.server import *
 
 
-class TCPServer(object):
+class KATCPServer(object):
     def __init__(self, device, host, port, tb_limit=20, logger=log):
         self._device = device
         self._parser = MessageParser()
@@ -368,11 +368,11 @@ class ClientConnection(object):
     def address(self):
         return self._get_address()
 
-    def __init__(self, server, conn_key):
+    def __init__(self, server, conn_id):
         self._server = server
-        self._conn_key = conn_key
-        self._get_address = partial(server.get_address, conn_key)
-        self._send_message = partial(server.send_message, conn_key)
+        self._conn_key = conn_id
+        self._get_address = partial(server.get_address, conn_id)
+        self._send_message = partial(server.send_message, conn_id)
         self._mass_send_message = server.mass_send_message
 
     def inform(self, msg):
@@ -433,6 +433,7 @@ class ClientConnection(object):
             reply is sent.
         """
         assert (reply.mtype == Message.REPLY)
+        assert reply.name == orig_req.name
         reply.mid = orig_req.mid
         self._send_message(reply)
 
@@ -459,7 +460,6 @@ class ClientRequestConnection(object):
 
         Will check that rep_msg.name matches the bound request
         """
-        assert rep_msg.name == self.msg.name
         self.client_connection.reply(rep_msg, self.msg)
         self._post_reply()
 
@@ -516,7 +516,7 @@ class DeviceServerBase(object):
 
 
     def __init__(self, host, port, tb_limit=20, logger=log):
-        self._server = TCPServer(self, host, port, tb_limit, logger)
+        self._server = KATCPServer(self, host, port, tb_limit, logger)
         self._logger = logger
         self._tb_limit = tb_limit
 
@@ -1300,11 +1300,6 @@ class DeviceServer(DeviceServerBase):
         num_clients = len(clients)
         for conn in clients:
             addr = conn.address
-            # try:
-            #     addr = ":".join(str(part) for part in client.getpeername())
-            # except socket.error:
-            #     # client may be gone, in which case just send a description
-            #     addr = repr(client)
             req.inform(addr)
         return req.make_reply('ok', str(num_clients))
 
