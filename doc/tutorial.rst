@@ -304,7 +304,7 @@ A very simple server example looks like::
           reversed_args = msg.arguments[::-1]
           # req.make_reply() makes a katcp.Message.reply using the correct request
           # name and message ID
-          return req.make_reply(*reversed_args)
+          return req.make_reply('ok', *reversed_args)
 
 
   if __name__ == "__main__":

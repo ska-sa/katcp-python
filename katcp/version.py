@@ -8,6 +8,8 @@
    """
 
 import pkg_resources
+import sys
+import subprocess
 
 VERSION = (0, 5, 6, 'alpha', 0)
 
@@ -61,3 +63,49 @@ def construct_package_build_info(package, version):
         rev = "unknown"
 
     return version[:2] + (rev,)
+
+def get_git_revision():
+    """
+    Attempt to find the git revision of this package's source
+
+    Usually called by setup.py
+    """
+    # Backported implementation of subprocess.check_output from Python >= 2.7
+    if sys.version_info < (2, 7):
+        def check_output(*popenargs, **kwargs):
+            """Run command with arguments and return its output as a byte string.
+
+            Backported from Python 2.7 as it's implemented as pure python in stdlib.
+
+            >>> check_output(['/usr/bin/python', '--version'])
+            Python 2.6.2
+            """
+            # Code borrowed from https://gist.github.com/1027906
+            process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)
+            output, unused_err = process.communicate()
+            retcode = process.poll()
+            if retcode:
+                cmd = kwargs.get("args")
+                if cmd is None:
+                    cmd = popenargs[0]
+                error = subprocess.CalledProcessError(retcode, cmd)
+                error.output = output
+                raise error
+            return output
+    else:
+        check_output = subprocess.check_output
+
+    # See if we are installing from a git repository; retrieve the branch name if so
+    try:
+        git_branch = check_output(
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD']).strip()
+    except Exception:
+        git_branch = None
+
+    if git_branch:
+        # Get the git revision if this is a git repo
+        git_revision = check_output(['git', 'rev-parse', 'HEAD']).strip()
+    else:
+        git_revision = None
+
+    return git_branch, git_revision

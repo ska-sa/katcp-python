@@ -2,9 +2,15 @@
 from setuptools import setup, find_packages
 from katcp import version
 
+version_str = version.VERSION_STR
+git_branch, git_revision = version.get_git_revision()
+if git_branch:
+    version_str = version_str+'git-{0}-{1}'.format(git_branch, git_revision)
+
+
 setup (
     name = "katcp",
-    version = version.VERSION_STR,
+    version = version_str,
     description = "Karoo Array Telescope Communication Protocol library",
     author = "SKA SA KAT-7 / MeerKAT CAM team",
     author_email = "cam@ska.ac.za",
