@@ -613,7 +613,7 @@ class DeviceClient(object):
             is as for sys.excepthook.
         """
         if self._thread:
-            raise RuntimeError("Device client already started.")
+            raise RuntimeError("Device client %r already started." % (self._bindaddr,))
 
         self._thread = ExcepthookThread(target=self.run, excepthook=excepthook)
         if daemon is not None:
@@ -622,7 +622,7 @@ class DeviceClient(object):
         if timeout:
             self._connected.wait(timeout)
             if not self._connected.isSet():
-                raise RuntimeError("Device client failed to start.")
+                raise RuntimeError("Device client %r failed to start." % (self._bindaddr,))
 
     def join(self, timeout=None):
         """Rejoin the client thread.
@@ -633,7 +633,7 @@ class DeviceClient(object):
             Seconds to wait for thread to finish.
         """
         if not self._thread:
-            raise RuntimeError("Device client thread not started.")
+            raise RuntimeError("Device client %r thread not started." % (self._bindaddr,))
 
         self._thread.join(timeout)
         if not self._thread.isAlive():
