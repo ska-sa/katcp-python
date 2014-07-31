@@ -18,7 +18,7 @@ import mock
 
 from .core import Sensor, Message
 from .server import (DeviceServer, FailReply, ClientRequestConnection,
-                     ClientConnectionTCP)
+                     ClientConnection)
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +38,13 @@ class ClientConnectionTest(object):
     """
     def __init__(self):
         self.messages = []
+        self.mass_informs = []
 
     def inform(self, msg):
         self.messages.append(msg)
+
+    def mass_inform(self, msg):
+        self.mass_informs.append(msg)
 
     def reply(self, msg, req_msg):
         self.messages.append(msg)
@@ -1394,7 +1398,7 @@ def mock_req(req_name, *args, **kwargs):
        Used as the socket object when constructing a server and client_connection
 
     If server but not sock is specified, a mock sock and real a
-    ClientConnectionTCP instances are used. If client_conn is not specified, a
+    ClientConnection instances are used. If client_conn is not specified, a
     WaitingMock instance is used instead.
 
     Returns
@@ -1416,7 +1420,7 @@ def mock_req(req_name, *args, **kwargs):
     if not sock:
         sock = WaitingMock()
     if server:
-        client_conn = ClientConnectionTCP(server, sock)
+        client_conn = ClientConnection(server, sock)
     if not client_conn:
         client_conn = WaitingMock()
 

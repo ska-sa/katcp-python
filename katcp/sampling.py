@@ -509,8 +509,8 @@ class SampleReactor(ExcepthookThread):
     logger : logging.Logger object
         Python logger to write logs to.
     """
-    def __init__(self, logger=log):
-        super(SampleReactor, self).__init__()
+    def __init__(self, logger=log, excepthook=None):
+        super(SampleReactor, self).__init__(excepthook=excepthook)
         self._strategies = set()
         self._stopEvent = threading.Event()
         self._wakeEvent = threading.Event()
@@ -619,7 +619,7 @@ class SampleReactor(ExcepthookThread):
                 wake.wait()
 
         self._stopEvent.clear()
-        self._logger.debug("Stopping thread %s" % (_currentThread().getName()))
+        self._logger.debug("Stopped thread %s" % (_currentThread().getName()))
 
     def _remove_dead_events(self):
         """Remove event from event heap to prevent memory leaks caused by

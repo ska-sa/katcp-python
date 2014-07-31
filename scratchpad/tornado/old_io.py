@@ -1,83 +1,7 @@
-# servers.py
-# -*- coding: utf8 -*-
-# vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+from katcp.server import *
 
-"""Servers for the KAT device control language.
-"""
-
-import socket
-import errno
-import select
-import threading
-import Queue
-import traceback
-import logging
-import sys
-import re
-import time
-from functools import partial
-
-from .core import (DeviceMetaclass, ExcepthookThread, Message, MessageParser,
-                   FailReply, AsyncReply, ProtocolFlags)
-from .sampling import SampleReactor, SampleStrategy, SampleNone
-from .sampling import format_inform_v5, format_inform_v4
-from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
-                   VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR,
-                   convert_method_name)
-from .version import VERSION, VERSION_STR
-from .kattypes import (request, return_reply)
-
-log = logging.getLogger("katcp")
-
-BASE_REQUESTS = frozenset(['client-list',
-                           'halt',
-                           'help',
-                           'log-level',
-                           'new-command',
-                           'raise-exception',
-                           'raise-fail',
-                           'restart',
-                           'sensor-list',
-                           'sensor-sampling-clear',
-                           'sensor-value',
-                           'version-list',
-                           'watchdog',
-                           'sensor-sampling',])
-"List of basic KATCP request that a minimal device server should implement"
-
-def construct_name_filter(pattern):
-    """Return a function for filtering sensor names based on a pattern.
-
-    Parameters
-    ----------
-    pattern : None or str
-        If None, returned function matches all names.
-        If pattern starts and ends with '/' the text between the slashes
-        is used a regular expression to search the names.
-        Otherwise the pattern must match the name of the sensor exactly.
-
-    Return
-    ------
-    exact : bool
-        Return True if pattern is expected to matche exactly. Used
-        to determine whether no matching sensors constitutes an error.
-    filter_func : f(str) -> bool
-        Function for determining whether a name matches the pattern.
-    """
-    if pattern is None:
-        return False, lambda name: True
-    if pattern.startswith('/') and pattern.endswith('/'):
-        name_re = re.compile(pattern[1:-1])
-        return False, lambda name: name_re.search(name) is not None
-    return True, lambda name: name == pattern
 
 class KATCPServer(object):
-    @property
-    def bind_address(self):
-        return self._bindaddr
-
     def __init__(self, device, host, port, tb_limit=20, logger=log):
         self._device = device
         self._parser = MessageParser()
@@ -126,11 +50,7 @@ class KATCPServer(object):
 
     def _remove_socket(self, sock):
         """Remove a client socket from the socket and chunk lists."""
-        try:
-            sock.close()
-        except Exception:
-            self._logger.warn('Could not close client socket due to exception:',
-                              exc_info=True)
+        sock.close()
         self._data_lock.acquire()
         try:
             if sock in self._socks:
@@ -195,110 +115,97 @@ class KATCPServer(object):
         self._bindaddr = self._sock.getsockname()
 
         self._running.set()
-        try:
-            while self._running.isSet():
-                self._device._process_deferred_queue()
-                all_socks = self._socks + [self._sock]
-                try:
-                    readers, _writers, errors = _select(
-                        all_socks, [], all_socks, timeout)
-                except Exception, e:
-                    # catch Exception because class of exception thrown
-                    # varies drastically between Mac and Linux
-                    self._logger.debug("Select error: %s" % (e,))
+        while self._running.isSet():
+            self._device._process_deferred_queue()
+            all_socks = self._socks + [self._sock]
+            try:
+                readers, _writers, errors = _select(
+                    all_socks, [], all_socks, timeout)
+            except Exception, e:
+                # catch Exception because class of exception thrown
+                # varies drastically between Mac and Linux
+                self._logger.debug("Select error: %s" % (e,))
 
-                    # search for broken socket
-                    for sock in list(self._socks):
-                        try:
-                            _readers, _writers, _errors = _select([sock], [], [],
-                                                                  0)
-                        except Exception, e:
-                            # Need to get connection before calling _remove_socket()
-                            conn = self._sock_connections[sock]
-                            self._remove_socket(sock)
-                            self._device.on_client_disconnect(
-                                conn, "Client socket died" " with error %s" % (e,),
-                                False)
-                    # check server socket
+                # search for broken socket
+                for sock in list(self._socks):
                     try:
-                        _readers, _writers, _errors = _select([self._sock], [], [],
+                        _readers, _writers, _errors = _select([sock], [], [],
                                                               0)
-                    except:
-                        self._logger.warn("Server socket died, attempting to"
-                                          " restart it.")
-                        self._sock = self._bind(self._bindaddr)
-                    # try select again
-                    continue
+                    except Exception, e:
+                        # Need to get connection before calling _remove_socket()
+                        conn = self._sock_connections[sock]
+                        self._remove_socket(sock)
+                        self._device.on_client_disconnect(
+                            conn, "Client socket died" " with error %s" % (e,),
+                            False)
+                # check server socket
+                try:
+                    _readers, _writers, _errors = _select([self._sock], [], [],
+                                                          0)
+                except:
+                    self._logger.warn("Server socket died, attempting to"
+                                      " restart it.")
+                    self._sock = self._bind(self._bindaddr)
+                # try select again
+                continue
 
-                for sock in errors:
-                    if sock is self._sock:
-                        # server socket died, attempt restart
-                        self._sock = self._bind(self._bindaddr)
+            for sock in errors:
+                if sock is self._sock:
+                    # server socket died, attempt restart
+                    self._sock = self._bind(self._bindaddr)
+                else:
+                    # client socket died, remove it
+                    # Need to get connection before calling _remove_socket()
+                    conn = self._sock_connections.get(sock)
+                    self._remove_socket(sock)
+                    # Don't call on_client_disconnect if the connection has
+                    # already been removed in another thread
+                    if conn:
+                        self._device.on_client_disconnect(conn, "Client socket died", False)
+
+            for sock in readers:
+                if sock is self._sock:
+                    client, addr = sock.accept()
+                    client.setblocking(0)
+                    self.mass_send_message(Message.inform("client-connected",
+                        "New client connected from %s" % (addr,)))
+                    self._add_socket(client)
+                    conn = self._sock_connections.get(client)
+                    if client:
+                        self._device.on_client_connect(conn)
                     else:
-                        # client socket died, remove it
+                        self._logger.warn(
+                            'Client connection for socket %s dissappeared before '
+                            'on_client_connect could be called' % (client,))
+                else:
+                    try:
+                        chunk = sock.recv(4096)
+                    except _socket_error:
+                        # an error when sock was within ready list presumably
+                        # means the client needs to be ditched.
+                        chunk = ""
+                    if chunk:
+                        self._handle_chunk(sock, chunk)
+                    else:
+                        # no data, assume socket EOF
                         # Need to get connection before calling _remove_socket()
                         conn = self._sock_connections.get(sock)
                         self._remove_socket(sock)
-                        # Don't call on_client_disconnect if the connection has
-                        # already been removed in another thread
+                        # Don't run on_client_disconnect if another thread has
+                        # beaten us to the punch of removing the connection
+                        # object
                         if conn:
-                            self._device.on_client_disconnect(conn, "Client socket died", False)
+                            self._device.on_client_disconnect(conn, "Socket EOF", False)
 
-                for sock in readers:
-                    if sock is self._sock:
-                        client, addr = sock.accept()
-                        client.setblocking(0)
-                        self.mass_send_message(Message.inform("client-connected",
-                            "New client connected from %s" % (addr,)))
-                        self._add_socket(client)
-                        conn = self._sock_connections.get(client)
-                        if client:
-                            self._device.on_client_connect(conn)
-                        else:
-                            self._logger.warn(
-                                'Client connection for socket %s dissappeared before '
-                                'on_client_connect could be called' % (client,))
-                    else:
-                        try:
-                            chunk = sock.recv(4096)
-                        except _socket_error:
-                            # an error when sock was within ready list presumably
-                            # means the client needs to be ditched.
-                            chunk = ""
-                        if chunk:
-                            self._handle_chunk(sock, chunk)
-                        else:
-                            # no data, assume socket EOF
-                            # Need to get connection before calling _remove_socket()
-                            conn = self._sock_connections.get(sock)
-                            self._remove_socket(sock)
-                            # Don't run on_client_disconnect if another thread has
-                            # beaten us to the punch of removing the connection
-                            # object
-                            if conn:
-                                self._device.on_client_disconnect(conn, "Socket EOF", False)
+        for sock in list(self._socks):
+            conn = self._sock_connections.get(sock)
+            if conn:
+                self._device.on_client_disconnect(
+                    conn, "Device server shutting down.", True)
+            self._device._process_deferred_queue()
+            self._remove_socket(sock)
 
-            for sock in list(self._socks):
-                conn = self._sock_connections.get(sock)
-                try:
-                    if conn:
-                        self._device.on_client_disconnect(
-                            conn, "Device server shutting down.", True)
-                    self._device._process_deferred_queue()
-                except Exception:
-                    self._logger.warn('Exception removing client from device: ',
-                                      exc_info=True)
-                self._remove_socket(sock)
-        finally:
-            self._sock.close()
-            for sock in self._socks:
-                # Ensure that all clients sockets are really closed just in case something
-                # bad happened above
-                try:
-                    self._remove_socket(sock)
-                except Exception:
-                    pass
-
+        self._sock.close()
 
     def start(self, timeout=None, daemon=None, excepthook=None):
         """Start the server in a new thread.
@@ -499,7 +406,6 @@ class ClientConnection(object):
             inform is sent.
         """
         assert (inform.mtype == Message.INFORM)
-        assert (inform.name == orig_req.name)
         inform.mid = orig_req.mid
         self._send_message(inform)
 
@@ -608,9 +514,6 @@ class DeviceServerBase(object):
         ProtocolFlags.MESSAGE_IDS,
         ]))
 
-    @property
-    def bind_address(self):
-        return self._server.bind_address
 
     def __init__(self, host, port, tb_limit=20, logger=log):
         self._server = KATCPServer(self, host, port, tb_limit, logger)
@@ -783,7 +686,7 @@ class DeviceServerBase(object):
             The inform message to send.
         """
         assert (msg.mtype == Message.INFORM)
-        self._server.mass_send_message(msg)
+        self._server.mass_inform(msg)
 
 
     def reply(self, connection, reply, orig_req):
@@ -937,6 +840,7 @@ class DeviceServerBase(object):
         """
         pass
 
+
 class DeviceServer(DeviceServerBase):
     """Implements some standard messages on top of DeviceServerBase.
 
@@ -1080,8 +984,7 @@ class DeviceServer(DeviceServerBase):
             if strategies is not None:
                 for sensor, strategy in list(strategies.items()):
                     del strategies[sensor]
-                    if self._reactor:
-                        self._reactor.remove_strategy(strategy)
+                    self._reactor.remove_strategy(strategy)
 
     def on_client_disconnect(self, client_conn, msg, connection_valid):
         """Inform client it is about to be disconnected.
@@ -1762,7 +1665,7 @@ class DeviceServer(DeviceServerBase):
             Function to call if the client throws an exception. Signature
             is as for sys.excepthook.
         """
-        self._reactor = SampleReactor(excepthook=excepthook)
+        self._reactor = SampleReactor()
         self._reactor.start()
         super(DeviceServer, self).start(timeout, daemon, excepthook)
 
@@ -1771,184 +1674,3 @@ class DeviceServer(DeviceServerBase):
         self._reactor.join(timeout=0.5)
         self._reactor = None
         super(DeviceServer, self).stop(timeout)
-
-class DeviceLogger(object):
-    """Object for logging messages from a DeviceServer.
-
-    Log messages are logged at a particular level and under
-    a particular name. Names use dotted notation to form
-    a virtual hierarchy of loggers with the device.
-
-    Parameters
-    ----------
-    device_server : DeviceServerBase object
-        The device server this logger should use for sending out logs.
-    root_logger : str
-        The name of the root logger.
-    """
-
-    # level values are used as indexes into the LEVELS list
-    # so these to lists should be in the same order
-    ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF = range(8)
-
-    ## @brief List of logging level names.
-    LEVELS = ["all", "trace", "debug", "info", "warn",
-              "error", "fatal", "off"]
-
-    ## @brief Map of Python logging level to corresponding to KATCP levels
-    PYTHON_LEVEL = {
-        TRACE: 0,
-        DEBUG: logging.DEBUG,
-        INFO: logging.INFO,
-        WARN: logging.WARN,
-        ERROR: logging.ERROR,
-        FATAL: logging.FATAL,
-    }
-
-    def __init__(self, device_server, root_logger="root", python_logger=None):
-        self._device_server = device_server
-        self._python_logger = python_logger
-        self._log_level = self.WARN
-        self._root_logger_name = root_logger
-
-    def level_name(self, level=None):
-        """Return the name of the given level value.
-
-        If level is None, return the name of the current level.
-
-        Parameters
-        ----------
-        level : logging level constant
-            The logging level constant whose name to retrieve.
-
-        Returns
-        -------
-        level_name : str
-            The name of the logging level.
-        """
-        if level is None:
-            level = self._log_level
-        return self.LEVELS[level]
-
-    def level_from_name(self, level_name):
-        """Return the level constant for a given name.
-
-        If the level_name is not known, raise a ValueError.
-
-        Parameters
-        ----------
-        level_name : str
-            The logging level name whose logging level constant
-            to retrieve.
-
-        Returns
-        -------
-        level : logging level constant
-            The logging level constant associated with the name.
-        """
-        try:
-            return self.LEVELS.index(level_name)
-        except ValueError:
-            raise ValueError("Unknown logging level name '%s'" % (level_name,))
-
-    def set_log_level(self, level):
-        """Set the logging level.
-
-        Parameters
-        ----------
-        level : logging level constant
-            The value to set the logging level to.
-        """
-        self._log_level = level
-        if self._python_logger:
-            self._python_logger.setLevel(level)
-
-    def set_log_level_by_name(self, level_name):
-        """Set the logging level using a level name.
-
-        Parameters
-        ----------
-        level_name : str
-            The name of the logging level.
-        """
-        self.set_log_level(self.level_from_name(level_name))
-
-    def log(self, level, msg, *args, **kwargs):
-        """Log a message and inform all clients.
-
-        Parameters
-        ----------
-        level : logging level constant
-            The level to log the message at.
-        msg : str
-            The text format for the log message.
-        args : list of objects
-            Arguments to pass to log format string. Final message text is
-            created using: msg % args.
-        kwargs : additional keyword parameters
-            Allowed keywords are 'name' and 'timestamp'. The name is the name
-            of the logger to log the message to. If not given the name defaults
-            to the root logger. The timestamp is a float in seconds. If not
-            given the timestamp defaults to the current time.
-        """
-        timestamp = kwargs.get("timestamp")
-        python_msg = msg
-        if self._python_logger is not None:
-            if not timestamp is None:
-                python_msg = ' '.join((
-                    'katcp timestamp: %r' % timestamp,
-                    python_msg))
-            self._python_logger.log(self.PYTHON_LEVEL[level], python_msg, *args)
-        if level >= self._log_level:
-            name = kwargs.get("name")
-            if name is None:
-                name = self._root_logger_name
-            self._device_server.mass_inform(
-                self._device_server._log_msg(self.level_name(level),
-                                             msg % args, name,
-                                             timestamp=timestamp))
-
-    def trace(self, msg, *args, **kwargs):
-        """Log a trace message."""
-        self.log(self.TRACE, msg, *args, **kwargs)
-
-    def debug(self, msg, *args, **kwargs):
-        """Log a debug message."""
-        self.log(self.DEBUG, msg, *args, **kwargs)
-
-    def info(self, msg, *args, **kwargs):
-        """Log an info message."""
-        self.log(self.INFO, msg, *args, **kwargs)
-
-    def warn(self, msg, *args, **kwargs):
-        """Log an warning message."""
-        self.log(self.WARN, msg, *args, **kwargs)
-
-    def error(self, msg, *args, **kwargs):
-        """Log an error message."""
-        self.log(self.ERROR, msg, *args, **kwargs)
-
-    def fatal(self, msg, *args, **kwargs):
-        """Log a fatal error message."""
-        self.log(self.FATAL, msg, *args, **kwargs)
-
-    @classmethod
-    def log_to_python(cls, logger, msg):
-        """Log a KATCP logging message to a Python logger.
-
-        Parameters
-        ----------
-        logger : logging.Logger object
-            The Python logger to log the given message to.
-        msg : Message object
-            The #log message to create a log entry from.
-        """
-        (level, timestamp, name, message) = tuple(msg.arguments)
-        log_string = "%s %s: %s" % (timestamp, name, message)
-        logger.log({"trace": 0,
-                    "debug": logging.DEBUG,
-                    "info": logging.INFO,
-                    "warn": logging.WARN,
-                    "error": logging.ERROR,
-                    "fatal": logging.FATAL}[level], log_string)
-
