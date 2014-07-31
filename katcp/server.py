@@ -126,7 +126,11 @@ class KATCPServer(object):
 
     def _remove_socket(self, sock):
         """Remove a client socket from the socket and chunk lists."""
-        sock.close()
+        try:
+            sock.close()
+        except Exception:
+            self._logger.warn('Could not close client socket due to exception:',
+                              exc_info=True)
         self._data_lock.acquire()
         try:
             if sock in self._socks:
@@ -191,97 +195,110 @@ class KATCPServer(object):
         self._bindaddr = self._sock.getsockname()
 
         self._running.set()
-        while self._running.isSet():
-            self._device._process_deferred_queue()
-            all_socks = self._socks + [self._sock]
-            try:
-                readers, _writers, errors = _select(
-                    all_socks, [], all_socks, timeout)
-            except Exception, e:
-                # catch Exception because class of exception thrown
-                # varies drastically between Mac and Linux
-                self._logger.debug("Select error: %s" % (e,))
-
-                # search for broken socket
-                for sock in list(self._socks):
-                    try:
-                        _readers, _writers, _errors = _select([sock], [], [],
-                                                              0)
-                    except Exception, e:
-                        # Need to get connection before calling _remove_socket()
-                        conn = self._sock_connections[sock]
-                        self._remove_socket(sock)
-                        self._device.on_client_disconnect(
-                            conn, "Client socket died" " with error %s" % (e,),
-                            False)
-                # check server socket
+        try:
+            while self._running.isSet():
+                self._device._process_deferred_queue()
+                all_socks = self._socks + [self._sock]
                 try:
-                    _readers, _writers, _errors = _select([self._sock], [], [],
-                                                          0)
-                except:
-                    self._logger.warn("Server socket died, attempting to"
-                                      " restart it.")
-                    self._sock = self._bind(self._bindaddr)
-                # try select again
-                continue
+                    readers, _writers, errors = _select(
+                        all_socks, [], all_socks, timeout)
+                except Exception, e:
+                    # catch Exception because class of exception thrown
+                    # varies drastically between Mac and Linux
+                    self._logger.debug("Select error: %s" % (e,))
 
-            for sock in errors:
-                if sock is self._sock:
-                    # server socket died, attempt restart
-                    self._sock = self._bind(self._bindaddr)
-                else:
-                    # client socket died, remove it
-                    # Need to get connection before calling _remove_socket()
-                    conn = self._sock_connections.get(sock)
-                    self._remove_socket(sock)
-                    # Don't call on_client_disconnect if the connection has
-                    # already been removed in another thread
-                    if conn:
-                        self._device.on_client_disconnect(conn, "Client socket died", False)
-
-            for sock in readers:
-                if sock is self._sock:
-                    client, addr = sock.accept()
-                    client.setblocking(0)
-                    self.mass_send_message(Message.inform("client-connected",
-                        "New client connected from %s" % (addr,)))
-                    self._add_socket(client)
-                    conn = self._sock_connections.get(client)
-                    if client:
-                        self._device.on_client_connect(conn)
-                    else:
-                        self._logger.warn(
-                            'Client connection for socket %s dissappeared before '
-                            'on_client_connect could be called' % (client,))
-                else:
+                    # search for broken socket
+                    for sock in list(self._socks):
+                        try:
+                            _readers, _writers, _errors = _select([sock], [], [],
+                                                                  0)
+                        except Exception, e:
+                            # Need to get connection before calling _remove_socket()
+                            conn = self._sock_connections[sock]
+                            self._remove_socket(sock)
+                            self._device.on_client_disconnect(
+                                conn, "Client socket died" " with error %s" % (e,),
+                                False)
+                    # check server socket
                     try:
-                        chunk = sock.recv(4096)
-                    except _socket_error:
-                        # an error when sock was within ready list presumably
-                        # means the client needs to be ditched.
-                        chunk = ""
-                    if chunk:
-                        self._handle_chunk(sock, chunk)
+                        _readers, _writers, _errors = _select([self._sock], [], [],
+                                                              0)
+                    except:
+                        self._logger.warn("Server socket died, attempting to"
+                                          " restart it.")
+                        self._sock = self._bind(self._bindaddr)
+                    # try select again
+                    continue
+
+                for sock in errors:
+                    if sock is self._sock:
+                        # server socket died, attempt restart
+                        self._sock = self._bind(self._bindaddr)
                     else:
-                        # no data, assume socket EOF
+                        # client socket died, remove it
                         # Need to get connection before calling _remove_socket()
                         conn = self._sock_connections.get(sock)
                         self._remove_socket(sock)
-                        # Don't run on_client_disconnect if another thread has
-                        # beaten us to the punch of removing the connection
-                        # object
+                        # Don't call on_client_disconnect if the connection has
+                        # already been removed in another thread
                         if conn:
-                            self._device.on_client_disconnect(conn, "Socket EOF", False)
+                            self._device.on_client_disconnect(conn, "Client socket died", False)
 
-        for sock in list(self._socks):
-            conn = self._sock_connections.get(sock)
-            if conn:
-                self._device.on_client_disconnect(
-                    conn, "Device server shutting down.", True)
-            self._device._process_deferred_queue()
-            self._remove_socket(sock)
+                for sock in readers:
+                    if sock is self._sock:
+                        client, addr = sock.accept()
+                        client.setblocking(0)
+                        self.mass_send_message(Message.inform("client-connected",
+                            "New client connected from %s" % (addr,)))
+                        self._add_socket(client)
+                        conn = self._sock_connections.get(client)
+                        if client:
+                            self._device.on_client_connect(conn)
+                        else:
+                            self._logger.warn(
+                                'Client connection for socket %s dissappeared before '
+                                'on_client_connect could be called' % (client,))
+                    else:
+                        try:
+                            chunk = sock.recv(4096)
+                        except _socket_error:
+                            # an error when sock was within ready list presumably
+                            # means the client needs to be ditched.
+                            chunk = ""
+                        if chunk:
+                            self._handle_chunk(sock, chunk)
+                        else:
+                            # no data, assume socket EOF
+                            # Need to get connection before calling _remove_socket()
+                            conn = self._sock_connections.get(sock)
+                            self._remove_socket(sock)
+                            # Don't run on_client_disconnect if another thread has
+                            # beaten us to the punch of removing the connection
+                            # object
+                            if conn:
+                                self._device.on_client_disconnect(conn, "Socket EOF", False)
 
-        self._sock.close()
+            for sock in list(self._socks):
+                conn = self._sock_connections.get(sock)
+                try:
+                    if conn:
+                        self._device.on_client_disconnect(
+                            conn, "Device server shutting down.", True)
+                    self._device._process_deferred_queue()
+                except Exception:
+                    self._logger.warn('Exception removing client from device: ',
+                                      exc_info=True)
+                self._remove_socket(sock)
+        finally:
+            self._sock.close()
+            for sock in self._socks:
+                # Ensure that all clients sockets are really closed just in case something
+                # bad happened above
+                try:
+                    self._remove_socket(sock)
+                except Exception:
+                    pass
+
 
     def start(self, timeout=None, daemon=None, excepthook=None):
         """Start the server in a new thread.
@@ -1063,7 +1080,8 @@ class DeviceServer(DeviceServerBase):
             if strategies is not None:
                 for sensor, strategy in list(strategies.items()):
                     del strategies[sensor]
-                    self._reactor.remove_strategy(strategy)
+                    if self._reactor:
+                        self._reactor.remove_strategy(strategy)
 
     def on_client_disconnect(self, client_conn, msg, connection_valid):
         """Inform client it is about to be disconnected.

@@ -619,7 +619,7 @@ class SampleReactor(ExcepthookThread):
                 wake.wait()
 
         self._stopEvent.clear()
-        self._logger.debug("Stopping thread %s" % (_currentThread().getName()))
+        self._logger.debug("Stopped thread %s" % (_currentThread().getName()))
 
     def _remove_dead_events(self):
         """Remove event from event heap to prevent memory leaks caused by
