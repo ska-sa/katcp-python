@@ -353,16 +353,16 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     def test_slow_client(self):
         # Test that server does not choke sending messages to slow clients
-        self.server.send_timeout = 0.1    # Set a short sending timeout
+        self.server._server.send_timeout = 0.1    # Set a short sending timeout
 
         self.client.wait_protocol(1)
         slow_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         slow_sock.connect(self.server_addr)
-        slow_sock.settimeout(0.1)
+        slow_sock.settimeout(0.01)
         # Send a bunch of request to the server, but don't read anything from
         # the server
         try:
-            slow_sock.sendall('?help\n'*100000)
+            slow_sock.sendall('?help\n'*1000000)
         except socket.timeout:
             pass
 
