@@ -1298,12 +1298,12 @@ def start_thread_with_cleanup(
     thread_object.join(timeout=timeout) and thread_object.stop() is added to the
     test instance cleanup. Parameter timeout defaults to 1.
     """
+    test_instance.addCleanup(thread_object.join, timeout=timeout)
+    test_instance.addCleanup(thread_object.stop)
     if start_timeout is not None:
         thread_object.start(timeout=start_timeout)
     else:
         thread_object.start()
-    test_instance.addCleanup(thread_object.join, timeout=timeout)
-    test_instance.addCleanup(thread_object.stop)
 
 import threading
 from peak.util.proxies import ObjectWrapper
