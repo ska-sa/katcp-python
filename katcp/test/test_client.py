@@ -171,20 +171,12 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
 class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
-        self.server.start(timeout=0.1)
+        start_thread_with_cleanup(self, self.server, start_timeout=1)
 
         host, port = self.server.bind_address
 
         self.client = katcp.DeviceClient(host, port)
-        self.client.start(timeout=0.1)
-
-    def tearDown(self):
-        if self.client.running():
-            self.client.stop()
-            self.client.join()
-        if self.server.running():
-            self.server.stop()
-            self.server.join()
+        start_thread_with_cleanup(self, self.client, start_timeout=1)
 
     def test_request(self):
         """Test request method."""
@@ -226,22 +218,47 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
     def test_is_connected(self):
         """Test is_connected method."""
         self.assertTrue(self.client.is_connected())
+        # Use client.notify_connected to synchronise to the disconnection
+        disconnected = threading.Event()
+        self.client.notify_connected = (
+            lambda connected: disconnected.set() if not connected else None)
         self.server.stop(timeout=0.1)
-        # timeout needs to be longer than select sleep.
+        # Restart server during cleanup to keep teardown happy
+        self.addCleanup(self.server.start)
+        # Wake up the server select by sending a message
+        self.client.request(katcp.Message.request('watchdog'))
         self.server.join(timeout=1.5)
+        # Wait for the client to be disconnected
+        disconnected.wait(1.5)
         self.assertFalse(self.client.is_connected())
 
     def test_wait_connected(self):
         """Test wait_connected method."""
         start = time.time()
+        # Ensure that we are connected at the start of the test
         self.assertTrue(self.client.wait_connected(1.0))
+        # Check that we did not wait more than the timeout.
         self.assertTrue(time.time() - start < 1.0)
+        # Now we will cause the client to disconnect by stopping the server, and then
+        # checking that wait_connected returns fails, and waits approximately the right
+        # amount of time
+        # Use client.notify_connected to synchronise to the disconnection
+        disconnected = threading.Event()
+        self.client.notify_connected = (
+            lambda connected: disconnected.set() if not connected else None)
         self.server.stop(timeout=0.1)
-        # timeout needs to be longer than select sleep.
+        # Wake up the server select by sending a message
+        self.client.request(katcp.Message.request('watchdog'))
         self.server.join(timeout=1.5)
+        # Restart server during cleanup to keep teardown happy
+        self.addCleanup(self.server.start)
+        # Wait for the client to be disconnected
+        disconnected.wait(1.5)
+        # Now check that wait_connected returns false
         start = time.time()
-        self.assertFalse(self.client.wait_connected(0.2))
-        self.assertTrue(0.15 < time.time() - start < 0.25)
+        self.assertFalse(self.client.wait_connected(0.1))
+        # And waited more or less the timeout.
+        self.assertTrue(0.05 < time.time() - start <= 0.15)
 
     def test_bad_socket(self):
         """Test what happens when select is called on a dead socket."""
@@ -659,7 +676,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         help_replies = []
         help_informs = []
         done = threading.Event()
-        
+
         def help_reply(reply, x, y):
             self.assertEqual(reply.name, "help")
             self.assertEqual(x, 5)
