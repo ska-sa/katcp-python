@@ -4,7 +4,7 @@ import sys
 
 from logging import *
 
-# Put this shiz on
+# Put this stuff on
 # http://stackoverflow.com/questions/12980512/custom-logger-class-and-correct-line-number-function-name-in-log
 
 # This code is mainly copied from the python logging module, with minor modifications

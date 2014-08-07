@@ -6,7 +6,6 @@
 
 """Servers for the KAT device control language.
 """
-
 import socket
 import errno
 import select
@@ -17,6 +16,10 @@ import logging
 import sys
 import re
 import time
+
+import tornado.ioloop
+import tornado.tcpserver
+
 from functools import partial
 
 from .core import (DeviceMetaclass, ExcepthookThread, Message, MessageParser,
