@@ -1,6 +1,10 @@
 from katcp.server import *
 
 from thread import get_ident as get_thread_ident
+import logging
+
+# TODO
+# Use IOStream.set_nodelay(value) instead of setting it on the server socket
 
 class KATCPServerTornado(object):
     BACKLOG = 5                           # Size of server socket backlog
@@ -157,6 +161,33 @@ class KATCPServerTornado(object):
         client_conn = ClientConnection(self, stream)
         self._connections[stream] = client_conn
         self._device.on_client_connect(client_conn)
+        self._receive_msg(stream, client_conn)
+
+    def _receive_msg(self, stream, client_conn):
+        # TODO actually parse the message to katcp!
+        # TODO test stream.closed() to decide what to do if closed
+        logging.info('In _receive_msg')
+        def callback(msg):
+            logging.info('In callback')
+            try:
+                self._device.handle_message(client_conn, msg)
+            except Exception:
+                # TODO should log or handle errors here
+                logging.info('oops: ', exc_info=True)
+                pass
+            self._receive_msg(stream, client_conn)
+        try:
+            logging.info('reading')
+            stream.read_until('\n', callback=callback)
+        except tornado.iostream.StreamClosedError:
+            # Perhaps do something on_disconnecty here?
+            logging.info('oops: ', exc_info=True)
+            return
+        except Exception:
+            # For all other errors try again
+            logging.info('oops: ', exc_info=True)
+            self._ioloop.add_callback(self._receive_msg, stream, client_conn)
+
 
     def get_address(self, stream):
         """Text representation of the network address of a connection"""
@@ -210,8 +241,6 @@ class KATCPServerTornado(object):
 #     Use the send-done callback to cancel connection-termination timeout
 
 
-    
-    tornado.iostream.IOStream
     # API with device:
     #
     # self.send_message(conn_id, self._device._log_msg("error", reason, "root"))
