@@ -117,14 +117,9 @@ class KATCPServerTornado(object):
 
     def _bind_socket(self, bindaddr):
         """Create a listening server socket."""
-        # could be a function but we don't want it to be
-        # pylint: disable-msg = R0201
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setblocking(0)
-        if hasattr(socket, 'TCP_NODELAY'):
-            # our message packets are small, don't delay sending them.
-            sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
         try:
             sock.bind(bindaddr)
         except Exception, e:
@@ -158,6 +153,8 @@ class KATCPServerTornado(object):
     def _handle_stream(self, stream, address):
         """Handle a new connection as a tornado.iostream.IOStream instance"""
         assert get_thread_ident() == self._ioloop_thread_id
+        # our message packets are small, don't delay sending them.
+        stream.set_nodelay(True)
         client_conn = ClientConnection(self, stream)
         self._connections[stream] = client_conn
         self._device.on_client_connect(client_conn)
