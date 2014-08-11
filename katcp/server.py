@@ -464,9 +464,14 @@ class ClientConnection(object):
     def address(self):
         return self._get_address()
 
+    @property
+    def client_disconnect_called(self):
+        return self._disconnect_called
+
     def __init__(self, server, conn_id):
         self._server = server
         self._conn_key = conn_id
+        self._disconnect_called = False
         self._get_address = partial(server.get_address, conn_id)
         self._send_message = partial(server.send_message, conn_id)
         self._mass_send_message = server.mass_send_message
@@ -534,6 +539,13 @@ class ClientConnection(object):
         reply.mid = orig_req.mid
         self._send_message(reply)
 
+    def on_client_disconnect_was_called(self):
+        """Should be called when an on_client_disconnect handler has been called
+
+        Used to prevent multiple calls to on_client_disconnect handler"""
+        if self._disconnect_called:
+            raise RuntimeError('"on_client_disconnect" already called for this connection')
+        self._disconnect_called = True
 
 class ClientRequestConnection(object):
     def __init__(self, client_connection, req_msg):

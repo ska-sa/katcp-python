@@ -3,16 +3,13 @@ from katcp.server import *
 from thread import get_ident as get_thread_ident
 import logging
 
-# TODO
-# Use IOStream.set_nodelay(value) instead of setting it on the server socket
-
 class KATCPServerTornado(object):
     BACKLOG = 5                        # Size of server socket backlog
     MAX_MSG_SIZE = 128*1024
     """Maximum message size that can be sent or received in bytes
 
     If more than MAX_MSG_SIZE bytes are read from the client without encountering a
-    message terminator (i.e. newline), the connection is closed
+    message terminator (i.e. newline), the connection is closed.
     """
 
     @property
@@ -139,7 +136,16 @@ class KATCPServerTornado(object):
     def _start_ioloop(self):
         if not self._ioloop:
             self._ioloop = tornado.ioloop.IOLoop()
-        self._ioloop_thread = threading.Thread(target=self._ioloop.start)
+        def run_ioloop():
+            try:
+                self._ioloop.start()
+            except Exception:
+                self._logger.error('Error starting tornado IOloop: ', exc_info=True)
+            finally:
+                self._stopped.set()
+                self._logger.info('Managed tornado IOloop {0} stopped'
+                                   .format(self._ioloop))
+        self._ioloop_thread = threading.Thread(target=run_ioloop)
         self._ioloop_thread.start()
 
     def _install(self):
@@ -151,63 +157,121 @@ class KATCPServerTornado(object):
     def _uninstall(self):
         # Remove us from the IOLoop
         assert get_thread_ident() == self._ioloop_thread_id
-        self._tcp_server.stop()
-        # TODO Call something to close all sockets, one at a time in a nice non-blocking fashion
-        if self._ioloop_managed:
-            self._ioloop.stop()
-        self._running.clear()
-        self._stopped.set()
+        try:
+            self._tcp_server.stop()
+            for stream, conn in self._connections.items():
+                self._disconnect_client(stream, conn, 'Device server shutting down.')
+        finally:
+            self._running.clear()
+            if not self._ioloop_managed:
+                self._stopped.set()
+            else:
+                # Our thread run function that started the ioloop should set self._stopped
+                # when it exits
+                self._ioloop.add_callback(self._ioloop.stop)
+
 
     def _handle_stream(self, stream, address):
         """Handle a new connection as a tornado.iostream.IOStream instance"""
-        assert get_thread_ident() == self._ioloop_thread_id
-        stream.set_close_callback(partial(self._stream_closed_callback, stream))
-        # our message packets are small, don't delay sending them.
-        stream.set_nodelay(True)
-        # Limit in-process write buffer size so that we can quickly know if the
-        # client is slow
-        stream.max_write_buffer_size = self.MAX_MSG_SIZE
-        client_conn = ClientConnection(self, stream)
-        self._connections[stream] = client_conn
-        self._device.on_client_connect(client_conn)
-        self._receive_msg(stream, client_conn)
+        try:
+            assert get_thread_ident() == self._ioloop_thread_id
+            stream.set_close_callback(partial(self._stream_closed_callback, stream))
+            # our message packets are small, don't delay sending them.
+            stream.set_nodelay(True)
+            # Limit in-process write buffer size so that we can quickly know if the
+            # client is slow
+            stream.max_write_buffer_size = self.MAX_MSG_SIZE
 
-    def _receive_msg(self, stream, client_conn):
+            # Abuse the IOStream object slightly by adding an 'address' attribute. Use
+            # nasty prefix to prevent collisions
+            stream.KATCPServerTornado_address = address
+
+            client_conn = ClientConnection(self, stream)
+            self._connections[stream] = client_conn
+            try:
+                self._device.on_client_connect(client_conn)
+            except Exception:
+                # If on_client_connect fails there is no reason to continue trying to handle
+                # this connection. Try and send exception info to the client and disconnect
+                e_type, e_value, trace = sys.exc_info()
+                reason = "\n".join(traceback.format_exception(
+                    e_type, e_value, trace, self._tb_limit))
+                log_msg = 'Device error initialising connection {0}'.format(reason)
+                self._logger.error(log_msg)
+                stream.write(log_msg)
+                stream.close(exc_info=True)
+            else:
+                self._start_read_loop(stream, client_conn)
+        except Exception:
+            self._logger.error('Unhandled exception trying to handle new connection',
+                              exc_info=True)
+
+    def _start_read_loop(self, stream, client_conn):
         # TODO actually parse the message to katcp!
-        # TODO test stream.closed() to decide what to do if closed
         logging.info('In _receive_msg')
-        def callback(msg):
-            logging.info('In callback')
+        assert get_thread_ident() == self._ioloop_thread_id
+        def line_read_callback(msg):
+            logging.info('In line_read_callback')
             try:
                 self._device.handle_message(client_conn, msg)
             except Exception:
-                # TODO should log or handle errors here
-                logging.info('oops: ', exc_info=True)
+                self._logger.error('Error handling message', exc_info=True)
+            try:
+                stream.read_until('\n', callback=line_read_callback)
+            except tornado.iostream.StreamClosedError:
+                # Assume that the _stream_closed_callback will handle this case
                 pass
-            self._receive_msg(stream, client_conn)
+            except Exception:
+                self._logger.warn('Unhandled Exception while reading from client {0}:'
+                                  .format(self.get_address(stream)), exc_info=True)
         try:
             logging.info('reading')
-            stream.read_until('\n', callback=callback)
+            stream.read_until('\n', callback=line_read_callback)
         except tornado.iostream.StreamClosedError:
-            # Perhaps do something on_disconnecty here?
-            logging.info('oops: ', exc_info=True)
+            self._logger.warn('Connection closed before we could start reading from new '
+                              'client {0}'.format(self.get_address(stream)))
+            # Assume that _stream_closed_callback() will handle this case
             return
-        except Exception:
-            # For all other errors try again
-            logging.info('oops: ', exc_info=True)
-            self._ioloop.add_callback(self._receive_msg, stream, client_conn)
+        # Other exceptions should be caught and logged by caller.
 
     def _stream_closed_callback(self, stream):
-        # TODO do on-stream closed stuff here
-        pass
-    def get_address(self, stream):
-        """Text representation of the network address of a connection"""
-        sock = stream.socket
+        assert get_thread_ident() == self._ioloop_thread_id
+        # Remove ClientConnection object for the current stream from our state
+        conn = self._connections.pop(stream, None)
+        error_repr = '{0!r}'.format(stream.error) if stream.error else ''
+        if error_repr:
+            self._logger.warn('Stream for client {0} closed with error {1}'
+                              .format(self.get_address(stream), error_repr))
+        if conn:
+            reason = error_repr or "Socket EOF"
+            self._disconnect_client(stream, conn, reason)
+
+    def _disconnect_client(self, stream, conn, reason):
+        assert get_thread_ident() == self._ioloop_thread_id
+        stream_open = not stream.closed()
         try:
-            addr = ":".join(str(part) for part in sock.getpeername())
-        except socket.error:
-            # client may be gone, in which case just send a description
-            addr = repr(sock)
+            if not conn.client_disconnect_called:
+                try:
+                    self._device.on_client_disconnect(conn, reason, stream_open)
+                except Exception:
+                    self._logger.error(
+                        'Error while calling on_client_disconnect for client {0}'.format(
+                            self.get_address(stream)),
+                        exc_info=True)
+                finally:
+                    conn.on_client_disconnect_was_called()
+        finally:
+            # Make sure stream is closed.
+            stream.close()
+
+    def get_address(self, stream):
+        """Text representation of the network address of a connection stream"""
+        try:
+            addr = ":".join(str(part) for part in stream.KATCPServerTornado_address)
+        except AttributeError:
+            # Something weird happened, but keep trucking
+            addr = '<error>'
+            self._logger.warn('Could not determine address of stream', exc_info=True)
         return addr
 
     def send_message(self, stream, msg):
@@ -223,13 +287,15 @@ class KATCPServerTornado(object):
         msg : Message object
             The message to send.
 
-        Returns
-        -------
-        a Future
 
         """
         assert get_thread_ident() == self._ioloop_thread_id
-        return stream.write(str(msg) + '\n')
+        try:
+            return stream.write(str(msg) + '\n')
+        except Exception:
+            addr = self.get_address(stream)
+            self._logger.warn('Could not send message to {0}'.format(addr), exc_info=True)
+            stream.close(exc_info=True)
 
     def mass_send_message(self, msg):
         """Send a message to all connected clients"""

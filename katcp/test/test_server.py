@@ -666,9 +666,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         # hack to hide re-connect exception
         self.client.connect = lambda: None
         self.server.join()
-        time.sleep(0.1)
 
-        self._assert_msgs_equal(get_msgs(), [
+        self._assert_msgs_equal(get_msgs(min_number=2), [
             r"!halt[1] ok",
             r"#disconnect Device\_server\_shutting\_down.",
         ])
