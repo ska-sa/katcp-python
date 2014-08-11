@@ -7,7 +7,13 @@ import logging
 # Use IOStream.set_nodelay(value) instead of setting it on the server socket
 
 class KATCPServerTornado(object):
-    BACKLOG = 5                           # Size of server socket backlog
+    BACKLOG = 5                        # Size of server socket backlog
+    MAX_MSG_SIZE = 128*1024
+    """Maximum message size that can be sent or received in bytes
+
+    If more than MAX_MSG_SIZE bytes are read from the client without encountering a
+    message terminator (i.e. newline), the connection is closed
+    """
 
     @property
     def bind_address(self):
@@ -70,8 +76,10 @@ class KATCPServerTornado(object):
         # Make sure we have an ioloop
         if self._ioloop_managed:
             self._start_ioloop()
-
-        self._tcp_server = tornado.tcpserver.TCPServer(self._ioloop)
+        # Set max_buffer_size to ensure streams are closed if too-large messages are
+        # received
+        self._tcp_server = tornado.tcpserver.TCPServer(
+            self._ioloop, max_buffer_size=self.MAX_MSG_SIZE)
         self._tcp_server.handle_stream = self._handle_stream
         self._server_sock = self._bind_socket(self._bindaddr)
         self._bindaddr = self._server_sock.getsockname()
@@ -155,6 +163,9 @@ class KATCPServerTornado(object):
         assert get_thread_ident() == self._ioloop_thread_id
         # our message packets are small, don't delay sending them.
         stream.set_nodelay(True)
+        # Limit in-process write buffer size so that we can quickly know if the
+        # client is slow
+        stream.max_write_buffer_size = self.MAX_MSG_SIZE
         client_conn = ClientConnection(self, stream)
         self._connections[stream] = client_conn
         self._device.on_client_connect(client_conn)
