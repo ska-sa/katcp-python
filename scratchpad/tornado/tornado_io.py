@@ -161,6 +161,7 @@ class KATCPServerTornado(object):
     def _handle_stream(self, stream, address):
         """Handle a new connection as a tornado.iostream.IOStream instance"""
         assert get_thread_ident() == self._ioloop_thread_id
+        stream.set_close_callback(partial(self._stream_closed_callback, stream))
         # our message packets are small, don't delay sending them.
         stream.set_nodelay(True)
         # Limit in-process write buffer size so that we can quickly know if the
@@ -196,7 +197,9 @@ class KATCPServerTornado(object):
             logging.info('oops: ', exc_info=True)
             self._ioloop.add_callback(self._receive_msg, stream, client_conn)
 
-
+    def _stream_closed_callback(self, stream):
+        # TODO do on-stream closed stuff here
+        pass
     def get_address(self, stream):
         """Text representation of the network address of a connection"""
         sock = stream.socket
