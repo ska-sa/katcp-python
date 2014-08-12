@@ -17,8 +17,20 @@ import sys
 import re
 import time
 
-import tornado.ioloop
-import tornado.tcpserver
+from thread import get_ident as get_thread_ident
+
+try:
+    import tornado.ioloop
+    import tornado.tcpserver
+    from tornado.concurrent import Future as tornado_Future
+    from concurrent.futures import Future
+except ImportError:
+    # Ignore this error to prevent import errors during setup.py when katcp.version is
+    # imported. Things should break soon enough afterwards :)
+    import warnings
+    warnings.warn('Could not import tornado or concurrent.futures, fine during setup, '
+                  'but will prevent the library from working if you see this after '
+                  'installation')
 
 from functools import partial
 
@@ -76,390 +88,7 @@ def construct_name_filter(pattern):
         return False, lambda name: name_re.search(name) is not None
     return True, lambda name: name == pattern
 
-class KATCPServer(object):
-    @property
-    def bind_address(self):
-        return self._bindaddr
-
-    def __init__(self, device, host, port, tb_limit=20, logger=log):
-        self._device = device
-        self._parser = MessageParser()
-        self._tb_limit = tb_limit
-        self._bindaddr = (host, port)
-        self._running = threading.Event()
-        self._logger = logger
-        self.send_timeout = 5 # Timeout to catch spinning sends
-        self._sock = None
-        self._thread = None
-        self._logger = logger
-
-        # sockets and data
-        self._data_lock = threading.Lock()
-        self._socks = []  # list of client sockets
-        self._waiting_chunks = {}  # map from client sockets to messages pieces
-        self._sock_locks = {}  # map from client sockets to sending locks
-        # map from sockets to ClientConnection objects
-        self._sock_connections = {}
-
-    def _bind(self, bindaddr):
-        """Create a listening server socket."""
-        # could be a function but we don't want it to be
-        # pylint: disable-msg = R0201
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.setblocking(0)
-        if hasattr(socket, 'TCP_NODELAY'):
-            # our message packets are small, don't delay sending them.
-            sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
-        try:
-            sock.bind(bindaddr)
-        except Exception, e:
-            self._logger.exception("Unable to bind to %s" % str(bindaddr))
-            raise
-        sock.listen(5)
-        return sock
-
-    def _add_socket(self, sock):
-        """Add a client socket to the socket and chunk lists."""
-        with self._data_lock:
-            self._socks.append(sock)
-            self._waiting_chunks[sock] = ""
-            self._sock_locks[sock] = threading.Lock()
-            self._sock_connections[sock] = ClientConnection(self, sock)
-
-    def _remove_socket(self, sock):
-        """Remove a client socket from the socket and chunk lists."""
-        try:
-            sock.close()
-        except Exception:
-            self._logger.warn('Could not close client socket due to exception:',
-                              exc_info=True)
-        self._data_lock.acquire()
-        try:
-            if sock in self._socks:
-                self._socks.remove(sock)
-                del self._waiting_chunks[sock]
-                del self._sock_locks[sock]
-                del self._sock_connections[sock]
-        finally:
-            self._data_lock.release()
-
-    def _handle_chunk(self, sock, chunk):
-        """Handle a chunk of data for socket sock."""
-        chunk = chunk.replace("\r", "\n")
-        lines = chunk.split("\n")
-
-        waiting_chunk = self._waiting_chunks.get(sock, "")
-
-        for line in lines[:-1]:
-            full_line = waiting_chunk + line
-            waiting_chunk = ""
-
-            if full_line:
-                try:
-                    msg = self._parser.parse(full_line)
-                # We do want to catch everything that inherits from Exception
-                # pylint: disable-msg = W0703
-                except Exception:
-                    e_type, e_value, trace = sys.exc_info()
-                    reason = "\n".join(traceback.format_exception(
-                        e_type, e_value, trace, self._tb_limit))
-                    self._logger.error("BAD COMMAND: %s in line %r" % (
-                        reason, full_line))
-                    self.send_message(
-                        sock, self._device._log_msg("error", reason, "root"))
-                else:
-                    try:
-                        client_conn = self._sock_connections[sock]
-                    except KeyError:
-                        self._logger.warn(
-                        'Client disconnected while handling received message: %r'
-                        % sock)
-                    else:
-                        self._device.handle_message(client_conn, msg)
-
-        with self._data_lock:
-            if sock in self._waiting_chunks:
-                self._waiting_chunks[sock] = waiting_chunk + lines[-1]
-
-    def run(self):
-        """Listen for clients and process their requests."""
-        timeout = 0.5  # s
-
-        # save globals so that the thread can run cleanly
-        # even while Python is setting module globals to
-        # None.
-        _select = select.select
-        _socket_error = socket.error
-
-        self._sock = self._bind(self._bindaddr)
-        # replace bindaddr with real address so we can rebind
-        # to the same port.
-        self._bindaddr = self._sock.getsockname()
-
-        self._running.set()
-        try:
-            while self._running.isSet():
-                self._device._process_deferred_queue()
-                all_socks = self._socks + [self._sock]
-                try:
-                    readers, _writers, errors = _select(
-                        all_socks, [], all_socks, timeout)
-                except Exception, e:
-                    # catch Exception because class of exception thrown
-                    # varies drastically between Mac and Linux
-                    self._logger.debug("Select error: %s" % (e,))
-
-                    # search for broken socket
-                    for sock in list(self._socks):
-                        try:
-                            _readers, _writers, _errors = _select([sock], [], [],
-                                                                  0)
-                        except Exception, e:
-                            # Need to get connection before calling _remove_socket()
-                            conn = self._sock_connections[sock]
-                            self._remove_socket(sock)
-                            self._device.on_client_disconnect(
-                                conn, "Client socket died" " with error %s" % (e,),
-                                False)
-                    # check server socket
-                    try:
-                        _readers, _writers, _errors = _select([self._sock], [], [],
-                                                              0)
-                    except:
-                        self._logger.warn("Server socket died, attempting to"
-                                          " restart it.")
-                        self._sock = self._bind(self._bindaddr)
-                    # try select again
-                    continue
-
-                for sock in errors:
-                    if sock is self._sock:
-                        # server socket died, attempt restart
-                        self._sock = self._bind(self._bindaddr)
-                    else:
-                        # client socket died, remove it
-                        # Need to get connection before calling _remove_socket()
-                        conn = self._sock_connections.get(sock)
-                        self._remove_socket(sock)
-                        # Don't call on_client_disconnect if the connection has
-                        # already been removed in another thread
-                        if conn:
-                            self._device.on_client_disconnect(conn, "Client socket died", False)
-
-                for sock in readers:
-                    if sock is self._sock:
-                        client, addr = sock.accept()
-                        client.setblocking(0)
-                        self.mass_send_message(Message.inform("client-connected",
-                            "New client connected from %s" % (addr,)))
-                        self._add_socket(client)
-                        conn = self._sock_connections.get(client)
-                        if client:
-                            self._device.on_client_connect(conn)
-                        else:
-                            self._logger.warn(
-                                'Client connection for socket %s dissappeared before '
-                                'on_client_connect could be called' % (client,))
-                    else:
-                        try:
-                            chunk = sock.recv(4096)
-                        except _socket_error:
-                            # an error when sock was within ready list presumably
-                            # means the client needs to be ditched.
-                            chunk = ""
-                        if chunk:
-                            self._handle_chunk(sock, chunk)
-                        else:
-                            # no data, assume socket EOF
-                            # Need to get connection before calling _remove_socket()
-                            conn = self._sock_connections.get(sock)
-                            self._remove_socket(sock)
-                            # Don't run on_client_disconnect if another thread has
-                            # beaten us to the punch of removing the connection
-                            # object
-                            if conn:
-                                self._device.on_client_disconnect(conn, "Socket EOF", False)
-
-            for sock in list(self._socks):
-                conn = self._sock_connections.get(sock)
-                try:
-                    if conn:
-                        self._device.on_client_disconnect(
-                            conn, "Device server shutting down.", True)
-                    self._device._process_deferred_queue()
-                except Exception:
-                    self._logger.warn('Exception removing client from device: ',
-                                      exc_info=True)
-                self._remove_socket(sock)
-        finally:
-            self._sock.close()
-            for sock in self._socks:
-                # Ensure that all clients sockets are really closed just in case something
-                # bad happened above
-                try:
-                    self._remove_socket(sock)
-                except Exception:
-                    pass
-
-
-    def start(self, timeout=None, daemon=None, excepthook=None):
-        """Start the server in a new thread.
-
-        Parameters
-        ----------
-        timeout : float in seconds
-            Time to wait for server thread to start.
-        daemon : boolean
-            If not None, the thread's setDaemon method is called with this
-            parameter before the thread is started.
-        excepthook : function
-            Function to call if the client throws an exception. Signature
-            is as for sys.excepthook.
-        """
-        if self._thread:
-            raise RuntimeError("Device TCP server already started.")
-
-        self._thread = ExcepthookThread(target=self.run, excepthook=excepthook)
-        if daemon is not None:
-            self._thread.setDaemon(daemon)
-        self._thread.start()
-        if timeout:
-            self._running.wait(timeout)
-            if not self._running.isSet():
-                raise RuntimeError("Device TCP server failed to start.")
-
-    def join(self, timeout=None):
-        """Rejoin the server thread.
-
-        Parameters
-        ----------
-        timeout : float in seconds
-            Time to wait for the thread to finish.
-        """
-        if not self._thread:
-            raise RuntimeError("Device server thread not started.")
-
-        self._thread.join(timeout)
-        if not self._thread.isAlive():
-            self._thread = None
-
-    def stop(self, timeout=1.0):
-        """Stop a running server (from another thread).
-
-        Parameters
-        ----------
-        timeout : float in seconds
-            Seconds to wait for server to have *started*.
-        """
-        self._running.wait(timeout)
-        if not self._running.isSet():
-            raise RuntimeError("Attempt to stop server that wasn't running.")
-        self._running.clear()
-
-    def running(self):
-        """Whether the server is running."""
-        return self._running.isSet()
-
-    def wait_running(self, timeout=None):
-        """Wait until the server is running"""
-        return self._running.wait(timeout=timeout)
-
-    def send_message(self, sock, msg):
-        """Send an arbitrary message to a particular client.
-
-        Note that failed sends disconnect the client sock and call
-        on_client_disconnect. They do not raise exceptions.
-
-        Parameters
-        ----------
-        sock : socket.socket object
-            The socket to send the message to.
-        msg : Message object
-            The message to send.
-        """
-        data = str(msg) + "\n"
-        datalen = len(data)
-        totalsent = 0
-
-        # Log all sent messages here so no one else has to.
-        self._logger.debug(data)
-
-        # sends are locked per-socket -- i.e. only one send per socket at
-        # a time
-        lock = self._sock_locks.get(sock)
-        if lock is None:
-            try:
-                client_name = sock.getpeername()
-            except socket.error:
-                client_name = "<disconnected client>"
-            msg = "Attempt to send to a socket %s which is no longer a" \
-                " client." % (client_name,)
-            self._logger.warn(msg)
-            return
-
-        # do not do anything inside here which could call send_message!
-        send_failed = False
-        lock.acquire()
-        t0 = time.time()
-        try:
-            while totalsent < datalen:
-                if time.time()-t0 > self.send_timeout:
-                    self._logger.error(
-                        'server._send_msg() timing out after %fs, sent %d/%d bytes'
-                        % (self.send_timeout, totalsent, datalen) )
-                    send_failed = True
-                    break
-                try:
-                    sent = sock.send(data[totalsent:])
-                except socket.error, e:
-                    if len(e.args) == 2 and e.args[0] == errno.EAGAIN:
-                        continue
-                    else:
-                        send_failed = True
-                        break
-
-                if sent == 0:
-                    send_failed = True
-                    break
-
-                totalsent += sent
-        finally:
-            lock.release()
-
-        if send_failed:
-            try:
-                client_name = sock.getpeername()
-            except socket.error:
-                client_name = "<disconnected client>"
-            msg = "Failed to send message to client %s" % (client_name,)
-            self._logger.error(msg)
-            # Need to get connection before calling _remove_socket()
-            conn = self._sock_connections.get(sock)
-            self._remove_socket(sock)
-            # Don't run on_client_disconnect if another thread has beaten us to
-            # the punch of removing the connection object
-            if conn:
-                self._device.on_client_disconnect(conn, msg, False)
-
-    def mass_send_message(self, msg):
-        """Send a message to all connected clients"""
-        for sock in list(self._socks):
-            if sock is self._sock:
-                continue
-            self.send_message(sock, msg)
-
-    def get_address(self, sock):
-        """Text representation of the network address of a socket"""
-        try:
-            addr = ":".join(str(part) for part in sock.getpeername())
-        except socket.error:
-            # client may be gone, in which case just send a description
-            addr = repr(sock)
-        return addr
-
 class ClientConnection(object):
-
     @property
     def address(self):
         return self._get_address()
@@ -547,6 +176,443 @@ class ClientConnection(object):
             raise RuntimeError('"on_client_disconnect" already called for this connection')
         self._disconnect_called = True
 
+class ThreadsafeClientConnection(ClientConnection):
+    """Make ClientConnection compatible with messages being sent from other threads
+    """
+
+    def __init__(self, server, conn_id):
+        super(ThreadsafeClientConnection, self).__init__(server, conn_id)
+        self._send_message = partial(server.send_message_async, conn_id)
+        self._mass_send_message = server.mass_send_message_async
+
+class KATCPServer(object):
+    """
+    Tornado IO backend for a KATCP Device
+
+    All class CONSTANT attributes can be changed until start() is called
+    """
+    BACKLOG = 5                        # Size of server socket backlog
+    MAX_MSG_SIZE = 128*1024
+    """Maximum message size that can be sent or received in bytes
+
+    If more than MAX_MSG_SIZE bytes are read from the client without encountering a
+    message terminator (i.e. newline), the connection is closed.
+    """
+    MAX_WRITE_BUFFER_SIZE = 2**20      # 2**20 = 1 MB
+    """Maximum outstanding bytes to be buffered by the server process
+
+    If more than MAX_WRITE_BUFFER_SIZE bytes are outstanding, the client connection is
+    closed. Note that the OS also buffers socket write, so more than MAX_WRITE_BUFFER_SIZE
+    bytes may be untransmitted in total.
+    """
+
+    # client_connection_factory = ClientConnection
+    client_connection_factory = ClientConnection
+    """Factory that produces a ClientConnection compatible instance
+
+    signature: client_connection_factory(server, conn_id)
+    """
+
+    @property
+    def bind_address(self):
+        """(host, port) where the server is listening for connections"""
+        return self._bindaddr
+
+    def __init__(self, device, host, port, tb_limit=20, logger=log):
+        self._device = device
+        self._bindaddr = (host, port)
+        self._tb_limit = tb_limit
+        self._logger = logger
+        self._parser = MessageParser()
+        # Indicate that server is running and ready to accept connections
+        self._running = threading.Event()
+        # Indicate that we are stopped, i.e. join() can return
+        self._stopped = threading.Event()
+        self.send_timeout = 5 # Timeout to catch spinning sends
+        self.ioloop = None   # The Tornado IOloop to use, set by self.set_ioloop()
+        # ID of Thread that hosts the IOLoop. Used to check that we are running in the
+        # ioloop.
+        self._ioloop_thread_id = None
+        # True if we manage the ioloop. Will be updated by self.set_ioloop()
+        self._ioloop_managed = True
+        # Thread object that a managed ioloop is running in
+        self._ioloop_thread = None
+        # map from tornado IOStreams to ClientConnection objects
+        self._connections = {}
+
+    def set_ioloop(self, ioloop=None):
+        """Set the tornado.ioloop.IOLoop instance to use, default to IOLoop.current()
+
+        If set_ioloop() is never called the IOLoop is started in a new thread, and will
+        be stopped if self.stop() is called.
+
+        Notes
+        =====
+
+        Must be called before start() is called
+        """
+        if self.ioloop:
+            raise RuntimeError('IOLoop instance can only be set once')
+        if ioloop:
+            self.ioloop = ioloop
+        else:
+            self.ioloop = tornado.ioloop.IOLoop.current()
+        self._ioloop_managed = False
+
+    def start(self, timeout=None, daemon=None, excepthook=None):
+        """Install the server on its IOLoop, starting the IOLoop in a thread if needed
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Time to wait for server thread to start.
+        daemon : boolean
+            If not None, the thread's setDaemon method is called with this
+            parameter before the thread is started.
+        excepthook : function
+            Function to call if the client throws an exception. Signature
+            is as for sys.excepthook.
+        """
+        if self._running.isSet():
+            raise RuntimeError('Server already started')
+        self._stopped.clear()
+        # Make sure we have an ioloop
+        if self._ioloop_managed:
+            self._start_ioloop()
+        # Set max_buffer_size to ensure streams are closed if too-large messages are
+        # received
+        self._tcp_server = tornado.tcpserver.TCPServer(
+            self.ioloop, max_buffer_size=self.MAX_MSG_SIZE)
+        self._tcp_server.handle_stream = self._handle_stream
+        self._server_sock = self._bind_socket(self._bindaddr)
+        self._bindaddr = self._server_sock.getsockname()
+
+        self.ioloop.add_callback(self._install)
+        if timeout:
+            self._running.wait(timeout)
+
+    def stop(self, timeout=1.0):
+        """Stop a running server (from another thread).
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for server to have *started*.
+        """
+        if timeout:
+            self._running.wait(timeout)
+        self.ioloop.add_callback(self._uninstall)
+
+    def join(self, timeout=None):
+        """Rejoin the server thread.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Time to wait for the thread to finish.
+
+        Notes
+        -----
+
+        If the ioloop is not managed, this function will block until the server port is
+        closed, meaning a new server can be listen at the same port
+
+        """
+        if self._ioloop_managed:
+            try:
+                self._ioloop_thread.join(timeout)
+            except AttributeError:
+                raise RuntimeError('Cannot join if not started')
+        else:
+            self._stopped.wait(timeout)
+
+    def _bind_socket(self, bindaddr):
+        """Create a listening server socket."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setblocking(0)
+        try:
+            sock.bind(bindaddr)
+        except Exception, e:
+            self._logger.exception("Unable to bind to %s" % str(bindaddr))
+            raise
+        sock.listen(self.BACKLOG)
+        return sock
+
+    def _start_ioloop(self):
+        if not self.ioloop:
+            self.ioloop = tornado.ioloop.IOLoop()
+        def run_ioloop():
+            try:
+                self.ioloop.start()
+            except Exception:
+                self._logger.error('Error starting tornado IOloop: ', exc_info=True)
+            finally:
+                self._stopped.set()
+                self._logger.info('Managed tornado IOloop {0} stopped'
+                                   .format(self.ioloop))
+        self._ioloop_thread = threading.Thread(target=run_ioloop)
+        self._ioloop_thread.start()
+
+    def _install(self):
+        # Do stuff to put us on the IOLoop
+        self._ioloop_thread_id = get_thread_ident()
+        self._tcp_server.add_socket(self._server_sock)
+        self._running.set()
+
+    def _uninstall(self):
+        # Remove us from the IOLoop
+        assert get_thread_ident() == self._ioloop_thread_id
+        try:
+            self._tcp_server.stop()
+            for stream, conn in self._connections.items():
+                self._disconnect_client(stream, conn, 'Device server shutting down.')
+        finally:
+            self._running.clear()
+            if not self._ioloop_managed:
+                self._stopped.set()
+            else:
+                # Our thread run function that started the ioloop should set self._stopped
+                # when it exits
+                self.ioloop.add_callback(self.ioloop.stop)
+
+
+    def _handle_stream(self, stream, address):
+        """Handle a new connection as a tornado.iostream.IOStream instance"""
+        try:
+            assert get_thread_ident() == self._ioloop_thread_id
+            stream.set_close_callback(partial(self._stream_closed_callback, stream))
+            # our message packets are small, don't delay sending them.
+            stream.set_nodelay(True)
+            stream.max_write_buffer_size = self.MAX_WRITE_BUFFER_SIZE
+
+            # Abuse the IOStream object slightly by adding an 'address' attribute. Use
+            # nasty prefix to prevent naming collisions
+            stream.KATCPServerTornado_address = address
+
+            client_conn = self.client_connection_factory(self, stream)
+            self._connections[stream] = client_conn
+            try:
+                self._device.on_client_connect(client_conn)
+            except Exception:
+                # If on_client_connect fails there is no reason to continue trying to handle
+                # this connection. Try and send exception info to the client and disconnect
+                e_type, e_value, trace = sys.exc_info()
+                reason = "\n".join(traceback.format_exception(
+                    e_type, e_value, trace, self._tb_limit))
+                log_msg = 'Device error initialising connection {0}'.format(reason)
+                self._logger.error(log_msg)
+                stream.write(log_msg)
+                stream.close(exc_info=True)
+            else:
+                self._start_read_loop(stream, client_conn)
+        except Exception:
+            self._logger.error('Unhandled exception trying to handle new connection',
+                              exc_info=True)
+
+    def _start_read_loop(self, stream, client_conn, restarted=False):
+        # TODO actually parse the message to katcp!
+        assert get_thread_ident() == self._ioloop_thread_id
+        if restarted:
+            self._logger.info('Re-starting read loop for client {0}'
+                              .format(self.get_address(stream)))
+
+        def line_read_callback(line):
+            try:
+                line = line.replace("\r", "\n").split("\n")[0]
+                msg = self._parser.parse(line)
+                # We do want to catch everything that inherits from Exception
+                # pylint: disable-msg = W0703
+            except Exception:
+                msg = None
+                e_type, e_value, trace = sys.exc_info()
+                reason = "\n".join(traceback.format_exception(
+                    e_type, e_value, trace, self._tb_limit))
+                self._logger.error("BAD COMMAND: %s in line %r" % (reason, line))
+                self.send_message(stream, self._device._log_msg("error", reason, "root"))
+            if msg:
+                try:
+                    not_busy_future = self._device.handle_message(client_conn, msg)
+                except Exception:
+                    not_busy_future = None
+                    self._logger.error('Error handling message', exc_info=True)
+            try:
+                if not not_busy_future:
+                    stream.read_until('\n', callback=line_read_callback)
+                else:
+                    self._logger.warn('Pausing client connection {0} since device is busy'
+                                      .format(self.get_address(stream)))
+                    restart_callback = (lambda future:
+                        self._start_read_loop(stream, client_conn, restarted=True))
+                    self.ioloop.add_future(not_busy_future, restart_callback)
+            except tornado.iostream.StreamClosedError:
+                # Assume that the _stream_closed_callback will handle this case
+                pass
+            except Exception:
+                self._logger.warn('Unhandled Exception while reading from client {0}:'
+                                  .format(self.get_address(stream)), exc_info=True)
+
+        try:
+            stream.read_until('\n', callback=line_read_callback)
+        except tornado.iostream.StreamClosedError:
+            self._logger.warn('Connection closed before we could start reading from new '
+                              'client {0}'.format(self.get_address(stream)))
+            # Assume that _stream_closed_callback() will handle this case
+            return
+        # Other exceptions should be caught and logged by caller.
+
+    def _stream_closed_callback(self, stream):
+        assert get_thread_ident() == self._ioloop_thread_id
+        # Remove ClientConnection object for the current stream from our state
+        conn = self._connections.pop(stream, None)
+        error_repr = '{0!r}'.format(stream.error) if stream.error else ''
+        if error_repr:
+            self._logger.warn('Stream for client {0} closed with error {1}'
+                              .format(self.get_address(stream), error_repr))
+        if conn:
+            reason = error_repr or "Socket EOF"
+            self._disconnect_client(stream, conn, reason)
+
+    def _disconnect_client(self, stream, conn, reason):
+        assert get_thread_ident() == self._ioloop_thread_id
+        stream_open = not stream.closed()
+        try:
+            if not conn.client_disconnect_called:
+                try:
+                    self._device.on_client_disconnect(conn, reason, stream_open)
+                except Exception:
+                    self._logger.error(
+                        'Error while calling on_client_disconnect for client {0}'.format(
+                            self.get_address(stream)),
+                        exc_info=True)
+                finally:
+                    conn.on_client_disconnect_was_called()
+        finally:
+            # Make sure stream is closed.
+            stream.close()
+
+    def get_address(self, stream):
+        """Text representation of the network address of a connection stream
+
+        Notes
+        -----
+
+        This method is thread-safe
+        """
+        try:
+            addr = ":".join(str(part) for part in stream.KATCPServerTornado_address)
+        except AttributeError:
+            # Something weird happened, but keep trucking
+            addr = '<error>'
+            self._logger.warn('Could not determine address of stream', exc_info=True)
+        return addr
+
+    def send_message(self, stream, msg):
+        """Send an arbitrary message to a particular client.
+
+        Parameters
+        ----------
+        stream : tornado.iostream.IOStream object
+            The stream to send the message to.
+        msg : Message object
+            The message to send.
+
+        Notes
+        -----
+
+        This method can only be called in the IOLoop thread
+
+        Failed sends disconnect the client connection and calls the device
+        on_client_disconnect() method. They do not raise exceptions, but they are
+        logged. Sends also fail if more than self.MAX_WRITE_BUFFER_SIZE bytes are queued
+        for sending, implying that the client is falling behind.
+        """
+        assert get_thread_ident() == self._ioloop_thread_id
+        try:
+            return stream.write(str(msg) + '\n')
+        except Exception:
+            addr = self.get_address(stream)
+            self._logger.warn('Could not send message to {0}'.format(addr), exc_info=True)
+            stream.close(exc_info=True)
+
+    def async_call(self, fn):
+        """Allow thread-safe calls to ioloop functions
+
+        Uses add_callback if not in the IOLoop thread, otherwise calls directly.  Returns
+        an already resolved tornado.concurrent.Future if in ioloop, otherwise a
+        concurrent.Future. Logs unhandled exceptions. Resolves with an exception if one
+        occured.
+        """
+        if self.in_ioloop_thread():
+            f = tornado_Future()
+            try:
+                f.set_result(fn())
+            except Exception, e:
+                f.set_exception(e)
+                self._logger.exception('Error executing callback in ioloop thread')
+            finally:
+                return f
+        else:
+            f = Future()
+            f.set_running_or_notify_cancel()
+
+            def send_message_callback():
+                try:
+                    f.set_result(fn())
+                except Exception, e:
+                    f.set_exception(e)
+                    self._logger.exception(
+                        'Error executing wrapped async callback')
+
+            self.ioloop.add_callback(send_message_callback)
+
+    def send_message_async(self, stream, msg):
+        """Thread-safe version of send_message() returning a Future instance
+
+        Return Value
+        ============
+
+        Future that will resolve without raising an exception as soon as the call to
+        send_message() completes. This does not guarantee that the message has been
+        delivered yet. If the call to send_message() failed, the exception will be logged,
+        and the future will resolve with the exception raised. Since a failed call to
+        send_message() will result in the connection being closed, so no real error
+        handling apart from loggin will be possible.
+
+        Notes
+        =====
+
+        This method is thread-safe. If called from within the ioloop, send_message is
+        called directly and a resolved is tornado.concurrent.Future is returned, otherwise
+        a callback is submitted to the ioloop that will resolve a thread-safe
+        concurrent.futures.Future instance.
+        """
+        return self.async_call(partial(self.send_message, stream, msg))
+
+    def mass_send_message(self, msg):
+        """Send a message to all connected clients
+
+        Notes
+        -----
+
+        This method can only be called in the IOLoop thread
+
+        """
+        for stream in self._connections.keys():
+            self.send_message(stream, msg)
+
+    def mass_send_message_async(self, msg):
+        """Thread-safe version of send_message() returning a Future instance
+
+        See return value and notes for send_message_async()
+        """
+        return self.async_call(partial(self.mass_send_message, msg))
+
+    def in_ioloop_thread(self):
+        """Return True if called in the IOLoop thread of this server"""
+        return get_thread_ident() == self._ioloop_thread_id
+
+
 class ClientRequestConnection(object):
     def __init__(self, client_connection, req_msg):
         self.client_connection = client_connection
@@ -582,6 +648,105 @@ class ClientRequestConnection(object):
 
     def make_reply(self, *args):
         return Message.reply_to_request(self.msg, *args)
+
+class MessageHandlerThread(threading.Thread):
+    MAX_QUEUE_SIZE = 10
+
+    def __init__(self, handler, log_inform_formatter, logger=log):
+        self.handler = handler
+        self.log_inform_formatter = log_inform_formatter
+        self._message_queue = Queue.Queue(maxsize=self.MAX_QUEUE_SIZE)
+        self._not_busy_future = None
+        self._future_lock = threading.Event()
+        self._logger = logger
+        self._running = threading.Event()
+
+    def handle_message(self, client_conn, msg):
+        """Handle message
+
+        Return value
+        ============
+
+        (not_busy_future)
+
+        not_busy_future -- a future that will resolve once we're ready, else None
+
+        Notes
+        =====
+
+        If busy=True, any subsequent calls to handle_message will fail until the future is
+        resolved
+        """
+        try:
+            self._message_queue.put_nowait((client_conn, msg))
+        except Queue.Full:
+            busy = True
+            with self._future_lock:
+                if self._not_busy_future:
+                    raise RuntimeError('Cannot call handle_message until a previous '
+                                       'ready_future is resolved')
+                ready_future = self._not_busy_future = Future()
+
+        return self._not_busy_future
+
+    def run(self):
+        self._running.set()
+        try:
+            while True:
+                client_conn, msg = self._message_queue.get()
+                if client_conn is None:
+                    break
+                try:
+                    self.handler(client_conn, msg)
+                except Exception:
+                    err_msg = 'Error calling message handler for msg:\n {0!s}'.format(msg)
+                    self._logger.error(err_msg, exc_info=True)
+                    client_conn.inform(self.log_inform_formatter(
+                        'error', 'See device logs:\n' + err_msg, root))
+                finally:
+                    with self._future_lock:
+                        if self._not_busy_future:
+                            not_busy_future = self._not_busy_future
+                            self._not_busy_future = None
+                            if not_busy_future.set_running_or_notify_cancel():
+                                not_busy_future.set_result(True)
+        finally:
+            self._running.clear()
+            self._logger.info('Request handler thread stopped.')
+
+
+    def start(self, timeout=None):
+        super(MessageHandlerThread, self).start()
+        if timeout:
+            return self.wait_running(timeout)
+
+    def stop(self, timeout=1.0):
+        """Stop the handler thread (from another thread).
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for server to have *started*.
+        """
+        if timeout:
+            self._running.wait(timeout)
+        self._running.clear()
+        try:
+            # Make sure to wake the run thread.
+            self._message_queue.put_nowait((None, None))
+        except Queue.Full:
+            # If the queue is full there is no need to put something in it to wake the run
+            # thread
+            pass
+
+    def running(self):
+        """Whether the handler thread is running."""
+        return self._running.isSet()
+
+    def wait_running(self, timeout=None):
+        """Wait until the handler thread is running."""
+        return self._running.wait(timeout)
+
 
 class DeviceServerBase(object):
     """Base class for device servers.
@@ -631,6 +796,10 @@ class DeviceServerBase(object):
         self._server = KATCPServer(self, host, port, tb_limit, logger)
         self._logger = logger
         self._tb_limit = tb_limit
+        # Thread that will optionally be used to handle requests
+        self._handler_thread = None
+        # Set default concurrency options
+        self.set_concurrency_options()
 
         self._deferred_queue = Queue.Queue(maxsize=self.MAX_DEFERRED_QUEUE_SIZE)
 
@@ -874,6 +1043,26 @@ class DeviceServerBase(object):
             processed = processed + 1
 
 
+    def set_ioloop(self, ioloop=None):
+        """Set the tornado.ioloop.IOLoop instance to use, default to IOLoop.current()
+
+        If set_ioloop() is never called the IOLoop is started in a new thread, and will
+        be stopped if self.stop() is called.
+
+        Notes
+        =====
+
+        Must be called before start() is called
+        """
+        self._server.set_ioloop(ioloop)
+
+    def set_concurrency_options(self, thread_safe=True, handler_thread=True):
+        if handler_thread:
+            assert thread_safe, "handler_thread=True requires thread_safe=True"
+        self._HANDLER_THREAD = handler_thread
+        self._server.client_connection_factory = (
+                ThreadsafeClientConnection if thread else ClientConnection)
+
     def start(self, timeout=None, daemon=None, excepthook=None):
         """Start the server in a new thread.
 
@@ -1115,12 +1304,13 @@ class DeviceServer(DeviceServerBase):
         def remove_strategies():
             self.clear_strategies(client_conn, remove_client=True)
             if connection_valid:
-                self.inform(client_conn, Message.inform("disconnect", msg))
+                client_conn.inform(Message.inform("disconnect", msg))
 
         self._client_conns.remove(client_conn)
 
         try:
-            self._deferred_queue.put_nowait(remove_strategies)
+            #self._deferred_queue.put_nowait(remove_strategies)
+            remove_strategies()
         except Queue.Full:
             self._logger.error(
                 'Deferred queue full when trying to add sensor '
