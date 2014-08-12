@@ -511,7 +511,7 @@ class ClientConnection(object):
         msg : Message object
             The inform message to send.
         """
-        assert (inform.mtype == Message.INFORM)
+        assert (msg.mtype == Message.INFORM)
         self._mass_send_message(msg)
 
     def reply(self, reply, orig_req):

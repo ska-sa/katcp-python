@@ -83,6 +83,10 @@ class test_ClientConnection(unittest.TestCase):
             DUT.reply(rep_rep, rep_req)
         self.assertFalse(server.send_message.called)
 
+        # Check that mass_inform works
+        DUT.mass_inform(katcp.Message.inform('blahh'))
+        server.mass_send_message.assert_called_once_with(katcp.Message.inform('blahh'))
+
 class test_ClientRequestConnection(unittest.TestCase):
     def setUp(self):
         self.client_connection = mock.Mock()
