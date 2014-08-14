@@ -38,7 +38,7 @@ class D(DeviceServer):
         s = self.get_sensor('asens')
         def updat():
             s.set_value(not s.value())
-            self.ioloop.call_later(1, updat)
+            self.ioloop.call_later(0.9, updat)
         self.ioloop.add_callback(updat)
 
 restart_queue = Queue.Queue()
