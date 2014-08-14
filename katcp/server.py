@@ -17,13 +17,15 @@ import sys
 import re
 import time
 
+from collections import deque
 from thread import get_ident as get_thread_ident
 
 try:
+    from concurrent.futures import Future
     import tornado.ioloop
     import tornado.tcpserver
     from tornado.concurrent import Future as tornado_Future
-    from concurrent.futures import Future
+    from tornado import gen
 except ImportError:
     # Ignore this error to prevent import errors during setup.py when katcp.version is
     # imported. Things should break soon enough afterwards :)
@@ -228,7 +230,6 @@ class KATCPServer(object):
         self._running = threading.Event()
         # Indicate that we are stopped, i.e. join() can return
         self._stopped = threading.Event()
-        self.send_timeout = 5 # Timeout to catch spinning sends
         self.ioloop = None   # The Tornado IOloop to use, set by self.set_ioloop()
         # ID of Thread that hosts the IOLoop. Used to check that we are running in the
         # ioloop.
@@ -405,61 +406,46 @@ class KATCPServer(object):
                 stream.write(log_msg)
                 stream.close(exc_info=True)
             else:
-                self._start_read_loop(stream, client_conn)
+                self._line_read_loop(stream, client_conn)
         except Exception:
             self._logger.error('Unhandled exception trying to handle new connection',
                               exc_info=True)
 
-    def _start_read_loop(self, stream, client_conn, restarted=False):
-        # TODO actually parse the message to katcp!
+    @gen.coroutine
+    def _line_read_loop(self, stream, client_conn):
         assert get_thread_ident() == self._ioloop_thread_id
-        if restarted:
-            self._logger.info('Re-starting read loop for client {0}'
-                              .format(self.get_address(stream)))
-
-        def line_read_callback(line):
-            try:
-                line = line.replace("\r", "\n").split("\n")[0]
-                msg = self._parser.parse(line)
-                # We do want to catch everything that inherits from Exception
-                # pylint: disable-msg = W0703
-            except Exception:
-                msg = None
-                e_type, e_value, trace = sys.exc_info()
-                reason = "\n".join(traceback.format_exception(
-                    e_type, e_value, trace, self._tb_limit))
-                self._logger.error("BAD COMMAND: %s in line %r" % (reason, line))
-                self.send_message(stream, self._device._log_msg("error", reason, "root"))
-            if msg:
-                try:
-                    not_busy_future = self._device.handle_message(client_conn, msg)
-                except Exception:
-                    not_busy_future = None
-                    self._logger.error('Error handling message', exc_info=True)
-            try:
-                if not not_busy_future:
-                    stream.read_until('\n', callback=line_read_callback)
-                else:
-                    self._logger.warn('Pausing client connection {0} since device is busy'
-                                      .format(self.get_address(stream)))
-                    restart_callback = (lambda future:
-                        self._start_read_loop(stream, client_conn, restarted=True))
-                    self.ioloop.add_future(not_busy_future, restart_callback)
-            except tornado.iostream.StreamClosedError:
-                # Assume that the _stream_closed_callback will handle this case
-                pass
-            except Exception:
-                self._logger.warn('Unhandled Exception while reading from client {0}:'
-                                  .format(self.get_address(stream)), exc_info=True)
-
+        client_address = self.get_address(stream)
         try:
-            stream.read_until('\n', callback=line_read_callback)
-        except tornado.iostream.StreamClosedError:
-            self._logger.warn('Connection closed before we could start reading from new '
-                              'client {0}'.format(self.get_address(stream)))
-            # Assume that _stream_closed_callback() will handle this case
-            return
-        # Other exceptions should be caught and logged by caller.
+            while True:
+                try:
+                    line = yield stream.read_until('\n')
+                except tornado.iostream.StreamClosedError:
+                    break # Assume that _stream_closed_callback() will handle this case
+                except Exception:
+                        self._logger.warn('Unhandled Exception while reading from client {0}:'
+                                          .format(client_address), exc_info=True)
+                try:
+                    line = line.replace("\r", "\n").split("\n")[0]
+                    msg = self._parser.parse(line) if line else None
+                except Exception:
+                    msg = None
+                    e_type, e_value, trace = sys.exc_info()
+                    reason = "\n".join(traceback.format_exception(
+                        e_type, e_value, trace, self._tb_limit))
+                    self._logger.error("BAD COMMAND: %s in line %r" % (reason, line))
+                    self.send_message(stream, self._device._log_msg("error", reason, "root"))
+                    continue # Wait for the next message and hope it is better
+                try:
+                    if msg:
+                        yield gen.maybe_future(self._device.on_message(client_conn, msg))
+                except Exception:
+                    self._logger.error('Error handling message', exc_info=True)
+        except Exception:
+            self._logger.error('Unexpected exception in read-loop for client {0}:'
+                               .format(client_address))
+        finally:
+            self._logger.info('Reading loop for client {0} completed'.format(client_address))
+
 
     def _stream_closed_callback(self, stream):
         assert get_thread_ident() == self._ioloop_thread_id
@@ -532,7 +518,9 @@ class KATCPServer(object):
             return stream.write(str(msg) + '\n')
         except Exception:
             addr = self.get_address(stream)
-            self._logger.warn('Could not send message to {0}'.format(addr), exc_info=True)
+            self._logger.warn('Could not send message {0!r} to {1}'
+                              .format(str(msg), addr),
+                              exc_info=True)
             stream.close(exc_info=True)
 
     def async_call(self, fn):
@@ -649,74 +637,72 @@ class ClientRequestConnection(object):
     def make_reply(self, *args):
         return Message.reply_to_request(self.msg, *args)
 
-class MessageHandlerThread(threading.Thread):
-    MAX_QUEUE_SIZE = 10
-
+class MessageHandlerThread(object):
     def __init__(self, handler, log_inform_formatter, logger=log):
         self.handler = handler
         self.log_inform_formatter = log_inform_formatter
-        self._message_queue = Queue.Queue(maxsize=self.MAX_QUEUE_SIZE)
-        self._not_busy_future = None
-        self._future_lock = threading.Event()
+        self._wake = threading.Event()
+        self._msg_queue = deque()
         self._logger = logger
         self._running = threading.Event()
+        self._thread = None
+        super(MessageHandlerThread, self).__init__()
 
-    def handle_message(self, client_conn, msg):
+    def on_message(self, client_conn, msg):
         """Handle message
 
         Return value
         ============
 
-        (not_busy_future)
-
-        not_busy_future -- a future that will resolve once we're ready, else None
+        ready_future -- a future that will resolve once we're ready, else None
 
         Notes
         =====
 
-        If busy=True, any subsequent calls to handle_message will fail until the future is
-        resolved
+        handle_message should not be called again until ready_future has resolved
         """
-        try:
-            self._message_queue.put_nowait((client_conn, msg))
-        except Queue.Full:
-            busy = True
-            with self._future_lock:
-                if self._not_busy_future:
-                    raise RuntimeError('Cannot call handle_message until a previous '
-                                       'ready_future is resolved')
-                ready_future = self._not_busy_future = Future()
-
-        return self._not_busy_future
+        self._logger.info('on_message called')
+        MAX_QUEUE_SIZE = 3
+        if len(self._msg_queue) >= MAX_QUEUE_SIZE:
+            # This should never happen if callers to handle_message wait for its futures
+            # to resolve before sending another message.
+            raise RuntimeError('MessageHandlerThread unhandled message queue full, '
+                               'not handling message')
+        ready_future = Future()
+        self._msg_queue.append((ready_future, client_conn, msg))
+        self._wake.set()
+        return ready_future
 
     def run(self):
         self._running.set()
         try:
-            while True:
-                client_conn, msg = self._message_queue.get()
-                if client_conn is None:
-                    break
-                try:
-                    self.handler(client_conn, msg)
-                except Exception:
-                    err_msg = 'Error calling message handler for msg:\n {0!s}'.format(msg)
-                    self._logger.error(err_msg, exc_info=True)
-                    client_conn.inform(self.log_inform_formatter(
-                        'error', 'See device logs:\n' + err_msg, root))
-                finally:
-                    with self._future_lock:
-                        if self._not_busy_future:
-                            not_busy_future = self._not_busy_future
-                            self._not_busy_future = None
-                            if not_busy_future.set_running_or_notify_cancel():
-                                not_busy_future.set_result(True)
+            while self._running.isSet():
+                if not self._msg_queue:
+                    self._wake.wait()
+                while self._msg_queue:
+                    ready_future, client_conn, msg = self._msg_queue.popleft()
+                    try:
+                        ready_future.set_result(self.handler(client_conn, msg))
+                    except Exception, e:
+                        err_msg = 'Error calling message handler for msg:\n {0!s}'.format(msg)
+                        self._logger.error(err_msg, exc_info=True)
+                        client_conn.inform(self.log_inform_formatter(
+                            'error', 'See device logs:\n' + err_msg, root))
+                        ready_future.set_exception(e)
+                self._wake.clear()
+
+        except Exception:
+            self._logger.error(
+                'Unhandled exception in message handler thread: ', exc_info=True)
         finally:
             self._running.clear()
-            self._logger.info('Request handler thread stopped.')
-
+            self._logger.info('Message handler thread stopped.')
 
     def start(self, timeout=None):
-        super(MessageHandlerThread, self).start()
+        if self._thread and self._thread.isAlive():
+            raise RuntimeError('Cannot start since thread is already running')
+        self._thread = threading.Thread(target=self.run)
+        self._thread.start()
         if timeout:
             return self.wait_running(timeout)
 
@@ -731,13 +717,21 @@ class MessageHandlerThread(threading.Thread):
         if timeout:
             self._running.wait(timeout)
         self._running.clear()
-        try:
-            # Make sure to wake the run thread.
-            self._message_queue.put_nowait((None, None))
-        except Queue.Full:
-            # If the queue is full there is no need to put something in it to wake the run
-            # thread
-            pass
+        # Make sure to wake the run thread.
+        self._wake.set()
+
+    def join(self, timeout=None):
+        """Rejoin the handler thread.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Time to wait for the thread to finish.
+        """
+        self._thread.join(timeout)
+
+    def isAlive(self):
+        return self._thread and self._thread.isAlive()
 
     def running(self):
         """Whether the handler thread is running."""
@@ -779,7 +773,6 @@ class DeviceServerBase(object):
     """
 
     __metaclass__ = DeviceMetaclass
-    MAX_DEFERRED_QUEUE_SIZE = 100000      # Maximum size of deferred action queue
 
     ## @brief Protocol versions and flags. Default to version 5, subclasses
     ## should override PROTOCOL_INFO
@@ -801,8 +794,6 @@ class DeviceServerBase(object):
         # Set default concurrency options
         self.set_concurrency_options()
 
-        self._deferred_queue = Queue.Queue(maxsize=self.MAX_DEFERRED_QUEUE_SIZE)
-
     def _log_msg(self, level_name, msg, name, timestamp=None):
         """Create a katcp logging inform message.
 
@@ -823,6 +814,15 @@ class DeviceServerBase(object):
                 name,
                 msg,
         )
+
+    def on_message(self, client_conn, msg):
+        """Dummy implementation of on_message required by KATCPServer
+
+        Will by replaced by a handler with the appropriate concurrency semantics when
+        set_concurrency_options is called (defaults are set in __init__())
+        """
+        raise RuntimeError(
+            'set_concurrency_options() need to be called once before on_message')
 
     def handle_message(self, client_conn, msg):
         """Handle messages of all types from clients.
@@ -1018,31 +1018,6 @@ class DeviceServerBase(object):
             connection = connection.client_connection
         connection.reply_inform(inform, orig_req)
 
-    def _process_deferred_queue(self, max_items=0):
-        """
-        Process deferred queue
-
-        Items in self._deferred_queue are assumed to be functions that
-        are to be called once.
-
-        Parameters
-        ==========
-
-        max_items: int
-            Maximum number of items to process, 0 if the whole
-            queue is to be processed
-        """
-        processed = 0
-        while max_items == 0 or processed < max_items:
-            try:
-                task = self._deferred_queue.get_nowait()
-            except Queue.Empty:
-                break
-            task()                        # Execute the task
-            self._deferred_queue.task_done()   # tell the queue that it is done
-            processed = processed + 1
-
-
     def set_ioloop(self, ioloop=None):
         """Set the tornado.ioloop.IOLoop instance to use, default to IOLoop.current()
 
@@ -1055,13 +1030,19 @@ class DeviceServerBase(object):
         Must be called before start() is called
         """
         self._server.set_ioloop(ioloop)
+        self.ioloop = self._server.ioloop
 
     def set_concurrency_options(self, thread_safe=True, handler_thread=True):
         if handler_thread:
             assert thread_safe, "handler_thread=True requires thread_safe=True"
-        self._HANDLER_THREAD = handler_thread
         self._server.client_connection_factory = (
-                ThreadsafeClientConnection if thread else ClientConnection)
+                ThreadsafeClientConnection if thread_safe else ClientConnection)
+        if handler_thread:
+            self._handler_thread = MessageHandlerThread(
+                self.handle_message, self._log_msg, self._logger)
+            self.on_message = self._handler_thread.on_message
+        else:
+            self.on_message = self.handle_message
 
     def start(self, timeout=None, daemon=None, excepthook=None):
         """Start the server in a new thread.
@@ -1077,7 +1058,13 @@ class DeviceServerBase(object):
             Function to call if the client throws an exception. Signature
             is as for sys.excepthook.
         """
+        if self._handler_thread and self._handler_thread.isAlive():
+            raise RuntimeError('Message handler thread already started')
+        self._handler_thread.start(timeout)
         self._server.start(timeout, daemon, excepthook)
+        if not self._server.ioloop:
+            self._server.set_ioloop()
+        self.ioloop = self._server.ioloop
 
     def join(self, timeout=None):
         """Rejoin the server thread.
@@ -1088,6 +1075,8 @@ class DeviceServerBase(object):
             Time to wait for the thread to finish.
         """
         self._server.join(timeout)
+        if self._handler_thread:
+            self._handler_thread.join(timeout)
 
     def stop(self, timeout=1.0):
         """Stop a running server (from another thread).
@@ -1098,6 +1087,8 @@ class DeviceServerBase(object):
             Seconds to wait for server to have *started*.
         """
         self._server.stop(timeout)
+        if self._handler_thread:
+            self._handler_thread.stop(timeout)
 
     def running(self):
         """Whether the server is running."""
@@ -1307,14 +1298,7 @@ class DeviceServer(DeviceServerBase):
                 client_conn.inform(Message.inform("disconnect", msg))
 
         self._client_conns.remove(client_conn)
-
-        try:
-            #self._deferred_queue.put_nowait(remove_strategies)
-            remove_strategies()
-        except Queue.Full:
-            self._logger.error(
-                'Deferred queue full when trying to add sensor '
-                'strategy de-registration task for client %r' % conn)
+        self.ioloop.add_callback(remove_strategies)
 
     def build_state(self):
         """Return a build state string in the form
