@@ -38,7 +38,7 @@ except ImportError:
 
 from functools import partial
 
-from .core import (DeviceMetaclass, ExcepthookThread, Message, MessageParser,
+from .core import (DeviceMetaclass, Message, MessageParser,
                    FailReply, AsyncReply, ProtocolFlags)
 from .sampling import SampleReactor, SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
@@ -295,7 +295,9 @@ class KATCPServer(object):
         It is expected that device will use the KATCPServer instance's ioloop. Devices
         would mainly interact using:
 
-        set_ioloop(), start(), stop(), join()
+        set_ioloop(), start(), stop(), join(), send_message(), mass_send_message(), and
+        _async() versions of the send messages from another thread. Except for the
+        _async() versions, all calls must be made from  the ioloop thread
         """
 
         self._device = device
@@ -338,19 +340,13 @@ class KATCPServer(object):
             self.ioloop = tornado.ioloop.IOLoop.current()
         self._ioloop_managed = False
 
-    def start(self, timeout=None, daemon=None, excepthook=None):
+    def start(self, timeout=None):
         """Install the server on its IOLoop, starting the IOLoop in a thread if needed
 
         Parameters
         ----------
         timeout : float in seconds
             Time to wait for server thread to start.
-        daemon : boolean
-            If not None, the thread's setDaemon method is called with this
-            parameter before the thread is started.
-        excepthook : function
-            Function to call if the client throws an exception. Signature
-            is as for sys.excepthook.
         """
         if self._running.isSet():
             raise RuntimeError('Server already started')
@@ -404,6 +400,14 @@ class KATCPServer(object):
                 raise RuntimeError('Cannot join if not started')
         else:
             self._stopped.wait(timeout)
+
+    def running(self):
+        """Whether the handler thread is running."""
+        return self._running.isSet()
+
+    def wait_running(self, timeout=None):
+        """Wait until the handler thread is running."""
+        return self._running.wait(timeout)
 
     def _bind_socket(self, bindaddr):
         """Create a listening server socket."""
@@ -501,7 +505,7 @@ class KATCPServer(object):
         try:
             while True:
                 try:
-                    line = yield stream.read_until('\n')
+                    line = yield stream.read_until_regex('\n|\r')
                 except tornado.iostream.StreamClosedError:
                     break # Assume that _stream_closed_callback() will handle this case
                 except Exception:
@@ -924,7 +928,7 @@ class DeviceServerBase(object):
             The message to process.
         """
         # log messages received so that no one else has to
-        self._logger.debug(str(msg))
+        self._logger.debug('received: {0!s}'.format(msg))
 
         if msg.mtype == msg.REQUEST:
             self.handle_request(client_conn, msg)
@@ -1136,24 +1140,18 @@ class DeviceServerBase(object):
         self._concurrency_options = ObjectDict(
             thread_safe=thread_safe, handler_thread=handler_thread)
 
-    def start(self, timeout=None, daemon=None, excepthook=None):
+    def start(self, timeout=None):
         """Start the server in a new thread.
 
         Parameters
         ----------
         timeout : float in seconds
             Time to wait for server thread to start.
-        daemon : boolean
-            If not None, the thread's setDaemon method is called with this
-            parameter before the thread is started.
-        excepthook : function
-            Function to call if the client throws an exception. Signature
-            is as for sys.excepthook.
         """
         if self._handler_thread and self._handler_thread.isAlive():
             raise RuntimeError('Message handler thread already started')
         self._handler_thread.start(timeout)
-        self._server.start(timeout, daemon, excepthook)
+        self._server.start(timeout)
         if not self._server.ioloop:
             self._server.set_ioloop()
         self.ioloop = self._server.ioloop
@@ -2082,23 +2080,17 @@ class DeviceServer(DeviceServerBase):
 
     # pylint: enable-msg = W0613
 
-    def start(self, timeout=None, daemon=None, excepthook=None):
+    def start(self, timeout=None):
         """Start the server in a new thread.
 
         Parameters
         ----------
         timeout : float in seconds
             Time to wait for server thread to start.
-        daemon : boolean
-            If not None, the thread's setDaemon method is called with this
-            parameter before the thread is started.
-        excepthook : function
-            Function to call if the client throws an exception. Signature
-            is as for sys.excepthook.
         """
-        self._reactor = SampleReactor(excepthook=excepthook)
+        self._reactor = SampleReactor()
         self._reactor.start()
-        super(DeviceServer, self).start(timeout, daemon, excepthook)
+        super(DeviceServer, self).start(timeout)
 
     def stop(self, timeout=None):
         self._reactor.stop()
@@ -2239,7 +2231,7 @@ class DeviceLogger(object):
                 name = self._root_logger_name
             self._device_server.mass_inform(
                 self._device_server.create_log_inform(
-                    self.level_name(level), sg % args, name, timestamp=timestamp))
+                    self.level_name(level), msg % args, name, timestamp=timestamp))
 
     def trace(self, msg, *args, **kwargs):
         """Log a trace message."""

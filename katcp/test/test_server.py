@@ -287,13 +287,13 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     def setUp(self):
         self.server = DeviceTestServer('', 0)
-        self.server.start(timeout=0.1)
+        self.server.start(timeout=1)
         host, port = self.server.bind_address
         self.server_addr = (host, port)
 
         self.client = BlockingTestClient(self, host, port)
-        self.client.start(timeout=0.1)
-        self.assertTrue(self.client.wait_protocol(timeout=0.1))
+        self.client.start(timeout=1)
+        self.assertTrue(self.client.wait_protocol(timeout=1))
 
     def tearDown(self):
         if self.client.running():
@@ -308,9 +308,12 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
                 blacklist=self.BLACKLIST,
                 replies=True)
 
-        with mock.patch('katcp.server.time.time') as m_time:
-            m_time.return_value = 1234
-            self.server.log.error('An error')
+        def tst():
+            with mock.patch('katcp.server.time.time') as m_time:
+                m_time.return_value = 1234
+                self.server.log.error('An error')
+        self.server.ioloop.add_callback(tst)
+
         get_msgs.wait_number(1)
         self._assert_msgs_equal(
             get_msgs(), [r"#log error 1234.000000 root An\_error"])
@@ -331,9 +334,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.raw_send("m arg1 arg2")
         self.client.raw_send("\n")
 
-        time.sleep(0.1)
-
-        self._assert_msgs_equal(get_msgs(), [
+        self._assert_msgs_equal(get_msgs(min_number=4), [
             r"!foo invalid Unknown\_request.",
             r"!bar-boom invalid Unknown\_request.",
             r"!baz invalid Unknown\_request.",
@@ -420,19 +421,17 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.blocking_request(katcp.Message.request(
             "sensor-sampling", "an.int", "unknown"), use_mid=False)
 
-        time.sleep(0.1)
-
-        self.server.log.trace("trace-msg")
-        self.server.log.debug("debug-msg")
-        self.server.log.info("info-msg")
-        self.server.log.warn("warn-msg")
-        self.server.log.error("error-msg")
-        self.server.log.fatal("fatal-msg")
-
-        time.sleep(0.1)
+        def tst():
+            self.server.log.trace("trace-msg")
+            self.server.log.debug("debug-msg")
+            self.server.log.info("info-msg")
+            self.server.log.warn("warn-msg")
+            self.server.log.error("error-msg")
+            self.server.log.fatal("fatal-msg")
+        self.server.ioloop.add_callback(tst)
 
         self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
-        self._assert_msgs_like(get_msgs(), [
+        expected_msgs = [
             (r"!watchdog ok", ""),
             (r"!restart ok", ""),
             (r"!log-level ok warn", ""),
@@ -489,7 +488,9 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#log warn", r"root warn-msg"),
             (r"#log error", r"root error-msg"),
             (r"#log fatal", r"root fatal-msg"),
-        ])
+        ]
+        self._assert_msgs_like(get_msgs(min_number=len(expected_msgs)),
+                               expected_msgs)
 
     def test_standard_requests_with_ids(self):
         """Test standard request and replies with message ids."""
@@ -534,17 +535,16 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.blocking_request(mid_req(
             "sensor-sampling", "an.int", "unknown"))
 
-        self.server.log.trace("trace-msg")
-        self.server.log.debug("debug-msg")
-        self.server.log.info("info-msg")
-        self.server.log.warn("warn-msg")
-        self.server.log.error("error-msg")
-        self.server.log.fatal("fatal-msg")
+        def tst():
+            self.server.log.trace("trace-msg")
+            self.server.log.debug("debug-msg")
+            self.server.log.info("info-msg")
+            self.server.log.warn("warn-msg")
+            self.server.log.error("error-msg")
+            self.server.log.fatal("fatal-msg")
+        self.server.ioloop.add_callback(tst)
 
-        time.sleep(0.1)
-
-        self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
-        self._assert_msgs_like(get_msgs(), [
+        expected_msgs = [
             (r"!watchdog[1] ok", ""),
             (r"!restart[2] ok", ""),
             (r"!log-level[3] ok warn", ""),
@@ -602,7 +602,9 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#log warn", r"root warn-msg"),
             (r"#log error", r"root error-msg"),
             (r"#log fatal", r"root fatal-msg"),
-        ])
+        ]
+        self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
+        self._assert_msgs_like(get_msgs(min_number=len(expected_msgs)), expected_msgs)
 
     def test_sensor_list_regex(self):
         reply, informs = self.client.blocking_request(katcp.Message.request(
@@ -722,98 +724,36 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     def test_stop_and_restart(self):
         """Test stopping and restarting the device server."""
+        # So we can wait for the client to disconnect
+        self.client.notify_connected = WaitingMock()
         self.server.stop(timeout=0.1)
         self.server.join(timeout=1.0)
-        self.assertEqual(self.server._server._thread, None)
-        self.assertFalse(self.server._server._running.isSet())
+        self.assertFalse(self.server.running())
+        # Wait for client to be disconnected
+        self.client.notify_connected.assert_wait_call_count(1)
+        self.assertFalse(self.client.is_connected())
         self.server.start(timeout=1.0)
 
     def test_bad_client_socket(self):
         """Test what happens when select is called on a dead client socket."""
-        # wait for client to arrive
-        time.sleep(0.1)
+        # close client stream while the server isn't looking then wait for the server to
+        # notice
 
-        # close socket while the server isn't looking
-        # then wait for the server to notice
-        sock = self.server._server._socks[0]
-        sock.close()
-        time.sleep(0.75)
+        stream, client_conn = self.server._server._connections.items()[0]
+        # Wait for the client to disconnect
+        self.client.notify_connected = WaitingMock()
+        self.server.ioloop.add_callback(stream.close)
+        # Wait for the client to be disconnected, and to connect again
+        self.client.notify_connected.assert_wait_call_count(2)
 
-        # check that client was removed
-        self.assertTrue(sock not in self.server._server._socks,
+        # check that client stream was removed from the KATCPServer
+        self.assertTrue(stream not in self.server._server._connections,
                         "Expected %r to not be in %r" %
-                        (sock, self.server._server._socks))
-
-    def test_bad_server_socket(self):
-        """Test what happens when select is called on a dead server socket."""
-        # wait for client to arrive
-        time.sleep(0.1)
-
-        # close socket while the server isn't looking
-        # then wait for the server to notice
-        sock = self.server._server._sock
-        sockname = sock.getsockname()
-        sock.close()
-        time.sleep(0.75)
-
-        # check that server restarted
-        self.assertTrue(sock is not self.server._server._sock,
-                        "Expected %r to not be %r" % (sock, self.server._server._sock))
-        self.assertEqual(sockname, self.server.bind_address)
-
-    def test_daemon_value(self):
-        """Test passing in a daemon value to server start method."""
-        self.server.stop(timeout=0.1)
-        self.server.join(timeout=1.0)
-
-        self.server.start(timeout=0.1, daemon=True)
-        self.assertTrue(self.server._server._thread.isDaemon())
-
-    def test_excepthook(self):
-        """Test passing in an excepthook to server start method."""
-        exceptions = []
-        except_event = threading.Event()
-
-        def excepthook(etype, value, traceback):
-            """Keep track of exceptions."""
-            exceptions.append(etype)
-            except_event.set()
-
-        self.server.stop(timeout=0.1)
-        self.server.join(timeout=1.5)
-
-        self.server.start(timeout=0.1, excepthook=excepthook)
-        # force exception by deleteing _running
-        old_running = self.server._server._running
-        try:
-            del self.server._server._running
-            except_event.wait(1.5)
-            self.assertEqual(exceptions, [AttributeError])
-        finally:
-            self.server._server._running = old_running
-
-        # close socket -- server didn't shut down correctly
-        self.server._server._sock.close()
-        self.server.stop(timeout=0.1)
-        self.server.join(timeout=1.5)
-
-        except_event.clear()
-        del exceptions[:]
-        self.server.start(timeout=0.1, excepthook=excepthook)
-        # force exception in sample reactor and check that it makes
-        # it back up
-        reactor = self.server._reactor
-        old_stop = reactor._stopEvent
-        try:
-            del reactor._stopEvent
-            reactor._wakeEvent.set()
-            except_event.wait(0.1)
-            self.assertEqual(exceptions, [AttributeError])
-        finally:
-            reactor._stopEvent = old_stop
-
-        # close socket -- server didn't shut down correctly
-        self.server._server._sock.close()
+                        (stream, self.server._server._connections))
+        # And check that the ClientConnection object was removed from the DeviceServer
+        self.assertTrue(client_conn not in self.server._client_conns,
+                        "Expected %r to not be in %r" %
+                        (client_conn, self.server._client_conns))
 
     def test_sampling(self):
         """Test sensor sampling."""

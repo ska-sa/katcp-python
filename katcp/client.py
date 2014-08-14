@@ -16,7 +16,7 @@ import select
 import time
 import logging
 import errno
-from .core import (DeviceMetaclass, MessageParser, Message, ExcepthookThread,
+from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, ProtocolFlags,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
 
@@ -598,26 +598,18 @@ class DeviceClient(object):
         self._logger.debug("Stopping thread %s" % (
                 threading.currentThread().getName()))
 
-    def start(self, timeout=None, daemon=None, excepthook=None):
+    def start(self, timeout=None):
         """Start the client in a new thread.
 
         Parameters
         ----------
         timeout : float in seconds
             Seconds to wait for client thread to start.
-        daemon : boolean
-            If not None, the thread's setDaemon method is called with this
-            parameter before the thread is started.
-        excepthook : function
-            Function to call if the client throws an exception. Signature
-            is as for sys.excepthook.
         """
         if self._thread:
             raise RuntimeError("Device client %r already started." % (self._bindaddr,))
 
-        self._thread = ExcepthookThread(target=self.run, excepthook=excepthook)
-        if daemon is not None:
-            self._thread.setDaemon(daemon)
+        self._thread = threading.Thread(target=self.run)
         self._thread.start()
         if timeout:
             self._connected.wait(timeout)
