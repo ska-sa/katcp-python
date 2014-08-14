@@ -277,16 +277,6 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
                         "Expected %r to not be %r" % (sock, self.client._sock))
         self.assertEqual(sockname, self.client._sock.getpeername())
 
-    def test_daemon_value(self):
-        """Test passing in a daemon value to client start method."""
-        self.client.stop(timeout=0.1)
-        # timeout needs to be longer than select sleep.
-        self.client.join(timeout=1.5)
-
-        self.client.start(timeout=0.1, daemon=True)
-        self.assertTrue(self.client._thread.isDaemon())
-
-
 class TestSlowServerReceive(unittest.TestCase):
     # Test that sending a request does not spin forever if a timeout is set and
     # the server is not receiving data (i.e. the socket keeps raising EAGAIN)
