@@ -17,6 +17,7 @@ import sys
 import re
 import time
 
+from functools import wraps
 from collections import deque
 from thread import get_ident as get_thread_ident
 
@@ -64,6 +65,23 @@ BASE_REQUESTS = frozenset(['client-list',
                            'watchdog',
                            'sensor-sampling',])
 "List of basic KATCP request that a minimal device server should implement"
+
+def return_future(fn):
+    """Decorator that turns a syncronous function into one returning a tornado Future
+
+    This should only be applied to non-blocking functions. Will do set_result() with the
+    return value, or set_exc_info() if an exception is raised.
+    """
+    @wraps(fn)
+    def decorated(*args, **kwargs):
+        f = tornado_Future()
+        try:
+            f.set_result(fn(*args, **kwargs))
+        except Exception:
+            f.set_exc_info(sys.exc_info())
+        return f
+
+    return decorated
 
 def construct_name_filter(pattern):
     """Return a function for filtering sensor names based on a pattern.
@@ -442,7 +460,7 @@ class KATCPServer(object):
                 self.ioloop.add_callback(stop)
 
 
-    
+    @gen.coroutine
     def _handle_stream(self, stream, address):
         """Handle a new connection as a tornado.iostream.IOStream instance"""
         try:
@@ -459,7 +477,7 @@ class KATCPServer(object):
             client_conn = self.client_connection_factory(self, stream)
             self._connections[stream] = client_conn
             try:
-                self._device.on_client_connect(client_conn)
+                yield self._device.on_client_connect(client_conn)
             except Exception:
                 # If on_client_connect fails there is no reason to continue trying to handle
                 # this connection. Try and send exception info to the client and disconnect
@@ -503,7 +521,7 @@ class KATCPServer(object):
                     continue # Wait for the next message and hope it is better
                 try:
                     if msg: # Ignore empty messages (i.e empty lines)
-                        yield gen.maybe_future(self._device.on_message(client_conn, msg))
+                        yield self._device.on_message(client_conn, msg)
                 except Exception:
                     self._logger.error('Error handling message', exc_info=True)
         except Exception:
@@ -894,6 +912,7 @@ class DeviceServerBase(object):
         raise RuntimeError(
             'set_concurrency_options() need to be called once before on_message')
 
+    @return_future
     def handle_message(self, client_conn, msg):
         """Handle messages of all types from clients.
 
@@ -1171,6 +1190,7 @@ class DeviceServerBase(object):
         """Wait until the server is running"""
         return self._server.wait_running(timeout)
 
+    @return_future
     def on_client_connect(self, conn):
         """Called after client connection is established.
 
@@ -1181,9 +1201,16 @@ class DeviceServerBase(object):
         ----------
         conn : ClientConnection object
             The client connection that has been successfully established.
+
+        Return Value
+        ------------
+
+        Future that resolves when the device is ready to accept messages
         """
         pass
 
+
+    @return_future
     def on_client_disconnect(self, conn, msg, connection_valid):
         """Called before a client connection is closed.
 
@@ -1202,6 +1229,11 @@ class DeviceServerBase(object):
         connection_valid : boolean
             True if connection is still open for sending,
             False otherwise.
+
+        Return Value
+        ------------
+
+        Future that resolves when the client connection can be closed
         """
 
         f = tornado_Future()
@@ -1319,6 +1351,7 @@ class DeviceServer(DeviceServerBase):
 
     # pylint: enable-msg = W0142
 
+    @return_future
     def on_client_connect(self, client_conn):
         """Inform client of build state and version on connect.
 
@@ -1326,6 +1359,11 @@ class DeviceServer(DeviceServerBase):
         ----------
         client_conn : ClientConnection object
             The client connection that has been successfully established.
+
+        Return Value
+        ------------
+
+        Future that resolves when the device is ready to accept messages
         """
         self._client_conns.add(client_conn)
         with self._strat_lock:
@@ -1379,6 +1417,11 @@ class DeviceServer(DeviceServerBase):
         connection_valid : boolean
             True if connection is still open for sending,
             False otherwise.
+
+        Return Value
+        ------------
+
+        Future that resolves when the client connection can be closed
         """
         f = tornado_Future()
         def remove_strategies():
