@@ -601,42 +601,6 @@ class AsyncReply(Exception):
     pass
 
 
-class ExcepthookThread(threading.Thread):
-    """A custom Thread class that provides an exception hook.
-
-    Exceptions are passed up to an excepthook callable that
-    functions like sys.excepthook.
-
-    Parameters
-    ----------
-    excepthook : callable
-        Function to call when the thread raises an unhandled
-        exception. The signature is the same as for sys.excepthook.
-    args : additional arguments
-        Passed to the threading.Thread constructor.
-    kwargs: additional keyword arguments
-        Passed to the threading.Thread constructor.
-    """
-    def __init__(self, excepthook=None, *args, **kwargs):
-        if excepthook is None:
-            excepthook = getattr(threading.currentThread(), "_excepthook",
-                                 None)
-        self._excepthook = excepthook
-        # evil hack to support subclasses that override run
-        self._old_run = self.run
-        self.run = self._wrapped_run
-        super(ExcepthookThread, self).__init__(*args, **kwargs)
-
-    def _wrapped_run(self):
-        try:
-            self._old_run()
-        except:
-            if self._excepthook is not None:
-                self._excepthook(*sys.exc_info())
-            else:
-                raise
-
-
 from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp, Address
 
 

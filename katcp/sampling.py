@@ -16,7 +16,7 @@ import Queue
 import os
 
 from functools import partial
-from .core import Message, Sensor, ExcepthookThread, SEC_TO_MS_FAC, MS_TO_SEC_FAC
+from .core import Message, Sensor, SEC_TO_MS_FAC, MS_TO_SEC_FAC
 
 
 log = logging.getLogger("katcp.sampling")
@@ -497,7 +497,7 @@ class SampleDifferentialRate(SampleStrategy):
         self.update(self._sensor)
         super(SampleDifferentialRate, self).attach()
 
-class SampleReactor(ExcepthookThread):
+class SampleReactor(threading.Thread):
     """SampleReactor manages sampling strategies.
 
     This class keeps track of all the sensors and what strategy
@@ -509,8 +509,8 @@ class SampleReactor(ExcepthookThread):
     logger : logging.Logger object
         Python logger to write logs to.
     """
-    def __init__(self, logger=log, excepthook=None):
-        super(SampleReactor, self).__init__(excepthook=excepthook)
+    def __init__(self, logger=log):
+        super(SampleReactor, self).__init__()
         self._strategies = set()
         self._stopEvent = threading.Event()
         self._wakeEvent = threading.Event()

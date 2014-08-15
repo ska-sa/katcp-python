@@ -18,10 +18,10 @@ logging.getLogger("katcp").addHandler(NullHandler())
 
 del logging, NullHandler
 
-from .core import Message, KatcpSyntaxError, MessageParser, \
-                  DeviceMetaclass, ExcepthookThread, FailReply, \
-                  AsyncReply, KatcpDeviceError, KatcpClientError, \
-                  Sensor, ProtocolFlags
+from .core import (Message, KatcpSyntaxError, MessageParser,
+                   DeviceMetaclass, FailReply,
+                   AsyncReply, KatcpDeviceError, KatcpClientError,
+                   Sensor, ProtocolFlags)
 
 from .server import DeviceServerBase, DeviceServer, DeviceLogger
 

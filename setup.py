@@ -32,7 +32,7 @@ setup (
         "Topic :: Scientific/Engineering :: Astronomy",
     ],
     platforms = [ "OS Independent" ],
-    install_requires = ["ply", "twisted", "nose", "unittest2", "mock", "ProxyTypes"],
+    install_requires = ["ply", "tornado>=4.0", "nose", "unittest2", "mock", "ProxyTypes"],
     keywords="kat kat7 ska MeerKAT",
     zip_safe = False,
     # Bitten Test Suite
