@@ -16,19 +16,30 @@ class NullHandler(logging.Handler):
 
 logging.getLogger("katcp").addHandler(NullHandler())
 
+
 del logging, NullHandler
 
-from .core import (Message, KatcpSyntaxError, MessageParser,
-                   DeviceMetaclass, FailReply,
-                   AsyncReply, KatcpDeviceError, KatcpClientError,
-                   Sensor, ProtocolFlags)
+try:
 
-from .server import DeviceServerBase, DeviceServer, DeviceLogger
+    from .core import (Message, KatcpSyntaxError, MessageParser,
+                       DeviceMetaclass, FailReply,
+                       AsyncReply, KatcpDeviceError, KatcpClientError,
+                       Sensor, ProtocolFlags)
 
-from .client import DeviceClient, BlockingClient, CallbackClient
+    from .server import DeviceServerBase, DeviceServer, DeviceLogger
 
-from .sensortree import GenericSensorTree, BooleanSensorTree, \
-                        AggregateSensorTree
+    from .client import DeviceClient, BlockingClient, CallbackClient
+
+    from .sensortree import GenericSensorTree, BooleanSensorTree, \
+                            AggregateSensorTree
+
+except ImportError:
+    # Ignore this error to prevent import errors during setup.py when katcp.version is
+    # imported. Things should break soon enough afterwards :)
+    import warnings
+    warnings.warn('Could not import some modules, fine during setup, but will prevent the '
+                  'library from working if you see this after installation')
+
 
 from .version import VERSION, VERSION_STR
 

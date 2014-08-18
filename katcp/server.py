@@ -17,26 +17,19 @@ import sys
 import re
 import time
 
-from functools import wraps
+import tornado.ioloop
+import tornado.tcpserver
+
+from functools import partial, wraps
 from collections import deque
 from thread import get_ident as get_thread_ident
 
-try:
-    import tornado.ioloop
-    import tornado.tcpserver
-    from tornado import gen
-    from tornado.concurrent import Future as tornado_Future
-    from tornado.util import ObjectDict
-    from concurrent.futures import Future, TimeoutError
-except ImportError:
-    # Ignore this error to prevent import errors during setup.py when katcp.version is
-    # imported. Things should break soon enough afterwards :)
-    import warnings
-    warnings.warn('Could not import tornado or concurrent.futures, fine during setup, '
-                  'but will prevent the library from working if you see this after '
-                  'installation')
+from tornado import gen
+from tornado.concurrent import Future as tornado_Future
+from tornado.util import ObjectDict
+from concurrent.futures import Future, TimeoutError
 
-from functools import partial
+
 
 from .core import (DeviceMetaclass, Message, MessageParser,
                    FailReply, AsyncReply, ProtocolFlags)
