@@ -637,7 +637,7 @@ class KATCPServer(object):
                 self.ioloop.add_callback(send_message_callback)
             finally:
                 return f
-            
+
 
     def send_message_async(self, stream, msg):
         """Thread-safe version of send_message() returning a Future instance
@@ -1053,7 +1053,7 @@ class DeviceServerBase(object):
             The inform message to send.
         """
         assert (msg.mtype == Message.INFORM)
-        self._server.mass_send_message(msg)
+        self._server.mass_send_message_async(msg)
 
 
     def reply(self, connection, reply, orig_req):
@@ -1227,9 +1227,7 @@ class DeviceServerBase(object):
         Future that resolves when the client connection can be closed
         """
 
-        f = tornado_Future()
-        f.set_result(None)
-        return f
+        return None
 
     def sync_with_ioloop(self, timeout=None):
         """Block for ioloop to complete a loop if called from another thread
