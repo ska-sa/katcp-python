@@ -395,7 +395,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         get_msgs = self.client.message_recorder(
                 blacklist=self.BLACKLIST, replies=True)
         nomid_req = partial(self.client.blocking_request, use_mid=False)
-        nomid_req(katcp.Message.request("watchdog"), use_mid=False)
+        nomid_req(katcp.Message.request("watchdog"))
         nomid_req(katcp.Message.request("restart"))
         nomid_req(katcp.Message.request("log-level"))
         nomid_req(katcp.Message.request("log-level", "trace"))
@@ -805,5 +805,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test adding and removing sensors from a running device."""
         an_int = self.server._sensors["an.int"]
         self.server.remove_sensor(an_int)
+        # TODO remove_sensor test that checks that everything is indeed gone
         self.server.add_sensor(an_int)
         self.test_sampling()
+

@@ -76,7 +76,7 @@ class TestGenericSensorTree(BaseTreeTest):
         self.tree.add_links(self.sensor1, [self.sensor2])
 
         class LinkOnUpdate(object):
-            def update(linker, sensor):
+            def update(linker, sensor, reading):
                 self.tree.add_links(self.sensor3, [self.sensor2])
 
         linker = LinkOnUpdate()

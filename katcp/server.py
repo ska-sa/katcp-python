@@ -33,7 +33,7 @@ from concurrent.futures import Future, TimeoutError
 
 from .core import (DeviceMetaclass, Message, MessageParser,
                    FailReply, AsyncReply, ProtocolFlags)
-from .sampling import SampleReactor, SampleStrategy, SampleNone
+from .sampling import SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
 from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
                    VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR,
@@ -1333,7 +1333,6 @@ class DeviceServer(DeviceServerBase):
         self.extra_versions = {}
         self._restart_queue = None
         self._sensors = {}  # map names to sensor objects
-        self._reactor = None  # created in run
         # map client sockets to map of sensors -> sampling strategies
         self._strategies = {}
         # strat lock (should be held for updates to _strategies)
@@ -1395,9 +1394,8 @@ class DeviceServer(DeviceServerBase):
             strategies = getter(client_conn, None)
             if strategies is not None:
                 for sensor, strategy in list(strategies.items()):
+                    strategy.cancel()
                     del strategies[sensor]
-                    if self._reactor:
-                        self._reactor.remove_strategy(strategy)
 
     def on_client_disconnect(self, client_conn, msg, connection_valid):
         """Inform client it is about to be disconnected.
@@ -1477,17 +1475,13 @@ class DeviceServer(DeviceServerBase):
             sensor_name = sensor
         else:
             sensor_name = sensor.name
-        del self._sensors[sensor_name]
+        sensor = self._sensors.pop(sensor_name)
 
-        self._strat_lock.acquire()
-        try:
-            for strategies in self._strategies.values():
-                for other_sensor, strategy in list(strategies.items()):
-                    if other_sensor.name == sensor_name:
-                        del strategies[other_sensor]
-                        self._reactor.remove_strategy(strategy)
-        finally:
-            self._strat_lock.release()
+        with self._strat_lock:
+            for conn_strategies in self._strategies.values():
+                strategy = conn_strategies.pop(sensor, None)
+                if strategy:
+                    strategy.cancel()
 
     def get_sensor(self, sensor_name):
         """Fetch the sensor with the given name.
@@ -1568,11 +1562,9 @@ class DeviceServer(DeviceServerBase):
             ?halt
             !halt ok
         """
-        self.stop()
-        # this message makes it through because stop should only register in the ioloop
-        # after the reply has been sent.
         req.reply("ok")
         self.sync_with_ioloop(timeout=1)
+        self.stop()
         raise AsyncReply
 
     def request_help(self, req, msg):
@@ -1910,9 +1902,7 @@ class DeviceServer(DeviceServerBase):
 
         katcp_version = self.PROTOCOL_INFO.major
         for name, sensor in sensors:
-            timestamp, status, value = sensor.read_formatted()
-            if katcp_version <= 4:
-                timestamp = int(SEC_TO_MS_FAC*float(timestamp))
+            timestamp, status, value = sensor.read_formatted(katcp_version)
             req.inform(timestamp, "1", name, status, value)
         return req.make_reply("ok", str(len(sensors)))
 
@@ -1998,8 +1988,7 @@ class DeviceServer(DeviceServerBase):
 
             def inform_callback(sensor_name, timestamp, status, value):
                 """Inform callback for sensor strategy."""
-                cb_msg = format_inform(
-                sensor_name, timestamp, status, value)
+                cb_msg = format_inform(sensor_name, timestamp, status, value)
                 client.inform(cb_msg)
 
             if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
@@ -2007,22 +1996,20 @@ class DeviceServer(DeviceServerBase):
                 # involving timestamps it's not _too_ nasty :)
                 params = [float(params[0]) * MS_TO_SEC_FAC] + params[1:]
             new_strategy = SampleStrategy.get_strategy(
-                strategy, inform_callback, sensor, *params)
+                strategy, inform_callback, sensor, *params, ioloop=self.ioloop)
 
             with self._strat_lock:
-                old_strategy = self._strategies[client].get(sensor, None)
-                if old_strategy is not None:
-                    self._reactor.remove_strategy(old_strategy)
+                # Remove and cancel old strategy
+                old_strategy = self._strategies[client].pop(sensor, None)
+                if old_strategy:
+                    old_strategy.cancel()
 
                 # todo: replace isinstance check with something better
-                if isinstance(new_strategy, SampleNone):
-                    if sensor in self._strategies[client]:
-                        del self._strategies[client][sensor]
-                else:
+                if not isinstance(new_strategy, SampleNone):
                     self._strategies[client][sensor] = new_strategy
-                    # reactor.add_strategy() sends out an inform
+                    # strategy.start() sends out an inform
                     # which is not great while the lock is held.
-                    self._reactor.add_strategy(new_strategy)
+                    self.ioloop.add_callback(new_strategy.start)
 
         current_strategy = self._strategies[client].get(sensor, None)
         if not current_strategy:
@@ -2034,6 +2021,8 @@ class DeviceServer(DeviceServerBase):
             # Another slightly nasty hack, but since period is the only
             # v4 strategy involving timestamps it's not _too_ nasty :)
             params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
+
+        self.sync_with_ioloop()
         return req.make_reply("ok", name, strategy, *params)
 
     @request()
@@ -2075,25 +2064,6 @@ class DeviceServer(DeviceServerBase):
         return req.make_reply("ok")
 
     # pylint: enable-msg = W0613
-
-    def start(self, timeout=None):
-        """Start the server in a new thread.
-
-        Parameters
-        ----------
-        timeout : float in seconds
-            Time to wait for server thread to start.
-        """
-        self._reactor = SampleReactor()
-        self._reactor.start()
-        super(DeviceServer, self).start(timeout)
-
-    def stop(self, timeout=None):
-        if self._reactor:
-            self._reactor.stop()
-            self._reactor.join(timeout=0.5)
-            self._reactor = None
-        super(DeviceServer, self).stop(timeout)
 
 class DeviceLogger(object):
     """Object for logging messages from a DeviceServer.

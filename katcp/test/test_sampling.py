@@ -14,32 +14,65 @@ import logging
 import katcp
 import mock
 import Queue
+import tornado.testing
+import concurrent.futures
 
+from thread import get_ident
+from tornado import gen
+from katcp import sampling, Sensor
 from katcp.testutils import (
     TestLogHandler, DeviceTestSensor, start_thread_with_cleanup)
-from katcp import sampling, Sensor
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
+logger = logging.getLogger(__name__)
 
-
-class TestSampling(unittest.TestCase):
+class TestSampling(tornado.testing.AsyncTestCase):
+    # TODO Also test explicit ioloop passing
 
     def setUp(self):
         """Set up for test."""
         # test sensor
+        super(TestSampling, self).setUp()
         self.sensor = DeviceTestSensor(
                 Sensor.INTEGER, "an.int", "An integer.", "count",
-                [-4, 3],
-                timestamp=12345, status=Sensor.NOMINAL, value=3)
-
+                [-40, 30],
+                timestamp=self.ioloop_time, status=Sensor.NOMINAL, value=3)
         # test callback
-        def inform(sensor_name, timestamp, status, value):
-            self.calls.append(sampling.format_inform_v5(
-                sensor_name, timestamp, status, value) )
+        def inform(sensor, timestamp, status, value):
+            assert get_ident() == self.ioloop_thread_id, (
+                "inform must be called from in the ioloop")
+            self.calls.append((sensor, timestamp, status, value))
+
+        # sampling module time to iolooptime
+        patcher = mock.patch('katcp.sampling.time')
+        mtime = patcher.start()
+        self.addCleanup(patcher.stop)
+        mtime.time.side_effect = lambda : self.ioloop_time
 
         self.calls = []
         self.inform = inform
+
+    def get_new_ioloop(self):
+        ioloop = super(TestSampling, self).get_new_ioloop()
+        self.ioloop_time = 0
+        ioloop.time = lambda : self.ioloop_time
+        def set_ioloop_thread_id():
+            self.ioloop_thread_id = get_ident()
+        ioloop.add_callback(set_ioloop_thread_id)
+        return ioloop
+
+    def wake_ioloop(self):
+        f = tornado.concurrent.Future()
+        self.io_loop.add_callback(lambda : f.set_result(None))
+        return f
+
+    def set_ioloop_time(self, new_time, wake_ioloop=True):
+        logger.debug('setting ioloop time: {0}'.format(new_time))
+        assert new_time > self.ioloop_time
+        self.ioloop_time = new_time
+        if wake_ioloop:
+            return self.wake_ioloop()
 
     def test_sampling(self):
         """Test getting and setting the sampling."""
@@ -74,15 +107,247 @@ class TestSampling(unittest.TestCase):
         self.assertRaises(ValueError, sampling.SampleStrategy.get_strategy,
                           "differential", None, s, "bar")
 
-    def test_event(self):
-        """Test SampleEvent strategy."""
-        event = sampling.SampleEvent(self.inform, self.sensor)
-        self.assertEqual(event.get_sampling_formatted(),
-                         ('event', []) )
-
+    @tornado.testing.gen_test(timeout=200)
+    # Timeout needs to be longer than 'fake' duration of the test, since the tornado
+    # ioloop is using out time-warped clock to determine timeouts too!
+    def test_periodic(self):
+        t0 = self.ioloop_time
+        sample_p = 10                            # sample DUT in seconds
+        DUT = sampling.SamplePeriod(self.inform, self.sensor, sample_p)
+        self.assertEqual(self.calls, [])
+        t, status, value = self.sensor.read()
+        DUT.start()
+        yield self.wake_ioloop()
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
+        # Warp the ioloop clock forward a bit more than one DUT. Check that
+        #   1) a sample is sent,
+        #   2) the next sample is scheduled at t0+DUT, not t0+DUT+extra delay
+        yield self.set_ioloop_time(t0 + sample_p*1.15)
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
+        # Don't expect an update, since we are at just before the next sample DUT
+        yield self.set_ioloop_time(t0 + sample_p*1.99)
+        self.assertEqual(self.calls, [])
+        # Now we are at exactly the next sample time, expect update
+        yield self.set_ioloop_time(t0 + sample_p*2)
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
+        # Bit past previous sample time, expect no update
+        yield self.set_ioloop_time(t0 + sample_p*2.16)
         self.assertEqual(self.calls, [])
 
-        event.attach()
+        # Check that no update is sent if the sensor is updated, but that the next
+        # periodic update is correct
+        t, status, value = (t0 + sample_p*2.5, Sensor.WARN, -1)
+        self.sensor.set(t, status, value)
+        yield self.set_ioloop_time(t0 + sample_p*2.6)
+        self.assertEqual(self.calls, [])
+        yield self.set_ioloop_time(t0 + sample_p*3)
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
+
+        # Cancel strategy and check that its timeout call is cancelled.
+        DUT.cancel()
+        yield self.wake_ioloop()
+        yield self.set_ioloop_time(t0 + sample_p*4.1)
+        self.assertEqual(self.calls, [])
+
+
+    @tornado.testing.gen_test(timeout=200)
+    def test_auto(self):
+        t0 = self.ioloop_time
+        DUT = sampling.SampleAuto(self.inform, self.sensor)
+        self.assertEqual(self.calls, [])
+        t, status, value = self.sensor.read()
+        DUT.start()
+        yield self.wake_ioloop()
+        # Check that it is attached
+        self.assertTrue(DUT in self.sensor._observers)
+        # The initial update
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
+        # Move along in time, don't expect any updates
+        yield self.set_ioloop_time(t0 + 20)
+        self.assertEqual(self.calls, [])
+        # Now update the sensor a couple of times
+        t1, status1, value1 = t0 + 21, Sensor.ERROR, 2
+        t2, status2, value2 = t0 + 22, Sensor.NOMINAL, -1
+        self.sensor.set(t1, status1, value1)
+        self.sensor.set(t2, status2, value2)
+        self.assertEqual(self.calls, [(self.sensor, t1, status1, value1),
+                                      (self.sensor, t2, status2, value2)])
+        self.calls = []
+
+        self._thread_update_check(t, status, value)
+        yield self._check_cancel(DUT)
+
+    @gen.coroutine
+    def _thread_update_check(self, ts, status, value):
+        # Check update from thread (inform() raises if called from the wrong thread)
+        # Clears out self.calls before starting
+        self.calls = []
+        f = concurrent.futures.Future()
+        def do_update():
+            try:
+                self.sensor.set(ts, status, value)
+            finally:
+                f.set_result(None)
+            return f
+        t = threading.Thread(target=do_update)
+        t.start()
+        yield f
+        yield self.wake_ioloop()
+        self.assertEqual(self.calls, [(self.sensor, ts, status, value)])
+
+    @gen.coroutine
+    def _check_cancel(self, DUT):
+        # Check post-cancel cleanup
+        DUT.cancel()
+        yield self.wake_ioloop()
+        self.assertFalse(DUT in self.sensor._observers)
+
+    @tornado.testing.gen_test(timeout=200)
+    def test_differential(self):
+        """Test SampleDifferential strategy."""
+        t, status, value = self.sensor.read()
+        delta = 3
+        DUT = sampling.SampleDifferential(self.inform, self.sensor, delta)
+        self.assertEqual(len(self.calls), 0)
+        DUT.start()
+        yield self.wake_ioloop()
+        # Check initial update
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
+        # Some Updates less than delta from intial value
+        self.sensor.set_value(value + 1)
+        self.sensor.set_value(value + delta)
+        self.sensor.set_value(value)
+        self.sensor.set_value(value - 2)
+        self.assertEqual(len(self.calls), 0)
+        # Now an update bigger than delta from initial value
+        self.sensor.set(t, status, value + delta + 1)
+        yield self.wake_ioloop()
+        self.assertEqual(self.calls, [(self.sensor, t, status, value + delta + 1)])
+        self.calls = []
+        # Now change only the status, should update
+        t, status, value = self.sensor.read()
+        self.sensor.set(t, Sensor.ERROR, value)
+        self.assertEqual(self.calls, [(self.sensor, t, Sensor.ERROR, value)])
+        # Test threaded update
+        yield self._thread_update_check(t, status, value)
+        yield self._check_cancel(DUT)
+
+    def test_differential_timestamp(self):
+        # Test that the timetamp differential is stored correctly as
+        # seconds. This is mainly to check the conversion of the katcp spec from
+        # milliseconds to seconds for katcp v5 spec.
+        time_diff = 4.12                  # Time differential in seconds
+        ts_sensor = Sensor(Sensor.TIMESTAMP, 'ts', 'ts sensor', '')
+        diff = sampling.SampleDifferential(self.inform, ts_sensor, time_diff)
+        self.assertEqual(diff._threshold, time_diff)
+
+    @tornado.testing.gen_test(timeout=200)
+    def test_event_rate(self):
+        """Test SampleEventRate strategy."""
+        shortest = 1.5
+        longest = 4.5
+        t, status, value = self.sensor.read()
+
+        DUT = sampling.SampleEventRate(self.inform, self.sensor, shortest, longest)
+        self.assertEqual(len(self.calls), 0)
+        DUT.start()
+        yield self.wake_ioloop()
+        # Check initial update
+        t_last_sent = self.ioloop_time
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
+
+        # Too soon, should not send update
+        yield self.set_ioloop_time(t_last_sent + shortest*0.99)
+        value = value + 3
+        t = self.ioloop_time
+        self.sensor.set(t, status, value)
+        self.assertEqual(len(self.calls), 0)
+
+        # Too soon again, should not send update
+        yield self.set_ioloop_time(t_last_sent + shortest*0.999)
+        value = value + 1
+        t = self.ioloop_time
+        self.sensor.set(t, status, value)
+        self.assertEqual(len(self.calls), 0)
+
+        # Should now get minimum time update
+        yield self.set_ioloop_time(t_last_sent + shortest)
+        t_last_sent = self.ioloop_time
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
+
+        # Warp to just before longest period, should not update
+        yield self.set_ioloop_time(t_last_sent + longest*0.999)
+        self.assertEqual(len(self.calls), 0)
+
+        # Warp to longest period, should update
+        yield self.set_ioloop_time(t_last_sent + longest)
+        t_last_sent = self.ioloop_time
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
+
+        # Warp to just before next longest period, should not update
+        yield self.set_ioloop_time(t_last_sent + longest*0.999)
+        self.assertEqual(len(self.calls), 0)
+
+        # Warp to longest period, should update
+        yield self.set_ioloop_time(t_last_sent + longest)
+        t_last_sent = self.ioloop_time
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
+
+        # Set identical value, jump past min update time, no update should happen
+        self.sensor.set(self.ioloop_time, status, value)
+        yield self.set_ioloop_time(t_last_sent + shortest)
+        self.assertEqual(len(self.calls), 0)
+
+        # Set new value, update should happen
+        value = value - 2
+        self.sensor.set(self.ioloop_time, status, value)
+        t_last_sent = self.ioloop_time
+        self.assertEqual(self.calls, [(self.sensor, t_last_sent, status, value)])
+        self.calls = []
+
+        # Now warp to after min period, change only status, update should happen
+        yield self.set_ioloop_time(t_last_sent + shortest)
+        status = Sensor.ERROR
+        self.sensor.set(self.ioloop_time, status, value)
+        self.assertEqual(self.calls, [(self.sensor, self.ioloop_time, status, value)])
+        t_last_sent = self.ioloop_time
+        self.calls = []
+
+        yield self.set_ioloop_time(t_last_sent + shortest)
+        status = Sensor.NOMINAL
+        value = value + 1
+        yield self._thread_update_check(self.ioloop_time, status, value)
+        yield self._check_cancel(DUT)
+        self.calls = []
+
+        # Since strategy is cancelled, no futher updates should be sent
+        yield self.set_ioloop_time(self.ioloop_time + 5*longest)
+        self.sensor.set(self.ioloop_time, Sensor.WARN, value + 3)
+        self.assertEqual(len(self.calls), 0)
+
+    @tornado.testing.gen_test(timeout=2000000)
+    def test_event(self):
+        """Test SampleEvent strategy."""
+        DUT = sampling.SampleEvent(self.inform, self.sensor)
+        self.assertEqual(DUT.get_sampling_formatted(), ('event', []) )
+        self.assertEqual(self.calls, [])
+        DUT.start()
+        yield self.wake_ioloop()
+        # Check intial update
+        self.assertEqual(len(self.calls), 1)
+
+        # Jump forward a lot, should not result in another sample
+        yield self.set_ioloop_time(200000)
         self.assertEqual(len(self.calls), 1)
 
         self.sensor.set_value(2, status=Sensor.NOMINAL)
@@ -97,466 +362,97 @@ class TestSampling(unittest.TestCase):
         self.sensor.set_value(2, status=Sensor.WARN)
         self.assertEqual(len(self.calls), 3)
 
+    @tornado.testing.gen_test(timeout=200)
+    def test_differential_rate(self):
+        shortest = 1.5
+        longest = 4.5
+        delta = 2
+        t, status, value = self.sensor.read()
+        # TODO change to be differentialrate test
 
-    def test_differential(self):
-        """Test SampleDifferential strategy."""
-        diff = sampling.SampleDifferential(self.inform, self.sensor, 5)
-        self.assertEqual(self.calls, [])
-
-        diff.attach()
-        self.assertEqual(len(self.calls), 1)
-
-    def test_differential_timestamp(self):
-        # Test that the timetamp differential is stored correctly as
-        # seconds. This is mainly to check the conversion of the katcp spec from
-        # milliseconds to seconds for katcp v5 spec.
-        time_diff = 4.12                  # Time differential in seconds
-        ts_sensor = Sensor(Sensor.TIMESTAMP, 'ts', 'ts sensor', '')
-        diff = sampling.SampleDifferential(self.inform, ts_sensor, time_diff)
-        self.assertEqual(diff._threshold, time_diff)
-
-    def test_periodic(self):
-        """Test SamplePeriod strategy."""
-        sample_p = 10                            # sample period in seconds
-        period = sampling.SamplePeriod(self.inform, self.sensor, sample_p)
-        self.assertEqual(self.calls, [])
-
-        period.attach()
-        self.assertEqual(self.calls, [])
-
-        next_p = period.periodic(1)
-        self.assertEqual(next_p, 1 + sample_p)
-        self.assertEqual(len(self.calls), 1)
-
-        next_p = period.periodic(11)
-        self.assertEqual(len(self.calls), 2)
-        self.assertEqual(next_p, 11 + sample_p)
-
-        next_p = period.periodic(12)
-        self.assertEqual(next_p, 12 + sample_p)
-        self.assertEqual(len(self.calls), 3)
-
-    def test_event_rate(self):
-        """Test SampleEventRate strategy."""
-        shortest = 10
-        longest = 20
-        patcher = mock.patch('katcp.sampling.time')
-        mtime = patcher.start()
-        self.addCleanup(patcher.stop)
-        time_ = mtime.time
-        time_.return_value = 1
-        evrate = sampling.SampleEventRate(
-            self.inform, self.sensor, shortest, longest)
-        new_period = mock.Mock()
-        evrate.set_new_period_callback(new_period)
-
-        time_.return_value = 1
-
-        self.assertEqual(self.calls, [])
-
-        evrate.attach()
+        DUT = sampling.SampleDifferentialRate(
+            self.inform, self.sensor, delta, shortest, longest)
+        self.assertEqual(len(self.calls), 0)
+        DUT.start()
+        yield self.wake_ioloop()
         # Check initial update
-        self.assertEqual(len(self.calls), 1)
+        t_last_sent = self.ioloop_time
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
 
         # Too soon, should not send update
-        self.sensor.set_value(1)
-        self.assertEqual(len(self.calls), 1)
-        # but should have requested a future update at now + shortest-time
-        new_period.assert_called_once_with(evrate, 11)
-        new_period.reset_mock()
-
-        time_.return_value = 11
-        next_p = evrate.periodic(11)
-        self.assertEqual(len(self.calls), 2)
-        self.assertEqual(new_period.called, False)
-
-        evrate.periodic(12)
-        self.assertEqual(len(self.calls), 2)
-        self.assertEqual(new_period.called, False)
-        evrate.periodic(13)
-        self.assertEqual(len(self.calls), 2)
-        self.assertEqual(new_period.called, False)
-
-        evrate.periodic(31)
-        self.assertEqual(len(self.calls), 3)
-
-        time_.return_value = 32
-        self.assertEqual(len(self.calls), 3)
-
-        time_.return_value = 41
-        self.sensor.set_value(2)
-        self.assertEqual(len(self.calls), 4)
-
-    def test_differential_rate(self):
-        difference = 2
-        shortest = 10
-        longest = 20
-        patcher = mock.patch('katcp.sampling.time')
-        mtime = patcher.start()
-        self.addCleanup(patcher.stop)
-        time_ = mtime.time
-        time_.return_value = 0
-        drate = sampling.SampleDifferentialRate(
-            self.inform, self.sensor, difference, shortest, longest)
-        self.assertEqual(
-            drate.get_sampling(), sampling.SampleStrategy.DIFFERENTIAL_RATE)
-
-        new_period = mock.Mock()
-        drate.set_new_period_callback(new_period)
-
+        yield self.set_ioloop_time(t_last_sent + shortest*0.99)
+        value = value + delta + 1
+        t = self.ioloop_time
+        self.sensor.set(t, status, value)
         self.assertEqual(len(self.calls), 0)
-        drate.attach()
-        self.assertEqual(len(self.calls), 1)
-        # Bigger than `difference`, but too soon
-        self.sensor.set_value(0)
-        # Should not have added a call
-        self.assertEqual(len(self.calls), 1)
-        # Should have requested a future update at shortest-time
-        new_period.assert_called_once_with(drate, 10)
-        new_period.reset_mock()
 
-        # call before shortest update period
-        drate.periodic(7)
-        # Should not have added a call
-        self.assertEqual(len(self.calls), 1)
-        # Call at next period, should call, and schedule a periodic update
-        # `longest` later
-        next_p = drate.periodic(10)
-        self.assertEqual(len(self.calls), 2)
-        self.assertEqual(next_p, 30)
-        next_p = drate.periodic(30)
-        self.assertEqual(len(self.calls), 3)
-        self.assertEqual(next_p, 50)
+        # Too soon again, should not send update
+        yield self.set_ioloop_time(t_last_sent + shortest*0.999)
+        value = value + delta + 1
+        t = self.ioloop_time
+        self.sensor.set(t, status, value)
+        self.assertEqual(len(self.calls), 0)
 
-        # Update with a too-small difference in value, should not send an
-        # update, nor should it schedule a shortest-time future-update
-        self.sensor.set_value(-1)
-        self.assertEqual(len(self.calls), 3)
-        self.assertEqual(new_period.called, False)
-
-        next_p = drate.periodic(50)
-        self.assertEqual(len(self.calls), 4)
-        self.assertEqual(next_p, 70)
-
-
-    def test_event_rate_fractions(self):
-        # Test SampleEventRate strategy in the presence of fractional seconds --
-        # mainly to catch bugs when it was converted to taking seconds instead of
-        # milliseconds, since the previous implementation used an integer number
-        # of milliseconds
-        shortest = 3./8
-        longest = 6./8
-        evrate = sampling.SampleEventRate(self.inform, self.sensor, shortest,
-                                          longest)
-        evrate.set_new_period_callback(mock.Mock())
-
-        now = [0]
-        evrate._time = lambda: now[0]
-
-        evrate.attach()
-        self.assertEqual(len(self.calls), 1)
-
-        now[0] = 0.999*shortest
-        self.sensor.set_value(1)
-        self.assertEqual(len(self.calls), 1)
-
-        now[0] = shortest
-        self.sensor.set_value(1)
-        self.assertEqual(len(self.calls), 2)
-
-        next_time = evrate.periodic(now[0] + 0.99*shortest)
-        self.assertEqual(len(self.calls), 2)
-        self.assertEqual(next_time, now[0] + longest)
-
-class FakeEvent(object):
-    def __init__(self, time_source, wait_called_callback=None, waited_callback=None):
-        self._event = threading.Event()
-        self._set = False
-        self._set_lock = threading.Lock()
-        self.wait_called_callback = wait_called_callback
-        self.waited_callback = waited_callback
-        self._time_source = time_source
-
-    def set(self):
-        with self._set_lock:
-            self._set = True
-            self.break_wait()
-
-    def clear(self):
-        with self._set_lock:
-            self._set = False
-            self._event.clear()
-
-    def isSet(self):
-        return self._set
-
-    is_set = isSet
-
-    def wait(self, timeout=None):
-        if self.wait_called_callback:
-            self.wait_called_callback(timeout)
-        start_time = self._time_source()
-        if not self._set and (timeout is None or timeout >= 0):
-            self._event.wait()
-        with self._set_lock:
-            if not self._set:
-                self._event.clear()
-            isset = self._set
-        now = self._time_source()
-
-        if self.waited_callback:
-            self.waited_callback(start_time, now, timeout)
-        return isset
-
-    def break_wait(self):
-        self._event.set()
-
-class TestReactorIntegration(unittest.TestCase):
-    def setUp(self):
-        """Set up for test."""
-        # test sensor
-        # self._print_lock = threading.Lock()
-        self._time_lock = threading.Lock()
-        self._next_wakeup = 1e99
-        self.wake_waits = Queue.Queue()
-        self.sensor = DeviceTestSensor(
-                Sensor.INTEGER, "an.int", "An integer.", "count",
-        [-4, 3],
-                timestamp=12345, status=Sensor.NOMINAL, value=3)
-
-
-        # test callback
-        self.inform_called = threading.Event()
-        def inform(sensor_name, timestamp, status, value):
-            self.inform_called.set()
-            self.calls.append((self.time(),
-                               (sensor_name, float(timestamp), status, value)) )
-
-        def next_wakeup_callback(timeout):
-            with self._time_lock:
-                if timeout is not None:
-                    next_wake = self.time() + timeout
-                    self._next_wakeup = min(self._next_wakeup, next_wake)
-                else:
-                    self._next_wakeup = 1e99
-            self.wake_waits.put(timeout)
-
-        def waited_callback(start, end, timeout):
-            # A callback that updates 'simulated time' whenever wake.wait() is
-            # called
-            with self._time_lock:
-                self._next_wakeup = 1e99
-
-        # test reactor
-        self.reactor = sampling.SampleReactor()
-
-        # Patch time.time so that we can lie about time.
-        self.time_patcher = mock.patch('katcp.sampling.time')
-        mtime = self.time_patcher.start()
-        self.addCleanup(self.time_patcher.stop)
-        self.time = mtime.time
-        self.start_time = self.time.return_value = 0
-
-        # Replace the reactor wake Event with a time-warping mock Event
-        self.reactor._wakeEvent = self.wake = wake = FakeEvent(
-            self.time, next_wakeup_callback, waited_callback)
-
-        start_thread_with_cleanup(self, self.reactor)
-        # Wait for the event loop to reach its first wake.wait()
-        self.wake_waits.get(timeout=1)
-
+        # Should now get minimum time update
+        yield self.set_ioloop_time(t_last_sent + shortest)
+        t_last_sent = self.ioloop_time
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
         self.calls = []
-        self.inform = inform
 
-    def _add_strategy(self, strat, wait_initial=True):
-        # Add strategy to test reactor while taking care to mock time.time as
-        # needed, and waits for the initial update (all strategies except None
-        # should send an initial update)
-
-        self.reactor.add_strategy(strat)
-
-        if wait_initial:
-            self.inform_called.wait(1)
-            self.inform_called.clear()
-            self.wake_waits.get(timeout=1)
-
-    def timewarp(self, jump, wait_for_waitstate=True, event_to_await=None):
-        """
-        Timewarp simulation time by `jump` seconds
-
-        Arguments
-        ---------
-
-        jump: float
-            Number of seconds to time-warp by
-        wait_for_waitstate: bool, default True
-            Wait until the simulated loop again enters a wait state that times
-            out beyond the current time-warp end-time. Will wake up the simulated
-            loop as many times as necessary.
-        event_to_await: Event or None, default None
-            If an Event object is passed, wait for it to be set after
-            time-warping, and then clear it.
-        """
-
-        start_time = self.time.return_value
-        end_time = start_time + jump
-        while end_time >= self._next_wakeup:
-            with self._time_lock:
-                self.time.return_value = self._next_wakeup
-            self.wake.break_wait()
-            if wait_for_waitstate:
-                wait_timeout = self.wake_waits.get(timeout=1)
-            else:
-                break
-
-        if event_to_await:
-            event_to_await.wait(1)
-            event_to_await.clear()
-        with self._time_lock:
-            self.time.return_value = end_time
-
-
-    def test_periodic(self):
-        """Test reactor with periodic sampling."""
-        period = 10.
-        no_periods = 5
-        period_strat = sampling.SamplePeriod(self.inform, self.sensor, period)
-        self._add_strategy(period_strat)
-
-        for i in range(no_periods):
-            self.timewarp(period, event_to_await=self.inform_called)
-
-        self.reactor.remove_strategy(period_strat)
-
-        call_times = [t for t, vals in self.calls]
-        self.assertEqual(len(self.calls), no_periods + 1)
-        self.assertEqual(call_times,
-                         [self.start_time + i*period
-                          for i in range(no_periods + 1)])
-
-
-    def test_event_rate(self):
-        max_period = 10.
-        min_period = 1.
-        event_rate_strat = sampling.SampleEventRate(
-            self.inform, self.sensor, min_period, max_period)
-        self._add_strategy(event_rate_strat)
-
-        no_max_periods = 3
-
-        # Do some 'max period' updates where the sensor has not changed
-        for i in range(no_max_periods):
-            self.timewarp(max_period, event_to_await=self.inform_called)
-
-        call_times = [t for t, vals in self.calls]
-        self.assertEqual(len(self.calls), no_max_periods + 1)
-        self.assertEqual(call_times,
-                         [self.start_time + i*max_period
-                          for i in range(no_max_periods + 1)])
-
-        del self.calls[:]
-
-        # Now do a sensor update without moving time along, should not result in
-        # any additional updates
-        update_time = self.time()
-        expected_send_time = update_time + min_period
-        self.sensor.set_value(2, self.sensor.NOMINAL, update_time)
-        # There should, however, be a wake-wait event
-        self.wake_waits.get(timeout=1)
-
-        self.assertEqual(len(self.calls), 0)
-        # Timewarp less than min update period, should not result in an inform
-        # callback
-        self.timewarp(min_period*0.6)
-
-        # Move time beyond minimum step
-        self.timewarp(min_period*1.01, event_to_await=self.inform_called)
-
-        self.assertEqual(len(self.calls), 1)
-        self.assertEqual(self.calls,
-                         [(expected_send_time,
-                           (self.sensor.name, update_time, 'nominal', '2'))])
-        # Should not be any outstanding wake-waits
-        self.assertEqual(self.wake_waits.qsize(), 0)
-
-        del self.calls[:]
-        # Time we expect the next max-period sample
-        expected_send_time += max_period
-        # Timewarp past the next expected max-period sample time
-        self.timewarp(max_period + min_period*0.01,
-                      event_to_await=self.inform_called)
-        self.assertEqual(len(self.calls), 1)
-        self.assertEqual(self.calls[0][0], expected_send_time)
-        self.reactor._debug_now = False
-        self.reactor.remove_strategy(event_rate_strat)
-
-
-    def test_differential_rate(self):
-        max_period = 10.
-        min_period = 1.
-        difference = 2
-        differential_rate_strat = sampling.SampleDifferentialRate(
-            self.inform, self.sensor, difference, min_period, max_period)
-        self._add_strategy(differential_rate_strat)
-
-        no_max_periods = 3
-
-        # Do some 'max period' updates where the sensor has not changed
-        for i in range(no_max_periods):
-            self.timewarp(max_period, event_to_await=self.inform_called)
-
-        call_times = [t for t, vals in self.calls]
-        self.assertEqual(len(self.calls), no_max_periods + 1)
-        self.assertEqual(call_times,
-                         [self.start_time + i*max_period
-                          for i in range(no_max_periods + 1)])
-
-        del self.calls[:]
-
-        # Now do a sensor update by more than `difference` without moving time
-        # along, should not result in any additional updates
-        update_time = self.time()
-        expected_send_time = update_time + min_period
-        # Intial value = 3, difference = 2, 3-2 = 1, but sensor must differ by
-        # _more_ than difference, so choose 0
-        self.sensor.set_value(0, self.sensor.NOMINAL, update_time)
-        # There should, however, be a wake-wait event
-        self.wake_waits.get(timeout=1)
-
-        self.assertEqual(len(self.calls), 0)
-        # Timewarp less than min update period, should not result in an inform
-        # callback
-        self.timewarp(min_period*0.6)
+        # Warp to just before longest period, should not update
+        yield self.set_ioloop_time(t_last_sent + longest*0.999)
         self.assertEqual(len(self.calls), 0)
 
-        # Move time beyond minimum step
-        self.timewarp(min_period*1.01, event_to_await=self.inform_called)
+        # Warp to longest period, should update
+        yield self.set_ioloop_time(t_last_sent + longest)
+        t_last_sent = self.ioloop_time
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
 
-        self.assertEqual(len(self.calls), 1)
-        self.assertEqual(self.calls,
-                         [(expected_send_time,
-                           (self.sensor.name, update_time, 'nominal', '0'))])
-        # Should not be any outstanding wake-waits
-        self.assertEqual(self.wake_waits.qsize(), 0)
+        # Warp to just before next longest period, should not update
+        yield self.set_ioloop_time(t_last_sent + longest*0.999)
+        self.assertEqual(len(self.calls), 0)
 
-        del self.calls[:]
+        # Warp to longest period, should update
+        yield self.set_ioloop_time(t_last_sent + longest)
+        t_last_sent = self.ioloop_time
+        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.calls = []
 
-        # Do a sensor update by less than `difference`
-        self.sensor.set_value(1, self.sensor.NOMINAL, update_time)
-        # Time we expect the next max-period sample
-        expected_send_time += max_period
-        update_time = self.time()
+        # Set value with to small a change, jump past min update time, no update should
+        # happen
+        value = value - delta
+        self.sensor.set(self.ioloop_time, status, value)
+        yield self.set_ioloop_time(t_last_sent + shortest)
+        self.assertEqual(len(self.calls), 0)
 
-        # Move time beyond minimum step, should not send an update, since the
-        # sensor changed by less than `difference`
-        self.timewarp(min_period*1.1)
-        # Timewarp past the next expected max-period sample time
-        self.timewarp(max_period - min_period,
-                      event_to_await=self.inform_called)
+        # Set new value with large enough difference, update should happen
+        value = value - 1
+        self.sensor.set(self.ioloop_time, status, value)
+        t_last_sent = self.ioloop_time
+        self.assertEqual(self.calls, [(self.sensor, t_last_sent, status, value)])
+        self.calls = []
 
-        self.assertEqual(len(self.calls), 1)
-        self.assertEqual(self.calls[0][0], expected_send_time)
-        self.reactor._debug_now = False
-        self.reactor.remove_strategy(differential_rate_strat)
+        # Now warp to after min period, change only status, update should happen
+        yield self.set_ioloop_time(t_last_sent + shortest)
+        status = Sensor.ERROR
+        self.sensor.set(self.ioloop_time, status, value)
+        self.assertEqual(self.calls, [(self.sensor, self.ioloop_time, status, value)])
+        t_last_sent = self.ioloop_time
+        self.calls = []
+
+        yield self.set_ioloop_time(t_last_sent + shortest)
+        status = Sensor.NOMINAL
+        value = value + 1
+        yield self._thread_update_check(self.ioloop_time, status, value)
+        yield self._check_cancel(DUT)
+        self.calls = []
+
+        # Since strategy is cancelled, no futher updates should be sent
+        yield self.set_ioloop_time(self.ioloop_time + 5*longest)
+        self.sensor.set(self.ioloop_time, Sensor.WARN, value + 3)
+        self.assertEqual(len(self.calls), 0)
+
 
 

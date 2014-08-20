@@ -14,24 +14,45 @@ import logging
 import heapq
 import Queue
 import os
+import tornado.ioloop
 
 from functools import partial
+from thread import get_ident as get_thread_ident
 from .core import Message, Sensor, SEC_TO_MS_FAC, MS_TO_SEC_FAC
 
 
 log = logging.getLogger("katcp.sampling")
 
+AGE_OF_UNIVERSE = 4.32329886e17 # approximate age of the universe
 
 # pylint: disable-msg=W0142
 
-def format_inform_v4(sensor_name, timestamp, status, value):
-    timestamp = int(float(timestamp) * SEC_TO_MS_FAC)
+def format_inform_v4(sensor, *reading):
+    timestamp, status, value = sensor.format_reading(reading, 4)
     return Message.inform(
-        "sensor-status", timestamp, "1", sensor_name, status, value)
+        "sensor-status", timestamp, "1", sensor.name, status, value)
 
-def format_inform_v5(sensor_name, timestamp, status, value):
+def format_inform_v5(sensor, *reading):
+    timestamp, status, value = sensor.format_reading(reading, 5)
     return Message.inform(
-        "sensor-status", timestamp, "1", sensor_name, status, value)
+        "sensor-status", timestamp, "1", sensor.name, status, value)
+
+def update_in_ioloop(update):
+    """Decorator that ensures a update() method is run in the tornado ioloop.
+
+    Does this by checking the thread identity. Requires the object that the method is
+    bound to to have :attr:`_ioloop_thread_id`, the result of thread.get_ident() in the
+    ioloop thread, and :attr:`ioloop`, which is the ioloop instance that should be
+    used. Also assumes that the signature update(self, sensor, reading)
+    """
+    def wrapped_update(self, sensor, reading):
+        if get_thread_ident() == self._ioloop_thread_id:
+            update(self, sensor, reading)
+        else:
+            self.ioloop.add_callback(update, self, sensor, reading)
+
+    return wrapped_update
+
 
 
 class SampleStrategy(object):
@@ -71,13 +92,17 @@ class SampleStrategy(object):
 
     # pylint: enable-msg = E0602
 
-    def __init__(self, inform_callback, sensor, *params):
+    OBSERVE_UPDATES = False
+    "True if a strategy must be attached to its sensor as an observer"
+
+    def __init__(self, inform_callback, sensor, *params, **kwargs):
+        self.ioloop = kwargs.get('ioloop') or tornado.ioloop.IOLoop.current()
         self._inform_callback = inform_callback
         self._sensor = sensor
         self._params = params
 
     @classmethod
-    def get_strategy(cls, strategyName, inform_callback, sensor, *params):
+    def get_strategy(cls, strategyName, inform_callback, sensor, *params, **kwargs):
         """Factory method to create a strategy object.
 
         Parameters
@@ -89,6 +114,12 @@ class SampleStrategy(object):
             Sensor to sample.
         params : list of objects
             Custom sampling parameters.
+
+        Keyword Args
+        ------------
+
+        ioloop : tornado.ioloop.IOLoop instance
+            Tornado ioloop to use, otherwise tornado.ioloop.IOLoop.current()
 
         Returns
         -------
@@ -102,21 +133,21 @@ class SampleStrategy(object):
 
         strategyType = cls.SAMPLING_LOOKUP_REV[strategyName]
         if strategyType == cls.NONE:
-            return SampleNone(inform_callback, sensor, *params)
+            return SampleNone(inform_callback, sensor, *params, **kwargs)
         elif strategyType == cls.AUTO:
-            return SampleAuto(inform_callback, sensor, *params)
+            return SampleAuto(inform_callback, sensor, *params, **kwargs)
         elif strategyType == cls.EVENT:
-            return SampleEvent(inform_callback, sensor, *params)
+            return SampleEvent(inform_callback, sensor, *params, **kwargs)
         elif strategyType == cls.DIFFERENTIAL:
-            return SampleDifferential(inform_callback, sensor, *params)
+            return SampleDifferential(inform_callback, sensor, *params, **kwargs)
         elif strategyType == cls.PERIOD:
-            return SamplePeriod(inform_callback, sensor, *params)
+            return SamplePeriod(inform_callback, sensor, *params, **kwargs)
         elif strategyType == cls.EVENT_RATE:
-            return SampleEventRate(inform_callback, sensor, *params)
+            return SampleEventRate(inform_callback, sensor, *params, **kwargs)
         elif strategyType == cls.DIFFERENTIAL_RATE:
-            return SampleDifferentialRate(inform_callback, sensor, *params)
+            return SampleDifferentialRate(inform_callback, sensor, *params, **kwargs)
 
-    def update(self, sensor):
+    def update(self, sensor, reading):
         """Callback used by the sensor's notify method.
 
         This update method is called whenever the sensor value is set
@@ -125,38 +156,22 @@ class SampleStrategy(object):
         a handle to it but receives it due to the generic observer
         mechanism.
 
-        Sub-classes should override this method or :meth:`periodic` to
-        provide the necessary sampling strategy.
+        Sub-classes should override this method or :meth:`start` to provide the necessary
+        sampling strategy. Sub-classes should also ensure that :meth:`update` is thread
+        safe; an easy way to do this is to using the @update_in_ioloop decorator
 
         Parameters
         ----------
         sensor : Sensor object
             The sensor which was just updated.
+        reading : (timestamp, status, value) tuple
+            Sensor reading as would be returned by sensor.read()
         """
         pass
 
-    def periodic(self, timestamp):
-        """This method is called when a period strategy is being configured
-           or periodically after that.
-
-        Sub-classes should override this method or :meth:`update` to
-        provide the necessary sampling strategy.
-
-        Parameters
-        ----------
-        timestamp : float in seconds
-            The time at which the next sample was requested.
-
-        Returns
-        -------
-        next_timestamp : float in seconds
-            The desired timestamp for the next sample.
-        """
-        pass
-
-    def inform(self):
+    def inform(self, reading):
         """Inform strategy creator of the sensor status."""
-        timestamp, status, value = self._sensor.read_formatted()
+        timestamp, status, value = self._sensor.format_reading(reading)
         self._inform_callback(self._sensor.name, timestamp, status, value)
 
     def set_new_period_callback(self, new_period_callback):
@@ -215,33 +230,71 @@ class SampleStrategy(object):
         """Detach strategy from its sensor."""
         self._sensor.detach(self)
 
+    def cancel(self):
+        if self.OBSERVE_UPDATES:
+            self.detach()
+        self.ioloop.add_callback(self.cancel_timeouts)
+
+    def start(self):
+        """Called when strategy should start operating.
+
+        Subclasses that override start() should call the super method before it does
+        anything that uses the ioloop. Will attach to the sensor as as an observer if
+        :attr:`OBSERVE_UPDATES` is True, and sets :attr:`_ioloop_thread_id using
+        thread.get_ident()`
+        """
+        def first_run():
+            self._ioloop_thread_id = get_thread_ident()
+            if self.OBSERVE_UPDATES:
+                self.attach()
+        self.ioloop.add_callback(first_run)
+
+    def inform(self, reading):
+        """Inform strategy creator of the sensor status."""
+        try:
+            timestamp, status, value = reading
+            self._inform_callback(self._sensor, timestamp, status, value)
+        except Exception:
+            log.exception('Unhandled exception trying to send a sensor update')
+
+    def cancel_timeouts(self):
+        "Override this method to cancel any outstanding ioloop timeouts"
+        pass
 
 class SampleAuto(SampleStrategy):
     """Strategy which sends updates whenever the sensor itself is updated."""
 
-    def __init__(self, inform_callback, sensor, *params):
-        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+    OBSERVE_UPDATES = True
+
+    def __init__(self, inform_callback, sensor, *params, **kwargs):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params, **kwargs)
         if params:
             raise ValueError("The 'auto' strategy takes no parameters.")
 
-    def update(self, sensor):
-        self.inform()
+    @update_in_ioloop
+    def update(self, sensor, reading):
+        self.inform(reading)
 
     def get_sampling(self):
         return SampleStrategy.AUTO
 
     def attach(self):
-        self.update(self._sensor)
+        s = self._sensor
+        self.update(s, s.read())
         super(SampleAuto, self).attach()
 
 
 class SampleNone(SampleStrategy):
     """Sampling strategy which never sends any updates."""
 
-    def __init__(self, inform_callback, sensor, *params):
-        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+    def __init__(self, inform_callback, sensor, *params, **kwargs):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params, **kwargs)
         if params:
             raise ValueError("The 'none' strategy takes no parameters.")
+
+    def start(self):
+        # Do nothing, since we don't need set anything up
+        pass
 
     def get_sampling(self):
         return SampleStrategy.NONE
@@ -253,8 +306,11 @@ class SampleDifferential(SampleStrategy):
     Sends updates only when the value has changed by more than some
     specified threshold, or the status changes.
     """
-    def __init__(self, inform_callback, sensor, *params):
-        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+
+    OBSERVE_UPDATES = True
+
+    def __init__(self, inform_callback, sensor, *params, **kwargs):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params, **kwargs)
         if len(params) != 1:
             raise ValueError("The 'differential' strategy takes"
                              " one parameter.")
@@ -283,20 +339,23 @@ class SampleDifferential(SampleStrategy):
         self._lastStatus = None
         self._lastValue = None
 
-    def update(self, sensor):
-        _timestamp, status, value = sensor.read()
-        if status != self._lastStatus or \
-                abs(value - self._lastValue) > self._threshold:
+    @update_in_ioloop
+    def update(self, sensor, reading):
+        _timestamp, status, value = reading
+        if (status != self._lastStatus or
+                abs(value - self._lastValue) > self._threshold):
             self._lastStatus = status
             self._lastValue = value
-            self.inform()
+            self.inform(reading)
 
     def get_sampling(self):
         return SampleStrategy.DIFFERENTIAL
 
     def attach(self):
-        self.update(self._sensor)
+        s = self._sensor
+        self.update(s, s.read())
         super(SampleDifferential, self).attach()
+
 
 class SamplePeriod(SampleStrategy):
     """Periodic sampling strategy.
@@ -304,8 +363,8 @@ class SamplePeriod(SampleStrategy):
     For periodic sampling of any sensor.
     """
 
-    def __init__(self, inform_callback, sensor, *params):
-        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+    def __init__(self, inform_callback, sensor, *params, **kwargs):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params, **kwargs)
         if len(params) != 1:
             raise ValueError("The 'period' strategy takes one parameter. "
                              "Parameters passed: %r, in pid : %s" % (params, os.getpid()))
@@ -315,13 +374,28 @@ class SamplePeriod(SampleStrategy):
                              "Parameters passed: %r, in pid : %s" % (params,os.getpid()))
         self._period = period
 
-    def periodic(self, timestamp):
-        self.inform()
-        return timestamp + self._period
+    def start(self):
+        super(SamplePeriod, self).start()
+        def start_periodic_sampling():
+            self.next_time = self.ioloop.time()
+            self._run_once()
+        self.ioloop.add_callback(start_periodic_sampling)
+
+    def _run_once(self):
+        assert get_thread_ident() == self._ioloop_thread_id
+        now = self.ioloop.time()
+        self.inform(self._sensor.read())
+        self.next_time += self._period
+        if self.next_time < now:
+            # Catch up if we have fallen far behind
+            self.next_time = now + self._period
+        self.next_timeout_handle = self.ioloop.call_at(self.next_time, self._run_once)
 
     def get_sampling(self):
         return SampleStrategy.PERIOD
 
+    def cancel_timeouts(self):
+        self.ioloop.remove_timeout(self.next_timeout_handle)
 
 class SampleEventRate(SampleStrategy):
     """Event rate sampling strategy.
@@ -333,63 +407,91 @@ class SampleEventRate(SampleStrategy):
     update.
     """
 
-    def __init__(self, inform_callback, sensor, *params):
-        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+    OBSERVE_UPDATES = True
+
+    def __init__(self, inform_callback, sensor, *params, **kwargs):
+        SampleStrategy.__init__(self, inform_callback, sensor, *params, **kwargs)
         if len(params) != 2:
             raise ValueError("The 'event-rate' strategy takes two parameters.")
         shortest_period = float(params[0])
         longest_period = float(params[1])
-        # Last sensor status / value, used to determine if it has changed
-        self._last_sv = (None, None)
         self._next_periodic = 1e99
 
         if not 0 <= shortest_period <= longest_period:
             raise ValueError("The shortest and longest periods must"
                              " satisfy 0 <= shortest_period <= longest_period")
         self._shortest_period = shortest_period
+        self._short_timeout_handle = None
         self._longest_period = longest_period
         # don't send updates until timestamp _not_before
         self._not_before = 0
-        # time between _not_before and next required update
-        self._not_after_delta = (self._longest_period - self._shortest_period)
-        self._time = time.time
 
-    def update(self, sensor, now=None):
-        if now is None:
-            now = self._time()
 
-        _, status, value = sensor.read()
-        last_s, last_v = self._last_sv
-        sensor_changed = status != last_s or value != last_v
+    def inform(self, reading):
+        SampleStrategy.inform(self, reading)
+        now = self.ioloop.time()
+        self._not_before = now + self._shortest_period
+        self._not_after = now + self._longest_period
+        self._last_reading_sent = reading
 
-        if now < self._not_before:
-            if self._next_periodic != self._not_before and sensor_changed:
-                # If you get an AttributeError here it's because
-                # set_new_period_callback() should have been called
-                self._next_periodic = self._not_before
-                self._new_period_callback(self._not_before)
+
+    def start(self):
+        super(SampleEventRate, self).start()
+        def start_periodic_sampling():
+            self.inform(self._sensor.read())
+            self._periodic_sampling()
+
+        self.ioloop.add_callback(start_periodic_sampling)
+
+    def _periodic_sampling(self):
+        if self._not_after >= AGE_OF_UNIVERSE:
+            # Ignore stupidly long periods
+            self._periodic_timeout_handle = None
+            return
+        if self.ioloop.time() >= self._not_after:
+            self.inform(self._sensor.read())
+
+        # We depend on self.inform() having updating self._not_after
+        self._periodic_timeout_handle = self.ioloop.call_at(
+            self._not_after, self._periodic_sampling)
+
+    def _short_timeout_handler(self):
+        self._short_timeout_handle = None
+        if (self.ioloop.time() >= self._not_before):
+            self.inform(self._sensor.read())
+
+    def _sensor_changed(self, reading):
+        _, status, value = reading
+        _, last_s, last_v = self._last_reading_sent
+        return status != last_s or value != last_v
+
+    @update_in_ioloop
+    def update(self, sensor, reading):
+        sensor_changed = self._sensor_changed(reading)
+        if not sensor_changed:        # Ignore  update if sensor value/status is unchanged
             return
 
-        past_longest = now >= self._not_before + self._not_after_delta
-
-        if past_longest or sensor_changed:
-            self._not_before = now + self._shortest_period
-            self._last_sv = (status, value)
-            self.inform()
-
-    def periodic(self, timestamp):
-        self.update(self._sensor, now=timestamp)
-        np = self._next_periodic = self._not_before + self._not_after_delta
-        # Don't bother with a next update if it is going to be beyond the
-        # approximate age of the universe
-        return np if np < 4.32329886e17 else None
+        now = self.ioloop.time()
+        if now < self._not_before:
+            # Too soon to send an update again
+            if not self._short_timeout_handle:
+                # Make sure we schedule a callback to send the sensor value as soon as the
+                # mininum period since the last update has expired
+                self._short_timeout_handle = self.ioloop.call_at(
+                    self._not_before, self._short_timeout_handler)
+        else:
+            # Send the sensor value, updating self._not_before and self._last_reading_sent
+            # in the process
+            self.inform(reading)
 
     def get_sampling(self):
         return SampleStrategy.EVENT_RATE
 
-    def attach(self):
-        self.update(self._sensor)
-        super(SampleEventRate, self).attach()
+    def cancel_timeouts(self):
+        if self._periodic_timeout_handle:
+            self.ioloop.remove_timeout(self._periodic_timeout_handle)
+        if self._short_timeout_handle:
+            self.ioloop.remove_timeout(self._short_timeout_handle)
 
 
 class SampleEvent(SampleEventRate):
@@ -406,11 +508,10 @@ class SampleEvent(SampleEventRate):
     # SampleEventRate with the appropriate default values to implement
     # SampleEvent
 
-    def __init__(self, inform_callback, sensor, *params):
-        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+    def __init__(self, inform_callback, sensor, *params, **kwargs):
         if len(params) > 0:
             raise ValueError("The 'event' strategy takes no parameters.")
-        super(SampleEvent, self).__init__(inform_callback, sensor, 0, 1e99)
+        super(SampleEvent, self).__init__(inform_callback, sensor, 0, 1e99, **kwargs)
         # Fix up the parameters so we don't see the extra parameters that were
         # passed to SampleEventRate
         self._params = params
@@ -418,7 +519,7 @@ class SampleEvent(SampleEventRate):
     def get_sampling(self):
         return SampleStrategy.EVENT
 
-class SampleDifferentialRate(SampleStrategy):
+class SampleDifferentialRate(SampleEventRate):
     """Event rate sampling strategy.
 
     Report the value whenever it changes by more than `difference` from the last
@@ -429,10 +530,12 @@ class SampleDifferentialRate(SampleStrategy):
     implemented for float and integer sensors.
     """
 
-    def __init__(self, inform_callback, sensor, *params):
-        SampleStrategy.__init__(self, inform_callback, sensor, *params)
+    def __init__(self, inform_callback, sensor, *params, **kwargs):
+        # Remove the 'difference' parameter from params for the super call
         if len(params) != 3:
             raise ValueError("The 'differential-rate' strategy takes three parameters.")
+        super(SampleDifferentialRate, self).__init__(
+            inform_callback, sensor, *params[1:], **kwargs)
         difference = params[0]
         if sensor.stype ==  'integer':
             difference = int(difference)
@@ -441,212 +544,10 @@ class SampleDifferentialRate(SampleStrategy):
         else:
             raise ValueError('The differential-rate strategy can only be defined '
                              'for integer or float sensors')
-        shortest_period = float(params[1])
-        longest_period = float(params[2])
-        # Last sensor status / value, used to determine if it has changed
-        self._last_sv = (None, None)
-        self._next_periodic = 1e99
-
-        if not 0 <= shortest_period <= longest_period:
-            raise ValueError("The shortest and longest periods must"
-                             " satisfy 0 <= shortest_period <= longest_period")
-        self._shortest_period = shortest_period
-        self._longest_period = longest_period
         self.difference = difference
         # don't send updates until timestamp _not_before
-        self._not_before = 0
-        # time between _not_before and next required update
-        self._not_after_delta = (self._longest_period - self._shortest_period)
-        self._time = time.time
 
-    def update(self, sensor, now=None):
-        if now is None:
-            now = self._time()
-
-        _, status, value = sensor.read()
-        last_s, last_v = self._last_sv
-        sensor_changed = (status != last_s or
-                          abs(value - last_v) > self.difference)
-
-        if now < self._not_before:
-            if self._next_periodic != self._not_before and sensor_changed:
-                # If you get an AttributeError here it's because
-                # set_new_period_callback() should have been called
-                self._next_periodic = self._not_before
-                self._new_period_callback(self._not_before)
-            return
-
-        past_longest = now >= self._not_before + self._not_after_delta
-
-        if past_longest or sensor_changed:
-            self._not_before = now + self._shortest_period
-            self._last_sv = (status, value)
-            self.inform()
-
-    def periodic(self, timestamp):
-        self.update(self._sensor, now=timestamp)
-        np = self._next_periodic = self._not_before + self._not_after_delta
-        # Don't bother with a next update if it is going to be beyond the
-        # approximate age of the universe
-        return np if np < 4.32329886e17 else None
-
-    def get_sampling(self):
-        return SampleStrategy.DIFFERENTIAL_RATE
-
-    def attach(self):
-        self.update(self._sensor)
-        super(SampleDifferentialRate, self).attach()
-
-class SampleReactor(threading.Thread):
-    """SampleReactor manages sampling strategies.
-
-    This class keeps track of all the sensors and what strategy
-    is currently used to sample each one.  It also provides a
-    thread that calls periodic sampling strategies as needed.
-
-    Parameters
-    ----------
-    logger : logging.Logger object
-        Python logger to write logs to.
-    """
-    def __init__(self, logger=log):
-        super(SampleReactor, self).__init__()
-        self._strategies = set()
-        self._stopEvent = threading.Event()
-        self._wakeEvent = threading.Event()
-        self._heap = []
-        self._removal_events = Queue.Queue()
-        self._adding_events = Queue.Queue()
-        self._logger = logger
-        # set daemon True so that the app can stop even if the thread
-        # is running
-        self.setDaemon(True)
-
-    def add_strategy(self, strategy):
-        """Add a sensor strategy to the reactor.
-
-        Strategies should be removed using :meth:`remove_strategy`.
-
-        The new strategy is then attached to the sensor for updates and a
-        periodic sample is triggered to schedule the next one.
-
-        Parameters
-        ----------
-        strategy : SampleStrategy object
-            The sampling strategy to add to the reactor.
-        """
-        self._strategies.add(strategy)
-        strategy.set_new_period_callback(self.adjust_strategy_update_time)
-        strategy.attach()
-
-        next_time = strategy.periodic(time.time())
-        if next_time is not None:
-            self._adding_events.put((next_time, strategy))
-            self._wakeEvent.set()
-
-    def adjust_strategy_update_time(self, strategy, next_time):
-        """Called by a strategy if it needs to have a periodic update time adjusted"""
-        if next_time is not None:
-            self._adding_events.put((next_time, strategy))
-            self._wakeEvent.set()
-
-    def remove_strategy(self, strategy):
-        """Remove a strategy from the reactor.
-
-        Strategies are added with :meth:`add_strategy`.
-
-        Parameters
-        ----------
-        strategy : SampleStrategy object
-            The sampling strategy to remove from the reactor.
-        """
-        strategy.detach()
-        self._strategies.remove(strategy)
-        self._removal_events.put(strategy)
-        self._wakeEvent.set()
-
-
-    def stop(self):
-        """Send event to processing thread and wait for it to stop."""
-        self._stopEvent.set()
-        self._wakeEvent.set()
-
-    def run(self):
-        """Run the sample reactor."""
-        self._logger.debug("Starting thread %s" %
-                           (threading.currentThread().getName()))
-        heap = self._heap
-        wake = self._wakeEvent
-
-        # save globals so that the thread can run cleanly
-        # even while Python is setting module globals to
-        # None.
-        _time = time.time
-        _currentThread = threading.currentThread
-        _push = heapq.heappush
-        _pop = heapq.heappop
-        self._heapify = heapq.heapify
-
-        while not self._stopEvent.isSet():
-            # Push new events into the heap
-            while True:
-                try:
-                    _push(heap, self._adding_events.get(block=False))
-                except Queue.Empty:
-                    break
-            self._remove_dead_events()
-            wake.clear()
-            if heap:
-                next_time, strategy = _pop(heap)
-                if strategy not in self._strategies:
-                    continue
-
-                wake.wait(next_time - _time())
-                if wake.isSet():
-                    _push(heap, (next_time, strategy))
-                    continue
-
-                try:
-                    next_time = strategy.periodic(next_time)
-                    if next_time is not None:
-                        _push(heap, (next_time, strategy))
-                except Exception, e:
-                    self._logger.exception(e)
-                    # push ten seconds into the future and hope whatever was
-                    # wrong sorts itself out
-                    _push(heap, (next_time + 10.0, strategy))
-            else:
-                wake.wait()
-
-        self._stopEvent.clear()
-        self._logger.debug("Stopped thread %s" % (_currentThread().getName()))
-
-    def _remove_dead_events(self):
-        """Remove event from event heap to prevent memory leaks caused by
-        far-future-dated sampling events"""
-        # Find strateg(ies) in sampling heap, set to (None, None) so that it
-        # will sort to the top and re-heapify. Next run through the reactor loop
-        # should discard the item.
-
-        # XX TODO O(n), but oh well. Also happens in the sampling event loop, so
-        # may affect sampling accuracy while strategies are being set by
-        # increasing the latency of the loop. Might need to use a different data
-        # structure in the future, but it should also be fixed if we use the
-        # twisted reactor :)
-
-        heap = self._heap
-        removals = []
-        while True:
-            try:
-                removals.append(self._removal_events.get_nowait())
-            except Queue.Empty:
-                break
-        if not removals:
-            return
-
-        removals = set(removals)
-        for i in range(len(heap)):
-            if heap[i][1] in removals:
-                heap[i] = (None, None)
-
-        self._heapify(self._heap)
+    def _sensor_changed(self, reading):
+        _, status, value = reading
+        _, last_s, last_v = self._last_reading_sent
+        return (abs(value - last_v) > self.difference or status != last_s)
