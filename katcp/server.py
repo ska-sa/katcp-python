@@ -474,7 +474,7 @@ class KATCPServer(object):
             client_conn = self.client_connection_factory(self, stream)
             self._connections[stream] = client_conn
             try:
-                yield self._device.on_client_connect(client_conn)
+                yield gen.maybe_future(self._device.on_client_connect(client_conn))
             except Exception:
                 # If on_client_connect fails there is no reason to continue trying to handle
                 # this connection. Try and send exception info to the client and disconnect
@@ -483,7 +483,7 @@ class KATCPServer(object):
                     e_type, e_value, trace, self._tb_limit))
                 log_msg = 'Device error initialising connection {0}'.format(reason)
                 self._logger.error(log_msg)
-                stream.write(log_msg)
+                stream.write(str(Message.inform('log', log_msg)))
                 stream.close(exc_info=True)
             else:
                 self._line_read_loop(stream, client_conn)
@@ -547,7 +547,8 @@ class KATCPServer(object):
         try:
             if not conn.client_disconnect_called:
                 try:
-                    yield self._device.on_client_disconnect(conn, reason, stream_open)
+                    yield gen.maybe_future(
+                        self._device.on_client_disconnect(conn, reason, stream_open))
                 except Exception:
                     self._logger.error(
                         'Error while calling on_client_disconnect for client {0}'.format(
