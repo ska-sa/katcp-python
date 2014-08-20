@@ -408,7 +408,7 @@ class DeviceClient(object):
                     e_type, e_value, trace = sys.exc_info()
                     reason = "\n".join(traceback.format_exception(
                         e_type, e_value, trace, self._tb_limit))
-                    self._logger.error("BAD COMMAND: %s" % (reason,))
+                    self._logger.error("BAD COMMAND %r: %s" % (full_line, reason))
                 else:
                     self.handle_message(msg)
 
