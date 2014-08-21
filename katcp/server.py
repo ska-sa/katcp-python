@@ -369,7 +369,11 @@ class KATCPServer(object):
         """
         if timeout:
             self._running.wait(timeout)
-        self.ioloop.add_callback(self._uninstall)
+        try:
+            self.ioloop.add_callback(self._uninstall)
+        except AttributeError:
+            # Probably we have been shut-down already
+            pass
 
     def join(self, timeout=None):
         """Rejoin the server thread.
@@ -2087,9 +2091,10 @@ class DeviceServer(DeviceServerBase):
         super(DeviceServer, self).start(timeout)
 
     def stop(self, timeout=None):
-        self._reactor.stop()
-        self._reactor.join(timeout=0.5)
-        self._reactor = None
+        if self._reactor:
+            self._reactor.stop()
+            self._reactor.join(timeout=0.5)
+            self._reactor = None
         super(DeviceServer, self).stop(timeout)
 
 class DeviceLogger(object):
