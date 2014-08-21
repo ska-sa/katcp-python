@@ -421,6 +421,7 @@ class KATCPServer(object):
         def run_ioloop():
             try:
                 self.ioloop.start()
+                self.ioloop.close()
             except Exception:
                 self._logger.error('Error starting tornado IOloop: ', exc_info=True)
             finally:
