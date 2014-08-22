@@ -753,7 +753,6 @@ class MessageHandlerThread(object):
 
         handle_message should not be called again until ready_future has resolved
         """
-        self._logger.info('on_message called')
         MAX_QUEUE_SIZE = 3
         if len(self._msg_queue) >= MAX_QUEUE_SIZE:
             # This should never happen if callers to handle_message wait for its futures
