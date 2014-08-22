@@ -394,7 +394,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test standard request and replies."""
         get_msgs = self.client.message_recorder(
                 blacklist=self.BLACKLIST, replies=True)
-        nomid_req = partial(self.client.request, use_mid=False)
+        nomid_req = partial(self.client.blocking_request, use_mid=False)
         nomid_req(katcp.Message.request("watchdog"), use_mid=False)
         nomid_req(katcp.Message.request("restart"))
         nomid_req(katcp.Message.request("log-level"))
@@ -420,8 +420,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         nomid_req(katcp.Message.request("sensor-sampling"))
         nomid_req(katcp.Message.request("sensor-sampling",
                                                   "an.unknown", "auto"))
-        self.client.blocking_request(katcp.Message.request(
-            "sensor-sampling", "an.int", "unknown"), use_mid=False)
+        nomid_req(katcp.Message.request("sensor-sampling", "an.int", "unknown"))
 
         def tst():
             self.server.log.trace("trace-msg")
