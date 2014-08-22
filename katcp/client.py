@@ -22,7 +22,7 @@ from .core import (DeviceMetaclass, MessageParser, Message,
 
 
 #logging.basicConfig(level=logging.DEBUG)
-log = logging.getLogger("katcp")
+log = logging.getLogger("katcp.client")
 
 
 class DeviceClient(object):

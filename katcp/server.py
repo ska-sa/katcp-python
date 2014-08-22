@@ -41,7 +41,7 @@ from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
 from .version import VERSION, VERSION_STR
 from .kattypes import (request, return_reply)
 
-log = logging.getLogger("katcp")
+log = logging.getLogger("katcp.server")
 
 BASE_REQUESTS = frozenset(['client-list',
                            'halt',
@@ -916,7 +916,6 @@ class DeviceServerBase(object):
         raise RuntimeError(
             'set_concurrency_options() need to be called once before on_message')
 
-    @return_future
     def handle_message(self, client_conn, msg):
         """Handle messages of all types from clients.
 
@@ -1135,7 +1134,7 @@ class DeviceServerBase(object):
                 self.handle_message, self.create_log_inform, self._logger)
             self.on_message = self._handler_thread.on_message
         else:
-            self.on_message = self.handle_message
+            self.on_message = return_future(self.handle_message)
 
         self._concurrency_options = ObjectDict(
             thread_safe=thread_safe, handler_thread=handler_thread)
