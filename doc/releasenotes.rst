@@ -24,6 +24,14 @@ updates due to race conditions. This is a backwards incompatible changes.
 Whereas before observers were called as `observer.update(sensor)`, they are now
 called as `observer.update(sensor, reading)`.
 
+Sample Reactor callback API
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Sensor strategies now call back with the sensor object and raw Python datatype
+values rather than the sensor name and KATCP formatted values. The sensor
+classes have also grown a :meth:`katcp.core.Sensor.format_reading` method that
+can be used to do KATCP-version specific formatting of the sensor reading.
+
 0.5.5
 =====
 

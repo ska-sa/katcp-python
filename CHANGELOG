@@ -1,5 +1,7 @@
  (0.6.?)
-* Backwards-incompatible change in Sensor observer API
+ * Backwards-incompatible change in Sensor observer API
+ * Sensor strategies now call back with raw Python dattype values rather than
+   KATCP formatted
 
 14 July 2014 (0.5.5)
  * Add utility code to katcp.version.py that other modules can use to parse svn
