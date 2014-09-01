@@ -963,7 +963,9 @@ class Sensor(object):
     def attach(self, observer):
         """Attach an observer to this sensor.
 
-        The observer must support a call to observer.update(sensor).
+        The observer must support a call to observer.update(sensor, reading), where
+        sensor -- the sensor object
+        reading -- (timestamp, status, value) tuple for this update
 
         Parameters
         ----------
@@ -984,11 +986,11 @@ class Sensor(object):
         """
         self._observers.discard(observer)
 
-    def notify(self):
+    def notify(self, reading):
         """Notify all observers of changes to this sensor."""
         # copy list before iterating in case new observers arrive
         for o in list(self._observers):
-            o.update(self)
+            o.update(self, reading)
 
     def parse_value(self, s_value, katcp_major=DEFAULT_KATCP_MAJOR):
         """Parse a value from a string.
@@ -1019,8 +1021,8 @@ class Sensor(object):
             The value of the sensor (the type should be appropriate to the
             sensor's type).
         """
-        self._value_tuple = (timestamp, status, value)
-        self.notify()
+        reading = self._value_tuple = (timestamp, status, value)
+        self.notify(reading)
 
     def set_formatted(self, raw_timestamp, raw_status, raw_value,
                       major=DEFAULT_KATCP_MAJOR):
@@ -1062,7 +1064,38 @@ class Sensor(object):
         value : str
             KATCP formatted sensor value
         """
-        timestamp, status, value = self.read()
+        return self.format_reading(self.read(), major)
+
+    def format_reading(self, reading, major=DEFAULT_KATCP_MAJOR):
+        """Format sensor reading as timestamp, status, value tuple of strings.
+
+        All values are strings formatted as specified in the Sensor Type
+        Formats in the katcp specification.
+
+        Parameters
+        ----------
+
+        reading : tuple (timestamp, status, value)
+            sensor reading as returned by read()
+        major : int. Defaults to latest implemented KATCP version (5)
+            Major version of KATCP to use when interpreting types
+
+        Returns
+        -------
+        timestamp : str
+            KATCP formatted timestamp string
+        status : str
+            KATCP formatted sensor status string
+        value : str
+            KATCP formatted sensor value
+
+        Note
+        ----
+
+        Should only be used for a reading obtained from the same sensor.
+        """
+
+        timestamp, status, value = reading
         return (self.TIMESTAMP_TYPE.encode(timestamp, major),
                 self.STATUSES[status],
                 self._formatter(value, True, major))

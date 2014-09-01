@@ -4,7 +4,33 @@
 Release Notes
 *************
 
+0.6.?
+=====
+
+* Major change: Use the tornado event loop and async socket routines.
+* TODO Write about how the library should be used for blocking or async code.
+
 See also :download:`CHANGELOG.txt` for more details on chages.
+
+Important API changes
+---------------------
+
+Sensor observer API
+^^^^^^^^^^^^^^^^^^^
+
+The :class:`katcp.core.Sensor` sensor observer API has been changed to pass the
+sensor reading in the `observer.update()` callback, preventing potential lost
+updates due to race conditions. This is a backwards incompatible changes.
+Whereas before observers were called as `observer.update(sensor)`, they are now
+called as `observer.update(sensor, reading)`.
+
+Sample Reactor callback API
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Sensor strategies now call back with the sensor object and raw Python datatype
+values rather than the sensor name and KATCP formatted values. The sensor
+classes have also grown a :meth:`katcp.core.Sensor.format_reading` method that
+can be used to do KATCP-version specific formatting of the sensor reading.
 
 0.5.5
 =====

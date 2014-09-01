@@ -42,13 +42,15 @@ class GenericSensorTree(object):
         # map of parent -> set of all child sensors
         self._parent_to_children = {}
 
-    def update(self, sensor):
+    def update(self, sensor, reading):
         """Update callback used by sensors to notify obervers of changes.
 
         Parameters
         ----------
         sensor : :class:`katcp.Sensor`
             The sensor whose value has changed.
+        reading : (timestamp, status, value) tuple
+            Sensor reading as would be returned by sensor.read()
         """
         parents = list(self._child_to_parents[sensor])
         for parent in parents:

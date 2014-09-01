@@ -195,6 +195,8 @@ class TestSensor(unittest.TestCase):
         s = Sensor.integer("an.int", "An integer.", "count", [-4, 3])
         self.assertEqual(s.stype, 'integer')
         s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
+        # test both read_formatted and format_reading
+        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "nominal", "3"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "nominal", "3"))
         self.assertEquals(s.parse_value("3"), 3)
         self.assertEquals(s.parse_value("4"), 4)
@@ -213,6 +215,8 @@ class TestSensor(unittest.TestCase):
         s = Sensor.float("a.float", "A float.", "power", [0.0, 5.0])
         self.assertEqual(s.stype, 'float')
         s.set(timestamp=12345, status=katcp.Sensor.WARN, value=3.0)
+        # test both read_formatted and format_reading
+        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "warn", "3"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "warn", "3"))
         self.assertEquals(s.parse_value("3"), 3.0)
         self.assertEquals(s.parse_value("10"), 10.0)
@@ -231,6 +235,8 @@ class TestSensor(unittest.TestCase):
         s = Sensor.boolean("a.boolean", "A boolean.", "on/off", None)
         self.assertEqual(s.stype, 'boolean')
         s.set(timestamp=12345, status=katcp.Sensor.UNKNOWN, value=True)
+        # test both read_formatted and format_reading
+        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "unknown", "1"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "unknown", "1"))
         self.assertEquals(s.parse_value("1"), True)
         self.assertEquals(s.parse_value("0"), False)
@@ -246,6 +252,8 @@ class TestSensor(unittest.TestCase):
             "a.discrete", "A discrete sensor.", "state", ["on", "off"])
         self.assertEqual(s.stype, 'discrete')
         s.set(timestamp=12345, status=katcp.Sensor.ERROR, value="on")
+        # test both read_formatted and format_reading
+        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "error", "on"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "error", "on"))
         self.assertEquals(s.parse_value("on"), "on")
         self.assertRaises(ValueError, s.parse_value, "fish")
@@ -261,6 +269,8 @@ class TestSensor(unittest.TestCase):
         s = Sensor.lru("an.lru", "An LRU sensor.", "state", None)
         self.assertEqual(s.stype, 'lru')
         s.set(timestamp=12345, status=Sensor.FAILURE, value=Sensor.LRU_ERROR)
+        # test both read_formatted and format_reading
+        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "failure", "error"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "failure", "error"))
         self.assertEquals(s.parse_value("nominal"), katcp.Sensor.LRU_NOMINAL)
         self.assertRaises(ValueError, s.parse_value, "fish")
@@ -276,6 +286,8 @@ class TestSensor(unittest.TestCase):
         s = Sensor.string("a.string", "A string sensor.", "filename", None)
         self.assertEqual(s.stype, 'string')
         s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value="zwoop")
+        # test both read_formatted and format_reading
+        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "nominal", "zwoop"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "nominal", "zwoop"))
         self.assertEquals(s.parse_value("bar foo"), "bar foo")
         s = Sensor.string(
@@ -287,9 +299,14 @@ class TestSensor(unittest.TestCase):
         s = Sensor.timestamp("a.timestamp", "A timestamp sensor.", "", None)
         self.assertEqual(s.stype, 'timestamp')
         s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value=1001.9)
+        # test both read_formatted and format_reading
+        self.assertEqual(s.format_reading(s.read()),
+                         ("12345.000000", "nominal", "1001.900000"))
         self.assertEqual(s.read_formatted(),
                          ("12345.000000", "nominal", "1001.900000"))
         # Test with katcp v4 parsing formatting
+        self.assertEqual(s.format_reading(s.read(), major=4),
+                         ("12345000", "nominal", "1001900"))
         self.assertEqual(s.read_formatted(major=4),
                          ("12345000", "nominal", "1001900"))
         self.assertAlmostEqual(s.parse_value("1002.100"), 1002.1)
@@ -310,6 +327,9 @@ class TestSensor(unittest.TestCase):
         s = Sensor.address("a.address", "An address sensor.", "", None)
         self.assertEqual(s.stype, 'address')
         s.set(timestamp=12345, status=Sensor.NOMINAL, value=("127.0.0.1", 80))
+        # test both read_formatted and format_reading
+        self.assertEqual(s.format_reading(s.read()),
+                         ("12345.000000", "nominal", "127.0.0.1:80"))
         self.assertEqual(s.read_formatted(),
                          ("12345.000000", "nominal", "127.0.0.1:80"))
         self.assertEqual(s.parse_value("[::1]:80"), ("::1", 80))

@@ -265,7 +265,7 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_equal(msgs, (
             r'#version-connect katcp-protocol 5.0-IM',
             # Will have to be updated for every library version bump
-            r'#version-connect katcp-library katcp-python-0.5.6a0',
+            r'#version-connect katcp-library katcp-python-0.6.0a0',
             r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g') )
 
     def test_request_sensor_sampling_clear(self):
@@ -395,7 +395,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         get_msgs = self.client.message_recorder(
                 blacklist=self.BLACKLIST, replies=True)
         nomid_req = partial(self.client.blocking_request, use_mid=False)
-        nomid_req(katcp.Message.request("watchdog"), use_mid=False)
+        nomid_req(katcp.Message.request("watchdog"))
         nomid_req(katcp.Message.request("restart"))
         nomid_req(katcp.Message.request("log-level"))
         nomid_req(katcp.Message.request("log-level", "trace"))
@@ -805,5 +805,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test adding and removing sensors from a running device."""
         an_int = self.server._sensors["an.int"]
         self.server.remove_sensor(an_int)
+        # TODO remove_sensor test that checks that everything is indeed gone
         self.server.add_sensor(an_int)
         self.test_sampling()
+

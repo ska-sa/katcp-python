@@ -1170,9 +1170,9 @@ class SensorTransitionWaiter(object):
         # Perform teardown cleanup actions on self.sensor
         self.sensor.detach(self._observer)
 
-    def _sensor_callback(self, sensor):
+    def _sensor_callback(self, sensor, reading):
         assert(sensor is self.sensor)
-        self._value_queue.put(sensor.value())
+        self._value_queue.put(reading[2])
 
     def _test_value(self, value, value_test):
         """

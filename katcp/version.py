@@ -11,7 +11,7 @@ import pkg_resources
 import sys
 import subprocess
 
-VERSION = (0, 5, 6, 'alpha', 0)
+VERSION = (0, 6, 0, 'alpha', 0)
 
 BASE_VERSION_STR = '.'.join([str(x) for x in VERSION[:3]])
 VERSION_STR = {

@@ -1,3 +1,8 @@
+ (0.6.?)
+ * Backwards-incompatible change in Sensor observer API
+ * Sensor strategies now call back with raw Python dattype values rather than
+   KATCP formatted
+
 14 July 2014 (0.5.5)
  * Add utility code to katcp.version.py that other modules can use to parse svn
    or git revisions for use in build-state informs or sensors
@@ -48,7 +53,7 @@
 
 29 January 2013 (0.5.0)
  * Minor documentation updates
- * Version 0.5.0 relesed
+ * Version 0.5.0 released
 
 13 December 2012 (0.5.0a0)
  * Add support for protocol flags to katcp.core -- a standard
