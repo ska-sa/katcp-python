@@ -598,6 +598,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         )
 
         reply_cb.assert_wait(1)
+        self.client.request(katcp.Message.request('cancel-slow-command'))
         self.assertEqual(len(replies), 1)
         self.assertEqual([msg.name for msg in replies], ["slow-command"])
         self.assertEqual([msg.arguments for msg in replies], [
@@ -830,6 +831,3 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         instance.cancel.assert_called_once_with()
         self.client.join(timeout=0.45)
         instance.join.assert_called_once_with(timeout=0.45)
-        # It's OK not to have this in teardown since the client will
-        # itself cancel the slow_command when it is stop()ed
-        self.client.blocking_request(katcp.Message.request("cancel-slow-command"))
