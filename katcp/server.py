@@ -24,8 +24,9 @@ from functools import partial, wraps
 from collections import deque
 from thread import get_ident as get_thread_ident
 
-from tornado import gen
+from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
+from tornado.concurrent import chain_future
 from tornado.util import ObjectDict
 from concurrent.futures import Future, TimeoutError
 
@@ -67,12 +68,12 @@ def return_future(fn):
     """
     @wraps(fn)
     def decorated(*args, **kwargs):
-        f = tornado_Future()
         try:
-            f.set_result(fn(*args, **kwargs))
+            return gen.maybe_future(fn(*args, **kwargs))
         except Exception:
+            f = tornado_Future()
             f.set_exc_info(sys.exc_info())
-        return f
+            return f
 
     return decorated
 
@@ -118,6 +119,7 @@ class ClientConnection(object):
         self._get_address = partial(server.get_address, conn_id)
         self._send_message = partial(server.send_message, conn_id)
         self._mass_send_message = server.mass_send_message
+        self.flush_on_close = partial(server.flush_on_close, conn_id)
 
     def inform(self, msg):
         """Send an inform message to a particular client.
@@ -222,6 +224,14 @@ class KATCPServer(object):
     If more than MAX_WRITE_BUFFER_SIZE bytes are outstanding, the client connection is
     closed. Note that the OS also buffers socket writes, so more than
     MAX_WRITE_BUFFER_SIZE bytes may be untransmitted in total.
+    """
+
+    DISCONNECT_TIMEOUT = 1
+    """How long to wait for the device on_client_disconnect() to complete
+
+    Not this will only work if the device on_client_disconnect() method is non-blocking
+    (i.e. returns a future immediately. Otherwise the ioloop will be blocked and unable to
+    apply the timeout
     """
 
     client_connection_factory = ClientConnection
@@ -364,7 +374,7 @@ class KATCPServer(object):
 
         Parameters
         ----------
-        timeout : float in seconds
+        timeout : float in seconds or None 
             Seconds to wait for server to have *started*.
         """
         if timeout:
@@ -473,9 +483,12 @@ class KATCPServer(object):
             stream.set_nodelay(True)
             stream.max_write_buffer_size = self.MAX_WRITE_BUFFER_SIZE
 
-            # Abuse the IOStream object slightly by adding an 'address' attribute. Use
-            # nasty prefix to prevent naming collisions
-            stream.KATCPServerTornado_address = address
+            # Abuse the IOStream object slightly by adding 'address' and 'closing'
+            # attributes. Use nasty prefix to prevent naming collisions
+            stream.KATCPServer_address = address
+            # Flag to indicate that no more write should be accepted so that we can flush
+            # the write buffer when closing a connection
+            stream.KATCPServer_closing = False
 
             client_conn = self.client_connection_factory(self, stream)
             self._connections[stream] = client_conn
@@ -504,8 +517,13 @@ class KATCPServer(object):
         try:
             while True:
                 try:
+                    if stream.closed():
+                        # read_until_regex() below will still give us the backlogged messages
+                        # buffered by the iostream, resulting in message handlers being
+                        # called with a closed connection. Exit early instead.
+                        break
                     line = yield stream.read_until_regex('\n|\r')
-                except tornado.iostream.StreamClosedError:
+                except iostream.StreamClosedError:
                     break # Assume that _stream_closed_callback() will handle this case
                 except Exception:
                         self._logger.warn('Unhandled Exception while reading from client {0}:'
@@ -526,7 +544,8 @@ class KATCPServer(object):
                     if msg: # Ignore empty messages (i.e empty lines)
                         yield self._device.on_message(client_conn, msg)
                 except Exception:
-                    self._logger.error('Error handling message', exc_info=True)
+                    self._logger.error('Error handling message {0!s}'.format(msg),
+                                       exc_info=True)
         except Exception:
             self._logger.error('Unexpected exception in read-loop for client {0}:'
                                .format(client_address))
@@ -553,8 +572,9 @@ class KATCPServer(object):
         try:
             if not conn.client_disconnect_called:
                 try:
-                    yield gen.maybe_future(
-                        self._device.on_client_disconnect(conn, reason, stream_open))
+                    f = gen.maybe_future(self._device.on_client_disconnect(
+                        conn, reason, stream_open))
+                    yield gen.with_timeout(self.DISCONNECT_TIMEOUT, f)
                 except Exception:
                     self._logger.error(
                         'Error while calling on_client_disconnect for client {0}'.format(
@@ -575,7 +595,7 @@ class KATCPServer(object):
         This method is thread-safe
         """
         try:
-            addr = ":".join(str(part) for part in stream.KATCPServerTornado_address)
+            addr = ":".join(str(part) for part in stream.KATCPServer_address)
         except AttributeError:
             # Something weird happened, but keep trucking
             addr = '<error>'
@@ -604,12 +624,25 @@ class KATCPServer(object):
         """
         assert get_thread_ident() == self._ioloop_thread_id
         try:
+            if stream.KATCPServer_closing:
+                raise RuntimeError('Stream is closing so we cannot accept any more writes')
             return stream.write(str(msg) + '\n')
         except Exception:
             addr = self.get_address(stream)
             self._logger.warn('Could not send message {0!r} to {1}'
                               .format(str(msg), addr), exc_info=True)
             stream.close(exc_info=True)
+
+    def flush_on_close(self, stream):
+        """Prevent further writes to a stream and flush tornado iostream write buffer
+
+        Returns a future that resolves when the stream is flushed
+        """
+        assert get_thread_ident() == self._ioloop_thread_id
+        # Prevent futher writes
+        stream.KATCPServer_closing = True
+        # Write an empty message to get a future that resolves when the buffer is flushed
+        return stream.write('\n')
 
     def async_call(self, fn):
         """Allow thread-safe calls to ioloop functions
@@ -644,7 +677,6 @@ class KATCPServer(object):
                 self.ioloop.add_callback(send_message_callback)
             finally:
                 return f
-
 
     def send_message_async(self, stream, msg):
         """Thread-safe version of send_message() returning a Future instance
@@ -773,7 +805,11 @@ class MessageHandlerThread(object):
                 while self._msg_queue:
                     ready_future, client_conn, msg = self._msg_queue.popleft()
                     try:
-                        ready_future.set_result(self.handler(client_conn, msg))
+                        res = self.handler(client_conn, msg)
+                        if gen.is_future(res):
+                            chain_future(res, ready_future)
+                        else:
+                            ready_future.set_result(res)
                     except Exception, e:
                         err_msg = 'Error calling message handler for msg:\n {0!s}'.format(msg)
                         self._logger.error(err_msg, exc_info=True)
@@ -929,11 +965,11 @@ class DeviceServerBase(object):
         self._logger.debug('received: {0!s}'.format(msg))
 
         if msg.mtype == msg.REQUEST:
-            self.handle_request(client_conn, msg)
+            return self.handle_request(client_conn, msg)
         elif msg.mtype == msg.INFORM:
-            self.handle_inform(client_conn, msg)
+            return self.handle_inform(client_conn, msg)
         elif msg.mtype == msg.REPLY:
-            self.handle_reply(client_conn, msg)
+            return self.handle_reply(client_conn, msg)
         else:
             reason = "Unexpected message type received by server ['%s']." \
                      % (msg,)
@@ -948,6 +984,14 @@ class DeviceServerBase(object):
             The client connection the message was from.
         msg : Message object
             The request message to process.
+
+        Return value
+        ------------
+
+        msg_future or None.
+
+        Returns msg_future for async request handlers that will resolve when done,
+        or None for sync request handlers once they have completed.
         """
         send_reply = True
         # TODO Should check presence of Message-ids against protocol flags and
@@ -956,9 +1000,28 @@ class DeviceServerBase(object):
             req_conn = ClientRequestConnection(connection, msg)
             try:
                 reply = self._request_handlers[msg.name](self, req_conn, msg)
-                assert (reply.mtype == Message.REPLY)
-                assert (reply.name == msg.name)
-                self._logger.debug("%s OK" % (msg.name,))
+                # If we get a future, assume this is an async message handler that will
+                # resolve the future with the reply message when it is complete. Attach a
+                # message-sending callback to the future, and return the future
+                if gen.is_future(reply):
+
+                    def async_reply(f):
+                        try:
+                            connection.reply(f.result(), msg)
+                        except AsyncReply:
+                            self._logger.debug("%s FUTURE ASYNC OK" % (msg.name,))
+                        except Exception:
+                            error_reply = self.create_exception_reply_and_log(
+                                msg, sys.exc_info())
+                            connection.reply(error_reply, msg)
+
+                    reply.add_done_callback(async_reply)
+                    self._logger.debug("%s FUTURE OK" % (msg.name,))
+                    return reply
+                else:
+                    assert (reply.mtype == Message.REPLY)
+                    assert (reply.name == msg.name)
+                    self._logger.debug("%s OK" % (msg.name,))
             except AsyncReply, e:
                 self._logger.debug("%s ASYNC OK" % (msg.name,))
                 send_reply = False
@@ -966,20 +1029,21 @@ class DeviceServerBase(object):
                 reason = str(e)
                 self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
                 reply = Message.reply(msg.name, "fail", reason)
-            # We do want to catch everything that inherits from Exception
-            # pylint: disable-msg = W0703
             except Exception:
-                e_type, e_value, trace = sys.exc_info()
-                reason = "\n".join(traceback.format_exception(
-                    e_type, e_value, trace, self._tb_limit))
-                self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
-                reply = Message.reply(msg.name, "fail", reason)
+                reply = self.create_exception_reply_and_log(msg, sys.exc_info())
         else:
             self._logger.error("%s INVALID: Unknown request." % (msg.name,))
             reply = Message.reply(msg.name, "invalid", "Unknown request.")
 
         if send_reply:
             connection.reply(reply, msg)
+
+    def create_exception_reply_and_log(self, req_msg, exc_info):
+        e_type, e_value, trace = exc_info
+        reason = "\n".join(traceback.format_exception(
+            e_type, e_value, trace, self._tb_limit))
+        self._logger.error("Request %s FAIL: %s" % (req_msg.name, reason))
+        return Message.reply(req_msg.name, "fail", reason)
 
     def handle_inform(self, connection, msg):
         """Dispatch an inform message to the appropriate method.
@@ -1237,14 +1301,24 @@ class DeviceServerBase(object):
     def sync_with_ioloop(self, timeout=None):
         """Block for ioloop to complete a loop if called from another thread
 
-        Returns immediately if called from inside the ioloop
-        Raises concurrent.futures.TimeoutError if timed out.
+        Returns a future if called from inside the ioloop.
+
+        Raises concurrent.futures.TimeoutError if timed out while blocking
         """
-        if not self._server.in_ioloop_thread():
+        in_ioloop = self._server.in_ioloop_thread()
+        if in_ioloop:
+            f = tornado_Future()
+        else:
             f = Future()
-            def cb():
-                f.set_result(None)
-            self.ioloop.add_callback(cb)
+
+        def cb():
+            f.set_result(None)
+
+        self.ioloop.add_callback(cb)
+
+        if in_ioloop:
+            return f
+        else:
             f.result(timeout)
 
 class DeviceServer(DeviceServerBase):
@@ -1416,20 +1490,16 @@ class DeviceServer(DeviceServerBase):
         Future that resolves when the client connection can be closed
         """
         f = tornado_Future()
+        @gen.coroutine
         def remove_strategies():
-            try:
-                self.clear_strategies(client_conn, remove_client=True)
-                if connection_valid:
-                    client_conn.inform(Message.inform("disconnect", msg))
-                    self.sync_with_ioloop()
-            except Exception:
-                f.set_exc_info(sys.exc_info())
-            else:
-                f.set_result(None)
+            self.clear_strategies(client_conn, remove_client=True)
+            if connection_valid:
+                client_conn.inform(Message.inform("disconnect", msg))
+                yield client_conn.flush_on_close()
 
         try:
             self._client_conns.remove(client_conn)
-            self.ioloop.add_callback(remove_strategies)
+            self.ioloop.add_callback(lambda : chain_future(remove_strategies(), f))
         except Exception:
             f.set_exc_info(sys.exc_info())
         return f
@@ -1562,10 +1632,16 @@ class DeviceServer(DeviceServerBase):
             ?halt
             !halt ok
         """
-        req.reply("ok")
-        self.sync_with_ioloop(timeout=1)
-        self.stop()
-        raise AsyncReply
+        f = Future()
+        @gen.coroutine
+        def _halt():
+            req.reply("ok")
+            yield gen.moment
+            self.stop(timeout=None)
+            raise AsyncReply
+
+        self.ioloop.add_callback(lambda: chain_future(_halt(), f))
+        return f
 
     def request_help(self, req, msg):
         """Return help on the available requests.
@@ -1674,14 +1750,18 @@ class DeviceServer(DeviceServerBase):
         """
         if self._restart_queue is None:
             raise FailReply("No restart queue registered -- cannot restart.")
-        # .put should never block because the queue should have no size limit.
-        self._restart_queue.put(self)
-        # this message makes it through because stop
-        # only registers in .run(...) after the reply
-        # has been sent.
-        req.reply("ok")
-        self.sync_with_ioloop(timeout=1)
-        raise AsyncReply
+
+        f = tornado_Future()
+
+        @gen.coroutine
+        def _restart():
+            # .put should never block because the queue should have no size limit.
+            self._restart_queue.put_nowait(self)
+            req.reply('ok')
+            raise AsyncReply
+
+        self.ioloop.add_callback(lambda: chain_future(_restart(), f))
+        return f
 
     def request_client_list(self, req, msg):
         """Request the list of connected clients.
@@ -2022,8 +2102,17 @@ class DeviceServer(DeviceServerBase):
             # v4 strategy involving timestamps it's not _too_ nasty :)
             params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
 
-        self.sync_with_ioloop()
-        return req.make_reply("ok", name, strategy, *params)
+        f = Future()
+        @gen.coroutine
+        def _reply():
+            # Let the ioloop run so that the #sensor-status inform is sent before the
+            # reply. Not strictly neccesary, but a number of tests depend on this
+            # behaviour, less effort to fix it here :-/
+            yield gen.moment
+            raise gen.Return(req.make_reply("ok", name, strategy, *params))
+
+        self.ioloop.add_callback(lambda: chain_future(_reply(), f))
+        return f
 
     @request()
     @return_reply()
