@@ -60,6 +60,9 @@ BASE_REQUESTS = frozenset(['client-list',
                            'sensor-sampling',])
 "List of basic KATCP request that a minimal device server should implement"
 
+def with_relative_timeout(timeout, future, io_loop=None):
+    return gen.with_timeout(timeout + time.time(), future, io_loop)
+
 def return_future(fn):
     """Decorator that turns a syncronous function into one returning a tornado Future
 
@@ -569,19 +572,19 @@ class KATCPServer(object):
     def _disconnect_client(self, stream, conn, reason):
         assert get_thread_ident() == self._ioloop_thread_id
         stream_open = not stream.closed()
+        address = self.get_address(stream)
         try:
             if not conn.client_disconnect_called:
                 try:
+                    conn.on_client_disconnect_was_called()
                     f = gen.maybe_future(self._device.on_client_disconnect(
                         conn, reason, stream_open))
-                    yield gen.with_timeout(self.DISCONNECT_TIMEOUT, f)
+                    yield with_relative_timeout(self.DISCONNECT_TIMEOUT, f)
                 except Exception:
                     self._logger.error(
-                        'Error while calling on_client_disconnect for client {0}'.format(
-                            self.get_address(stream)),
-                        exc_info=True)
-                finally:
-                    conn.on_client_disconnect_was_called()
+                        'Error while calling on_client_disconnect for client {0}'
+                        .format(address), exc_info=True)
+
         finally:
             # Make sure stream is closed.
             stream.close()
@@ -751,12 +754,16 @@ class ClientRequestConnection(object):
         return self.client_connection.reply(rep_msg, self.msg)
 
     def _post_reply(self):
-        # Future calls to reply_*() should error out.
+        # Future calls to reply_*() and inform() should error out.
         self.reply = self.reply_again
         self.reply_with_message = self.reply_again
+        self.inform = self.inform_after_reply
 
     def reply_again(self, *args):
         raise RuntimeError('Reply to request %r already sent.' % self.msg)
+
+    def inform_after_reply(self, *args):
+        raise RuntimeError('Cannot send infrom for request %r after sending reply.' % self.msg)
 
     def make_reply(self, *args):
         return Message.reply_to_request(self.msg, *args)
@@ -770,7 +777,11 @@ class MessageHandlerThread(object):
         self._logger = logger
         self._running = threading.Event()
         self._thread = None
+        self.ioloop = None
         super(MessageHandlerThread, self).__init__()
+
+    def set_ioloop(self, ioloop):
+        self.ioloop = ioloop
 
     def on_message(self, client_conn, msg):
         """Handle message
@@ -807,7 +818,7 @@ class MessageHandlerThread(object):
                     try:
                         res = self.handler(client_conn, msg)
                         if gen.is_future(res):
-                            chain_future(res, ready_future)
+                            self.ioloop.add_callback(chain_future, res, ready_future)
                         else:
                             ready_future.set_result(res)
                     except Exception, e:
@@ -1212,11 +1223,10 @@ class DeviceServerBase(object):
         """
         if self._handler_thread and self._handler_thread.isAlive():
             raise RuntimeError('Message handler thread already started')
-        self._handler_thread.start(timeout)
         self._server.start(timeout)
-        if not self._server.ioloop:
-            self._server.set_ioloop()
         self.ioloop = self._server.ioloop
+        self._handler_thread.set_ioloop(self.ioloop)
+        self._handler_thread.start(timeout)
 
     def join(self, timeout=None):
         """Rejoin the server thread.
