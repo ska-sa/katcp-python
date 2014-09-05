@@ -206,7 +206,7 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         # We need to pass in the same client_conn as used by the previous
         # request since strategies are bound to specific connections
         req = mock_req('sensor-sampling', 'a-sens', client_conn=client)
-        reply = self.server.request_sensor_sampling(req, req.msg)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
         self._assert_msgs_equal([reply],
                                 ['!sensor-sampling ok a-sens period 1000'])
         # event-rate is not an allowed v4 strategy
@@ -217,7 +217,6 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         with self.assertRaises(FailReply):
             self.server.request_sensor_sampling(req, katcp.Message.request(
              'sensor-sampling', 'a-sens', 'differential-rate', 1, 1000, 2000))
-
 
     def test_sensor_value(self):
         s = katcp.Sensor.boolean('a-sens')
@@ -288,8 +287,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
     BLACKLIST = ("version-connect", "version", "build-state")
 
     def setUp(self):
-        self.server = DeviceTestServer('', 0)
-        self.server.start(timeout=1)
+        self._setup_server()
         host, port = self.server.bind_address
         self.server_addr = (host, port)
 
@@ -297,13 +295,14 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.start(timeout=1)
         self.assertTrue(self.client.wait_protocol(timeout=1))
 
+    def _setup_server(self):
+        self.server = DeviceTestServer('', 0)
+        start_thread_with_cleanup(self, self.server, start_timeout=1)
+
     def tearDown(self):
         if self.client.running():
             self.client.stop()
             self.client.join()
-        if self.server.running():
-            self.server.stop()
-            self.server.join()
 
     def test_log(self):
         get_msgs = self.client.message_recorder(
@@ -509,7 +508,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
 
         self.client.request(mid_req("watchdog"))
-        self.client.request(mid_req("restart"))
+        self.client._next_id = mid  # mock our mid generator for testing
+        self.client.blocking_request(mid_req("restart"))
         self.client.request(mid_req("log-level"))
         self.client.request(mid_req("log-level", "trace"))
         self.client.request(mid_req("log-level", "unknown"))
@@ -524,7 +524,6 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.request(mid_req("sensor-value"))
         self.client.request(mid_req("sensor-value", "an.int"))
         self.client.request(mid_req("sensor-value", "an.unknown"))
-        self.client._next_id = mid  # mock our mid generator for testing
         self.client.blocking_request(mid_req("sensor-sampling", "an.int"))
         self.client.blocking_request(mid_req(
             "sensor-sampling", "an.int", "differential", "2"))
@@ -809,3 +808,9 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.server.add_sensor(an_int)
         self.test_sampling()
 
+
+class TestDeviceServerClientIntegratedAsync(TestDeviceServerClientIntegrated):
+    def _setup_server(self):
+        self.server = DeviceTestServer('', 0)
+        self.server.set_concurrency_options(thread_safe=False, handler_thread=False)
+        start_thread_with_cleanup(self, self.server, start_timeout=1)

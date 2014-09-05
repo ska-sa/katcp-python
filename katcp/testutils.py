@@ -16,7 +16,10 @@ import threading
 import functools
 import mock
 
-from .core import Sensor, Message
+from tornado import gen
+from concurrent.futures import Future
+
+from .core import Sensor, Message, AsyncReply
 from .server import (DeviceServer, FailReply, ClientRequestConnection,
                      ClientConnection)
 
@@ -893,8 +896,11 @@ class DeviceTestServer(DeviceServer):
         self.__msgs = []
         self.restart_queue = Queue.Queue()
         self.set_restart_queue(self.restart_queue)
-        self._cancel_slow_command = threading.Event()
-        self.slow_waiting = False
+        # Map of ClientConnection -> futures that can be resolved to cancel the command
+        self._slow_futures = {}
+
+    def cancel_slow(self):
+        self._cancel_slow_command.set()
 
     def setup_sensors(self):
         self.restarted = False
@@ -917,14 +923,32 @@ class DeviceTestServer(DeviceServer):
 
     def request_slow_command(self, req, msg):
         """A slow command, waits for msg.arguments[0] seconds"""
-        self.slow_waiting = True
-        self._cancel_slow_command.wait(float(msg.arguments[0]))
-        self.slow_waiting = False
-        return req.make_reply("ok")
+        if req.client_connection in self._slow_futures:
+            raise FailReply(
+                'A slow command is already running for this connection')
+        t0 = time.time()
+        wait_time = float(msg.arguments[0])
+        fut = self._slow_futures[req.client_connection] = Future()
+        @gen.coroutine
+        def slow_timeout():
+            try:
+                yield gen.with_timeout(t0 + wait_time, fut, self.ioloop)
+                req.reply("ok")
+            except gen.TimeoutError:
+                req.reply("ok")
+            except Exception:
+                self._logger.exception('Unable to complete ?slow-command request')
+                req.reply('fail', 'Unhandled exception, see logs')
+            finally:
+                del self._slow_futures[req.client_connection]
+        self.ioloop.add_callback(slow_timeout)
+        raise AsyncReply
 
     def request_cancel_slow_command(self, req, msg):
         """Cancel slow command request, resulting in it replying immediately"""
-        self._cancel_slow_command.set()
+        fut = self._slow_futures.pop(req.client_connection, None)
+        if fut:
+            fut.set_result(None)
         return req.make_reply('ok')
 
     def handle_message(self, req, msg):
@@ -937,7 +961,9 @@ class DeviceTestServer(DeviceServer):
     def stop(self, *args, **kwargs):
         # Make sure a slow command with long timeout does not hold us
         # up.
-        self._cancel_slow_command.set()
+        for fut in self._slow_futures.values():
+            if not fut.done:
+                fut.set_result(None)
         super(DeviceTestServer, self).stop(*args, **kwargs)
 
 
