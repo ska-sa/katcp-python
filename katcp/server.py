@@ -71,12 +71,7 @@ def return_future(fn):
     """
     @wraps(fn)
     def decorated(*args, **kwargs):
-        try:
-            return gen.maybe_future(fn(*args, **kwargs))
-        except Exception:
-            f = tornado_Future()
-            f.set_exc_info(sys.exc_info())
-            return f
+        return gen.maybe_future(fn(*args, **kwargs))
 
     return decorated
 
@@ -201,8 +196,8 @@ class ThreadsafeClientConnection(ClientConnection):
 
     def __init__(self, server, conn_id):
         super(ThreadsafeClientConnection, self).__init__(server, conn_id)
-        self._send_message = partial(server.send_message_async, conn_id)
-        self._mass_send_message = server.mass_send_message_async
+        self._send_message = partial(server.send_message_from_thread, conn_id)
+        self._mass_send_message = server.mass_send_message_from_thread
 
 class KATCPServer(object):
     """
@@ -302,8 +297,8 @@ class KATCPServer(object):
         would mainly interact using:
 
         set_ioloop(), start(), stop(), join(), send_message(), mass_send_message(), and
-        _async() versions of the send messages from another thread. Except for the
-        _async() versions, all calls must be made from  the ioloop thread
+        _from_thread() versions of message sending methods. Except for the _from_thread()
+        methods, all calls must be made from the ioloop thread.
         """
 
         self._device = device
@@ -681,7 +676,7 @@ class KATCPServer(object):
             finally:
                 return f
 
-    def send_message_async(self, stream, msg):
+    def send_message_from_thread(self, stream, msg):
         """Thread-safe version of send_message() returning a Future instance
 
         Return Value
@@ -691,15 +686,15 @@ class KATCPServer(object):
         send_message() completes. This does not guarantee that the message has been
         delivered yet. If the call to send_message() failed, the exception will be logged,
         and the future will resolve with the exception raised. Since a failed call to
-        send_message() will result in the connection being closed, so no real error
-        handling apart from loggin will be possible.
+        send_message() will result in the connection being closed, no real error
+        handling apart from logging will be possible.
 
         Notes
         =====
 
         This method is thread-safe. If called from within the ioloop, send_message is
-        called directly and a resolved is tornado.concurrent.Future is returned, otherwise
-        a callback is submitted to the ioloop that will resolve a thread-safe
+        called directly and a resolved tornado.concurrent.Future is returned, otherwise a
+        callback is submitted to the ioloop that will resolve a thread-safe
         concurrent.futures.Future instance.
         """
         return self.async_call(partial(self.send_message, stream, msg))
@@ -716,10 +711,10 @@ class KATCPServer(object):
         for stream in self._connections.keys():
             self.send_message(stream, msg)
 
-    def mass_send_message_async(self, msg):
+    def mass_send_message_from_thread(self, msg):
         """Thread-safe version of send_message() returning a Future instance
 
-        See return value and notes for send_message_async()
+        See return value and notes for send_message_from_thread()
         """
         return self.async_call(partial(self.mass_send_message, msg))
 
@@ -1133,7 +1128,7 @@ class DeviceServerBase(object):
             The inform message to send.
         """
         assert (msg.mtype == Message.INFORM)
-        self._server.mass_send_message_async(msg)
+        self._server.mass_send_message_from_thread(msg)
 
 
     def reply(self, connection, reply, orig_req):
