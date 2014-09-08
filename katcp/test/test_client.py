@@ -182,10 +182,11 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test request method."""
         self.assertTrue(self.client.wait_protocol(1))
         self.client.send_request(katcp.Message.request("watchdog"))
-        self.client.send_request(katcp.Message.request("watchdog", mid=55))
         self.client._server_supports_ids = False
         with self.assertRaises(katcp.core.KatcpVersionError):
             self.client.send_request(katcp.Message.request("watchdog", mid=56))
+        self.client._server_supports_ids = True
+        self.client.send_request(katcp.Message.request("watchdog", mid=55))
 
         time.sleep(0.1)
 
@@ -329,6 +330,9 @@ class TestBlockingClient(unittest.TestCase):
 
         # blocking_request() raises RuntimeError on timeout, so make a wrapper
         # function to eat that
+
+        # TODO (NM 2014-09-08): Can remove this once we've made all clients handle
+        # blocking_request timeouts in the same way.
         def blocking_request(*args, **kwargs):
             try:
                 return self.client.blocking_request(*args, **kwargs)
@@ -386,6 +390,8 @@ class TestBlockingClient(unittest.TestCase):
                 katcp.Message.request("slow-command", "0.5"),
                 timeout=0.001)
         except RuntimeError, e:
+            # TODO (NM 2014-09-08): Can remove this once we've made all clients handle
+            # blocking_request timeouts in the same way.
             self.assertEqual(str(e), "Request slow-command timed out after"
                              " 0.001 seconds.")
         else:
