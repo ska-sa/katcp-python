@@ -314,7 +314,7 @@ class KATCPServer(object):
         "The Tornado IOloop to use, set by self.set_ioloop()"
         # ID of Thread that hosts the IOLoop. Used to check that we are running in the
         # ioloop.
-        self._ioloop_thread_id = None
+        self.ioloop_thread_id = None
         # True if we manage the ioloop. Will be updated by self.set_ioloop()
         self._ioloop_managed = True
         # Thread object that a managed ioloop is running in
@@ -446,14 +446,14 @@ class KATCPServer(object):
 
     def _install(self):
         # Do stuff to put us on the IOLoop
-        self._ioloop_thread_id = get_thread_ident()
+        self.ioloop_thread_id = get_thread_ident()
         self._tcp_server.add_socket(self._server_sock)
         self._running.set()
 
     @gen.coroutine
     def _uninstall(self):
         # Stop listening, close all open connections and remove us from the IOLoop
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         try:
             self._tcp_server.stop()
             for stream, conn in self._connections.items():
@@ -475,7 +475,7 @@ class KATCPServer(object):
     def _handle_stream(self, stream, address):
         """Handle a new connection as a tornado.iostream.IOStream instance"""
         try:
-            assert get_thread_ident() == self._ioloop_thread_id
+            assert get_thread_ident() == self.ioloop_thread_id
             stream.set_close_callback(partial(self._stream_closed_callback, stream))
             # our message packets are small, don't delay sending them.
             stream.set_nodelay(True)
@@ -510,7 +510,7 @@ class KATCPServer(object):
 
     @gen.coroutine
     def _line_read_loop(self, stream, client_conn):
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         client_address = self.get_address(stream)
         try:
             while True:
@@ -551,7 +551,7 @@ class KATCPServer(object):
             self._logger.info('Reading loop for client {0} completed'.format(client_address))
 
     def _stream_closed_callback(self, stream):
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         # Remove ClientConnection object for the current stream from our state
         conn = self._connections.pop(stream, None)
         error_repr = '{0!r}'.format(stream.error) if stream.error else ''
@@ -565,7 +565,7 @@ class KATCPServer(object):
 
     @gen.coroutine
     def _disconnect_client(self, stream, conn, reason):
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         stream_open = not stream.closed()
         address = self.get_address(stream)
         try:
@@ -620,7 +620,7 @@ class KATCPServer(object):
         logged. Sends also fail if more than self.MAX_WRITE_BUFFER_SIZE bytes are queued
         for sending, implying that the client is falling behind.
         """
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         try:
             if stream.KATCPServer_closing:
                 raise RuntimeError('Stream is closing so we cannot accept any more writes')
@@ -636,7 +636,7 @@ class KATCPServer(object):
 
         Returns a future that resolves when the stream is flushed
         """
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         # Prevent futher writes
         stream.KATCPServer_closing = True
         # Write an empty message to get a future that resolves when the buffer is flushed
@@ -720,7 +720,7 @@ class KATCPServer(object):
 
     def in_ioloop_thread(self):
         """Return True if called in the IOLoop thread of this server"""
-        return get_thread_ident() == self._ioloop_thread_id
+        return get_thread_ident() == self.ioloop_thread_id
 
 
 class ClientRequestConnection(object):
