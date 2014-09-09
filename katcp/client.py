@@ -16,6 +16,13 @@ import select
 import time
 import logging
 import errno
+
+import tornado.ioloop
+
+from concurrent.futures import Future, TimeoutError
+from tornado.concurrent import Future as tornado_Future
+from tornado.concurrent import chain_future
+
 from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, ProtocolFlags,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
@@ -23,6 +30,43 @@ from .core import (DeviceMetaclass, MessageParser, Message,
 
 #logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")
+
+
+class AsyncEvent(object):
+    """tornado.concurrent.Future Event based on threading.Event API
+
+    Supports threading.Event API for setting / clearing / checking, but replaces the
+    wait() method with until() that returns a tornado Future that resolves when the event
+    is set.
+
+    Note, this class is NOT THREAD SAFE! It will only work properly if all it's methods
+    (appart from isSet()) are called from the same thread/ioloop.
+    """
+    def __init__(self):
+        self._flag = False
+        self._waiting_futures = set()
+
+    def isSet(self):
+        return self._flag
+
+    is_set = isSet
+
+    def set(self):
+        self._flag = True
+        while self._waiting_futures:
+            f = self._waiting_futures.pop()
+            f.set_result(True)
+
+    def clear(self):
+        self._flag = False
+
+    def until(self):
+        f = Future()
+        if self._flag:
+            f.set_result(True)
+        else:
+            self._waiting_futures.add(f)
+        return f
 
 
 class DeviceClient(object):
@@ -66,17 +110,29 @@ class DeviceClient(object):
 
     __metaclass__ = DeviceMetaclass
 
+    MAX_MSG_SIZE = 128*1024
+    """Maximum message size that can be received in bytes
+
+    If more than MAX_MSG_SIZE bytes are read from the socket without encountering a
+    message terminator (i.e. newline), the connection is closed.
+    """
+    MAX_WRITE_BUFFER_SIZE = 2*MAX_MSG_SIZE
+    """Maximum outstanding bytes to be buffered by the server process
+
+    If more than MAX_WRITE_BUFFER_SIZE bytes are outstanding, the connection is
+    closed. Note that the OS also buffers socket writes, so more than
+    MAX_WRITE_BUFFER_SIZE bytes may be untransmitted in total.
+    """
+
     def __init__(self, host, port, tb_limit=20, logger=log,
                  auto_reconnect=True):
         self._parser = MessageParser()
         self._bindaddr = (host, port)
         self._tb_limit = tb_limit
-        self._sock = None
         self._waiting_chunk = ""
-        self._running = threading.Event()
-        self._connected = threading.Event()
-        self._received_protocol_info = threading.Event()
-        self._send_lock = threading.Lock()
+        self._running = AsyncEvent()
+        self._connected = AsyncEvent()
+        self._received_protocol_info = AsyncEvent()
         self._thread = None
         self._logger = logger
         self._auto_reconnect = auto_reconnect
@@ -85,9 +141,19 @@ class DeviceClient(object):
         self._protocol_flags = None
         self._static_protocol_configuration = False
 
+        self.ioloop = None
+        "The Tornado IOloop to use, set by self.set_ioloop()"
+        # ID of Thread that hosts the IOLoop. Used to check that we are running in the
+        # ioloop.
+        self.ioloop_thread_id = None
+        # True if we manage the ioloop. Will be updated by self.set_ioloop()
+        self._ioloop_managed = True
+        # Thread object that a managed ioloop is running in
+        self._ioloop_thread = None
+
+
         # message id and lock
         self._last_msg_id = 0
-        self._msg_id_lock = threading.Lock()
 
     @property
     def protocol_flags(self):
@@ -101,7 +167,8 @@ class DeviceClient(object):
         self._received_protocol_info.set()
 
     @property
-    def bindaddr(self):
+    def bind_address(self):
+        """(host, port) where the client is connecting"""
         return self._bindaddr
 
     def convert_seconds(self, time_seconds):
@@ -597,6 +664,25 @@ class DeviceClient(object):
         self._disconnect()
         self._logger.debug("Stopping thread %s" % (
                 threading.currentThread().getName()))
+
+    def set_ioloop(self, ioloop=None):
+        """Set the tornado.ioloop.IOLoop instance to use, default to IOLoop.current()
+
+        If set_ioloop() is never called the IOLoop is started in a new thread, and will
+        be stopped if self.stop() is called.
+
+        Notes
+        =====
+
+        Must be called before start() is called
+        """
+        if self.ioloop:
+            raise RuntimeError('IOLoop instance can only be set once')
+        if ioloop:
+            self.ioloop = ioloop
+        else:
+            self.ioloop = tornado.ioloop.IOLoop.current()
+        self._ioloop_managed = False
 
     def start(self, timeout=None):
         """Start the client in a new thread.
@@ -1314,5 +1400,6 @@ def request_check(client, exception, *msg_parms, **kwargs):
     if not reply.reply_ok():
         raise exception('Unexpected failure reply "{2}"\n with device at {0}, '
                         'request \n"{1}"'
-                        .format(':'.join(str(x) for x in client.bindaddr), req_msg, reply))
+                        .format(':'.join(str(x) for x in client.bind_address),
+                                req_msg, reply))
     return reply, informs

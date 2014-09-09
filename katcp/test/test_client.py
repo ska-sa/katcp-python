@@ -14,6 +14,9 @@ import time
 import logging
 import threading
 import katcp
+
+from concurrent.futures import Future
+
 from katcp.core import ProtocolFlags
 
 from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
@@ -188,9 +191,7 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client._server_supports_ids = True
         self.client.send_request(katcp.Message.request("watchdog", mid=55))
 
-        time.sleep(0.1)
-
-        msgs = self.server.messages()
+        msgs = self.server.until_messages(2).result(timeout=1)
         self._assert_msgs_equal(msgs, [
             r"?watchdog",
             r"?watchdog[55]",
@@ -200,9 +201,7 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test send_message method."""
         self.client.send_message(katcp.Message.inform("random-inform"))
 
-        time.sleep(0.1)
-
-        msgs = self.server.messages()
+        msgs = self.server.until_messages(1).result(timeout=1)
         self._assert_msgs_equal(msgs, [
             r"#random-inform",
         ])
@@ -260,14 +259,19 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
     def test_bad_socket(self):
         """Test what happens when select is called on a dead socket."""
         # wait for client to connect
-        time.sleep(0.1)
+        self.client.wait_connected(timeout=1)
+        f = Future()
+        def notify_connected(connected):
+            if connected:
+                f.set_result(connected)
+        self.client.notify_connected = notify_connected
 
         # close socket while the client isn't looking
         # then wait for the client to notice
         sock = self.client._sock
         sockname = sock.getpeername()
         sock.close()
-        time.sleep(1.25)
+        f.result(timeout=1.25)
 
         # check that client reconnected
         self.assertTrue(sock is not self.client._sock,

@@ -898,6 +898,7 @@ class DeviceTestServer(DeviceServer):
         self.set_restart_queue(self.restart_queue)
         # Map of ClientConnection -> futures that can be resolved to cancel the command
         self._slow_futures = {}
+        self._cnt_futures = set()
 
     def cancel_slow(self):
         self._cancel_slow_command.set()
@@ -953,10 +954,24 @@ class DeviceTestServer(DeviceServer):
 
     def handle_message(self, req, msg):
         self.__msgs.append(msg)
+        self._check_cnt_futures()
         return super(DeviceTestServer, self).handle_message(req, msg)
 
     def messages(self):
         return self.__msgs
+
+    def until_messages(self, cnt):
+        f = Future()
+        self._cnt_futures.add((cnt, f))
+        self.ioloop.add_callback(self._check_cnt_futures)
+        return f
+
+    def _check_cnt_futures(self):
+        cnt = len(self.__msgs)
+        for f_cnt, fut in list(self._cnt_futures):
+            if cnt >= f_cnt:
+                self._cnt_futures.remove((f_cnt, fut))
+                fut.set_result(self.__msgs)
 
     def stop(self, *args, **kwargs):
         # Make sure a slow command with long timeout does not hold us
