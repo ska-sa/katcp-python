@@ -66,6 +66,20 @@ class DeviceClient(object):
 
     __metaclass__ = DeviceMetaclass
 
+    MAX_MSG_SIZE = 128*1024
+    """Maximum message size that can be received in bytes
+
+    If more than MAX_MSG_SIZE bytes are read from the socket without encountering a
+    message terminator (i.e. newline), the connection is closed.
+    """
+    MAX_WRITE_BUFFER_SIZE = 2*MAX_MSG_SIZE
+    """Maximum outstanding bytes to be buffered by the server process
+
+    If more than MAX_WRITE_BUFFER_SIZE bytes are outstanding, the connection is
+    closed. Note that the OS also buffers socket writes, so more than
+    MAX_WRITE_BUFFER_SIZE bytes may be untransmitted in total.
+    """
+
     def __init__(self, host, port, tb_limit=20, logger=log,
                  auto_reconnect=True):
         self._parser = MessageParser()
