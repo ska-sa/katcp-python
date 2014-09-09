@@ -314,7 +314,7 @@ class KATCPServer(object):
         "The Tornado IOloop to use, set by self.set_ioloop()"
         # ID of Thread that hosts the IOLoop. Used to check that we are running in the
         # ioloop.
-        self._ioloop_thread_id = None
+        self.ioloop_thread_id = None
         # True if we manage the ioloop. Will be updated by self.set_ioloop()
         self._ioloop_managed = True
         # Thread object that a managed ioloop is running in
@@ -446,14 +446,14 @@ class KATCPServer(object):
 
     def _install(self):
         # Do stuff to put us on the IOLoop
-        self._ioloop_thread_id = get_thread_ident()
+        self.ioloop_thread_id = get_thread_ident()
         self._tcp_server.add_socket(self._server_sock)
         self._running.set()
 
     @gen.coroutine
     def _uninstall(self):
         # Stop listening, close all open connections and remove us from the IOLoop
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         try:
             self._tcp_server.stop()
             for stream, conn in self._connections.items():
@@ -475,7 +475,7 @@ class KATCPServer(object):
     def _handle_stream(self, stream, address):
         """Handle a new connection as a tornado.iostream.IOStream instance"""
         try:
-            assert get_thread_ident() == self._ioloop_thread_id
+            assert get_thread_ident() == self.ioloop_thread_id
             stream.set_close_callback(partial(self._stream_closed_callback, stream))
             # our message packets are small, don't delay sending them.
             stream.set_nodelay(True)
@@ -510,7 +510,7 @@ class KATCPServer(object):
 
     @gen.coroutine
     def _line_read_loop(self, stream, client_conn):
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         client_address = self.get_address(stream)
         try:
             while True:
@@ -551,7 +551,7 @@ class KATCPServer(object):
             self._logger.info('Reading loop for client {0} completed'.format(client_address))
 
     def _stream_closed_callback(self, stream):
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         # Remove ClientConnection object for the current stream from our state
         conn = self._connections.pop(stream, None)
         error_repr = '{0!r}'.format(stream.error) if stream.error else ''
@@ -565,7 +565,7 @@ class KATCPServer(object):
 
     @gen.coroutine
     def _disconnect_client(self, stream, conn, reason):
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         stream_open = not stream.closed()
         address = self.get_address(stream)
         try:
@@ -620,7 +620,7 @@ class KATCPServer(object):
         logged. Sends also fail if more than self.MAX_WRITE_BUFFER_SIZE bytes are queued
         for sending, implying that the client is falling behind.
         """
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         try:
             if stream.KATCPServer_closing:
                 raise RuntimeError('Stream is closing so we cannot accept any more writes')
@@ -636,7 +636,7 @@ class KATCPServer(object):
 
         Returns a future that resolves when the stream is flushed
         """
-        assert get_thread_ident() == self._ioloop_thread_id
+        assert get_thread_ident() == self.ioloop_thread_id
         # Prevent futher writes
         stream.KATCPServer_closing = True
         # Write an empty message to get a future that resolves when the buffer is flushed
@@ -720,7 +720,7 @@ class KATCPServer(object):
 
     def in_ioloop_thread(self):
         """Return True if called in the IOLoop thread of this server"""
-        return get_thread_ident() == self._ioloop_thread_id
+        return get_thread_ident() == self.ioloop_thread_id
 
 
 class ClientRequestConnection(object):
@@ -1014,6 +1014,12 @@ class DeviceServerBase(object):
                     def async_reply(f):
                         try:
                             connection.reply(f.result(), msg)
+                        except FailReply, e:
+                            reason = str(e)
+                            self._logger.error(
+                                "Request %s ASYNC FAIL: %s" % (msg.name, reason))
+                            reply = Message.reply(msg.name, "fail", reason)
+                            connection.reply(reply, msg)
                         except AsyncReply:
                             self._logger.debug("%s FUTURE ASYNC OK" % (msg.name,))
                         except Exception:
@@ -1414,8 +1420,6 @@ class DeviceServer(DeviceServerBase):
         self._sensors = {}  # map names to sensor objects
         # map client sockets to map of sensors -> sampling strategies
         self._strategies = {}
-        # strat lock (should be held for updates to _strategies)
-        self._strat_lock = threading.Lock()
         # For holding ClientCoClientConnection* instances of active connections
         self._client_conns = set()
 
@@ -1437,9 +1441,9 @@ class DeviceServer(DeviceServerBase):
 
         Future that resolves when the device is ready to accept messages
         """
+        assert get_thread_ident() == self._server.ioloop_thread_id
         self._client_conns.add(client_conn)
-        with self._strat_lock:
-            self._strategies[client_conn] = {}  # map sensors -> sampling strategies
+        self._strategies[client_conn] = {}  # map sensors -> sampling strategies
 
         katcp_version = self.PROTOCOL_INFO.major
         if katcp_version >= VERSION_CONNECT_KATCP_MAJOR:
@@ -1467,14 +1471,15 @@ class DeviceServer(DeviceServerBase):
             Remove the client connection from the strategies datastructure.
             Usefull for clients that disconnect.
         """
-        with self._strat_lock:
-            getter = (self._strategies.pop if remove_client
-                      else self._strategies.get)
-            strategies = getter(client_conn, None)
-            if strategies is not None:
-                for sensor, strategy in list(strategies.items()):
-                    strategy.cancel()
-                    del strategies[sensor]
+        assert get_thread_ident() == self._server.ioloop_thread_id
+
+        getter = (self._strategies.pop if remove_client
+                  else self._strategies.get)
+        strategies = getter(client_conn, None)
+        if strategies is not None:
+            for sensor, strategy in list(strategies.items()):
+                strategy.cancel()
+                del strategies[sensor]
 
     def on_client_disconnect(self, client_conn, msg, connection_valid):
         """Inform client it is about to be disconnected.
@@ -1552,11 +1557,12 @@ class DeviceServer(DeviceServerBase):
             sensor_name = sensor.name
         sensor = self._sensors.pop(sensor_name)
 
-        with self._strat_lock:
+        def cancel_sensor_strategies():
             for conn_strategies in self._strategies.values():
                 strategy = conn_strategies.pop(sensor, None)
                 if strategy:
                     strategy.cancel()
+        self.ioloop.add_callback(cancel_sensor_strategies)
 
     def get_sensor(self, sensor_name):
         """Fetch the sensor with the given name.
@@ -2043,6 +2049,13 @@ class DeviceServer(DeviceServerBase):
             ?sensor-sampling cpu.power.on period 500
             !sensor-sampling ok cpu.power.on period 500
         """
+        f = Future()
+        self.ioloop.add_callback(lambda: chain_future(
+            self._handle_sensor_sampling(req, msg), f))
+        return f
+
+    @gen.coroutine
+    def _handle_sensor_sampling(self, req, msg):
         if not msg.arguments:
             raise FailReply("No sensor name given.")
 
@@ -2083,18 +2096,15 @@ class DeviceServer(DeviceServerBase):
             new_strategy = SampleStrategy.get_strategy(
                 strategy, inform_callback, sensor, *params, ioloop=self.ioloop)
 
-            with self._strat_lock:
-                # Remove and cancel old strategy
-                old_strategy = self._strategies[client].pop(sensor, None)
-                if old_strategy:
-                    old_strategy.cancel()
+            # Remove and cancel old strategy
+            old_strategy = self._strategies[client].pop(sensor, None)
+            if old_strategy:
+                old_strategy.cancel()
 
-                # todo: replace isinstance check with something better
-                if not isinstance(new_strategy, SampleNone):
-                    self._strategies[client][sensor] = new_strategy
-                    # strategy.start() sends out an inform
-                    # which is not great while the lock is held.
-                    self.ioloop.add_callback(new_strategy.start)
+            # todo: replace isinstance check with something better
+            if not isinstance(new_strategy, SampleNone):
+                self._strategies[client][sensor] = new_strategy
+                new_strategy.start()
 
         current_strategy = self._strategies[client].get(sensor, None)
         if not current_strategy:
@@ -2107,17 +2117,11 @@ class DeviceServer(DeviceServerBase):
             # v4 strategy involving timestamps it's not _too_ nasty :)
             params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
 
-        f = Future()
-        @gen.coroutine
-        def _reply():
-            # Let the ioloop run so that the #sensor-status inform is sent before the
-            # reply. Not strictly neccesary, but a number of tests depend on this
-            # behaviour, less effort to fix it here :-/
-            yield gen.moment
-            raise gen.Return(req.make_reply("ok", name, strategy, *params))
-
-        self.ioloop.add_callback(lambda: chain_future(_reply(), f))
-        return f
+        # Let the ioloop run so that the #sensor-status inform is sent before the
+        # reply. Not strictly neccesary, but a number of tests depend on this
+        # behaviour, less effort to fix it here :-/
+        yield gen.moment
+        raise gen.Return(req.make_reply("ok", name, strategy, *params))
 
     @request()
     @return_reply()
