@@ -12,6 +12,7 @@ import socket
 import errno
 import time
 import logging
+import thread
 import threading
 
 import katcp
@@ -169,6 +170,9 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         mock_conn = mock.Mock(spec=conn)
         self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
         self.server.VERSION_INFO = ('deviceapi', 5, 6)
+        # Hack around ioloop thread asserts
+        self.server._server.ioloop_thread_id = thread.get_ident()
+        # Test call
         self.server.on_client_connect(mock_conn)
         # we are expecting 2 inform messages
         no_msgs = 2
@@ -189,14 +193,14 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         self.assertTrue(self.server.running())
         self.server._strategies = defaultdict(lambda : {})
         req = mock_req('sensor-sampling', 'a-sens', 'event')
-        self.server.request_sensor_sampling(req, req.msg)
+        self.server.request_sensor_sampling(req, req.msg).result(timeout=1)
         inf = req.client_connection.inform
         inf.assert_wait_call_count(count=1)
         (inf_msg, ) = inf.call_args[0]
         self._assert_msgs_equal([inf_msg], (
             r'#sensor-status 1234000 1 a-sens nominal 1',))
         req = mock_req('sensor-sampling', 'a-sens', 'period', 1000)
-        self.server.request_sensor_sampling(req, req.msg)
+        self.server.request_sensor_sampling(req, req.msg).result()
         client = req.client_connection
         strat = self.server._strategies[client][s]
         # Test that the periodic update period is converted to seconds
@@ -212,11 +216,11 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         # event-rate is not an allowed v4 strategy
         with self.assertRaises(FailReply):
             self.server.request_sensor_sampling(req, katcp.Message.request(
-                'sensor-sampling', 'a-sens', 'event-rate', 1000, 2000))
+                'sensor-sampling', 'a-sens', 'event-rate', 1000, 2000)).result()
         # differential-rate is not an allowed v4 strategy
         with self.assertRaises(FailReply):
             self.server.request_sensor_sampling(req, katcp.Message.request(
-             'sensor-sampling', 'a-sens', 'differential-rate', 1, 1000, 2000))
+             'sensor-sampling', 'a-sens', 'differential-rate', 1, 1000, 2000)).result()
 
     def test_sensor_value(self):
         s = katcp.Sensor.boolean('a-sens')
@@ -255,6 +259,9 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
             spec=katcp.server.ClientConnection(self.server._server, fake_sock))
         self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
         self.server.VERSION_INFO = ('deviceapi', 5, 6)
+        # Hack around ioloop thread asserts
+        self.server._server.ioloop_thread_id = thread.get_ident()
+        # Test call
         self.server.on_client_connect(mock_conn)
         # we are expecting 3 inform messages
         no_msgs = 3
@@ -790,7 +797,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         # There should only be on connection to the server, so it should be
         # the test client
         client_conn = list(self.server._client_conns)[0]
-        self.server.clear_strategies(client_conn)
+        self.server.ioloop.add_callback(self.server.clear_strategies, client_conn)
+        self.server.sync_with_ioloop()
         self.client.assert_request_succeeds("sensor-sampling", "an.int",
                                             args_equal=["an.int", "none"])
 

@@ -1420,8 +1420,6 @@ class DeviceServer(DeviceServerBase):
         self._sensors = {}  # map names to sensor objects
         # map client sockets to map of sensors -> sampling strategies
         self._strategies = {}
-        # strat lock (should be held for updates to _strategies)
-        self._strat_lock = threading.Lock()
         # For holding ClientCoClientConnection* instances of active connections
         self._client_conns = set()
 
@@ -1443,9 +1441,9 @@ class DeviceServer(DeviceServerBase):
 
         Future that resolves when the device is ready to accept messages
         """
+        assert get_thread_ident() == self._server.ioloop_thread_id
         self._client_conns.add(client_conn)
-        with self._strat_lock:
-            self._strategies[client_conn] = {}  # map sensors -> sampling strategies
+        self._strategies[client_conn] = {}  # map sensors -> sampling strategies
 
         katcp_version = self.PROTOCOL_INFO.major
         if katcp_version >= VERSION_CONNECT_KATCP_MAJOR:
@@ -1473,14 +1471,15 @@ class DeviceServer(DeviceServerBase):
             Remove the client connection from the strategies datastructure.
             Usefull for clients that disconnect.
         """
-        with self._strat_lock:
-            getter = (self._strategies.pop if remove_client
-                      else self._strategies.get)
-            strategies = getter(client_conn, None)
-            if strategies is not None:
-                for sensor, strategy in list(strategies.items()):
-                    strategy.cancel()
-                    del strategies[sensor]
+        assert get_thread_ident() == self._server.ioloop_thread_id
+
+        getter = (self._strategies.pop if remove_client
+                  else self._strategies.get)
+        strategies = getter(client_conn, None)
+        if strategies is not None:
+            for sensor, strategy in list(strategies.items()):
+                strategy.cancel()
+                del strategies[sensor]
 
     def on_client_disconnect(self, client_conn, msg, connection_valid):
         """Inform client it is about to be disconnected.
@@ -1558,11 +1557,12 @@ class DeviceServer(DeviceServerBase):
             sensor_name = sensor.name
         sensor = self._sensors.pop(sensor_name)
 
-        with self._strat_lock:
+        def cancel_sensor_strategies():
             for conn_strategies in self._strategies.values():
                 strategy = conn_strategies.pop(sensor, None)
                 if strategy:
                     strategy.cancel()
+        self.ioloop.add_callback(cancel_sensor_strategies)
 
     def get_sensor(self, sensor_name):
         """Fetch the sensor with the given name.
@@ -2049,6 +2049,13 @@ class DeviceServer(DeviceServerBase):
             ?sensor-sampling cpu.power.on period 500
             !sensor-sampling ok cpu.power.on period 500
         """
+        f = Future()
+        self.ioloop.add_callback(lambda: chain_future(
+            self._handle_sensor_sampling(req, msg), f))
+        return f
+
+    @gen.coroutine
+    def _handle_sensor_sampling(self, req, msg):
         if not msg.arguments:
             raise FailReply("No sensor name given.")
 
@@ -2089,18 +2096,15 @@ class DeviceServer(DeviceServerBase):
             new_strategy = SampleStrategy.get_strategy(
                 strategy, inform_callback, sensor, *params, ioloop=self.ioloop)
 
-            with self._strat_lock:
-                # Remove and cancel old strategy
-                old_strategy = self._strategies[client].pop(sensor, None)
-                if old_strategy:
-                    old_strategy.cancel()
+            # Remove and cancel old strategy
+            old_strategy = self._strategies[client].pop(sensor, None)
+            if old_strategy:
+                old_strategy.cancel()
 
-                # todo: replace isinstance check with something better
-                if not isinstance(new_strategy, SampleNone):
-                    self._strategies[client][sensor] = new_strategy
-                    # strategy.start() sends out an inform
-                    # which is not great while the lock is held.
-                    self.ioloop.add_callback(new_strategy.start)
+            # todo: replace isinstance check with something better
+            if not isinstance(new_strategy, SampleNone):
+                self._strategies[client][sensor] = new_strategy
+                new_strategy.start()
 
         current_strategy = self._strategies[client].get(sensor, None)
         if not current_strategy:
@@ -2113,17 +2117,11 @@ class DeviceServer(DeviceServerBase):
             # v4 strategy involving timestamps it's not _too_ nasty :)
             params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
 
-        f = Future()
-        @gen.coroutine
-        def _reply():
-            # Let the ioloop run so that the #sensor-status inform is sent before the
-            # reply. Not strictly neccesary, but a number of tests depend on this
-            # behaviour, less effort to fix it here :-/
-            yield gen.moment
-            raise gen.Return(req.make_reply("ok", name, strategy, *params))
-
-        self.ioloop.add_callback(lambda: chain_future(_reply(), f))
-        return f
+        # Let the ioloop run so that the #sensor-status inform is sent before the
+        # reply. Not strictly neccesary, but a number of tests depend on this
+        # behaviour, less effort to fix it here :-/
+        yield gen.moment
+        raise gen.Return(req.make_reply("ok", name, strategy, *params))
 
     @request()
     @return_reply()
