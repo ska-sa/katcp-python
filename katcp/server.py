@@ -1014,6 +1014,12 @@ class DeviceServerBase(object):
                     def async_reply(f):
                         try:
                             connection.reply(f.result(), msg)
+                        except FailReply, e:
+                            reason = str(e)
+                            self._logger.error(
+                                "Request %s ASYNC FAIL: %s" % (msg.name, reason))
+                            reply = Message.reply(msg.name, "fail", reason)
+                            connection.reply(reply, msg)
                         except AsyncReply:
                             self._logger.debug("%s FUTURE ASYNC OK" % (msg.name,))
                         except Exception:
