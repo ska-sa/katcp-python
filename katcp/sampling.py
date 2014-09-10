@@ -174,22 +174,6 @@ class SampleStrategy(object):
         timestamp, status, value = self._sensor.format_reading(reading)
         self._inform_callback(self._sensor.name, timestamp, status, value)
 
-    def set_new_period_callback(self, new_period_callback):
-        """Set a function that will be called whenever a new period callback needs to be set
-
-        Arguments
-        ---------
-
-        new_period_callback(strategy, next_time) -- Callback function that takes a strategy
-            to be re-periodeded as parameter.
-
-        It is epxected that the reactor will not remove other periodic entries
-        that were previously created, so the period() update logic should
-        suppress spurious updates.
-        """
-
-        self._new_period_callback = partial(new_period_callback, self)
-
     def get_sampling(self):
         """Return the Strategy constant for this sampling strategy.
 
@@ -223,7 +207,9 @@ class SampleStrategy(object):
         return strategy, params
 
     def attach(self):
-        """Attach strategy to its sensor."""
+        """Attach strategy to its sensor and send initial update."""
+        s = self._sensor
+        self.update(s, s.read())
         self._sensor.attach(self)
 
     def detach(self):
@@ -277,12 +263,6 @@ class SampleAuto(SampleStrategy):
 
     def get_sampling(self):
         return SampleStrategy.AUTO
-
-    def attach(self):
-        s = self._sensor
-        self.update(s, s.read())
-        super(SampleAuto, self).attach()
-
 
 class SampleNone(SampleStrategy):
     """Sampling strategy which never sends any updates."""
@@ -350,12 +330,6 @@ class SampleDifferential(SampleStrategy):
 
     def get_sampling(self):
         return SampleStrategy.DIFFERENTIAL
-
-    def attach(self):
-        s = self._sensor
-        self.update(s, s.read())
-        super(SampleDifferential, self).attach()
-
 
 class SamplePeriod(SampleStrategy):
     """Periodic sampling strategy.
@@ -425,6 +399,7 @@ class SampleEventRate(SampleStrategy):
         self._longest_period = longest_period
         # don't send updates until timestamp _not_before
         self._not_before = 0
+        self._last_reading_sent = (None, None, None)
 
 
     def inform(self, reading):
@@ -437,11 +412,7 @@ class SampleEventRate(SampleStrategy):
 
     def start(self):
         super(SampleEventRate, self).start()
-        def start_periodic_sampling():
-            self.inform(self._sensor.read())
-            self._periodic_sampling()
-
-        self.ioloop.add_callback(start_periodic_sampling)
+        self.ioloop.add_callback(self._periodic_sampling)
 
     def _periodic_sampling(self):
         if self._not_after >= AGE_OF_UNIVERSE:
@@ -451,7 +422,7 @@ class SampleEventRate(SampleStrategy):
         if self.ioloop.time() >= self._not_after:
             self.inform(self._sensor.read())
 
-        # We depend on self.inform() having updating self._not_after
+        # We depend on self.inform() having updated self._not_after
         self._periodic_timeout_handle = self.ioloop.call_at(
             self._not_after, self._periodic_sampling)
 
@@ -545,7 +516,9 @@ class SampleDifferentialRate(SampleEventRate):
             raise ValueError('The differential-rate strategy can only be defined '
                              'for integer or float sensors')
         self.difference = difference
-        # don't send updates until timestamp _not_before
+        # Initial value that should not cause errors in _sensor_changed(), but should
+        # let it return True
+        self._last_reading_sent = (None, None, 1e99)
 
     def _sensor_changed(self, reading):
         _, status, value = reading
