@@ -1302,15 +1302,30 @@ class SensorTransitionWaiter(object):
         self._teardown_sensor()
         self._torn_down = True
 
-def wait_sensor(sensor, value, timeout=5):
+class SensorTransitionStatusWaiter(SensorTransitionWaiter):
+    """Also check for sensor status transitions, not just value"""
+    def _get_current_sensor_value(self):
+        # Return (status, value) tuple
+        return self.sensor.read()[1:]
+
+    def _sensor_callback(self, sensor, reading):
+        assert(sensor is self.sensor)
+        self._value_queue.put(reading[1:])
+
+
+def wait_sensor(sensor, value, status=None, timeout=5):
     """Wait for a katcp sensor to attain a certain value
 
     Temporarily attaches to the sensor to get sensor updates. It is assumed that
     the sensor is getting updated by another thread.
 
     """
-    tests = (lambda x: True, value)
-    waiter = SensorTransitionWaiter(sensor, tests)
+    test_val = value if status is None else (status, value)
+    tests = (lambda x: True, test_val)
+    if status is None:
+        waiter = SensorTransitionWaiter(sensor, tests)
+    else:
+        waiter = SensorTransitionStatusWaiter(sensor, tests)
     return waiter.wait(timeout=timeout)
 
 
