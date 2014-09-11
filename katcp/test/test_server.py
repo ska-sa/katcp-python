@@ -768,6 +768,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.server.ioloop.add_callback(stream.close)
         # Wait for the client to be disconnected, and to connect again
         self.client.notify_connected.assert_wait_call_count(2)
+        self.server.sync_with_ioloop()
 
         # check that client stream was removed from the KATCPServer
         self.assertTrue(stream not in self.server._server._connections,
