@@ -544,6 +544,10 @@ class KATCPServer(object):
                 except Exception:
                     self._logger.error('Error handling message {0!s}'.format(msg),
                                        exc_info=True)
+                # Allow the ioloop to run since we may be starving it if there is buffered
+                # data in the stream, resulting in yield stream.read_until_regex('\n|\r')
+                # never actually yielding control to the ioloop
+                yield gen.moment
         except Exception:
             self._logger.error('Unexpected exception in read-loop for client {0}:'
                                .format(client_address))
