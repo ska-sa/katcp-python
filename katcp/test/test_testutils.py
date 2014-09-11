@@ -8,22 +8,21 @@ from katcp import Sensor
 
 from katcp import testutils
 
+def get_sensor(sensor_type, name=None):
+    if name is None:
+        name = 'test_%s_sensor' % sensor_type
+    params = None
+    if sensor_type in (Sensor.INTEGER, Sensor.FLOAT):
+        params = [0, 1000]
+    elif sensor_type == Sensor.DISCRETE:
+        params = ['value1', 'value2', 'value3']
+    sensor = Sensor(
+        sensor_type, name, "Dummy %s Sensor" % sensor_type, "Units",
+        params)
+
+    return sensor
 
 class test_SensorTransitionWaiter(unittest.TestCase):
-    def _get_sensor(self, sensor_type, name=None):
-        if name is None:
-            name = 'test_%s_sensor' % sensor_type
-        params = None
-        if sensor_type in (Sensor.INTEGER, Sensor.FLOAT):
-            params = [0, 1000]
-        elif sensor_type == Sensor.DISCRETE:
-            params = ['value1', 'value2', 'value3']
-        sensor = Sensor(
-            sensor_type, name, "Dummy %s Sensor" % sensor_type, "Units",
-            params)
-
-        return sensor
-
     def test_wait_float_timeout(self):
         timeout = 0.1
         expected_conditions = (
@@ -43,7 +42,7 @@ class test_SensorTransitionWaiter(unittest.TestCase):
                 sensor.set_value(val)
 
         # Set up the DUT
-        sensor = self._get_sensor(Sensor.FLOAT)
+        sensor = get_sensor(Sensor.FLOAT)
         DUT = testutils.SensorTransitionWaiter(sensor, expected_conditions)
 
         # Set up the thread that will push the values to DUT
@@ -74,7 +73,7 @@ class test_SensorTransitionWaiter(unittest.TestCase):
 
     def test_init_teardown(self):
         now = time.time()
-        sensor = self._get_sensor(Sensor.INTEGER)
+        sensor = get_sensor(Sensor.INTEGER)
         sensor.set_value(0)
         # Test that an assertion is raised if the initial value of the
         # sensor does not match the first value in the expected
@@ -93,3 +92,32 @@ class test_SensorTransitionWaiter(unittest.TestCase):
         self.assertTrue(DUT._torn_down)
         with self.assertRaises(RuntimeError):
             DUT.wait() # should not allow waiting if we're torn down
+
+class test_wait_sensor(unittest.TestCase):
+    def _wait_sensor(self, vals, val, status):
+        sensor = get_sensor(Sensor.INTEGER)
+        sensor.set_value(0, Sensor.NOMINAL)
+        def set_vals():
+            time.sleep(0.05)
+            for v in vals:
+                if status is None:
+                    sensor.set_value(v)
+                else:
+                    sensor.set_value(*v)
+        sensor_thread = threading.Thread(target=set_vals)
+        # test timeout
+        self.assertFalse(testutils.wait_sensor(sensor, val, status=status, timeout=0.05))
+        # Now start setting vals
+        sensor_thread.start()
+        self.assertTrue(testutils.wait_sensor(sensor, val, status=status, timeout=1))
+
+    def test_values(self):
+        vals = (1,2,0,3)
+        self._wait_sensor(vals, 3, status=None)
+
+    def test_values_and_status(self):
+        vals = ((1, Sensor.NOMINAL),
+                (7, Sensor.WARN),
+                (2, Sensor.ERROR),
+                (0, Sensor.ERROR))
+        self._wait_sensor(vals, 0, status=Sensor.ERROR)
