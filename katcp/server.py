@@ -8,7 +8,6 @@
 """
 import socket
 import errno
-import select
 import threading
 import Queue
 import traceback

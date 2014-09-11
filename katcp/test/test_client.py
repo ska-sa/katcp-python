@@ -225,9 +225,7 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.server.stop(timeout=0.1)
         # Restart server during cleanup to keep teardown happy
         self.addCleanup(self.server.start)
-        # Wake up the server select by sending a message
-        self.client.request(katcp.Message.request('watchdog'))
-        self.server.join(timeout=1.5)
+        self.server.join(timeout=1.)
         # Wait for the client to be disconnected
         disconnected.wait(1.5)
         self.assertFalse(self.client.is_connected())
