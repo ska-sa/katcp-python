@@ -372,7 +372,7 @@ class KATCPServer(object):
 
         Parameters
         ----------
-        timeout : float in seconds or None 
+        timeout : float in seconds or None
             Seconds to wait for server to have *started*.
         """
         if timeout:
@@ -642,7 +642,7 @@ class KATCPServer(object):
         # Write an empty message to get a future that resolves when the buffer is flushed
         return stream.write('\n')
 
-    def async_call(self, fn):
+    def call_from_thread(self, fn):
         """Allow thread-safe calls to ioloop functions
 
         Uses add_callback if not in the IOLoop thread, otherwise calls directly.  Returns
@@ -697,7 +697,7 @@ class KATCPServer(object):
         callback is submitted to the ioloop that will resolve a thread-safe
         concurrent.futures.Future instance.
         """
-        return self.async_call(partial(self.send_message, stream, msg))
+        return self.call_from_thread(partial(self.send_message, stream, msg))
 
     def mass_send_message(self, msg):
         """Send a message to all connected clients
@@ -716,7 +716,7 @@ class KATCPServer(object):
 
         See return value and notes for send_message_from_thread()
         """
-        return self.async_call(partial(self.mass_send_message, msg))
+        return self.call_from_thread(partial(self.mass_send_message, msg))
 
     def in_ioloop_thread(self):
         """Return True if called in the IOLoop thread of this server"""
@@ -804,6 +804,9 @@ class MessageHandlerThread(object):
 
     def run(self):
         self._running.set()
+        # Set the default ioloop for anything using IOLoop.current() in this thread gets
+        # self.ioloop
+        self.ioloop.make_current()
         try:
             while self._running.isSet():
                 if not self._msg_queue:
@@ -1017,7 +1020,7 @@ class DeviceServerBase(object):
                         except FailReply, e:
                             reason = str(e)
                             self._logger.error(
-                                "Request %s ASYNC FAIL: %s" % (msg.name, reason))
+                                "Request %s FUTURE FAIL: %s" % (msg.name, reason))
                             reply = Message.reply(msg.name, "fail", reason)
                             connection.reply(reply, msg)
                         except AsyncReply:
@@ -1027,7 +1030,14 @@ class DeviceServerBase(object):
                                 msg, sys.exc_info())
                             connection.reply(error_reply, msg)
 
-                    reply.add_done_callback(async_reply)
+                    # TODO When using the return_reply() decorator the future returned is
+                    # not currently threadsafe, must either deal with it here, or in
+                    # kattypes.py. Would be nice if we don't have to always fall back to
+                    # adding a callback, or wrapping a thread safe future. Supporting
+                    # sync-with-thread and async futures is turning out to be a pain in
+                    # the ass ;)
+                    self.ioloop.add_callback(reply.add_done_callback, async_reply)
+                    # reply.add_done_callback(async_reply)
                     self._logger.debug("%s FUTURE OK" % (msg.name,))
                     return reply
                 else:
@@ -2138,9 +2148,14 @@ class DeviceServer(DeviceServerBase):
         ?sensor-sampling-clear
         !sensor-sampling-clear ok
         """
-        self.clear_strategies(req.client_connection)
+        f = Future()
+        @gen.coroutine
+        def _clear_strategies():
+            self.clear_strategies(req.client_connection)
+            raise gen.Return(('ok',))
 
-        return ["ok"]
+        self.ioloop.add_callback(lambda: chain_future(_clear_strategies(), f))
+        return f
 
 
     def request_watchdog(self, req, msg):

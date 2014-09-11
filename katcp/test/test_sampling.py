@@ -20,8 +20,7 @@ import concurrent.futures
 from thread import get_ident
 from tornado import gen
 from katcp import sampling, Sensor
-from katcp.testutils import (
-    TestLogHandler, DeviceTestSensor, start_thread_with_cleanup)
+from katcp.testutils import (TestLogHandler, DeviceTestSensor)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)

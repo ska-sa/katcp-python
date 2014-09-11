@@ -18,16 +18,20 @@ import threading
 import katcp
 import mock
 
+from concurrent.futures import Future
 from collections import defaultdict
 from functools import partial
+from tornado import gen
 
 from katcp.testutils import (
     TestLogHandler, BlockingTestClient, DeviceTestServer, TestUtilMixin,
-    start_thread_with_cleanup, WaitingMock, ClientConnectionTest, mock_req)
+    start_thread_with_cleanup, WaitingMock, ClientConnectionTest, mock_req,
+    handle_mock_req)
 from katcp.core import FailReply
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
+logger = logging.getLogger(__name__)
 
 NO_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
 
@@ -276,9 +280,18 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
 
     def test_request_sensor_sampling_clear(self):
         self.server.clear_strategies = mock.Mock()
+        start_thread_with_cleanup(self, self.server, start_timeout=1)
         client_connection = ClientConnectionTest()
-        self.server.handle_message(
+        self.server.ioloop.make_current()
+        tf = self.server.handle_message(
             client_connection, katcp.Message.request('sensor-sampling-clear'))
+        # tf may be a tornado (not thread-safe) future, so we wrap it in a thread-safe
+        # future object
+        f = Future()
+        self.server.ioloop.add_callback(gen.chain_future, tf, f)
+        f.result(timeout=1)
+        # Ensure that the tornado future has finished running its callbacks
+        self.server.sync_with_ioloop()
         self._assert_msgs_equal(client_connection.messages, [
             '!sensor-sampling-clear ok'])
         self.server.clear_strategies.assert_called_once_with(client_connection)
@@ -366,7 +379,10 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     def test_slow_client(self):
         # Test that server does not choke sending messages to slow clients
-        self.server._server.send_timeout = 0.1    # Set a short sending timeout
+
+        # Set max server write buffer size smaller so that it gives up earlier to make the
+        # test faster
+        self.server._server.MAX_WRITE_BUFFER_SIZE = 16384
 
         self.client.wait_protocol(1)
         slow_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -773,9 +789,9 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         # Wait for the request reply and for the sensor update messages to
         # arrive. We expect update one the moment the sensor-sampling request is
         # made, then four more over 4/32. of a second, resutling in 6
-        # messages. Wait half a period longer just to be sure we get everything.
+        # messages. Wait 0.75 of a period longer just to be sure we get everything.
 
-        self.assertTrue(get_msgs.wait_number(6, timeout=4.5/32.))
+        self.assertTrue(get_msgs.wait_number(6, timeout=4.75/32.))
         self.client.assert_request_succeeds("sensor-sampling", "an.int", "none")
         # Wait for reply to above request
         get_msgs.wait_number(7)

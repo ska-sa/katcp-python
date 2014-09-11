@@ -247,13 +247,11 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.notify_connected = (
             lambda connected: disconnected.set() if not connected else None)
         self.server.stop(timeout=0.1)
-        # Wake up the server select by sending a message
-        self.client.request(katcp.Message.request('watchdog'))
-        self.server.join(timeout=1.5)
+        self.server.join(timeout=1)
         # Restart server during cleanup to keep teardown happy
         self.addCleanup(self.server.start)
         # Wait for the client to be disconnected
-        disconnected.wait(1.5)
+        disconnected.wait(1)
         # Now check that wait_connected returns false
         start = time.time()
         self.assertFalse(self.client.wait_connected(0.1))

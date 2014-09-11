@@ -953,7 +953,7 @@ class DeviceTestServer(DeviceServer):
 
     def handle_message(self, req, msg):
         self.__msgs.append(msg)
-        super(DeviceTestServer, self).handle_message(req, msg)
+        return super(DeviceTestServer, self).handle_message(req, msg)
 
     def messages(self):
         return self.__msgs
@@ -1398,6 +1398,17 @@ class WaitingMock(mock.Mock):
             to_wait = timeout - (time.time() - t0)
 
         assert(self.call_count >= count)
+        # The _mock_call method increments call_count before adding the call to
+        # call_args or call_args_list, so it is possible that we return from
+        # assert_wait_call_count() before the results are available. Try sleep some
+        # more until this stops being the case
+        quantum = to_wait / 100.
+        while to_wait >= 0 and len(self.call_args_list) < count:
+            try:
+                self._counted_queue.get(timeout=quantum)
+            except Queue.Empty:
+                pass
+            to_wait -= quantum
 
 def mock_req(req_name, *args, **kwargs):
     """

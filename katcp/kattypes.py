@@ -12,6 +12,9 @@ from functools import partial
 import struct
 import re
 import logging
+
+from tornado import gen, ioloop
+
 from .core import (Message, FailReply, DEFAULT_KATCP_MAJOR,
                    SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC, MS_TO_SEC_FAC,
                    convert_method_name)
@@ -773,7 +776,10 @@ def return_reply(*types, **options):
 
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
-            return make_reply(msgname, types, reply_args, major)
+            if gen.is_future(reply_args):
+                return async_make_reply(msgname, types, reply_args, major)
+            else:
+                return make_reply(msgname, types, reply_args, major)
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
 
@@ -861,6 +867,11 @@ def make_reply(msgname, types, arguments, major):
             msgname, *pack_types((Str(),) + types, arguments, major))
     raise ValueError("First returned value must be 'ok' or 'fail'.")
 
+@gen.coroutine
+def async_make_reply(msgname, types, arguments_future, major):
+    """Wrap a future that will resolve with arguments as needed by make_reply()"""
+    arguments = yield arguments_future
+    raise gen.Return(make_reply(msgname, types, arguments, major))
 
 def unpack_types(types, args, argnames, major):
     """Parse arguments according to types list.
