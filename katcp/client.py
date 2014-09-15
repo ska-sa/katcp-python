@@ -23,6 +23,8 @@ from concurrent.futures import Future, TimeoutError
 from tornado.concurrent import Future as tornado_Future
 from tornado.concurrent import chain_future
 
+from thread import get_ident as get_thread_ident
+
 from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, ProtocolFlags,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
@@ -31,20 +33,39 @@ from .core import (DeviceMetaclass, MessageParser, Message,
 #logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")
 
+def make_threadsafe(meth):
+    """Decorator for a DeviceClient method should always run in the ioloop
+
+    Used with DeviceClient.set_thread_safe(flag). If `flag` is False, the method will be
+    unprotected and it is the user's responsibility to ensure that these methods are only
+    called from the ioloop. If `flag` is True, decorated methods are wrapped.
+    """
+    meth.make_threadsafe = True
+    return meth
+
+def threadsafe_only(meth):
+    """Decorator for a DeviceClient method that should only be callable in threadsafe mode
+
+    Used with DeviceClient.set_thread_safe(flag). If `flag` is False, the method will
+    raise a RuntimeError exception. It is recommended that, if such methods are blocking,
+    they raise an error if called in the ioloop.
+    """
+    meth.threadsafe_only = True
+    return meth
 
 class AsyncEvent(object):
     """tornado.concurrent.Future Event based on threading.Event API
 
     Supports threading.Event API for setting / clearing / checking, but replaces the
-    wait() method with until() that returns a tornado Future that resolves when the event
-    is set.
+    wait() method with until_set() that returns a tornado Future that resolves when the
+    event is set.
 
     Note, this class is NOT THREAD SAFE! It will only work properly if all it's methods
     (appart from isSet()) are called from the same thread/ioloop.
     """
     def __init__(self):
         self._flag = False
-        self._waiting_futures = set()
+        self._waiting_future = tornado_Future()
 
     def isSet(self):
         return self._flag
@@ -53,21 +74,15 @@ class AsyncEvent(object):
 
     def set(self):
         self._flag = True
-        while self._waiting_futures:
-            f = self._waiting_futures.pop()
-            f.set_result(True)
+        self._waiting_future.set_result(True)
 
     def clear(self):
         self._flag = False
+        if self._waiting_future.done():
+            self._waiting_future = tornado_Future()
 
-    def until(self):
-        f = Future()
-        if self._flag:
-            f.set_result(True)
-        else:
-            self._waiting_futures.add(f)
-        return f
-
+    def until_set(self):
+        return self._waiting_future
 
 class DeviceClient(object):
     """Device client proxy.
@@ -188,14 +203,15 @@ class DeviceClient(object):
                 device_time = int(device_time)
             return device_time
 
+    def _make_threadsafe(self, meth):
+        def wrapped(*args, **kwargs):
+            pass
+
     def _next_id(self):
         """Return the next available message id."""
-        self._msg_id_lock.acquire()
-        try:
-            self._last_msg_id += 1
-            return str(self._last_msg_id)
-        finally:
-            self._msg_id_lock.release()
+        assert get_thread_ident() == self.ioloop_thread_id
+        self._last_msg_id += 1
+        return str(self._last_msg_id)
 
     def preset_protocol_flags(self, protocol_flags):
         """
@@ -494,11 +510,11 @@ class DeviceClient(object):
             self._logger.debug(str(msg))
 
         if msg.mtype == Message.INFORM:
-            self.handle_inform(msg)
+            return self.handle_inform(msg)
         elif msg.mtype == Message.REPLY:
-            self.handle_reply(msg)
+            return self.handle_reply(msg)
         elif msg.mtype == Message.REQUEST:
-            self.handle_request(msg)
+            return self.handle_request(msg)
         else:
             self._logger.error("Unexpected message type from server ['%s']."
                 % (msg,))
@@ -516,7 +532,7 @@ class DeviceClient(object):
             method = self._inform_handlers[msg.name]
 
         try:
-            method(self, msg)
+            return method(self, msg)
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
@@ -536,7 +552,7 @@ class DeviceClient(object):
             method = self._reply_handlers[msg.name]
 
         try:
-            method(self, msg)
+            return method(self, msg)
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
@@ -553,7 +569,7 @@ class DeviceClient(object):
         """
         method = self.__class__.unhandled_request
         if msg.name in self._request_handlers:
-            method = self._request_handlers[msg.name]
+            return method = self._request_handlers[msg.name]
 
         try:
             reply = method(self, msg)
