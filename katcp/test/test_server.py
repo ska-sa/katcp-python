@@ -696,6 +696,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             r"!halt[1] ok",
             r"#disconnect Device\_server\_shutting\_down.",
         ])
+        # Start again to keep tear-down happy
+        start_thread_with_cleanup(self.server)
 
     def test_bad_handlers(self):
         """Test that bad request and inform handlers are picked up."""

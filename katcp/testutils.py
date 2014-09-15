@@ -197,13 +197,13 @@ class BlockingTestClient(client.BlockingClient):
 
     def handle_inform(self, msg):
         """Pass unhandled informs to message recorders."""
-        for append_msg in self._message_recorders.itervalues():
+        for append_msg in self._message_recorders.values():
             append_msg(msg)
         return super(BlockingTestClient, self).handle_inform(msg)
 
     def handle_reply(self, msg):
         """Pass unhandled replies to message recorders."""
-        for append_msg in self._message_recorders.itervalues():
+        for append_msg in self._message_recorders.values():
             append_msg(msg)
         return super(BlockingTestClient, self).handle_reply(msg)
 
