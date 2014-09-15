@@ -29,8 +29,7 @@ from tornado.concurrent import chain_future
 from tornado.util import ObjectDict
 from concurrent.futures import Future, TimeoutError
 
-
-
+from .ioloop_manager import IOLoopManager
 from .core import (DeviceMetaclass, Message, MessageParser,
                    FailReply, AsyncReply, ProtocolFlags)
 from .sampling import SampleStrategy, SampleNone
@@ -314,12 +313,9 @@ class KATCPServer(object):
         # ID of Thread that hosts the IOLoop. Used to check that we are running in the
         # ioloop.
         self.ioloop_thread_id = None
-        # True if we manage the ioloop. Will be updated by self.set_ioloop()
-        self._ioloop_managed = True
-        # Thread object that a managed ioloop is running in
-        self._ioloop_thread = None
         # map from tornado IOStreams to ClientConnection objects
         self._connections = {}
+        self._ioloop_manager = IOLoopManager(managed_default=True)
 
     def set_ioloop(self, ioloop=None):
         """Set the tornado.ioloop.IOLoop instance to use, default to IOLoop.current()
@@ -332,13 +328,7 @@ class KATCPServer(object):
 
         Must be called before start() is called
         """
-        if self.ioloop:
-            raise RuntimeError('IOLoop instance can only be set once')
-        if ioloop:
-            self.ioloop = ioloop
-        else:
-            self.ioloop = tornado.ioloop.IOLoop.current()
-        self._ioloop_managed = False
+        self._ioloop_manager.set_ioloop(ioloop, managed=False)
 
     def start(self, timeout=None):
         """Install the server on its IOLoop, starting the IOLoop in a thread if needed
@@ -352,8 +342,8 @@ class KATCPServer(object):
             raise RuntimeError('Server already started')
         self._stopped.clear()
         # Make sure we have an ioloop
-        if self._ioloop_managed:
-            self._start_ioloop()
+        self.ioloop = self._ioloop_manager.get_ioloop()
+        self._ioloop_manager.start()
         # Set max_buffer_size to ensure streams are closed if too-large messages are
         # received
         self._tcp_server = tornado.tcpserver.TCPServer(
@@ -364,7 +354,7 @@ class KATCPServer(object):
 
         self.ioloop.add_callback(self._install)
         if timeout:
-            self._running.wait(timeout)
+            return self._running.wait(timeout)
 
     def stop(self, timeout=1.0):
         """Stop a running server (from another thread).
@@ -376,11 +366,7 @@ class KATCPServer(object):
         """
         if timeout:
             self._running.wait(timeout)
-        try:
-            self.ioloop.add_callback(self._uninstall)
-        except AttributeError:
-            # Probably we have been shut-down already
-            pass
+        self._ioloop_manager.stop(callback=self._uninstall)
 
     def join(self, timeout=None):
         """Rejoin the server thread.
@@ -394,16 +380,13 @@ class KATCPServer(object):
         -----
 
         If the ioloop is not managed, this function will block until the server port is
-        closed, meaning a new server can be listen at the same port
+        closed, meaning a new server can be started on the same port.
 
         """
-        if self._ioloop_managed:
-            try:
-                self._ioloop_thread.join(timeout)
-            except AttributeError:
-                raise RuntimeError('Cannot join if not started')
-        else:
-            self._stopped.wait(timeout)
+        t0 = time.time()
+        self._ioloop_manager.join(timeout=timeout)
+        if timeout:
+            self._stopped.wait(timeout - (time.time() - t0))
 
     def running(self):
         """Whether the handler thread is running."""
@@ -426,23 +409,6 @@ class KATCPServer(object):
         sock.listen(self.BACKLOG)
         return sock
 
-    def _start_ioloop(self):
-        if not self.ioloop:
-            self.ioloop = tornado.ioloop.IOLoop()
-        def run_ioloop():
-            try:
-                self.ioloop.start()
-                self.ioloop.close()
-            except Exception:
-                self._logger.error('Error starting tornado IOloop: ', exc_info=True)
-            finally:
-                ioloop = self.ioloop
-                self.ioloop = None
-                self._stopped.set()
-                self._logger.info('Managed tornado IOloop {0} stopped'.format(ioloop))
-        self._ioloop_thread = threading.Thread(target=run_ioloop)
-        self._ioloop_thread.start()
-
     def _install(self):
         # Do stuff to put us on the IOLoop
         self.ioloop_thread_id = get_thread_ident()
@@ -458,17 +424,9 @@ class KATCPServer(object):
             for stream, conn in self._connections.items():
                 yield self._disconnect_client(stream, conn, 'Device server shutting down.')
         finally:
+            self.ioloop = None
             self._running.clear()
-            if not self._ioloop_managed:
-                self._stopped.set()
-            else:
-                # Our thread run function that started the ioloop should set self._stopped
-                # when it exits
-                def stop():
-                    self._logger.info('Stopping ioloop')
-                    self.ioloop.stop()
-                self.ioloop.add_callback(stop)
-
+            self._stopped.set()
 
     @gen.coroutine
     def _handle_stream(self, stream, address):
@@ -712,7 +670,9 @@ class KATCPServer(object):
 
         """
         for stream in self._connections.keys():
-            self.send_message(stream, msg)
+            if not stream.closed():
+                # Don't cause noise by trying to write to already closed streams
+                self.send_message(stream, msg)
 
     def mass_send_message_from_thread(self, msg):
         """Thread-safe version of send_message() returning a Future instance
@@ -1016,7 +976,7 @@ class DeviceServerBase(object):
                 # resolve the future with the reply message when it is complete. Attach a
                 # message-sending callback to the future, and return the future
                 if gen.is_future(reply):
-
+                    done_future = Future()
                     def async_reply(f):
                         try:
                             connection.reply(f.result(), msg)
@@ -1032,6 +992,8 @@ class DeviceServerBase(object):
                             error_reply = self.create_exception_reply_and_log(
                                 msg, sys.exc_info())
                             connection.reply(error_reply, msg)
+                        finally:
+                            done_future.set_result(None)
 
                     # TODO When using the return_reply() decorator the future returned is
                     # not currently threadsafe, must either deal with it here, or in
@@ -1042,7 +1004,7 @@ class DeviceServerBase(object):
                     self.ioloop.add_callback(reply.add_done_callback, async_reply)
                     # reply.add_done_callback(async_reply)
                     self._logger.debug("%s FUTURE OK" % (msg.name,))
-                    return reply
+                    return done_future
                 else:
                     assert (reply.mtype == Message.REPLY)
                     assert (reply.name == msg.name)

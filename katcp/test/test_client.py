@@ -14,6 +14,9 @@ import time
 import logging
 import threading
 import katcp
+
+from concurrent.futures import Future
+
 from katcp.core import ProtocolFlags
 
 from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
@@ -182,14 +185,13 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test request method."""
         self.assertTrue(self.client.wait_protocol(1))
         self.client.send_request(katcp.Message.request("watchdog"))
-        self.client.send_request(katcp.Message.request("watchdog", mid=55))
         self.client._server_supports_ids = False
         with self.assertRaises(katcp.core.KatcpVersionError):
             self.client.send_request(katcp.Message.request("watchdog", mid=56))
+        self.client._server_supports_ids = True
+        self.client.send_request(katcp.Message.request("watchdog", mid=55))
 
-        time.sleep(0.1)
-
-        msgs = self.server.messages()
+        msgs = self.server.until_messages(2).result(timeout=1)
         self._assert_msgs_equal(msgs, [
             r"?watchdog",
             r"?watchdog[55]",
@@ -199,9 +201,7 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test send_message method."""
         self.client.send_message(katcp.Message.inform("random-inform"))
 
-        time.sleep(0.1)
-
-        msgs = self.server.messages()
+        msgs = self.server.until_messages(1).result(timeout=1)
         self._assert_msgs_equal(msgs, [
             r"#random-inform",
         ])
@@ -259,14 +259,19 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
     def test_bad_socket(self):
         """Test what happens when select is called on a dead socket."""
         # wait for client to connect
-        time.sleep(0.1)
+        self.client.wait_connected(timeout=1)
+        f = Future()
+        def notify_connected(connected):
+            if connected:
+                f.set_result(connected)
+        self.client.notify_connected = notify_connected
 
         # close socket while the client isn't looking
         # then wait for the client to notice
         sock = self.client._sock
         sockname = sock.getpeername()
         sock.close()
-        time.sleep(1.25)
+        f.result(timeout=1.25)
 
         # check that client reconnected
         self.assertTrue(sock is not self.client._sock,
@@ -329,6 +334,9 @@ class TestBlockingClient(unittest.TestCase):
 
         # blocking_request() raises RuntimeError on timeout, so make a wrapper
         # function to eat that
+
+        # TODO (NM 2014-09-08): Can remove this once we've made all clients handle
+        # blocking_request timeouts in the same way.
         def blocking_request(*args, **kwargs):
             try:
                 return self.client.blocking_request(*args, **kwargs)
@@ -386,6 +394,8 @@ class TestBlockingClient(unittest.TestCase):
                 katcp.Message.request("slow-command", "0.5"),
                 timeout=0.001)
         except RuntimeError, e:
+            # TODO (NM 2014-09-08): Can remove this once we've made all clients handle
+            # blocking_request timeouts in the same way.
             self.assertEqual(str(e), "Request slow-command timed out after"
                              " 0.001 seconds.")
         else:
@@ -402,7 +412,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         host, port = self.server.bind_address
 
         self.client = katcp.CallbackClient(host, port)
-        self.client.start(timeout=0.1)
+        self.client.start(timeout=1)
         self.assertTrue(self.client.wait_protocol(timeout=1))
 
     def stop_server_client(self):
