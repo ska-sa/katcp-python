@@ -670,7 +670,9 @@ class KATCPServer(object):
 
         """
         for stream in self._connections.keys():
-            self.send_message(stream, msg)
+            if not stream.closed():
+                # Don't cause noise by trying to write to already closed streams
+                self.send_message(stream, msg)
 
     def mass_send_message_from_thread(self, msg):
         """Thread-safe version of send_message() returning a Future instance
