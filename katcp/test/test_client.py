@@ -412,7 +412,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         host, port = self.server.bind_address
 
         self.client = katcp.CallbackClient(host, port)
-        self.client.start(timeout=0.1)
+        self.client.start(timeout=1)
         self.assertTrue(self.client.wait_protocol(timeout=1))
 
     def stop_server_client(self):
