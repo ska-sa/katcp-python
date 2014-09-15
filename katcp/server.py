@@ -974,7 +974,7 @@ class DeviceServerBase(object):
                 # resolve the future with the reply message when it is complete. Attach a
                 # message-sending callback to the future, and return the future
                 if gen.is_future(reply):
-
+                    done_future = Future()
                     def async_reply(f):
                         try:
                             connection.reply(f.result(), msg)
@@ -990,6 +990,8 @@ class DeviceServerBase(object):
                             error_reply = self.create_exception_reply_and_log(
                                 msg, sys.exc_info())
                             connection.reply(error_reply, msg)
+                        finally:
+                            done_future.set_result(None)
 
                     # TODO When using the return_reply() decorator the future returned is
                     # not currently threadsafe, must either deal with it here, or in
@@ -1000,7 +1002,7 @@ class DeviceServerBase(object):
                     self.ioloop.add_callback(reply.add_done_callback, async_reply)
                     # reply.add_done_callback(async_reply)
                     self._logger.debug("%s FUTURE OK" % (msg.name,))
-                    return reply
+                    return done_future
                 else:
                     assert (reply.mtype == Message.REPLY)
                     assert (reply.name == msg.name)
