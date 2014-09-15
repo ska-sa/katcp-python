@@ -381,7 +381,6 @@ class KATCPServer(object):
 
         If the ioloop is not managed, this function will block until the server port is
         closed, meaning a new server can be started on the same port.
-
         """
         t0 = time.time()
         self._ioloop_manager.join(timeout=timeout)

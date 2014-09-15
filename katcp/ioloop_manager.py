@@ -106,7 +106,7 @@ class IOLoopManager(object):
         except AttributeError:
             # Probably we have been shut-down already
             pass
-        
+
     def join(self, timeout=None):
         """Join managed ioloop thread, or do nothing if not managed"""
         if not self._ioloop_managed:
