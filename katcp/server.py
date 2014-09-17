@@ -29,7 +29,7 @@ from tornado.concurrent import chain_future
 from tornado.util import ObjectDict
 from concurrent.futures import Future, TimeoutError
 
-from .ioloop_manager import IOLoopManager
+from .ioloop_manager import IOLoopManager, with_relative_timeout
 from .core import (DeviceMetaclass, Message, MessageParser,
                    FailReply, AsyncReply, ProtocolFlags)
 from .sampling import SampleStrategy, SampleNone
@@ -57,9 +57,6 @@ BASE_REQUESTS = frozenset(['client-list',
                            'watchdog',
                            'sensor-sampling',])
 "List of basic KATCP request that a minimal device server should implement"
-
-def with_relative_timeout(timeout, future, io_loop=None):
-    return gen.with_timeout(timeout + time.time(), future, io_loop)
 
 def return_future(fn):
     """Decorator that turns a syncronous function into one returning a tornado Future

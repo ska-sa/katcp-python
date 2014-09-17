@@ -10,45 +10,17 @@ logging.basicConfig(
     level=logging.DEBUG
 )
 
-def waitable_flag(getter):
-    waiting_futures = set()
-    var_name = '_' + getter.func_name
-
-    def getter(self):
-        return getattr(self, var_name)
-
-    def setter(self, val):
-        setattr(self, var_name, val)
-        if val:
-            notify(val)
-
-    def notify(val):
-        while waiting_futures:
-            f = waiting_futures.pop()
-            f.set_result(val)
-
-    return property(getter, setter, doc=getter.__doc__)
-
-
-class C(object):
-    def __init__(self):
-        self.x = AsyncFuture()
-
-c = C()
-
-import IPython ; IPython.embed()
-
-# try:
-#     d = DeviceTestServer('', 0)
-#     d.start(timeout=1)
-
-#     c = DeviceClient('localhost', d.bind_address[1])
-#     c.start(timeout=1)
+try:
+    d = DeviceTestServer('', 0)
+    d.start(timeout=1)
+    logging.info('Server started at port {0}'.format(d.bind_address[1]))
+    c = DeviceClient('127.0.0.1', d.bind_address[1])
+    c.start(timeout=1)
 
 #     rm = Message.request
 
 #     #time.sleep(10000000)
-#     import IPython ; IPython.embed()
-# finally:
-#     d.stop()
-#     c.stop()
+    import IPython ; IPython.embed()
+finally:
+    d.stop()
+    c.stop()
