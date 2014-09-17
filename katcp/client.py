@@ -241,10 +241,6 @@ class DeviceClient(object):
     def bind_address_string(self):
         return address_to_string(self._bindaddr)
 
-    def inform_sensor_status(self, msg):
-        "blah"
-        print msg
-
     def convert_seconds(self, time_seconds):
         """Convert a time in seconds to the device timestamp units
 
