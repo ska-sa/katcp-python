@@ -81,6 +81,8 @@ class IOLoopManager(object):
 
         if self._ioloop_managed:
             self._run_managed_ioloop()
+        else:
+            self._running.set()
 
         if timeout:
             return self._running.wait(timeout)
