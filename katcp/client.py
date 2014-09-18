@@ -1128,9 +1128,8 @@ class CallbackClient(DeviceClient):
             if isinstance(e, KatcpVersionError):
                 raise
 
-
-    def blocking_request(self, msg, timeout=None, use_mid=None):
-        """Send a request messsage.
+    def future_request(self, msg, timeout=None, use_mid=None):
+        """Send a request messsage, with future replies
 
         Parameters
         ----------
@@ -1145,6 +1144,9 @@ class CallbackClient(DeviceClient):
 
         Returns
         -------
+
+        A tornado.concurrent.Future that resolves with:
+
         reply : Message object
             The reply message received.
         informs : list of Message objects
@@ -1153,23 +1155,55 @@ class CallbackClient(DeviceClient):
         if timeout is None:
             timeout = self._request_timeout
 
-        done = threading.Event()
+        f = tornado_Future()
         informs = []
-        replies = []
 
         def reply_cb(msg):
-            self._logger.debug('received reply %r', str(msg))
-            replies.append(msg)
-            done.set()
+            f.set_result((msg, informs))
 
         def inform_cb(msg):
-            self._logger.debug('received inform %r', str(msg))
             informs.append(msg)
 
         self.callback_request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
                               timeout=timeout, use_mid=use_mid)
-        ## We wait on the done event that should be set by the reply
-        # handler callback. If this event does not occur within the
+        return f
+
+    def blocking_request(self, msg, timeout=None, use_mid=None):
+        """Send a request messsage and wait for its reply
+
+        Parameters
+        ----------
+        msg : Message object
+            The request Message to send.
+        timeout : float in seconds
+            How long to wait for a reply. The default is the
+            the timeout set when creating the CallbackClient.
+        use_mid : boolean, optional
+            Whether to use message IDs. Default is to use message IDs
+            if the server supports them.
+
+        Returns
+        -------
+
+        reply : Message object
+            The reply message received.
+        informs : list of Message objects
+            A list of the inform messages received.
+        """
+        assert (get_thread_ident() != self.ioloop_thread_id), (
+            'Cannot call blocking_request() in ioloop')
+        if timeout is None:
+            timeout = self._request_timeout
+
+        f = Future()
+        def blocking_request_callback():
+            tf = self.future_request(msg, timeout=timeout, use_mid=use_mid)
+            gen.chain_future(tf, f)
+
+        self.ioloop.add_callback(blocking_request_callback)
+
+        ## We wait on the future result that should be set by the reply
+        # handler callback. If this  does not occur within the
         # timeout it means something unexpected went wrong. We give it
         # an extra second to deal with (unlikely?) slowness in the
         # rest of the code
@@ -1177,12 +1211,11 @@ class CallbackClient(DeviceClient):
         wait_timeout = timeout
         if wait_timeout is not None:
             wait_timeout = wait_timeout + extra_wait
-        done.wait(timeout=wait_timeout)
-        if not done.isSet():
+        try:
+            return f.result(timeout=wait_timeout)
+        except TimeoutError:
             raise RuntimeError('Unexpected error: Async request handler did '
                                'not call reply handler within timeout period')
-        reply = replies[0]
-
         return reply, informs
 
     def handle_inform(self, msg):
@@ -1263,7 +1296,7 @@ class CallbackClient(DeviceClient):
         # arrived close to the timeout expiry, which means the
         # self._pop_async_request() call gave us None's. In this case, just bail
         #
-        # NM 2014-09-17 Not sure if this is true after porting to tornado, but too afraid
+        # NM 2014-09-17 Not sure if this is true after porting to tornado, but I'm too afraid
         # to remove this code :-/
         if timeout_handle is None:
             return
