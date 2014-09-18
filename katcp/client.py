@@ -58,32 +58,6 @@ def make_threadsafe_blocking(meth):
     meth.make_threadsafe_blocking = True
     return meth
 
-# TODO wait_future_timeout? Something that blocks on a tornado future with a
-# timeout. Turns generic until_blah methods into wait_blah methods that returns True if
-# the future resolves, False if it times out.
-
-def threadsafe_only(meth):
-    """Decorator for a DeviceClient method that should only be callable in threadsafe mode
-
-    Used with DeviceClient.enable_thread_safety(). If enable_thread_safety() is not
-    called, the method will raise a RuntimeError exception. It is recommended that, if
-    such methods are blocking, they raise an error if called in the ioloop.
-    """
-    # How to do this? Perhaps apply it in init.
-    # TODO do we need this?
-    meth.threadsafe_only = True
-    return meth
-
-def raise_in_ioloop(meth):
-    """Decorator for a DeviceClient method that raises if called in the ioloop
-
-    Method decorated thus will raise a RuntimeError exception if called in the ioloop
-    thread.
-    """
-    # TODO do we need this?
-    meth.raise_in_ioloop = True
-    return meth
-
 class AsyncEvent(object):
     """tornado.concurrent.Future Event based on threading.Event API
 
@@ -264,9 +238,6 @@ class DeviceClient(object):
         self._tcp_client = None
         # Indicate whether we are threadsafe or not. Managed by self.enable_thread_safety()
         self._threadsafe = False
-
-        # See raise_in_ioloop() and threadsafe_only() decorators
-        self._threadsafe_only_wrappers()
 
     @property
     def protocol_flags(self):
@@ -816,11 +787,6 @@ class DeviceClient(object):
                 return f.result(timeout)
         return wrapped
 
-    def _threadsafe_only_wrappers(self):
-        # Handle methods decorated with threadsafe_only
-        # TODO do we need this? See raise_in_ioloop() and threadsafe_only() decorators
-        pass
-
     def start(self, timeout=None):
         """Start the client in a new thread.
 
@@ -838,11 +804,6 @@ class DeviceClient(object):
         self._ioloop_manager.start(timeout)
         self.ioloop.add_callback(self._install)
 
-        # TODO need to do thread-safe wait on our own self._running as well. Perhaps we
-        # need an 'install' method too for when we share ioloops and bypass the
-        # thread-like API. start() can call into that, or other way around.
-
-    @raise_in_ioloop
     def join(self, timeout=None):
         """Rejoin the client thread.
 
@@ -896,7 +857,6 @@ class DeviceClient(object):
         """
         return self._connected.until_set()
 
-    @raise_in_ioloop
     def wait_running(self, timeout=None):
         """Wait until the client is running.
 
@@ -909,6 +869,11 @@ class DeviceClient(object):
         -------
         connected : bool
             Whether the client is running
+
+        Notes
+        -----
+
+        Do not call this from the ioloop, use until_running()
         """
         ioloop = getattr(self, 'ioloop', None)
         if not ioloop:
@@ -931,7 +896,6 @@ class DeviceClient(object):
         assert get_thread_ident() == self.ioloop_thread_id
         return self._connected.until_set()
 
-    @raise_in_ioloop
     def wait_connected(self, timeout=None):
         """Wait until the client is connected.
 
@@ -945,16 +909,23 @@ class DeviceClient(object):
         -------
         connected : bool
             Whether the client is connected.
+
+        Notes
+        -----
+
+        Do not call this from the ioloop, use until_connected()
         """
         self._connected.wait_with_ioloop(self.ioloop, timeout)
 
     def until_protocol(self):
         """Return future; resolved when katcp protocol information has been received.
+
+        If the returned future resolves, the server's protocol information is
+        available in the ProtocolFlags instance self.protocol_flags.
         """
         assert get_thread_ident() == self.ioloop_thread_id
         return self._received_protocol_info.until_set()
 
-    @raise_in_ioloop
     def wait_protocol(self, timeout=None):
         """Wait until katcp protocol information has been received from the server.
 
@@ -970,6 +941,11 @@ class DeviceClient(object):
 
         If this method returns True, the server's protocol information is
         available in the ProtocolFlags instance self.protocol_flags.
+
+        Notes
+        -----
+
+        Do not call this from the ioloop, use until_protocol()
         """
         return self._received_protocol_info.wait_with_ioloop(self.ioloop, timeout)
 
