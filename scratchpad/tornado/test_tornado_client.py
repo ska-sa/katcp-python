@@ -10,11 +10,15 @@ logging.basicConfig(
     level=logging.DEBUG
 )
 
+def cb(*args):
+    print args
+
 try:
     d = DeviceTestServer('', 0)
     d.start(timeout=1)
     logging.info('Server started at port {0}'.format(d.bind_address[1]))
     c = CallbackClient('127.0.0.1', d.bind_address[1])
+    c.enable_thread_safety()
     c.start(timeout=1)
 
 #     rm = Message.request

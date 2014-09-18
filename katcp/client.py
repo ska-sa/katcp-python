@@ -50,12 +50,13 @@ def make_threadsafe_blocking(meth):
     """Decorator for a DeviceClient method that will block
 
     Used with DeviceClient.enable_thread_safety(). Used to provide blocking calls that can
-    be made from other threads. Raises if called in ioloop context to prevent
-    deadlocks. Will route return value to caller. Add `timeout` keyword argument to limit
-    blocking time. If `meth` returns a future, it's result will be returned, otherwise its
-    result will be passed back directly.
+    be made from other threads. If called in ioloop context, calls the original method
+    directly to prevent deadlocks. Will route return value to caller. Add `timeout`
+    keyword argument to limit blocking time. If `meth` returns a future, it's result will
+    be returned, otherwise its result will be passed back directly.
     """
     meth.make_threadsafe_blocking = True
+    return meth
 
 # TODO wait_future_timeout? Something that blocks on a tornado future with a
 # timeout. Turns generic until_blah methods into wait_blah methods that returns True if
@@ -91,7 +92,7 @@ class AsyncEvent(object):
     event is set.
 
     Note, this class is NOT THREAD SAFE! It will only work properly if all it's methods
-    (appart from isSet()) are called from the same thread/ioloop.
+    (appart from isSet() and wait_with_ioloop()) are called from the same thread/ioloop.
     """
     def __init__(self):
         self._flag = False
@@ -119,10 +120,34 @@ class AsyncEvent(object):
         self._flag = False
 
     def until_set(self):
-        return self._waiting_future
+        if not self._flag:
+            return self._waiting_future
+        else:
+            f = tornado_Future()
+            f.set_result(True)
+            return f
 
     def wait_with_ioloop(self, ioloop, timeout=None):
-        # Note, this will deadlock if called in the ioloop!
+        """Do blocking wait until condition is event is set
+
+        Arguments
+        ---------
+
+        ioloop : tornadio.ioloop.IOLoop instance
+            MUST be the same ioloop that set() / clear() is called from
+        timeout : float, int or None
+            If not None, only wait up to `timeout` seconds for event to be set.
+
+        Return Value
+        ------------
+
+        flag : True if event was set within timeout, otherwise False.
+
+        Notes
+        -----
+
+        This will deadlock if called in the ioloop!
+        """
         f = Future()
         def cb():
             return gen.chain_future(self.until_set(), f)
@@ -264,7 +289,7 @@ class DeviceClient(object):
         return address_to_string(self._bindaddr)
 
     @property
-    def threaedsafe(self):
+    def threadsafe(self):
         return self._threadsafe
 
     def convert_seconds(self, time_seconds):
@@ -389,6 +414,7 @@ class DeviceClient(object):
         else:
             return msg.mid
 
+    @make_threadsafe_blocking
     def request(self, msg, use_mid=None):
         """
         Send a request message, automatically assign a message ID if requested
@@ -433,6 +459,7 @@ class DeviceClient(object):
             raise KatcpVersionError
         self.send_message(msg)
 
+    @make_threadsafe_blocking
     def send_message(self, msg):
         """Send any kind of message.
 
@@ -758,7 +785,10 @@ class DeviceClient(object):
 
             if make_threadsafe:
                 assert not make_threadsafe_blocking
-                meth = _make_threadsafe(meth)
+                meth = self._make_threadsafe(meth)
+                setattr(self, name, meth)
+            elif make_threadsafe_blocking:
+                meth = self._make_threadsafe_blocking(meth)
                 setattr(self, name, meth)
 
     def _make_threadsafe(self, meth):
@@ -775,12 +805,13 @@ class DeviceClient(object):
         def wrapped(*args, **kwargs):
             timeout = kwargs.pop('timeout', None)
             if get_thread_ident() == self.ioloop_thread_id:
-                raise RuntimeError(
-                    'Cannot call method that blocks on ioloop from the same ioloop')
+                return meth(*args, **kwargs)
             else:
                 f = Future()
                 def cb():
-                    return gen.maybe_future(meth(*args, **kwargs))
+                    tf = gen.maybe_future(meth(*args, **kwargs))
+                    gen.chain_future(tf, f)
+
                 self.ioloop.add_callback(cb)
                 return f.result(timeout)
         return wrapped
@@ -796,7 +827,9 @@ class DeviceClient(object):
         Parameters
         ----------
         timeout : float in seconds
-            Seconds to wait for client thread to start.
+            Seconds to wait for client thread to start. Do not specify a timeout if
+            start() is being called from the same ioloop that this client will be
+            installed on, since it will block the ioloop without progressing.
         """
         if self._running.isSet():
             raise RuntimeError("Device client already started.")
@@ -804,6 +837,7 @@ class DeviceClient(object):
         self.ioloop = self._ioloop_manager.get_ioloop()
         self._ioloop_manager.start(timeout)
         self.ioloop.add_callback(self._install)
+
         # TODO need to do thread-safe wait on our own self._running as well. Perhaps we
         # need an 'install' method too for when we share ioloops and bypass the
         # thread-like API. start() can call into that, or other way around.
@@ -816,8 +850,13 @@ class DeviceClient(object):
         ----------
         timeout : float in seconds
             Seconds to wait for thread to finish.
+
+        Notes
+        -----
+
+        Does nothing if the ioloop is not managed.
         """
-        self._st
+        self._ioloop_manager.join(timeout)
 
     def stop(self, timeout=None):
         """Stop a running client (from another thread).
@@ -827,6 +866,9 @@ class DeviceClient(object):
         timeout : float in seconds
            Seconds to wait for client thread to have *started*.
         """
+        ioloop = getattr(self, 'ioloop', None)
+        if not ioloop:
+            raise RuntimeError('Call start() before stop()')
         if timeout:
             if get_thread_ident() == self.ioloop_thread_id:
                 raise RuntimeError('Cannot block inside ioloop')
@@ -843,6 +885,35 @@ class DeviceClient(object):
             Whether the client is running.
         """
         return self._running.isSet()
+
+    def until_running(self):
+        """Return future that resolves when the client is running.
+
+        Notes
+        -----
+
+        Must be called from the same ioloop as the client.
+        """
+        return self._connected.until_set()
+
+    @raise_in_ioloop
+    def wait_running(self, timeout=None):
+        """Wait until the client is running.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for the client to start running.
+
+        Returns
+        -------
+        connected : bool
+            Whether the client is running
+        """
+        ioloop = getattr(self, 'ioloop', None)
+        if not ioloop:
+            raise RuntimeError('Call start() before wait_running()')
+        self._connected.wait_with_ioloop(ioloop, timeout)
 
     def is_connected(self):
         """Check if the socket is currently connected.
@@ -866,6 +937,7 @@ class DeviceClient(object):
 
         Parameters
         ----------
+
         timeout : float in seconds
             Seconds to wait for the client to connect.
 
@@ -973,9 +1045,6 @@ class CallbackClient(DeviceClient):
 
         self._request_timeout = timeout
 
-        # lock for checking and popping requests
-        self._async_lock = threading.Lock()
-
         # pending requests
         # msg_id -> (request, reply_cb, inform_cb, user_data, timeout_handle)
         #           callback tuples
@@ -1029,8 +1098,6 @@ class CallbackClient(DeviceClient):
 
     def _msg_id_for_name(self, msg_name):
         """Find the msg_id for a given request name.
-
-           Should only be called while the async lock is acquired.
 
            Return None if no message id exists.
            """
@@ -1277,14 +1344,14 @@ class CallbackClient(DeviceClient):
 
     def stop(self, *args, **kwargs):
         super(CallbackClient, self).stop(*args, **kwargs)
-        # Stop all async timeout handlers
-        with self._async_lock:
+        def _cleanup():
             for request_data in self._async_queue.values():
                 timeout_handle = request_data[-1]   # Last one should be timeout handle
                 if timeout_handle is not None:
                     self.ioloop.remove_timeout(timeout_handle)
                 self._do_fail_callback('Client stopped before reply was received',
                                        *request_data)
+        self.ioloop.add_callback(_cleanup)
 
 
 def request_check(client, exception, *msg_parms, **kwargs):
