@@ -14,7 +14,7 @@ try:
     d = DeviceTestServer('', 0)
     d.start(timeout=1)
     logging.info('Server started at port {0}'.format(d.bind_address[1]))
-    c = DeviceClient('127.0.0.1', d.bind_address[1])
+    c = CallbackClient('127.0.0.1', d.bind_address[1])
     c.start(timeout=1)
 
 #     rm = Message.request

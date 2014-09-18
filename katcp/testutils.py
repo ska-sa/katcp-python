@@ -178,7 +178,7 @@ class MessageRecorder(object):
         return True
 
 
-class BlockingTestClient(client.BlockingClient):
+class BlockingTestClient(client.CallbackClient):
     """Test blocking client."""
 
     def __init__(self, test, *args, **kwargs):
