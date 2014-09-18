@@ -427,7 +427,7 @@ class DeviceClient(object):
         """
         assert(msg.mtype == Message.REQUEST)
         if msg.mid and not self._server_supports_ids:
-            raise KatcpVersionError
+            raise KatcpVersionError('Message IDs not supported by server')
         self.send_message(msg)
 
     @make_threadsafe_blocking
@@ -762,6 +762,8 @@ class DeviceClient(object):
                 meth = self._make_threadsafe_blocking(meth)
                 setattr(self, name, meth)
 
+        self._threadsafe = True
+
     def _make_threadsafe(self, meth):
         @wraps(meth)
         def wrapped(*args, **kwargs):
@@ -968,7 +970,7 @@ class DeviceClient(object):
         """
         pass
 
-class CallbackClient(DeviceClient):
+class AsyncClient(DeviceClient):
     """Implement callback-based requests on top of DeviceClient.
 
     This client will use message IDs if the server supports them.
@@ -999,9 +1001,10 @@ class CallbackClient(DeviceClient):
     >>> def inform_cb(msg):
     ...     print "Inform:", msg
     ...
-    >>> c = CallbackClient('localhost', 10000)
+    >>> c = AsyncClient('localhost', 10000)
     >>> c.start()
-    >>> c.callback_request(
+    >>> c.ioloop.add_callback(
+    ...     c.callback_request,
     ...     katcp.Message.request('myreq'),
     ...     reply_cb=reply_cb,
     ...     inform_cb=inform_cb,
@@ -1015,9 +1018,9 @@ class CallbackClient(DeviceClient):
 
     def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
                  auto_reconnect=True):
-        super(CallbackClient, self).__init__(host, port, tb_limit=tb_limit,
-                                             logger=logger,
-                                             auto_reconnect=auto_reconnect)
+        super(AsyncClient, self).__init__(host, port, tb_limit=tb_limit,
+                                          logger=logger,
+                                          auto_reconnect=auto_reconnect)
 
         self._request_timeout = timeout
 
@@ -1082,7 +1085,7 @@ class CallbackClient(DeviceClient):
 
     @make_threadsafe
     def callback_request(self, msg, reply_cb=None, inform_cb=None,
-                user_data=None, timeout=None, use_mid=None):
+                         user_data=None, timeout=None, use_mid=None):
         """Send a request messsage.
 
         Parameters
@@ -1100,7 +1103,7 @@ class CallbackClient(DeviceClient):
             callbacks.
         timeout : float in seconds
             How long to wait for a reply. The default is the
-            the timeout set when creating the CallbackClient.
+            the timeout set when creating the AsyncClient.
         use_mid : boolean, optional
             Whether to use message IDs. Default is to use message IDs
             if the server supports them.
@@ -1125,8 +1128,6 @@ class CallbackClient(DeviceClient):
             error_reply = Message.request(msg.name, "fail", str(e))
             error_reply.mid = mid
             self.handle_reply(error_reply)
-            if isinstance(e, KatcpVersionError):
-                raise
 
     def future_request(self, msg, timeout=None, use_mid=None):
         """Send a request messsage, with future replies
@@ -1137,7 +1138,7 @@ class CallbackClient(DeviceClient):
             The request Message to send.
         timeout : float in seconds
             How long to wait for a reply. The default is the
-            the timeout set when creating the CallbackClient.
+            the timeout set when creating the AsyncClient.
         use_mid : boolean, optional
             Whether to use message IDs. Default is to use message IDs
             if the server supports them.
@@ -1164,8 +1165,11 @@ class CallbackClient(DeviceClient):
         def inform_cb(msg):
             informs.append(msg)
 
-        self.callback_request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
-                              timeout=timeout, use_mid=use_mid)
+        try:
+            self.callback_request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
+                                  timeout=timeout, use_mid=use_mid)
+        except Exception:
+            f.set_exc_info(sys.exc_info())
         return f
 
     def blocking_request(self, msg, timeout=None, use_mid=None):
@@ -1177,7 +1181,7 @@ class CallbackClient(DeviceClient):
             The request Message to send.
         timeout : float in seconds
             How long to wait for a reply. The default is the
-            the timeout set when creating the CallbackClient.
+            the timeout set when creating the AsyncClient.
         use_mid : boolean, optional
             Whether to use message IDs. Default is to use message IDs
             if the server supports them.
@@ -1242,7 +1246,7 @@ class CallbackClient(DeviceClient):
                 inform_cb, user_data = None, None
 
         if inform_cb is None:
-            inform_cb = super(CallbackClient, self).handle_inform
+            inform_cb = super(AsyncClient, self).handle_inform
             # override user_data since handle_inform takes no user_data
             user_data = None
 
@@ -1301,7 +1305,8 @@ class CallbackClient(DeviceClient):
         if timeout_handle is None:
             return
 
-        reason = "Timed out after {0:f} seconds".format(self.ioloop.time() - start_time)
+        reason = "Request {0.name} timed out after {1:f} seconds.".format(
+            msg, self.ioloop.time() - start_time)
         self._do_fail_callback(
             reason, msg, reply_cb, inform_cb, user_data, timeout_handle)
 
@@ -1335,7 +1340,7 @@ class CallbackClient(DeviceClient):
             self.ioloop.remove_timeout(timeout_handle)
 
         if reply_cb is None:
-            reply_cb = super(CallbackClient, self).handle_reply
+            reply_cb = super(AsyncClient, self).handle_reply
             # override user_data since handle_reply takes no user_data
             user_data = None
 
@@ -1352,7 +1357,7 @@ class CallbackClient(DeviceClient):
                                (msg.name, reason))
 
     def stop(self, *args, **kwargs):
-        super(CallbackClient, self).stop(*args, **kwargs)
+        super(AsyncClient, self).stop(*args, **kwargs)
         def _cleanup():
             for request_data in self._async_queue.values():
                 timeout_handle = request_data[-1]   # Last one should be timeout handle
@@ -1407,3 +1412,16 @@ def request_check(client, exception, *msg_parms, **kwargs):
                         'request \n"{1}"'.format(client.bind_address_string),
                         req_msg, reply)
     return reply, informs
+
+# Compatibility classes
+
+class CallbackClient(AsyncClient):
+    def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
+                 auto_reconnect=True):
+        super(CallbackClient, self).__init__(host, port, tb_limit=tb_limit,
+                                             logger=logger,
+                                             auto_reconnect=auto_reconnect)
+        self.enable_thread_safety()
+
+class BlockingClient(CallbackClient):
+    pass

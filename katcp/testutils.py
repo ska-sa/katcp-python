@@ -178,7 +178,7 @@ class MessageRecorder(object):
         return True
 
 
-class BlockingTestClient(client.CallbackClient):
+class BlockingTestClient(client.AsyncClient):
     """Test blocking client."""
 
     def __init__(self, test, *args, **kwargs):
@@ -1085,7 +1085,7 @@ def counting_callback(event=None, number_of_calls=1):
         wrapped_callback.done = event
         wrapped_callback.wait = event.wait
 
-        def assert_wait(timeout=None):
+        def assert_wait(timeout=1):
             done = event.wait(timeout)
             assert event.isSet()
             return done

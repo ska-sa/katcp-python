@@ -27,7 +27,7 @@ try:
 
     from .server import DeviceServerBase, DeviceServer, DeviceLogger
 
-    from .client import DeviceClient, CallbackClient
+    from .client import DeviceClient, AsyncClient, CallbackClient, BlockingClient
 
     from .sensortree import GenericSensorTree, BooleanSensorTree, \
                             AggregateSensorTree
