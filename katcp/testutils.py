@@ -17,7 +17,8 @@ import functools
 import mock
 
 from tornado import gen
-from concurrent.futures import Future
+from tornado.concurrent import Future as tornado_Future
+from concurrent.futures import Future, TimeoutError
 
 from .core import Sensor, Message, AsyncReply
 from .server import (DeviceServer, FailReply, ClientRequestConnection,
@@ -1529,3 +1530,28 @@ def handle_mock_req(dev, req):
     with mock.patch('katcp.server.ClientRequestConnection') as CRC:
         CRC.return_value = req
         dev.handle_request(req.client_connection, req.msg)
+
+def call_in_ioloop(ioloop, fn, *args, **kwargs):
+    """Run fn in ioloop and block until the result is available.
+
+    Should raise exceptions with proper tracebacks
+
+    kwargs ioloop_timeout is used as the maximum time to wait for a result, defaults to
+    5s. This kwarg is not sent to fn. Raises concurrent.futures.TimeoutError if the result
+    times out.
+    """
+    ioloop_timeout = kwargs.pop('ioloop_timeout', 5)
+    f = Future()
+    tf = tornado_Future()                 # for nice tracebacks
+    ioloop.add_callback(gen.chain_future, tf, f)
+    @gen.coroutine
+    def cb():
+        return fn(*args, **kwargs)
+    ioloop.add_callback(lambda : gen.chain_future(cb(), tf))
+    try:
+        f.result(timeout=ioloop_timeout)
+    except TimeoutError:
+        raise
+    except Exception:
+        pass
+    return tf.result()

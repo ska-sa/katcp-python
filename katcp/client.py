@@ -749,6 +749,7 @@ class DeviceClient(object):
         Must be called before start() is called
         """
         self._ioloop_manager.set_ioloop(ioloop, managed=False)
+        self.ioloop = ioloop
 
     def enable_thread_safety(self):
         """Enable thread-safety features
@@ -878,7 +879,7 @@ class DeviceClient(object):
 
         Must be called from the same ioloop as the client.
         """
-        return self._connected.until_set()
+        return self._running.until_set()
 
     def wait_running(self, timeout=None):
         """Wait until the client is running.
@@ -901,7 +902,7 @@ class DeviceClient(object):
         ioloop = getattr(self, 'ioloop', None)
         if not ioloop:
             raise RuntimeError('Call start() before wait_running()')
-        return self._connected.wait_with_ioloop(ioloop, timeout)
+        return self._running.wait_with_ioloop(ioloop, timeout)
 
     def is_connected(self):
         """Check if the socket is currently connected.
