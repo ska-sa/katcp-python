@@ -1221,10 +1221,15 @@ class AsyncClient(DeviceClient):
         if timeout is None:
             timeout = self._request_timeout
 
-        f = Future()
+        f = Future()             # for thread safety
+        tf = [None]              # Placeholder for tornado Future for exception tracebacks
         def blocking_request_callback():
-            tf = self.future_request(msg, timeout=timeout, use_mid=use_mid)
-            gen.chain_future(tf, f)
+            try:
+                tf[0] = frf = self.future_request(msg, timeout=timeout, use_mid=use_mid)
+            except Exception:
+                tf[0] = frf = tornado_Future()
+                frf.set_exc_info(sys.exc_info())
+            gen.chain_future(frf, f)
 
         self.ioloop.add_callback(blocking_request_callback)
 
@@ -1242,7 +1247,10 @@ class AsyncClient(DeviceClient):
         except TimeoutError:
             raise RuntimeError('Unexpected error: Async request handler did '
                                'not call reply handler within timeout period')
-        return reply, informs
+        except Exception:
+            # Use the tornado future to give us a usable traceback
+            tf[0].result()
+            assert False                  # Should not get here
 
     def handle_inform(self, msg):
         """Handle inform messages related to any current requests.
