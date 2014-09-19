@@ -178,7 +178,7 @@ class MessageRecorder(object):
         return True
 
 
-class BlockingTestClient(client.AsyncClient):
+class BlockingTestClient(client.BlockingClient):
     """Test blocking client."""
 
     def __init__(self, test, *args, **kwargs):
@@ -187,9 +187,10 @@ class BlockingTestClient(client.AsyncClient):
         self._message_recorders = {}
         super(BlockingTestClient, self).__init__(*args, **kwargs)
 
+    @client.make_threadsafe
     def raw_send(self, chunk):
         """Send a raw chunk of data to the server."""
-        self._sock.send(chunk)
+        self._stream.write(chunk)
 
     def _sensor_lag(self):
         """The expected lag before device changes are applied."""

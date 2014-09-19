@@ -260,6 +260,17 @@ class DeviceClient(object):
         return address_to_string(self._bindaddr)
 
     @property
+    def sockname(self):
+        if self._stream:
+            return self._stream.socket.getsockname()
+        else:
+            return (self._bindaddr[0], -1)
+
+    @property
+    def sockname_string(self):
+        return address_to_string(self.sockname)
+
+    @property
     def threadsafe(self):
         return self._threadsafe
 

@@ -681,7 +681,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         _, addr = inform.split()
         host, port = addr.split(':')
         port = int(port)
-        self.assertEqual((host, port), self.client._sock.getsockname())
+        self.assertEqual((host, port), self.client.sockname)
 
     def test_halt_request(self):
         """Test halt request."""
