@@ -394,8 +394,6 @@ class DeviceClient(object):
         ----------
         msg : katcp.Message request message
         use_mid : bool or None, default=None
-        timeout : float or None, default=None
-            Set timeout for sending request message, or None for no timeout
 
         Returns
         -------
@@ -422,8 +420,6 @@ class DeviceClient(object):
         ----------
         msg : Message object
             The request Message to send.
-        timeout : float or None, default=None
-            Set timeout for sending request message, or None for no timeout
         """
         assert(msg.mtype == Message.REQUEST)
         if msg.mid and not self._server_supports_ids:
@@ -448,7 +444,7 @@ class DeviceClient(object):
         except Exception:
             self._logger.warn('Could not send message {0!r} to {1!r}'
                               .format(str(msg), self._bindaddr), exc_info=True)
-            stream.close(exc_info=True)
+            self._stream.close(exc_info=True)
 
     @gen.coroutine
     def _connect(self):
@@ -776,14 +772,19 @@ class DeviceClient(object):
     def _make_threadsafe_blocking(self, meth):
         @wraps(meth)
         def wrapped(*args, **kwargs):
-            timeout = kwargs.pop('timeout', None)
+            timeout = kwargs.pop('timeout', 5)
             if get_thread_ident() == self.ioloop_thread_id:
                 return meth(*args, **kwargs)
             else:
                 f = Future()
                 def cb():
-                    tf = gen.maybe_future(meth(*args, **kwargs))
-                    gen.chain_future(tf, f)
+                    try:
+                        tf = gen.maybe_future(meth(*args, **kwargs))
+                    except Exception:
+                        tf = tornado_Future()
+                        tf.set_exc_info(sys.exc_info())
+                    finally:
+                        gen.chain_future(tf, f)
 
                 self.ioloop.add_callback(cb)
                 return f.result(timeout)
@@ -880,7 +881,7 @@ class DeviceClient(object):
         ioloop = getattr(self, 'ioloop', None)
         if not ioloop:
             raise RuntimeError('Call start() before wait_running()')
-        self._connected.wait_with_ioloop(ioloop, timeout)
+        return self._connected.wait_with_ioloop(ioloop, timeout)
 
     def is_connected(self):
         """Check if the socket is currently connected.
@@ -917,7 +918,7 @@ class DeviceClient(object):
 
         Do not call this from the ioloop, use until_connected()
         """
-        self._connected.wait_with_ioloop(self.ioloop, timeout)
+        return self._connected.wait_with_ioloop(self.ioloop, timeout)
 
     def until_protocol(self):
         """Return future; resolved when katcp protocol information has been received.

@@ -182,7 +182,9 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         host, port = self.server.bind_address
 
         self.client = katcp.DeviceClient(host, port)
+        self.client.enable_thread_safety()
         start_thread_with_cleanup(self, self.client, start_timeout=1)
+        self.client.wait_connected(timeout=1)
 
     def test_request(self):
         """Test request method."""
@@ -211,12 +213,15 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     def test_stop_and_restart(self):
         """Test stopping and then restarting a client."""
-        self.client.stop(timeout=0.1)
-        # timeout needs to be longer than select sleep.
-        self.client.join(timeout=1.5)
-        self.assertEqual(self.client._thread, None)
+        before_threads = threading.enumerate()
+        self.client.stop(timeout=1)
+        self.client.join(timeout=1)
+        # Test that we have fewer threads than before
+        self.assertLess(len(threading.enumerate()), len(before_threads))
         self.assertFalse(self.client._running.isSet())
-        self.client.start(timeout=0.1)
+        self.client.start(timeout=1)
+        # Now we should have the original number of threads again
+        self.assertEqual(len(threading.enumerate()), len(before_threads))
 
     def test_is_connected(self):
         """Test is_connected method."""
@@ -225,7 +230,7 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         disconnected = threading.Event()
         self.client.notify_connected = (
             lambda connected: disconnected.set() if not connected else None)
-        self.server.stop(timeout=0.1)
+        self.server.stop(timeout=1.)
         # Restart server during cleanup to keep teardown happy
         self.addCleanup(self.server.start)
         self.server.join(timeout=1.)
@@ -269,37 +274,17 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
                 f.set_result(connected)
         self.client.notify_connected = notify_connected
 
-        # close socket while the client isn't looking
+        # close stream while the client isn't looking
         # then wait for the client to notice
-        sock = self.client._sock
-        sockname = sock.getpeername()
-        sock.close()
+        stream = self.client._stream
+        sockname = stream.socket.getpeername()
+        self.client.ioloop.add_callback(stream.close)
         f.result(timeout=1.25)
 
         # check that client reconnected
-        self.assertTrue(sock is not self.client._sock,
-                        "Expected %r to not be %r" % (sock, self.client._sock))
-        self.assertEqual(sockname, self.client._sock.getpeername())
-
-class TestSlowServerReceive(unittest.TestCase):
-    # Test that sending a request does not spin forever if a timeout is set and
-    # the server is not receiving data (i.e. the socket keeps raising EAGAIN)
-    def setUp(self):
-        self.serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.serversocket.bind(('', 0))
-        self.serversocket.listen(0)
-        self.server_addr = self.serversocket.getsockname()
-        self.addCleanup(self.serversocket.close)
-
-    def test_request(self):
-        client = katcp.DeviceClient(*self.server_addr)
-        start_thread_with_cleanup(self, client, start_timeout=1)
-        t0 = time.time()
-        client.request(
-            katcp.Message.request('stupidlongrequest'*1000000), timeout=0.1)
-        # If the send_message() call is in an EAGAIN spinning loop it will never
-        # return, so getting here at all is a good sign :)
-        self.assertLess(time.time() - t0, 1)
+        self.assertTrue(stream is not self.client._stream,
+                        "Expected %r to not be %r" % (stream, self.client._stream))
+        self.assertEqual(sockname, self.client._stream.socket.getpeername())
 
 class TestBlockingClient(unittest.TestCase):
     def setUp(self):
