@@ -765,7 +765,12 @@ class DeviceClient(object):
             return getattr(obj, name, False)
 
         for name in dir(self):
-            meth = getattr(self, name)
+            try:
+                meth = getattr(self, name)
+            except AttributeError:
+                # Subclasses may have computed attributes that don't work before they are
+                # started, so let's ignore those
+                pass
             if not callable(meth):
                 continue
             make_threadsafe = _getattr(meth, 'make_threadsafe')
@@ -1450,7 +1455,7 @@ class CallbackClient(AsyncClient):
     def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
                  auto_reconnect=True):
         super(CallbackClient, self).__init__(host, port, tb_limit=tb_limit,
-                                             logger=logger,
+                                             logger=logger, timeout=timeout,
                                              auto_reconnect=auto_reconnect)
         self.enable_thread_safety()
 
