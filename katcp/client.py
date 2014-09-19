@@ -1358,7 +1358,6 @@ class AsyncClient(DeviceClient):
                                (msg.name, reason))
 
     def stop(self, *args, **kwargs):
-        super(AsyncClient, self).stop(*args, **kwargs)
         def _cleanup():
             for request_data in self._async_queue.values():
                 timeout_handle = request_data[-1]   # Last one should be timeout handle
@@ -1367,6 +1366,8 @@ class AsyncClient(DeviceClient):
                 self._do_fail_callback('Client stopped before reply was received',
                                        *request_data)
         self.ioloop.add_callback(_cleanup)
+        super(AsyncClient, self).stop(*args, **kwargs)
+
 
 
 def request_check(client, exception, *msg_parms, **kwargs):
