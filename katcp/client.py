@@ -707,8 +707,13 @@ class DeviceClient(object):
             except tornado.iostream.StreamClosedError:
                 break # Assume that _stream_closed_callback() will handle this case
             except Exception:
+                if self._stream:
+                    line = ''
                     self._logger.warn('Unhandled Exception while reading from {0}:'
                                       .format(self._bindaddr), exc_info=True)
+                else:
+                    self._logger.warn('self._stream object seems to have disappeared.')
+                    break
             try:
                 line = line.replace("\r", "\n").split("\n")[0]
                 msg = self._parser.parse(line) if line else None
@@ -724,6 +729,10 @@ class DeviceClient(object):
                     self._logger.exception(
                         'Unhandled exception in handle_message() from {0} for '
                         'message {1!r}'.format(self.bind_address_string, str(msg)))
+
+        if self._stream:
+            self._stream.close()
+
         self._logger.debug('client _line_read_loop() from {0} completed'
                            .format(self.bind_address_string))
 
