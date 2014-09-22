@@ -25,7 +25,8 @@ from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 
 from .core import (DeviceMetaclass, MessageParser, Message,
-                   KatcpClientError, KatcpVersionError, ProtocolFlags,
+                   KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
+                   ProtocolFlags,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
 from .ioloop_manager import IOLoopManager, with_relative_timeout
 
@@ -450,12 +451,15 @@ class DeviceClient(object):
         data = str(msg) + "\n"
         # Log all sent messages here so no one else has to.
         self._logger.debug(data)
+        if not self._connected.isSet():
+            raise KatcpClientDisconnected('Not connected to device {0}'.format(
+                self.bind_address_string))
         try:
             return self._stream.write(data)
         except Exception:
             self._logger.warn('Could not send message {0!r} to {1!r}'
                               .format(str(msg), self._bindaddr), exc_info=True)
-            self._stream.close(exc_info=True)
+            self._disconnect(exc_info=True)
 
     @gen.coroutine
     def _connect(self):
@@ -509,10 +513,10 @@ class DeviceClient(object):
                 self._logger.exception("Notify connect failed. Disconnecting.")
                 self._disconnect()
 
-    def _disconnect(self):
+    def _disconnect(self, exc_info=False):
         """Disconnect and cleanup."""
         if self._stream:
-            self._stream.close()
+            self._stream.close(exc_info=exc_info)
             # Cleanup should be handled by _stream_closed_callback()
 
     def _stream_closed_callback(self, stream):
@@ -730,8 +734,7 @@ class DeviceClient(object):
                         'Unhandled exception in handle_message() from {0} for '
                         'message {1!r}'.format(self.bind_address_string, str(msg)))
 
-        if self._stream:
-            self._stream.close()
+        self._disconnect()
 
         self._logger.debug('client _line_read_loop() from {0} completed'
                            .format(self.bind_address_string))
