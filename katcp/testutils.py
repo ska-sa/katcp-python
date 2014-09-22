@@ -15,7 +15,9 @@ import Queue
 import threading
 import functools
 import mock
+import tornado.testing
 
+from thread import get_ident
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
@@ -1555,3 +1557,34 @@ def call_in_ioloop(ioloop, fn, *args, **kwargs):
     except Exception:
         pass
     return tf.result()
+
+
+class TimewarpAsyncTestCase(tornado.testing.AsyncTestCase):
+    """Subclass of tornado.testing.AsyncTestCase that supports timewarping
+
+    The io_loop.time() method is replaced by a mock-timer, that only progresses when moved
+    along using set_ioloop_time().
+
+    Note, subclasses must call their super setUp() methods.
+    """
+
+    def get_new_ioloop(self):
+        ioloop = super(TimewarpAsyncTestCase, self).get_new_ioloop()
+        self.ioloop_time = 0
+        ioloop.time = lambda : self.ioloop_time
+        def set_ioloop_thread_id():
+            self.ioloop_thread_id = get_ident()
+        ioloop.add_callback(set_ioloop_thread_id)
+        return ioloop
+
+    def wake_ioloop(self):
+        f = tornado.concurrent.Future()
+        self.io_loop.add_callback(lambda : f.set_result(None))
+        return f
+
+    def set_ioloop_time(self, new_time, wake_ioloop=True):
+        logger.debug('setting ioloop time: {0}'.format(new_time))
+        assert new_time > self.ioloop_time
+        self.ioloop_time = new_time
+        if wake_ioloop:
+            return self.wake_ioloop()

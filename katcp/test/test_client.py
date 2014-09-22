@@ -13,6 +13,8 @@ import mock
 import time
 import logging
 import threading
+import tornado.testing
+
 import katcp
 
 from concurrent.futures import Future
@@ -23,7 +25,7 @@ from katcp.core import ProtocolFlags, Message
 
 from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
                              counting_callback, start_thread_with_cleanup,
-                             WaitingMock)
+                             WaitingMock, TimewarpAsyncTestCase)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -829,3 +831,83 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(replies[0].name, "foo")
         self.assertEqual(replies[0].arguments, ["fail", "Error foo"])
 
+class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase):
+    def setUp(self):
+        super(test_AsyncClientIntegrated, self).setUp()
+        self.server = DeviceTestServer('', 0)
+        self.server.set_ioloop(self.io_loop)
+        self.server.set_concurrency_options(thread_safe=False, handler_thread=False)
+        self.server.start()
+
+        host, port = self.server.bind_address
+        self.client = katcp.CallbackClient(host, port)
+        self.client.set_ioloop(self.io_loop)
+        self.client.start()
+
+    @tornado.testing.gen_test
+    def test_future_request_simple(self):
+        yield self.client.until_connected()
+        reply, informs = yield self.client.future_request(Message.request('watchdog'))
+        self.assertEqual(len(informs), 0)
+        self.assertEqual(reply.name, "watchdog")
+        self.assertEqual(reply.arguments, ["ok"])
+
+    @tornado.testing.gen_test
+    def test_future_request_with_informs(self):
+        yield self.client.until_connected()
+        reply, informs = yield self.client.future_request(Message.request('help'))
+        self.assertEqual(reply.name, "help")
+        self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
+        self.assertEqual(len(informs), NO_HELP_MESSAGES)
+
+class test_AsyncClientTimeoutsIntegrated(TimewarpAsyncTestCase):
+    def setUp(self):
+        super(test_AsyncClientTimeoutsIntegrated, self).setUp()
+        self.server = DeviceTestServer('', 0)
+        self.server.set_ioloop(self.io_loop)
+        self.server.set_concurrency_options(thread_safe=False, handler_thread=False)
+        self.server.start()
+
+        host, port = self.server.bind_address
+        self.client = katcp.CallbackClient(host, port)
+        self.client.set_ioloop(self.io_loop)
+        self.client.start()
+
+
+    @tornado.testing.gen_test(timeout=10)
+    # We are using time-warping, so the timeout should be longer than the fake-duration
+    def test_future_request_default_timeout(self):
+        # Test the default timeout of 5s
+        yield self._test_timeout(5)
+
+    @tornado.testing.gen_test()
+    def test_future_request_change_default_timeout(self):
+        self.client._request_timeout = 3
+        yield self._test_timeout(3)
+
+    @tornado.testing.gen_test()
+    def test_future_request_request_timeout(self):
+        yield self._test_timeout(1, set_request_timeout=True)
+
+    @gen.coroutine
+    def _test_timeout(self, timeout, set_request_timeout=False):
+        request_timeout = timeout if set_request_timeout else None
+        yield self.client.until_connected()
+        t0 = self.io_loop.time()
+        reply_future = self.client.future_request(Message.request('slow-command', timeout + 1),
+                                                  timeout=request_timeout)
+        # Warp to just before the timeout expires and check that the future is not yet
+        # resolved
+        self.set_ioloop_time(t0 + timeout*0.9999)
+        yield self.wake_ioloop()
+        self.assertFalse(reply_future.done())
+        # Warp to just after the timeout expires, and check that it gives us a timeout
+        # error reply
+        self.set_ioloop_time(t0 + timeout*1.0001)
+        yield self.wake_ioloop()
+        self.assertTrue(reply_future.done())
+        reply, informs = reply_future.result()
+        self.assertFalse(reply.reply_ok())
+        self.assertRegexpMatches(
+            reply.arguments[1],
+            r"Request slow-command timed out after .* seconds.")
