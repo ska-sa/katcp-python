@@ -1181,6 +1181,7 @@ class DeviceServerBase(object):
             self.on_message = self._handler_thread.on_message
         else:
             self.on_message = return_future(self.handle_message)
+            self._handler_thread = None
 
         self._concurrency_options = ObjectDict(
             thread_safe=thread_safe, handler_thread=handler_thread)
@@ -1197,8 +1198,9 @@ class DeviceServerBase(object):
             raise RuntimeError('Message handler thread already started')
         self._server.start(timeout)
         self.ioloop = self._server.ioloop
-        self._handler_thread.set_ioloop(self.ioloop)
-        self._handler_thread.start(timeout)
+        if self._handler_thread:
+            self._handler_thread.set_ioloop(self.ioloop)
+            self._handler_thread.start(timeout)
 
     def join(self, timeout=None):
         """Rejoin the server thread.
