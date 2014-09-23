@@ -33,6 +33,15 @@ from .ioloop_manager import IOLoopManager, with_relative_timeout
 #logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")
 
+def until_later(delay, ioloop=None):
+    ioloop = ioloop or tornado.ioloop.IOLoop.current()
+    f = tornado_Future()
+    def _done():
+        f.set_result(None)
+    ioloop.call_later(delay, _done)
+    return f
+
+
 def address_to_string(addr_tuple):
     return ":".join(str(part) for part in addr_tuple)
 
@@ -207,6 +216,8 @@ class DeviceClient(object):
     def __init__(self, host, port, tb_limit=20, logger=log,
                  auto_reconnect=True):
         self._parser = MessageParser()
+        if not host:
+            host = "0.0.0.0"
         self._bindaddr = (host, port)
         self._tb_limit = tb_limit
         self._logger = logger
@@ -220,6 +231,8 @@ class DeviceClient(object):
         # Indicate that client has received KATCP protocol information from its server
         self._received_protocol_info = AsyncEvent()
         self._auto_reconnect = auto_reconnect
+        # Number of seconds to wait before retrying a connection
+        self.auto_reconnect_delay = 0.5
         self._connect_failures = 0
         self._server_supports_ids = False
         self._protocol_flags = None
@@ -694,6 +707,7 @@ class DeviceClient(object):
                 except Exception:
                     self._logger.exception('Unhandled exception in _reading_loop()')
             elif self._auto_reconnect:
+                yield until_later(self.auto_reconnect_delay)
                 yield self._connect()
             else:
                 break
