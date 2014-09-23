@@ -697,6 +697,9 @@ class DeviceClient(object):
                 yield self._connect()
             else:
                 break
+            # Allow stream-close handlers etc to run before restarting _line_read_loop
+            yield gen.moment
+
 
     @gen.coroutine
     def _line_read_loop(self):
@@ -713,8 +716,12 @@ class DeviceClient(object):
             except Exception:
                 if self._stream:
                     line = ''
+                    self._logger.warn(counter)
                     self._logger.warn('Unhandled Exception while reading from {0}:'
                                       .format(self._bindaddr), exc_info=True)
+                        # Prevent potential tight error loops from blocking the ioloop
+                    self._disconnect()
+                    yield gen.moment
                 else:
                     self._logger.warn('self._stream object seems to have disappeared.')
                     break
@@ -728,7 +735,8 @@ class DeviceClient(object):
                 self._logger.error("BAD COMMAND: %s" % (reason,))
             else:
                 try:
-                    yield gen.maybe_future(self.handle_message(msg))
+                    if msg:
+                        yield gen.maybe_future(self.handle_message(msg))
                 except Exception:
                     self._logger.exception(
                         'Unhandled exception in handle_message() from {0} for '
@@ -1053,7 +1061,13 @@ class AsyncClient(DeviceClient):
                                           auto_reconnect=auto_reconnect)
 
         self._request_timeout = timeout
+        self._reset_async_requests()
 
+    def _reset_async_requests(self):
+        """Initialize / clear out async request structures
+
+        Good for a clean start after disconnection
+        """
         # pending requests
         # msg_id -> (request, reply_cb, inform_cb, user_data, timeout_handle)
         #           callback tuples
@@ -1396,14 +1410,33 @@ class AsyncClient(DeviceClient):
 
     def stop(self, *args, **kwargs):
         def _cleanup():
-            for request_data in self._async_queue.values():
-                timeout_handle = request_data[-1]   # Last one should be timeout handle
-                if timeout_handle is not None:
-                    self.ioloop.remove_timeout(timeout_handle)
-                self._do_fail_callback('Client stopped before reply was received',
-                                       *request_data)
+            self._running.clear()
+            self._fail_waiting_requests('Client stopped before reply was received')
+            self._disconnect()
         self.ioloop.add_callback(_cleanup)
         super(AsyncClient, self).stop(*args, **kwargs)
+
+    def _fail_waiting_requests(self, reason):
+        # Fail all requests that have not yet received their replies
+        for request_data in self._async_queue.values():
+            timeout_handle = request_data[-1]   # Last one should be timeout handle
+            if timeout_handle is not None:
+                self.ioloop.remove_timeout(timeout_handle)
+            try:
+                self._do_fail_callback(reason, *request_data)
+            except Exception:
+                self._logger.exception('Unhandled exception doing reply callback')
+        # Clear out the async data structures
+        self._reset_async_requests()
+
+
+    def _stream_closed_callback(self, stream):
+        try:
+            super(AsyncClient, self)._stream_closed_callback(stream)
+            self._fail_waiting_requests('Connection closed before reply was received')
+        except Exception:
+            self._logger.exception('Unhandled exception closing client stream {0!r} '
+                                   'to {1}'.format(stream, self.bind_address_string))
 
 
 

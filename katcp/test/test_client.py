@@ -760,7 +760,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         # Wait for the client to detect the server protocol. Server should
         # support message identifiers
-        self.assertTrue(self.client.wait_protocol(0.2))
+        self.assertTrue(self.client.wait_protocol(1))
         # Replace send_message so that we can check the message
         self.client.send_message = mock.Mock()
 
@@ -831,7 +831,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(replies[0].name, "foo")
         self.assertEqual(replies[0].arguments, ["fail", "Error foo"])
 
-class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase):
+class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase, TestUtilMixin):
     def setUp(self):
         super(test_AsyncClientIntegrated, self).setUp()
         self.server = DeviceTestServer('', 0)
@@ -859,6 +859,31 @@ class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.name, "help")
         self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
         self.assertEqual(len(informs), NO_HELP_MESSAGES)
+
+    @tornado.testing.gen_test
+    def test_disconnect_cleanup(self):
+        yield self.client.until_protocol()
+        mid = 55
+        future_reply = self.client.future_request(Message.request(
+            'slow-command', 1, mid=55))
+        # Force a disconnect
+        self.client._disconnect()
+        reply, informs = yield future_reply
+        self.assertEqual(reply, Message.reply(
+            'slow-command', 'fail', 'Connection closed before reply was received'))
+
+    @tornado.testing.gen_test
+    def test_stop_cleanup(self):
+        yield self.client.until_protocol()
+        mid = 56
+        future_reply = self.client.future_request(Message.request(
+            'slow-command', 1, mid=55))
+        # Force a disconnect
+        self.client.stop()
+        reply, informs = yield future_reply
+        self.assertEqual(reply, Message.reply(
+            'slow-command', 'fail', 'Client stopped before reply was received'))
+
 
 class test_AsyncClientTimeoutsIntegrated(TimewarpAsyncTestCase):
     def setUp(self):
