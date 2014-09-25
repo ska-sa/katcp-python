@@ -693,8 +693,7 @@ class DeviceClient(object):
         except Exception:
             self._logger.exception('Unhandled exception in _connect_loop()')
         finally:
-            self._running.clear()
-            self._disconnect()
+            self.stop() # Make sure everything is torn down properly
             self._logger.info("Client connect loop for {0!r} finished."
                               .format(self._bindaddr))
 
@@ -787,7 +786,8 @@ class DeviceClient(object):
             raise RuntimeError('Cannot enable thread safety after start')
 
         def _getattr(obj, name):
-            return getattr(obj, name, False)
+            # use 'is True' so that mock objects don't return true for everything
+            return getattr(obj, name, False) is True
 
         for name in dir(self):
             try:
@@ -888,7 +888,11 @@ class DeviceClient(object):
             if get_thread_ident() == self.ioloop_thread_id:
                 raise RuntimeError('Cannot block inside ioloop')
             self._running.wait_with_ioloop(self.ioloop, timeout)
-        self.ioloop.add_callback(self._running.clear)
+        try:
+            self.ioloop.add_callback(self._running.clear)
+        except RuntimeError:
+            # Probably someone else has already stopped the ioloop
+            pass
         self._ioloop_manager.stop(timeout=timeout)
 
     def running(self):
