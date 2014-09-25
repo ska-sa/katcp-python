@@ -16,8 +16,7 @@ class NullHandler(logging.Handler):
 
 logging.getLogger("katcp").addHandler(NullHandler())
 
-
-del logging, NullHandler
+del NullHandler
 
 try:
 
@@ -28,7 +27,7 @@ try:
 
     from .server import DeviceServerBase, DeviceServer, DeviceLogger
 
-    from .client import DeviceClient, BlockingClient, CallbackClient
+    from .client import DeviceClient, AsyncClient, CallbackClient, BlockingClient
 
     from .sensortree import GenericSensorTree, BooleanSensorTree, \
                             AggregateSensorTree
@@ -39,7 +38,9 @@ except ImportError:
     import warnings
     warnings.warn('Could not import some modules, fine during setup, but will prevent the '
                   'library from working if you see this after installation')
+    logging.exception('Error importing:')
 
+del logging
 
 from .version import VERSION, VERSION_STR
 

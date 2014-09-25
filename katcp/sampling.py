@@ -9,7 +9,6 @@
    """
 
 import threading
-import time
 import logging
 import heapq
 import Queue

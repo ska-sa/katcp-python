@@ -29,7 +29,7 @@ from tornado.concurrent import chain_future
 from tornado.util import ObjectDict
 from concurrent.futures import Future, TimeoutError
 
-from .ioloop_manager import IOLoopManager
+from .ioloop_manager import IOLoopManager, with_relative_timeout
 from .core import (DeviceMetaclass, Message, MessageParser,
                    FailReply, AsyncReply, ProtocolFlags)
 from .sampling import SampleStrategy, SampleNone
@@ -57,9 +57,6 @@ BASE_REQUESTS = frozenset(['client-list',
                            'watchdog',
                            'sensor-sampling',])
 "List of basic KATCP request that a minimal device server should implement"
-
-def with_relative_timeout(timeout, future, io_loop=None):
-    return gen.with_timeout(timeout + time.time(), future, io_loop)
 
 def return_future(fn):
     """Decorator that turns a syncronous function into one returning a tornado Future
@@ -381,7 +378,6 @@ class KATCPServer(object):
 
         If the ioloop is not managed, this function will block until the server port is
         closed, meaning a new server can be started on the same port.
-
         """
         t0 = time.time()
         self._ioloop_manager.join(timeout=timeout)
@@ -1185,6 +1181,7 @@ class DeviceServerBase(object):
             self.on_message = self._handler_thread.on_message
         else:
             self.on_message = return_future(self.handle_message)
+            self._handler_thread = None
 
         self._concurrency_options = ObjectDict(
             thread_safe=thread_safe, handler_thread=handler_thread)
@@ -1201,8 +1198,9 @@ class DeviceServerBase(object):
             raise RuntimeError('Message handler thread already started')
         self._server.start(timeout)
         self.ioloop = self._server.ioloop
-        self._handler_thread.set_ioloop(self.ioloop)
-        self._handler_thread.start(timeout)
+        if self._handler_thread:
+            self._handler_thread.set_ioloop(self.ioloop)
+            self._handler_thread.start(timeout)
 
     def join(self, timeout=None):
         """Rejoin the server thread.

@@ -20,13 +20,13 @@ import concurrent.futures
 from thread import get_ident
 from tornado import gen
 from katcp import sampling, Sensor
-from katcp.testutils import (TestLogHandler, DeviceTestSensor)
+from katcp.testutils import (TestLogHandler, DeviceTestSensor, TimewarpAsyncTestCase)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 logger = logging.getLogger(__name__)
 
-class TestSampling(tornado.testing.AsyncTestCase):
+class TestSampling(TimewarpAsyncTestCase):
     # TODO Also test explicit ioloop passing
 
     def setUp(self):
@@ -43,35 +43,8 @@ class TestSampling(tornado.testing.AsyncTestCase):
                 "inform must be called from in the ioloop")
             self.calls.append((sensor, timestamp, status, value))
 
-        # sampling module time to iolooptime
-        patcher = mock.patch('katcp.sampling.time')
-        mtime = patcher.start()
-        self.addCleanup(patcher.stop)
-        mtime.time.side_effect = lambda : self.ioloop_time
-
         self.calls = []
         self.inform = inform
-
-    def get_new_ioloop(self):
-        ioloop = super(TestSampling, self).get_new_ioloop()
-        self.ioloop_time = 0
-        ioloop.time = lambda : self.ioloop_time
-        def set_ioloop_thread_id():
-            self.ioloop_thread_id = get_ident()
-        ioloop.add_callback(set_ioloop_thread_id)
-        return ioloop
-
-    def wake_ioloop(self):
-        f = tornado.concurrent.Future()
-        self.io_loop.add_callback(lambda : f.set_result(None))
-        return f
-
-    def set_ioloop_time(self, new_time, wake_ioloop=True):
-        logger.debug('setting ioloop time: {0}'.format(new_time))
-        assert new_time > self.ioloop_time
-        self.ioloop_time = new_time
-        if wake_ioloop:
-            return self.wake_ioloop()
 
     def test_sampling(self):
         """Test getting and setting the sampling."""

@@ -1,3 +1,4 @@
+import time
 import logging
 
 import tornado.ioloop
@@ -8,6 +9,9 @@ from thread import get_ident
 from tornado import gen
 
 log = logging.getLogger(__name__)
+
+def with_relative_timeout(timeout, future, io_loop=None):
+    return gen.with_timeout(timeout + time.time(), future, io_loop)
 
 class IOLoopManager(object):
     def __init__(self, managed_default=True, logger=log):
@@ -77,6 +81,8 @@ class IOLoopManager(object):
 
         if self._ioloop_managed:
             self._run_managed_ioloop()
+        else:
+            self._running.set()
 
         if timeout:
             return self._running.wait(timeout)
@@ -95,7 +101,11 @@ class IOLoopManager(object):
 
         @gen.coroutine
         def _stop():
-            yield gen.maybe_future(callback())
+            if callback:
+                try:
+                    yield gen.maybe_future(callback())
+                except Exception:
+                    self._logger.exception('Unhandled exception calling stop callback')
             if self._ioloop_managed:
                 self._logger.info('Stopping ioloop {0!r}'.format(self._ioloop))
                 self._ioloop.stop()
@@ -106,7 +116,7 @@ class IOLoopManager(object):
         except AttributeError:
             # Probably we have been shut-down already
             pass
-        
+
     def join(self, timeout=None):
         """Join managed ioloop thread, or do nothing if not managed"""
         if not self._ioloop_managed:

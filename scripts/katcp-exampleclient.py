@@ -33,7 +33,7 @@ if __name__ == "__main__":
     parser = OptionParser(usage=usage)
     parser.add_option('-a', '--host', dest='host', type="string", default="", metavar='HOST',
                       help='attach to server HOST (default="" - localhost)')
-    parser.add_option('-p', '--port', dest='port', type=long, default=1235, metavar='N',
+    parser.add_option('-p', '--port', dest='port', type=int, default=1235, metavar='N',
                       help='attach to server port N (default=1235)')
     (opts, args) = parser.parse_args()
 
@@ -48,7 +48,7 @@ if __name__ == "__main__":
             s = raw_input("> ")
             try:
                 msg = katcp_parser.parse(s)
-                client.send_message(msg)
+                client.ioloop.add_callback(client.send_message, msg)
             except Exception, e:
                 e_type, e_value, trace = sys.exc_info()
                 reason = "\n".join(traceback.format_exception(

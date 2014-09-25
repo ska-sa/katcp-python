@@ -9,20 +9,138 @@ from __future__ import with_statement
    """
 
 import threading
-import socket
 import sys
 import traceback
-import select
-import time
 import logging
-import errno
-from .core import (DeviceMetaclass, MessageParser, Message,
-                   KatcpClientError, KatcpVersionError, ProtocolFlags,
-                   SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
 
+import tornado.ioloop
+import tornado.tcpclient
+import tornado.iostream
+
+from functools import partial, wraps
+from thread import get_ident as get_thread_ident
+
+from concurrent.futures import Future, TimeoutError
+from tornado import gen
+from tornado.concurrent import Future as tornado_Future
+
+from .core import (DeviceMetaclass, MessageParser, Message,
+                   KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
+                   ProtocolFlags,
+                   SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
+from .ioloop_manager import IOLoopManager, with_relative_timeout
 
 #logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")
+
+def until_later(delay, ioloop=None):
+    ioloop = ioloop or tornado.ioloop.IOLoop.current()
+    f = tornado_Future()
+    def _done():
+        f.set_result(None)
+    ioloop.call_later(delay, _done)
+    return f
+
+
+def address_to_string(addr_tuple):
+    return ":".join(str(part) for part in addr_tuple)
+
+def make_threadsafe(meth):
+    """Decorator for a DeviceClient method should always run in the ioloop
+
+    Used with DeviceClient.enable_thread_safety(). If not called the  method will be
+    unprotected and it is the user's responsibility to ensure that these methods are only
+    called from the ioloop, otherwise the decorated methods are wrapped. Should only
+    be used for functions that have no return value.
+    """
+    meth.make_threadsafe = True
+    return meth
+
+def make_threadsafe_blocking(meth):
+    """Decorator for a DeviceClient method that will block
+
+    Used with DeviceClient.enable_thread_safety(). Used to provide blocking calls that can
+    be made from other threads. If called in ioloop context, calls the original method
+    directly to prevent deadlocks. Will route return value to caller. Add `timeout`
+    keyword argument to limit blocking time. If `meth` returns a future, it's result will
+    be returned, otherwise its result will be passed back directly.
+    """
+    meth.make_threadsafe_blocking = True
+    return meth
+
+class AsyncEvent(object):
+    """tornado.concurrent.Future Event based on threading.Event API
+
+    Supports threading.Event API for setting / clearing / checking, but replaces the
+    wait() method with until_set() that returns a tornado Future that resolves when the
+    event is set.
+
+    Note, this class is NOT THREAD SAFE! It will only work properly if all it's methods
+    (appart from isSet() and wait_with_ioloop()) are called from the same thread/ioloop.
+    """
+    def __init__(self):
+        self._flag = False
+        self._waiting_future = tornado_Future()
+
+    def isSet(self):
+        return self._flag
+
+    is_set = isSet
+
+    def set(self):
+        """Set event flag to true, and resolve futres(s) returned by until_set()
+
+        Notes
+        -----
+
+        A call to set() may result in control being transfered to done_callbacks attached
+        to the future returned by until_set().
+        """
+        self._flag = True
+        self._waiting_future.set_result(True)
+        self._waiting_future = tornado_Future()
+
+    def clear(self):
+        self._flag = False
+
+    def until_set(self):
+        if not self._flag:
+            return self._waiting_future
+        else:
+            f = tornado_Future()
+            f.set_result(True)
+            return f
+
+    def wait_with_ioloop(self, ioloop, timeout=None):
+        """Do blocking wait until condition is event is set
+
+        Arguments
+        ---------
+
+        ioloop : tornadio.ioloop.IOLoop instance
+            MUST be the same ioloop that set() / clear() is called from
+        timeout : float, int or None
+            If not None, only wait up to `timeout` seconds for event to be set.
+
+        Return Value
+        ------------
+
+        flag : True if event was set within timeout, otherwise False.
+
+        Notes
+        -----
+
+        This will deadlock if called in the ioloop!
+        """
+        f = Future()
+        def cb():
+            return gen.chain_future(self.until_set(), f)
+        ioloop.add_callback(cb)
+        try:
+            f.result(timeout)
+            return True
+        except TimeoutError:
+            return self._flag
 
 
 class DeviceClient(object):
@@ -62,32 +180,78 @@ class DeviceClient(object):
     >>> # stop the client once we're finished with it
     >>> c.stop()
     >>> c.join()
+
+    Notes
+    -----
+
+    The client may block its ioloop if the default blocking tornado DNS resolver is
+    used. When an ioloop is shared, it would make sens to configure one of the
+    non-blocking resolver classes, see
+    http://tornado.readthedocs.org/en/latest/netutil.html
     """
 
     __metaclass__ = DeviceMetaclass
 
+    MAX_MSG_SIZE = 128*1024
+    """Maximum message size that can be received in bytes
+
+    If more than MAX_MSG_SIZE bytes are read from the socket without encountering a
+    message terminator (i.e. newline), the connection is closed.
+    """
+    MAX_WRITE_BUFFER_SIZE = 2*MAX_MSG_SIZE
+    """Maximum outstanding bytes to be buffered by the server process
+
+    If more than MAX_WRITE_BUFFER_SIZE bytes are outstanding, the connection is
+    closed. Note that the OS also buffers socket writes, so more than
+    MAX_WRITE_BUFFER_SIZE bytes may be untransmitted in total.
+    """
+
+    MSGS_PER_LOOP = 100
+    """Number of messages to receive before yeilding to the ioloop
+
+    iostream inline-reading can result in ioloop starvation (see
+    https://groups.google.com/forum/#!topic/python-tornado/yJrDAwDR_kA)
+    """
+
     def __init__(self, host, port, tb_limit=20, logger=log,
                  auto_reconnect=True):
         self._parser = MessageParser()
+        if not host:
+            host = "0.0.0.0"
         self._bindaddr = (host, port)
         self._tb_limit = tb_limit
-        self._sock = None
-        self._waiting_chunk = ""
-        self._running = threading.Event()
-        self._connected = threading.Event()
-        self._received_protocol_info = threading.Event()
-        self._send_lock = threading.Lock()
-        self._thread = None
         self._logger = logger
+        # Indicate that client is running and ready connect
+        self._running = AsyncEvent()
+        # Indicate that client is connected to its server
+        self._connected = AsyncEvent()
+        # Indicate that the client is disconnected
+        self._disconnected = AsyncEvent()
+        self._disconnected.set()
+        # Indicate that client has received KATCP protocol information from its server
+        self._received_protocol_info = AsyncEvent()
         self._auto_reconnect = auto_reconnect
+        # Number of seconds to wait before retrying a connection
+        self.auto_reconnect_delay = 0.5
         self._connect_failures = 0
         self._server_supports_ids = False
         self._protocol_flags = None
         self._static_protocol_configuration = False
-
-        # message id and lock
+        # Last used unique message id counter
         self._last_msg_id = 0
-        self._msg_id_lock = threading.Lock()
+
+        self.ioloop = None
+        "The Tornado IOloop to use, set by self.set_ioloop()"
+        # ID of Thread that hosts the IOLoop. Used to check that we are running in the
+        # ioloop.
+        self.ioloop_thread_id = None
+        self._ioloop_manager = IOLoopManager(managed_default=True)
+        # Current iostream instance, set by _connect()
+        self._stream = None
+        # tornado.tcpclient.TCPClient TCP connection factory, set by _install()
+        self._tcp_client = None
+        # Indicate whether we are threadsafe or not. Managed by self.enable_thread_safety()
+        self._threadsafe = False
 
     @property
     def protocol_flags(self):
@@ -101,8 +265,28 @@ class DeviceClient(object):
         self._received_protocol_info.set()
 
     @property
-    def bindaddr(self):
+    def bind_address(self):
+        """(host, port) where the client is connecting"""
         return self._bindaddr
+
+    @property
+    def bind_address_string(self):
+        return address_to_string(self._bindaddr)
+
+    @property
+    def sockname(self):
+        if self._stream:
+            return self._stream.socket.getsockname()
+        else:
+            return (self._bindaddr[0], -1)
+
+    @property
+    def sockname_string(self):
+        return address_to_string(self.sockname)
+
+    @property
+    def threadsafe(self):
+        return self._threadsafe
 
     def convert_seconds(self, time_seconds):
         """Convert a time in seconds to the device timestamp units
@@ -123,12 +307,9 @@ class DeviceClient(object):
 
     def _next_id(self):
         """Return the next available message id."""
-        self._msg_id_lock.acquire()
-        try:
-            self._last_msg_id += 1
-            return str(self._last_msg_id)
-        finally:
-            self._msg_id_lock.release()
+        assert get_thread_ident() == self.ioloop_thread_id
+        self._last_msg_id += 1
+        return str(self._last_msg_id)
 
     def preset_protocol_flags(self, protocol_flags):
         """
@@ -229,7 +410,8 @@ class DeviceClient(object):
         else:
             return msg.mid
 
-    def request(self, msg, use_mid=None, timeout=None):
+    @make_threadsafe_blocking
+    def request(self, msg, use_mid=None):
         """
         Send a request message, automatically assign a message ID if requested
 
@@ -237,8 +419,6 @@ class DeviceClient(object):
         ----------
         msg : katcp.Message request message
         use_mid : bool or None, default=None
-        timeout : float or None, default=None
-            Set timeout for sending request message, or None for no timeout
 
         Returns
         -------
@@ -255,164 +435,120 @@ class DeviceClient(object):
         """
 
         mid = self._get_mid_and_update_msg(msg, use_mid)
-        self.send_request(msg, timeout=timeout)
+        self.send_request(msg)
         return mid
 
-    def send_request(self, msg, timeout=None):
+    def send_request(self, msg):
         """Send a request messsage.
 
         Parameters
         ----------
         msg : Message object
             The request Message to send.
-        timeout : float or None, default=None
-            Set timeout for sending request message, or None for no timeout
         """
         assert(msg.mtype == Message.REQUEST)
         if msg.mid and not self._server_supports_ids:
-            raise KatcpVersionError
-        self.send_message(msg, timeout=timeout)
+            raise KatcpVersionError('Message IDs not supported by server')
+        self.send_message(msg)
 
-    def send_message(self, msg, timeout=None):
+    @make_threadsafe_blocking
+    def send_message(self, msg):
         """Send any kind of message.
 
         Parameters
         ----------
         msg : Message object
             The message to send.
-        timeout : float or None, default=None
-            Set timeout for sending request message, or None for no timeout.
         """
-        # TODO: should probably implement this as a queue of sockets and
-        #       messages to send and have the queue processed in the main loop
+        assert get_thread_ident() == self.ioloop_thread_id
         data = str(msg) + "\n"
-        datalen = len(data)
-        totalsent = 0
-        sock = self._sock
-
         # Log all sent messages here so no one else has to.
         self._logger.debug(data)
-
-        # do not do anything inside here which could call send_message!
-        send_failed = False
-        self._send_lock.acquire()
-        t0 = time.time()
-        e = 'unknown error'
+        if not self._connected.isSet():
+            raise KatcpClientDisconnected('Not connected to device {0}'.format(
+                self.bind_address_string))
         try:
-            if sock is None:
-                raise KatcpClientError("Client not connected")
+            return self._stream.write(data)
+        except Exception:
+            self._logger.warn('Could not send message {0!r} to {1!r}'
+                              .format(str(msg), self._bindaddr), exc_info=True)
+            self._disconnect(exc_info=True)
 
-            while totalsent < datalen:
-                if timeout is not None and time.time() - t0 > timeout:
-                    self._logger.warn('Timeout sending message')
-                    send_failed = True
-                    e = 'Could not send  message withing timeout {0}'.format(
-                        timeout)
-                    break
-                try:
-                    sent = sock.send(data[totalsent:])
-                except socket.error, e:
-                    if len(e.args) == 2 and e.args[0] == errno.EAGAIN and \
-                            sock is self._sock:
-                        continue
-                    else:
-                        send_failed = True
-                        break
-
-                if sent == 0:
-                    send_failed = True
-                    break
-
-                totalsent += sent
-        finally:
-            self._send_lock.release()
-
-        if send_failed:
-            try:
-                server_name = sock.getpeername()
-            except socket.error:
-                server_name = "<disconnected server>"
-            msg = "Failed to send message to server %s (%s)" % (server_name, e)
-            self._logger.error(msg)
-            self._disconnect()
-
+    @gen.coroutine
     def _connect(self):
         """Connect to the server."""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        assert get_thread_ident() == self.ioloop_thread_id
+        if self._stream:
+            self._logger.warn('Disconnecting existing connection to {0!r} '
+                              'to create a new connection')
+            self._disconnect()
+            yield self._disconnected.until_set()
+
+        stream = None
         try:
-            sock.connect(self._bindaddr)
-            sock.setblocking(0)
-            if hasattr(socket, 'TCP_NODELAY'):
-                # our message packets are small, don't delay sending them.
-                sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
+            host, port = self._bindaddr
+            stream = self._stream = yield self._tcp_client.connect(
+                host, port, max_buffer_size=self.MAX_MSG_SIZE)
+            stream.set_close_callback(partial(self._stream_closed_callback, stream))
+            # our message packets are small, don't delay sending them.
+            stream.set_nodelay(True)
+            stream.max_write_buffer_size = self.MAX_WRITE_BUFFER_SIZE
+            self._logger.debug('Connected to {0} with client addr {1}'.
+                               format(self.bind_address_string,
+                               address_to_string(stream.socket.getsockname())))
             if self._connect_failures >= 5:
-                self._logger.warn("Reconnected to %r" % (self._bindaddr,))
+                self._logger.warn("Reconnected to {0}".format(self.bind_address_string))
             self._connect_failures = 0
         except Exception, e:
-            self._connect_failures += 1
             if self._connect_failures % 5 == 0:
                 # warn on every fifth failure
-                self._logger.warn("Failed to connect to %r: %s" %
-                                  (self._bindaddr, e))
-            else:
-                self._logger.debug("Failed to connect to %r: %s" %
-                                   (self._bindaddr, e))
-            sock.close()
-            sock = None
+                self._logger.warn("Failed to connect to {0!r}: {1}"
+                                  .format(self._bindaddr, e))
+            self._connect_failures += 1
+            stream = None
+            yield gen.moment
+            # TODO some kind of error rate limiting?
 
-        if sock is None:
-            return
+            if self._stream:
+                # Can't use _disconnect() and wait on self._disconnected, since exception
+                # may be been raised before _stream_closed_callback was attached to the
+                # iostream.
+                self._logger.debug('stream was set even though connecting failed')
+                self._stream.close()
+                self._disconnected.set()
 
-        self._sock = sock
-        self._waiting_chunk = ""
-        self._connected.set()
+        if stream:
+            self._disconnected.clear()
+            self._connected.set()
+            try:
+                self.notify_connected(True)
+            except Exception:
+                self._logger.exception("Notify connect failed. Disconnecting.")
+                self._disconnect()
 
-        try:
-            self.notify_connected(True)
-        except Exception:
-            self._logger.exception("Notify connect failed. Disconnecting.")
-            self._disconnect()
-
-    def _disconnect(self):
+    def _disconnect(self, exc_info=False):
         """Disconnect and cleanup."""
-        # avoid disconnecting multiple times by immediately setting
-        # self._sock to None
-        sock = self._sock
-        self._sock = None
+        if self._stream:
+            self._stream.close(exc_info=exc_info)
+            # Cleanup should be handled by _stream_closed_callback()
 
-        if sock is not None:
-            sock.close()
+    def _stream_closed_callback(self, stream):
+        try:
+            assert stream is self._stream
+            self._stream = None
             self._connected.clear()
-            self.notify_connected(False)
-
-    def _handle_chunk(self, chunk):
-        """Handle a chunk of data from the server.
-
-        Parameters
-        ----------
-        chunk : data
-            The data string to process.
-        """
-        chunk = chunk.replace("\r", "\n")
-        lines = chunk.split("\n")
-
-        for line in lines[:-1]:
-            full_line = self._waiting_chunk + line
-            self._waiting_chunk = ""
-            if full_line:
-                try:
-                    msg = self._parser.parse(full_line)
-                # We do want to catch everything that inherits from Exception
-                # pylint: disable-msg = W0703
-                except Exception:
-                    e_type, e_value, trace = sys.exc_info()
-                    reason = "\n".join(traceback.format_exception(
-                        e_type, e_value, trace, self._tb_limit))
-                    self._logger.error("BAD COMMAND %r: %s" % (full_line, reason))
-                else:
-                    self.handle_message(msg)
-
-        self._waiting_chunk += lines[-1]
+            self._disconnected.set()
+            error_repr = '{0!r}'.format(stream.error) if stream.error else ''
+            if error_repr:
+                self._logger.warn('Client stream for server {0} closed with error {1}'
+                                  .format(self.bind_address_string, error_repr))
+            try:
+                self.notify_connected(False)
+            except Exception:
+                self._logger.exception("Notify connect failed")
+        except Exception:
+            self._logger.exception('Unhandled exception closing client stream {0!r} '
+                                   'to {1}'.format(stream, self.bind_address_string))
 
     def handle_message(self, msg):
         """Handle a message from the server.
@@ -427,11 +563,11 @@ class DeviceClient(object):
             self._logger.debug(str(msg))
 
         if msg.mtype == Message.INFORM:
-            self.handle_inform(msg)
+            return self.handle_inform(msg)
         elif msg.mtype == Message.REPLY:
-            self.handle_reply(msg)
+            return self.handle_reply(msg)
         elif msg.mtype == Message.REQUEST:
-            self.handle_request(msg)
+            return self.handle_request(msg)
         else:
             self._logger.error("Unexpected message type from server ['%s']."
                 % (msg,))
@@ -449,7 +585,7 @@ class DeviceClient(object):
             method = self._inform_handlers[msg.name]
 
         try:
-            method(self, msg)
+             return method(self, msg)
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
@@ -469,7 +605,7 @@ class DeviceClient(object):
             method = self._reply_handlers[msg.name]
 
         try:
-            method(self, msg)
+            return method(self, msg)
         except Exception:
             e_type, e_value, trace = sys.exc_info()
             reason = "\n".join(traceback.format_exception(
@@ -490,11 +626,19 @@ class DeviceClient(object):
 
         try:
             reply = method(self, msg)
-            reply.mid = msg.mid
-            assert (reply.mtype == Message.REPLY)
-            assert (reply.name == msg.name)
-            self._logger.info("%s OK" % (msg.name,))
-            self.send_message(reply)
+            if isinstance(reply, Message):
+                # If it is a message object, assume it is a reply.
+                reply.mid = msg.mid
+                assert (reply.mtype == Message.REPLY)
+                assert (reply.name == msg.name)
+                self._logger.info("%s OK" % (msg.name,))
+                self.send_message(reply)
+            else:
+                # Just pass on what is, potentially, a future. The implementor of the
+                # request handler method must arrange for a reply to be sent. Since
+                # clients have no business dealing with requests in any case we don't do
+                # much to help them.
+                return reply
         # We do want to catch everything that inherits from Exception
         # pylint: disable-msg = W0703
         except Exception:
@@ -533,70 +677,169 @@ class DeviceClient(object):
         """
         pass
 
-    def run(self):
-        """Process reply and inform messages from the server."""
-        self._logger.debug("Starting thread %s" % (
-                threading.currentThread().getName()))
-        timeout = 0.5  # s
-
-        # save globals so that the thread can run cleanly
-        # even while Python is setting module globals to
-        # None.
-        _select = select.select
-        _socket_error = socket.error
-        _sleep = time.sleep
-
-        if not self._auto_reconnect:
-            self._connect()
-            if not self.is_connected():
-                raise KatcpClientError("Failed to connect to %r" %
-                                       (self._bindaddr,))
-
+    @gen.coroutine
+    def _install(self):
+        # Do stuff to put us on the IOLoop
+        self._logger.debug("Starting client loop for {0!r}".format(self._bindaddr))
+        self.ioloop_thread_id = get_thread_ident()
+        self._tcp_client = tornado.tcpclient.TCPClient()
         self._running.set()
+
+        yield self._connect()
+        if self._stream is None and not self._auto_reconnect:
+            raise KatcpClientError("Failed to connect to {0!r}".format(self._bindaddr))
+        try:
+            yield self._connect_loop()
+        except Exception:
+            self._logger.exception('Unhandled exception in _connect_loop()')
+        finally:
+            self.stop() # Make sure everything is torn down properly
+            self._logger.info("Client connect loop for {0!r} finished."
+                              .format(self._bindaddr))
+
+    @gen.coroutine
+    def _connect_loop(self):
         while self._running.isSet():
-            # this is equivalent to self.is_connected()
-            # but ensure we have a socket object and not
-            # None for the select-and-read part of this loop
-            sock = self._sock
-            if sock is not None:
+            if self._connected.isSet():
                 try:
-                    readers, _writers, errors = _select([sock], [], [sock],
-                                                        timeout)
-                except Exception, e:
-                    # catch Exception because class of exception thrown
-                    # various drastically between Mac and Linux
-                    self._logger.debug("Select error: %s" % (e,))
-                    errors = [sock]
-
-                if errors:
-                    self._disconnect()
-
-                elif readers:
-                    try:
-                        chunk = sock.recv(4096)
-                    except _socket_error:
-                        # an error when sock was within ready list presumably
-                        # means the client needs to be ditched.
-                        chunk = ""
-                    if chunk:
-                        self._handle_chunk(chunk)
-                    else:
-                        # EOF from server
-                        self._disconnect()
+                    yield self._line_read_loop()
+                except Exception:
+                    self._logger.exception('Unhandled exception in _reading_loop()')
+            elif self._auto_reconnect:
+                yield until_later(self.auto_reconnect_delay)
+                yield self._connect()
             else:
-                # not currently connected so attempt to connect
-                # if auto_reconnect is set
-                if not self._auto_reconnect:
-                    self._running.clear()
-                    break
+                break
+            # Allow stream-close handlers etc to run before restarting _line_read_loop
+            yield gen.moment
+
+
+    @gen.coroutine
+    def _line_read_loop(self):
+        assert get_thread_ident() == self.ioloop_thread_id
+        counter = 0
+        while self._running.isSet():
+            counter += 1
+            if counter % self.MSGS_PER_LOOP == 0:
+                yield gen.moment
+            try:
+                line = yield self._stream.read_until_regex('\n|\r')
+            except tornado.iostream.StreamClosedError:
+                break # Assume that _stream_closed_callback() will handle this case
+            except Exception:
+                if self._stream:
+                    line = ''
+                    self._logger.warn(counter)
+                    self._logger.warn('Unhandled Exception while reading from {0}:'
+                                      .format(self._bindaddr), exc_info=True)
+                        # Prevent potential tight error loops from blocking the ioloop
+                    self._disconnect()
+                    yield gen.moment
                 else:
-                    self._connect()
-                    if not self.is_connected():
-                        _sleep(timeout)
+                    self._logger.warn('self._stream object seems to have disappeared.')
+                    break
+            try:
+                line = line.replace("\r", "\n").split("\n")[0]
+                msg = self._parser.parse(line) if line else None
+            except Exception:
+                e_type, e_value, trace = sys.exc_info()
+                reason = "\n".join(traceback.format_exception(
+                    e_type, e_value, trace, self._tb_limit))
+                self._logger.error("BAD COMMAND: %s" % (reason,))
+            else:
+                try:
+                    if msg:
+                        yield gen.maybe_future(self.handle_message(msg))
+                except Exception:
+                    self._logger.exception(
+                        'Unhandled exception in handle_message() from {0} for '
+                        'message {1!r}'.format(self.bind_address_string, str(msg)))
 
         self._disconnect()
-        self._logger.debug("Stopping thread %s" % (
-                threading.currentThread().getName()))
+
+        self._logger.debug('client _line_read_loop() from {0} completed'
+                           .format(self.bind_address_string))
+
+
+    def set_ioloop(self, ioloop=None):
+        """Set the tornado.ioloop.IOLoop instance to use, default to IOLoop.current()
+
+        If set_ioloop() is never called the IOLoop is started in a new thread, and will
+        be stopped if self.stop() is called.
+
+        Notes
+        =====
+
+        Must be called before start() is called
+        """
+        self._ioloop_manager.set_ioloop(ioloop, managed=False)
+        self.ioloop = ioloop
+
+    def enable_thread_safety(self):
+        """Enable thread-safety features
+
+        Must be called before start()
+        """
+        if self.threadsafe:
+            return                        # Already done!
+        if self._running.isSet():
+            raise RuntimeError('Cannot enable thread safety after start')
+
+        def _getattr(obj, name):
+            # use 'is True' so that mock objects don't return true for everything
+            return getattr(obj, name, False) is True
+
+        for name in dir(self):
+            try:
+                meth = getattr(self, name)
+            except AttributeError:
+                # Subclasses may have computed attributes that don't work before they are
+                # started, so let's ignore those
+                pass
+            if not callable(meth):
+                continue
+            make_threadsafe = _getattr(meth, 'make_threadsafe')
+            make_threadsafe_blocking = _getattr(meth, 'make_threadsafe_blocking')
+
+            if make_threadsafe:
+                assert not make_threadsafe_blocking
+                meth = self._make_threadsafe(meth)
+                setattr(self, name, meth)
+            elif make_threadsafe_blocking:
+                meth = self._make_threadsafe_blocking(meth)
+                setattr(self, name, meth)
+
+        self._threadsafe = True
+
+    def _make_threadsafe(self, meth):
+        @wraps(meth)
+        def wrapped(*args, **kwargs):
+            if get_thread_ident() == self.ioloop_thread_id:
+                return meth(*args, **kwargs)
+            else:
+                self.ioloop.add_callback(meth, *args, **kwargs)
+        return wrapped
+
+    def _make_threadsafe_blocking(self, meth):
+        @wraps(meth)
+        def wrapped(*args, **kwargs):
+            timeout = kwargs.pop('timeout', 5)
+            if get_thread_ident() == self.ioloop_thread_id:
+                return meth(*args, **kwargs)
+            else:
+                f = Future()
+                def cb():
+                    try:
+                        tf = gen.maybe_future(meth(*args, **kwargs))
+                    except Exception:
+                        tf = tornado_Future()
+                        tf.set_exc_info(sys.exc_info())
+                    finally:
+                        gen.chain_future(tf, f)
+
+                self.ioloop.add_callback(cb)
+                return f.result(timeout)
+        return wrapped
 
     def start(self, timeout=None):
         """Start the client in a new thread.
@@ -604,17 +847,16 @@ class DeviceClient(object):
         Parameters
         ----------
         timeout : float in seconds
-            Seconds to wait for client thread to start.
+            Seconds to wait for client thread to start. Do not specify a timeout if
+            start() is being called from the same ioloop that this client will be
+            installed on, since it will block the ioloop without progressing.
         """
-        if self._thread:
-            raise RuntimeError("Device client %r already started." % (self._bindaddr,))
-
-        self._thread = threading.Thread(target=self.run)
-        self._thread.start()
-        if timeout:
-            self._connected.wait(timeout)
-            if not self._connected.isSet():
-                raise RuntimeError("Device client %r failed to start." % (self._bindaddr,))
+        if self._running.isSet():
+            raise RuntimeError("Device client already started.")
+        # Make sure we have an ioloop
+        self.ioloop = self._ioloop_manager.get_ioloop()
+        self._ioloop_manager.start(timeout)
+        self.ioloop.add_callback(self._install)
 
     def join(self, timeout=None):
         """Rejoin the client thread.
@@ -623,15 +865,15 @@ class DeviceClient(object):
         ----------
         timeout : float in seconds
             Seconds to wait for thread to finish.
+
+        Notes
+        -----
+
+        Does nothing if the ioloop is not managed.
         """
-        if not self._thread:
-            raise RuntimeError("Device client %r thread not started." % (self._bindaddr,))
+        self._ioloop_manager.join(timeout)
 
-        self._thread.join(timeout)
-        if not self._thread.isAlive():
-            self._thread = None
-
-    def stop(self, timeout=1.0):
+    def stop(self, timeout=None):
         """Stop a running client (from another thread).
 
         Parameters
@@ -639,10 +881,19 @@ class DeviceClient(object):
         timeout : float in seconds
            Seconds to wait for client thread to have *started*.
         """
-        self._running.wait(timeout)
-        if not self._running.isSet():
-            raise RuntimeError("Attempt to stop client that wasn't running.")
-        self._running.clear()
+        ioloop = getattr(self, 'ioloop', None)
+        if not ioloop:
+            raise RuntimeError('Call start() before stop()')
+        if timeout:
+            if get_thread_ident() == self.ioloop_thread_id:
+                raise RuntimeError('Cannot block inside ioloop')
+            self._running.wait_with_ioloop(self.ioloop, timeout)
+        try:
+            self.ioloop.add_callback(self._running.clear)
+        except RuntimeError:
+            # Probably someone else has already stopped the ioloop
+            pass
+        self._ioloop_manager.stop(timeout=timeout)
 
     def running(self):
         """Whether the client is running.
@@ -654,6 +905,39 @@ class DeviceClient(object):
         """
         return self._running.isSet()
 
+    def until_running(self):
+        """Return future that resolves when the client is running.
+
+        Notes
+        -----
+
+        Must be called from the same ioloop as the client.
+        """
+        return self._running.until_set()
+
+    def wait_running(self, timeout=None):
+        """Wait until the client is running.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for the client to start running.
+
+        Returns
+        -------
+        connected : bool
+            Whether the client is running
+
+        Notes
+        -----
+
+        Do not call this from the ioloop, use until_running()
+        """
+        ioloop = getattr(self, 'ioloop', None)
+        if not ioloop:
+            raise RuntimeError('Call start() before wait_running()')
+        return self._running.wait_with_ioloop(ioloop, timeout)
+
     def is_connected(self):
         """Check if the socket is currently connected.
 
@@ -662,13 +946,20 @@ class DeviceClient(object):
         connected : bool
             Whether the client is connected.
         """
-        return self._sock is not None
+        return self._connected.isSet()
+
+    def until_connected(self):
+        """Return future that resolves when the client is connected.
+        """
+        assert get_thread_ident() == self.ioloop_thread_id
+        return self._connected.until_set()
 
     def wait_connected(self, timeout=None):
         """Wait until the client is connected.
 
         Parameters
         ----------
+
         timeout : float in seconds
             Seconds to wait for the client to connect.
 
@@ -676,13 +967,25 @@ class DeviceClient(object):
         -------
         connected : bool
             Whether the client is connected.
-        """
-        self._connected.wait(timeout)
-        return self._connected.isSet()
 
+        Notes
+        -----
+
+        Do not call this from the ioloop, use until_connected()
+        """
+        return self._connected.wait_with_ioloop(self.ioloop, timeout)
+
+    def until_protocol(self):
+        """Return future; resolved when katcp protocol information has been received.
+
+        If the returned future resolves, the server's protocol information is
+        available in the ProtocolFlags instance self.protocol_flags.
+        """
+        assert get_thread_ident() == self.ioloop_thread_id
+        return self._received_protocol_info.until_set()
 
     def wait_protocol(self, timeout=None):
-        """Wait until katcp protocol information has been received from the client.
+        """Wait until katcp protocol information has been received from the server.
 
         Parameters
         ----------
@@ -696,9 +999,13 @@ class DeviceClient(object):
 
         If this method returns True, the server's protocol information is
         available in the ProtocolFlags instance self.protocol_flags.
+
+        Notes
+        -----
+
+        Do not call this from the ioloop, use until_protocol()
         """
-        self._received_protocol_info.wait(timeout)
-        return self._received_protocol_info.isSet()
+        return self._received_protocol_info.wait_with_ioloop(self.ioloop, timeout)
 
     def notify_connected(self, connected):
         """Event handler that is called whenever the connection status changes.
@@ -719,183 +1026,7 @@ class DeviceClient(object):
         """
         pass
 
-
-class BlockingClient(DeviceClient):
-    """Implement blocking requests on top of DeviceClient.
-
-    This client will use message IDs if the server supports them.
-
-    Parameters
-    ----------
-    host : string
-        Host to connect to.
-    port : int
-        Port to connect to.
-    tb_limit : int
-        Maximum number of stack frames to send in error traceback.
-    logger : object
-        Python Logger object to log to.
-    auto_reconnect : bool
-        Whether to automatically reconnect if the connection dies.
-    timeout : float in seconds
-        Default number of seconds to wait before a blocking send_request times
-        out. Can be overriden in individual calls to blocking_request.
-
-    Examples
-    --------
-    >>> c = BlockingClient('localhost', 10000)
-    >>> c.start()
-    >>> reply, informs = c.blocking_request(katcp.Message.request('myreq'))
-    >>> print reply
-    >>> print [str(msg) for msg in informs]
-    >>> c.stop()
-    >>> c.join()
-    """
-
-    def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
-                 auto_reconnect=True):
-        super(BlockingClient, self).__init__(host, port, tb_limit=tb_limit,
-                                             logger=logger,
-                                             auto_reconnect=auto_reconnect)
-        self._request_timeout = timeout
-
-        self._request_end = threading.Event()
-        self._request_lock = threading.Lock()
-        self._current_name = None
-        self._current_msg_id = None  # only used if server supports msg ids
-        self._current_informs = None
-        self._current_reply = None
-        self._current_inform_count = None
-
-    def _message_matches(self, msg):
-        """Check whether message matches current request.
-
-           Must be called with _request_lock held.
-           """
-        return ((self._current_msg_id is not None and
-                 msg.mid == self._current_msg_id)
-                or
-                (self._current_msg_id is None and
-                 msg.name == self._current_name))
-
-    def blocking_request(self, msg, timeout=None, keepalive=False, use_mid=None):
-        """Send a request messsage.
-
-        Parameters
-        ----------
-        msg : Message object
-            The request Message to send.
-        timeout : float in seconds
-            How long to wait for a reply. The default is the
-            the timeout set when creating the BlockingClient.
-        keepalive : boolean, optional
-            Whether the arrival of an inform should
-            cause the timeout to be reset.
-        use_mid : boolean, optional
-            Whether to use message IDs. Default is to use message IDs
-            if the server supports them.
-
-        Returns
-        -------
-        reply : Message object
-            The reply message received.
-        informs : list of Message objects
-            A list of the inform messages received.
-        """
-        with self._request_lock:
-            self._request_end.clear()
-            self._current_name = msg.name
-            self._current_informs = []
-            self._current_reply = None
-            self._current_inform_count = 0
-
-        if timeout is None:
-            timeout = self._request_timeout
-
-        try:
-            self._get_mid_and_update_msg(msg, use_mid)
-            self._current_msg_id = msg.mid
-            self.send_request(msg, timeout=timeout)
-            while True:
-                self._request_end.wait(timeout)
-                if self._request_end.isSet() or not keepalive:
-                    break
-                new_inform_count = len(self._current_informs)
-                if new_inform_count == self._current_inform_count:
-                    # no new informs received either
-                    break
-                self._current_inform_count = new_inform_count
-        finally:
-            try:
-                self._request_lock.acquire()
-
-                success = self._request_end.isSet()
-                informs = self._current_informs
-                reply = self._current_reply
-
-                self._request_end.clear()
-                self._current_inform_count = None
-                self._current_informs = None
-                self._current_reply = None
-                self._current_name = None
-                self._current_msg_id = None
-            finally:
-                self._request_lock.release()
-
-        if success:
-            return reply, informs
-        else:
-            raise RuntimeError("Request %s timed out after %s seconds." %
-                                (msg.name, timeout))
-
-    def handle_inform(self, msg):
-        """Handle inform messages related to any current requests.
-
-        Inform messages not related to the current request go up to the
-        base class method.
-
-        Parameters
-        ----------
-        msg : Message object
-            The inform message to handle.
-        """
-        try:
-            self._request_lock.acquire()
-            if self._message_matches(msg):
-                self._current_informs.append(msg)
-                return
-        finally:
-            self._request_lock.release()
-
-        super(BlockingClient, self).handle_inform(msg)
-
-    def handle_reply(self, msg):
-        """Handle a reply message related to the current request.
-
-        Reply messages not related to the current request go up to the
-        base class method.
-
-        Parameters
-        ----------
-        msg : Message object
-            The reply message to handle.
-        """
-        try:
-            self._request_lock.acquire()
-            if self._message_matches(msg):
-                # unset _current_name so that no more replies or informs
-                # match this request
-                self._current_name = None
-                self._current_reply = msg
-                self._request_end.set()
-                return
-        finally:
-            self._request_lock.release()
-
-        super(BlockingClient, self).handle_reply(msg)
-
-
-class CallbackClient(DeviceClient):
+class AsyncClient(DeviceClient):
     """Implement callback-based requests on top of DeviceClient.
 
     This client will use message IDs if the server supports them.
@@ -926,9 +1057,10 @@ class CallbackClient(DeviceClient):
     >>> def inform_cb(msg):
     ...     print "Inform:", msg
     ...
-    >>> c = CallbackClient('localhost', 10000)
+    >>> c = AsyncClient('localhost', 10000)
     >>> c.start()
-    >>> c.callback_request(
+    >>> c.ioloop.add_callback(
+    ...     c.callback_request,
     ...     katcp.Message.request('myreq'),
     ...     reply_cb=reply_cb,
     ...     inform_cb=inform_cb,
@@ -942,17 +1074,20 @@ class CallbackClient(DeviceClient):
 
     def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
                  auto_reconnect=True):
-        super(CallbackClient, self).__init__(host, port, tb_limit=tb_limit,
-                                             logger=logger,
-                                             auto_reconnect=auto_reconnect)
+        super(AsyncClient, self).__init__(host, port, tb_limit=tb_limit,
+                                          logger=logger,
+                                          auto_reconnect=auto_reconnect)
 
         self._request_timeout = timeout
+        self._reset_async_requests()
 
-        # lock for checking and popping requests
-        self._async_lock = threading.Lock()
+    def _reset_async_requests(self):
+        """Initialize / clear out async request structures
 
+        Good for a clean start after disconnection
+        """
         # pending requests
-        # msg_id -> (request, reply_cb, inform_cb, user_data, timer)
+        # msg_id -> (request, reply_cb, inform_cb, user_data, timeout_handle)
         #           callback tuples
         self._async_queue = {}
 
@@ -961,65 +1096,58 @@ class CallbackClient(DeviceClient):
         self._async_id_stack = {}
 
     def _push_async_request(self, msg_id, request, reply_cb, inform_cb,
-                            user_data, timer):
+                            user_data, timeout_handle):
         """Store the callbacks for a request we've sent so we
            can forward any replies and informs to them.
            """
-        with self._async_lock:
-            self._async_queue[msg_id] = (
-                request, reply_cb, inform_cb, user_data, timer)
-            if request.name in self._async_id_stack:
-                self._async_id_stack[request.name].append(msg_id)
-            else:
-                self._async_id_stack[request.name] = [msg_id]
+        assert get_thread_ident() == self.ioloop_thread_id
+        self._async_queue[msg_id] = (
+            request, reply_cb, inform_cb, user_data, timeout_handle)
+        if request.name in self._async_id_stack:
+            self._async_id_stack[request.name].append(msg_id)
+        else:
+            self._async_id_stack[request.name] = [msg_id]
 
     def _pop_async_request(self, msg_id, msg_name):
         """Pop the set of callbacks for a request.
 
            Return tuple of Nones if callbacks already popped (or don't exist).
            """
-        self._async_lock.acquire()
-        try:
-            if msg_id is None:
-                msg_id = self._msg_id_for_name(msg_name)
-            if msg_id in self._async_queue:
-                callback_tuple = self._async_queue[msg_id]
-                del self._async_queue[msg_id]
-                self._async_id_stack[callback_tuple[0].name].remove(msg_id)
-                return callback_tuple
-            else:
-                return None, None, None, None, None
-        finally:
-            self._async_lock.release()
+        assert get_thread_ident() == self.ioloop_thread_id
+        if msg_id is None:
+            msg_id = self._msg_id_for_name(msg_name)
+        if msg_id in self._async_queue:
+            callback_tuple = self._async_queue[msg_id]
+            del self._async_queue[msg_id]
+            self._async_id_stack[callback_tuple[0].name].remove(msg_id)
+            return callback_tuple
+        else:
+            return None, None, None, None, None
 
     def _peek_async_request(self, msg_id, msg_name):
         """Peek at the set of callbacks for a request
 
            Return tuple of Nones if callbacks don't exist.
            """
-        self._async_lock.acquire()
-        try:
-            if msg_id is None:
-                msg_id = self._msg_id_for_name(msg_name)
-            if msg_id in self._async_queue:
-                return self._async_queue[msg_id]
-            else:
-                return None, None, None, None, None
-        finally:
-            self._async_lock.release()
+        assert get_thread_ident() == self.ioloop_thread_id
+        if msg_id is None:
+            msg_id = self._msg_id_for_name(msg_name)
+        if msg_id in self._async_queue:
+            return self._async_queue[msg_id]
+        else:
+            return None, None, None, None, None
 
     def _msg_id_for_name(self, msg_name):
         """Find the msg_id for a given request name.
-
-           Should only be called while the async lock is acquired.
 
            Return None if no message id exists.
            """
         if msg_name in self._async_id_stack and self._async_id_stack[msg_name]:
             return self._async_id_stack[msg_name][0]
 
+    @make_threadsafe
     def callback_request(self, msg, reply_cb=None, inform_cb=None,
-                user_data=None, timeout=None, use_mid=None):
+                         user_data=None, timeout=None, use_mid=None):
         """Send a request messsage.
 
         Parameters
@@ -1037,7 +1165,7 @@ class CallbackClient(DeviceClient):
             callbacks.
         timeout : float in seconds
             How long to wait for a reply. The default is the
-            the timeout set when creating the CallbackClient.
+            the timeout set when creating the AsyncClient.
         use_mid : boolean, optional
             Whether to use message IDs. Default is to use message IDs
             if the server supports them.
@@ -1048,28 +1176,23 @@ class CallbackClient(DeviceClient):
         mid = self._get_mid_and_update_msg(msg, use_mid)
 
         if timeout is None: # deal with 'no timeout', i.e. None
-            timer = None
+            timeout_handle = None
         else:
-            timer = threading.Timer(timeout, self._handle_timeout, (mid,))
-
+            timeout_handle = self.ioloop.call_later(
+                timeout, partial(self._handle_timeout, mid, self.ioloop.time()))
 
         self._push_async_request(
-            mid, msg, reply_cb, inform_cb, user_data, timer)
-        if timer:
-            timer.start()
+            mid, msg, reply_cb, inform_cb, user_data, timeout_handle)
 
         try:
-            self.send_request(msg, timeout=timeout)
+            self.send_request(msg)
         except KatcpClientError, e:
             error_reply = Message.request(msg.name, "fail", str(e))
             error_reply.mid = mid
             self.handle_reply(error_reply)
-            if isinstance(e, KatcpVersionError):
-                raise
 
-
-    def blocking_request(self, msg, timeout=None, use_mid=None):
-        """Send a request messsage.
+    def future_request(self, msg, timeout=None, use_mid=None):
+        """Send a request messsage, with future replies
 
         Parameters
         ----------
@@ -1077,13 +1200,16 @@ class CallbackClient(DeviceClient):
             The request Message to send.
         timeout : float in seconds
             How long to wait for a reply. The default is the
-            the timeout set when creating the CallbackClient.
+            the timeout set when creating the AsyncClient.
         use_mid : boolean, optional
             Whether to use message IDs. Default is to use message IDs
             if the server supports them.
 
         Returns
         -------
+
+        A tornado.concurrent.Future that resolves with:
+
         reply : Message object
             The reply message received.
         informs : list of Message objects
@@ -1092,23 +1218,63 @@ class CallbackClient(DeviceClient):
         if timeout is None:
             timeout = self._request_timeout
 
-        done = threading.Event()
+        f = tornado_Future()
         informs = []
-        replies = []
 
         def reply_cb(msg):
-            self._logger.debug('received reply %r', str(msg))
-            replies.append(msg)
-            done.set()
+            f.set_result((msg, informs))
 
         def inform_cb(msg):
-            self._logger.debug('received inform %r', str(msg))
             informs.append(msg)
 
-        self.callback_request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
-                              timeout=timeout, use_mid=use_mid)
-        ## We wait on the done event that should be set by the reply
-        # handler callback. If this event does not occur within the
+        try:
+            self.callback_request(msg, reply_cb=reply_cb, inform_cb=inform_cb,
+                                  timeout=timeout, use_mid=use_mid)
+        except Exception:
+            f.set_exc_info(sys.exc_info())
+        return f
+
+    def blocking_request(self, msg, timeout=None, use_mid=None):
+        """Send a request messsage and wait for its reply
+
+        Parameters
+        ----------
+        msg : Message object
+            The request Message to send.
+        timeout : float in seconds
+            How long to wait for a reply. The default is the
+            the timeout set when creating the AsyncClient.
+        use_mid : boolean, optional
+            Whether to use message IDs. Default is to use message IDs
+            if the server supports them.
+
+        Returns
+        -------
+
+        reply : Message object
+            The reply message received.
+        informs : list of Message objects
+            A list of the inform messages received.
+        """
+        assert (get_thread_ident() != self.ioloop_thread_id), (
+            'Cannot call blocking_request() in ioloop')
+        if timeout is None:
+            timeout = self._request_timeout
+
+        f = Future()             # for thread safety
+        tf = [None]              # Placeholder for tornado Future for exception tracebacks
+        def blocking_request_callback():
+            try:
+                tf[0] = frf = self.future_request(msg, timeout=timeout, use_mid=use_mid)
+            except Exception:
+                tf[0] = frf = tornado_Future()
+                frf.set_exc_info(sys.exc_info())
+            gen.chain_future(frf, f)
+
+        self.ioloop.add_callback(blocking_request_callback)
+
+        ## We wait on the future result that should be set by the reply
+        # handler callback. If this  does not occur within the
         # timeout it means something unexpected went wrong. We give it
         # an extra second to deal with (unlikely?) slowness in the
         # rest of the code
@@ -1116,13 +1282,15 @@ class CallbackClient(DeviceClient):
         wait_timeout = timeout
         if wait_timeout is not None:
             wait_timeout = wait_timeout + extra_wait
-        done.wait(timeout=wait_timeout)
-        if not done.isSet():
+        try:
+            return f.result(timeout=wait_timeout)
+        except TimeoutError:
             raise RuntimeError('Unexpected error: Async request handler did '
                                'not call reply handler within timeout period')
-        reply = replies[0]
-
-        return reply, informs
+        except Exception:
+            # Use the tornado future to give us a usable traceback
+            tf[0].result()
+            assert False                  # Should not get here
 
     def handle_inform(self, msg):
         """Handle inform messages related to any current requests.
@@ -1138,17 +1306,17 @@ class CallbackClient(DeviceClient):
         # this may also result in inform_cb being None if no
         # inform_cb was passed to the request method.
         if msg.mid is not None:
-            _request, _reply_cb, inform_cb, user_data, _timer = \
+            _request, _reply_cb, inform_cb, user_data, _timeout_handle = \
                     self._peek_async_request(msg.mid, None)
         else:
-            request, _reply_cb, inform_cb, user_data, _timer = \
+            request, _reply_cb, inform_cb, user_data, _timeout_handle = \
                 self._peek_async_request(None, msg.name)
             if request is not None and request.mid != None:
                 # we sent a mid but this inform doesn't have one
                 inform_cb, user_data = None, None
 
         if inform_cb is None:
-            inform_cb = super(CallbackClient, self).handle_inform
+            inform_cb = super(AsyncClient, self).handle_inform
             # override user_data since handle_inform takes no user_data
             user_data = None
 
@@ -1165,13 +1333,13 @@ class CallbackClient(DeviceClient):
                                (msg.name, reason))
 
     def _do_fail_callback(
-            self, reason, msg, reply_cb, inform_cb, user_data, timer):
+            self, reason, msg, reply_cb, inform_cb, user_data, timeout_handle):
         """Do callback for a failed request"""
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
 
         if reply_cb is None:
-            # this happens if no reply_cb was passed in to the request or
+            # this happens if no reply_cb was passed in to the request
             return
 
         reason_msg = Message.reply(msg.name, "fail", reason)
@@ -1188,7 +1356,7 @@ class CallbackClient(DeviceClient):
             self._logger.error("Callback reply during failure %s, %s FAIL: %s" %
                                (reason, msg.name, exc_reason))
 
-    def _handle_timeout(self, msg_id):
+    def _handle_timeout(self, msg_id, start_time):
         """Handle a timed out callback request.
 
         Parameters
@@ -1196,17 +1364,21 @@ class CallbackClient(DeviceClient):
         msg_id : uuid.UUID for message
             The name of the reply which was expected.
         """
-        msg, reply_cb, inform_cb, user_data, timer  = \
+        msg, reply_cb, inform_cb, user_data, timeout_handle  = \
             self._pop_async_request(msg_id, None)
         # We may have been racing with the actual reply handler if the reply
         # arrived close to the timeout expiry, which means the
         # self._pop_async_request() call gave us None's. In this case, just bail
-        if timer is None:
+        #
+        # NM 2014-09-17 Not sure if this is true after porting to tornado, but I'm too afraid
+        # to remove this code :-/
+        if timeout_handle is None:
             return
 
-        reason = "Timed out after %f seconds" % timer.interval
+        reason = "Request {0.name} timed out after {1:f} seconds.".format(
+            msg, self.ioloop.time() - start_time)
         self._do_fail_callback(
-            reason, msg, reply_cb, inform_cb, user_data, timer)
+            reason, msg, reply_cb, inform_cb, user_data, timeout_handle)
 
     def handle_reply(self, msg):
         """Handle a reply message related to the current request.
@@ -1222,23 +1394,23 @@ class CallbackClient(DeviceClient):
         # this may also result in reply_cb being None if no
         # reply_cb was passed to the request method
         if not msg.mid is None:
-            _request, reply_cb, _inform_cb, user_data, timer = \
+            _request, reply_cb, _inform_cb, user_data, timeout_handle = \
                     self._pop_async_request(msg.mid, None)
         else:
-            request, _reply_cb, _inform_cb, _user_data, timer = \
+            request, _reply_cb, _inform_cb, _user_data, timeout_handle = \
                 self._peek_async_request(None, msg.name)
             if request is not None and request.mid == None:
                 # we didn't send a mid so this is the request we want
-                _request, reply_cb, _inform_cb, user_data, timer = \
+                _request, reply_cb, _inform_cb, user_data, timeout_handle = \
                           self._pop_async_request(None, msg.name)
             else:
                 reply_cb, user_data = None, None
 
-        if timer is not None:
-            timer.cancel()
+        if timeout_handle is not None:
+            self.ioloop.remove_timeout(timeout_handle)
 
         if reply_cb is None:
-            reply_cb = super(CallbackClient, self).handle_reply
+            reply_cb = super(AsyncClient, self).handle_reply
             # override user_data since handle_reply takes no user_data
             user_data = None
 
@@ -1255,22 +1427,36 @@ class CallbackClient(DeviceClient):
                                (msg.name, reason))
 
     def stop(self, *args, **kwargs):
-        super(CallbackClient, self).stop(*args, **kwargs)
-        # Stop all async timeout handlers
-        with self._async_lock:
-            for request_data in self._async_queue.values():
-                timer = request_data[-1]   # Last one should be timeout timer
-                if timer is not None:
-                    timer.cancel()
-                self._do_fail_callback('Client stopped before reply was received',
-                                       *request_data)
+        def _cleanup():
+            self._running.clear()
+            self._fail_waiting_requests('Client stopped before reply was received')
+            self._disconnect()
+        self.ioloop.add_callback(_cleanup)
+        super(AsyncClient, self).stop(*args, **kwargs)
 
-    def join(self, timeout=None):
-        with self._async_lock:
-            for (_, _, _, _, timer) in self._async_queue.values():
-                if timer is not None:
-                    timer.join(timeout=timeout)
-        super(CallbackClient, self).join(timeout=timeout)
+    def _fail_waiting_requests(self, reason):
+        # Fail all requests that have not yet received their replies
+        for request_data in self._async_queue.values():
+            timeout_handle = request_data[-1]   # Last one should be timeout handle
+            if timeout_handle is not None:
+                self.ioloop.remove_timeout(timeout_handle)
+            try:
+                self._do_fail_callback(reason, *request_data)
+            except Exception:
+                self._logger.exception('Unhandled exception doing reply callback')
+        # Clear out the async data structures
+        self._reset_async_requests()
+
+
+    def _stream_closed_callback(self, stream):
+        try:
+            super(AsyncClient, self)._stream_closed_callback(stream)
+            self._fail_waiting_requests('Connection closed before reply was received')
+        except Exception:
+            self._logger.exception('Unhandled exception closing client stream {0!r} '
+                                   'to {1}'.format(stream, self.bind_address_string))
+
+
 
 def request_check(client, exception, *msg_parms, **kwargs):
     """Make a blocking_request to DeviceClient and raise an exception if reply is not ok
@@ -1313,6 +1499,19 @@ def request_check(client, exception, *msg_parms, **kwargs):
 
     if not reply.reply_ok():
         raise exception('Unexpected failure reply "{2}"\n with device at {0}, '
-                        'request \n"{1}"'
-                        .format(':'.join(str(x) for x in client.bindaddr), req_msg, reply))
+                        'request \n"{1}"'.format(client.bind_address_string),
+                        req_msg, reply)
     return reply, informs
+
+# Compatibility classes
+
+class CallbackClient(AsyncClient):
+    def __init__(self, host, port, tb_limit=20, timeout=5.0, logger=log,
+                 auto_reconnect=True):
+        super(CallbackClient, self).__init__(host, port, tb_limit=tb_limit,
+                                             logger=logger, timeout=timeout,
+                                             auto_reconnect=auto_reconnect)
+        self.enable_thread_safety()
+
+class BlockingClient(CallbackClient):
+    pass

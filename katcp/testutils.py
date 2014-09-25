@@ -15,9 +15,12 @@ import Queue
 import threading
 import functools
 import mock
+import tornado.testing
 
+from thread import get_ident
 from tornado import gen
-from concurrent.futures import Future
+from tornado.concurrent import Future as tornado_Future
+from concurrent.futures import Future, TimeoutError
 
 from .core import Sensor, Message, AsyncReply
 from .server import (DeviceServer, FailReply, ClientRequestConnection,
@@ -187,9 +190,10 @@ class BlockingTestClient(client.BlockingClient):
         self._message_recorders = {}
         super(BlockingTestClient, self).__init__(*args, **kwargs)
 
+    @client.make_threadsafe
     def raw_send(self, chunk):
         """Send a raw chunk of data to the server."""
-        self._sock.send(chunk)
+        self._stream.write(chunk)
 
     def _sensor_lag(self):
         """The expected lag before device changes are applied."""
@@ -1085,7 +1089,7 @@ def counting_callback(event=None, number_of_calls=1):
         wrapped_callback.done = event
         wrapped_callback.wait = event.wait
 
-        def assert_wait(timeout=None):
+        def assert_wait(timeout=1):
             done = event.wait(timeout)
             assert event.isSet()
             return done
@@ -1528,3 +1532,59 @@ def handle_mock_req(dev, req):
     with mock.patch('katcp.server.ClientRequestConnection') as CRC:
         CRC.return_value = req
         dev.handle_request(req.client_connection, req.msg)
+
+def call_in_ioloop(ioloop, fn, *args, **kwargs):
+    """Run fn in ioloop and block until the result is available.
+
+    Should raise exceptions with proper tracebacks
+
+    kwargs ioloop_timeout is used as the maximum time to wait for a result, defaults to
+    5s. This kwarg is not sent to fn. Raises concurrent.futures.TimeoutError if the result
+    times out.
+    """
+    ioloop_timeout = kwargs.pop('ioloop_timeout', 5)
+    f = Future()
+    tf = tornado_Future()                 # for nice tracebacks
+    ioloop.add_callback(gen.chain_future, tf, f)
+    @gen.coroutine
+    def cb():
+        return fn(*args, **kwargs)
+    ioloop.add_callback(lambda : gen.chain_future(cb(), tf))
+    try:
+        f.result(timeout=ioloop_timeout)
+    except TimeoutError:
+        raise
+    except Exception:
+        pass
+    return tf.result()
+
+
+class TimewarpAsyncTestCase(tornado.testing.AsyncTestCase):
+    """Subclass of tornado.testing.AsyncTestCase that supports timewarping
+
+    The io_loop.time() method is replaced by a mock-timer, that only progresses when moved
+    along using set_ioloop_time().
+
+    Note, subclasses must call their super setUp() methods.
+    """
+
+    def get_new_ioloop(self):
+        ioloop = super(TimewarpAsyncTestCase, self).get_new_ioloop()
+        self.ioloop_time = 0
+        ioloop.time = lambda : self.ioloop_time
+        def set_ioloop_thread_id():
+            self.ioloop_thread_id = get_ident()
+        ioloop.add_callback(set_ioloop_thread_id)
+        return ioloop
+
+    def wake_ioloop(self):
+        f = tornado.concurrent.Future()
+        self.io_loop.add_callback(lambda : f.set_result(None))
+        return f
+
+    def set_ioloop_time(self, new_time, wake_ioloop=True):
+        logger.debug('setting ioloop time: {0}'.format(new_time))
+        assert new_time > self.ioloop_time
+        self.ioloop_time = new_time
+        if wake_ioloop:
+            return self.wake_ioloop()

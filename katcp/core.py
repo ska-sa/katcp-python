@@ -46,6 +46,9 @@ class KatcpVersionError(KatcpClientError):
     of the server/client is requested
     """
 
+class KatcpClientDisconnected(KatcpClientError):
+    """Raised when trying to send a message to disconnected server"""
+
 class Message(object):
     """Represents a KAT device control language message.
 
