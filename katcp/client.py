@@ -526,6 +526,11 @@ class DeviceClient(object):
                 self._logger.exception("Notify connect failed. Disconnecting.")
                 self._disconnect()
 
+    @make_threadsafe
+    def disconnect(self):
+        """Force client connection to close. Will reconnect it auto-connect is set"""
+        self._disconnect()
+
     def _disconnect(self, exc_info=False):
         """Disconnect and cleanup."""
         if self._stream:
