@@ -684,7 +684,6 @@ class DeviceClient(object):
         self.ioloop_thread_id = get_thread_ident()
         self._tcp_client = tornado.tcpclient.TCPClient()
         self._running.set()
-
         yield self._connect()
         if self._stream is None and not self._auto_reconnect:
             raise KatcpClientError("Failed to connect to {0!r}".format(self._bindaddr))
@@ -693,7 +692,12 @@ class DeviceClient(object):
         except Exception:
             self._logger.exception('Unhandled exception in _connect_loop()')
         finally:
-            self.stop() # Make sure everything is torn down properly
+            try:
+                self.stop() # Make sure everything is torn down properly
+            except RuntimeError, e:
+                if str(e) == 'IOLoop is closing':
+                    # Seems the ioloop was stopped already, no worries.
+                    self._running.clear()
             self._logger.info("Client connect loop for {0!r} finished."
                               .format(self._bindaddr))
 
@@ -888,12 +892,11 @@ class DeviceClient(object):
             if get_thread_ident() == self.ioloop_thread_id:
                 raise RuntimeError('Cannot block inside ioloop')
             self._running.wait_with_ioloop(self.ioloop, timeout)
-        try:
-            self.ioloop.add_callback(self._running.clear)
-        except RuntimeError:
-            # Probably someone else has already stopped the ioloop
-            pass
-        self._ioloop_manager.stop(timeout=timeout)
+
+        def _cleanup():
+            self._running.clear()
+            self._disconnect()
+        self._ioloop_manager.stop(timeout=timeout, callback=_cleanup)
 
     def running(self):
         """Whether the client is running.
@@ -1342,7 +1345,7 @@ class AsyncClient(DeviceClient):
             # this happens if no reply_cb was passed in to the request
             return
 
-        reason_msg = Message.reply(msg.name, "fail", reason)
+        reason_msg = Message.reply(msg.name, "fail", reason, mid=msg.mid)
 
         try:
             if user_data is None:
@@ -1427,11 +1430,8 @@ class AsyncClient(DeviceClient):
                                (msg.name, reason))
 
     def stop(self, *args, **kwargs):
-        def _cleanup():
-            self._running.clear()
-            self._fail_waiting_requests('Client stopped before reply was received')
-            self._disconnect()
-        self.ioloop.add_callback(_cleanup)
+        self.ioloop.add_callback(
+            self._fail_waiting_requests, 'Client stopped before reply was received')
         super(AsyncClient, self).stop(*args, **kwargs)
 
     def _fail_waiting_requests(self, reason):
@@ -1440,13 +1440,12 @@ class AsyncClient(DeviceClient):
             timeout_handle = request_data[-1]   # Last one should be timeout handle
             if timeout_handle is not None:
                 self.ioloop.remove_timeout(timeout_handle)
-            try:
-                self._do_fail_callback(reason, *request_data)
-            except Exception:
-                self._logger.exception('Unhandled exception doing reply callback')
+            # Do add_callback to prevent callback functions from scheduling new requests
+            # before we call _reset_async_requests()
+            self.ioloop.add_callback(self._do_fail_callback, reason, *request_data)
+
         # Clear out the async data structures
         self._reset_async_requests()
-
 
     def _stream_closed_callback(self, stream):
         try:

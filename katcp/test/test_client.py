@@ -291,12 +291,12 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
 class TestBlockingClient(unittest.TestCase):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
-        start_thread_with_cleanup(self, self.server, start_timeout=0.1)
+        start_thread_with_cleanup(self, self.server, start_timeout=1)
 
         host, port = self.server.bind_address
 
         self.client = katcp.BlockingClient(host, port)
-        start_thread_with_cleanup(self, self.client, start_timeout=0.1)
+        start_thread_with_cleanup(self, self.client, start_timeout=1)
         self.assertTrue(self.client.wait_protocol(timeout=1))
 
     def test_blocking_request(self):
@@ -646,11 +646,16 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         # Running the handler with a fake msg_id should have the same result as
         # running it after a real request has already been popped. The expected
         # result is that no assertions are raised.
+
+        # NM 2014-09-26: This is probably no longer an issue with the tornado-based client
+        # implementatin, but leaving the test for good measure
         f = Future()
         @gen.coroutine
         def cb():
             self.client._handle_timeout('fake_msg_id', time.time())
         self.client.ioloop.add_callback(lambda : gen.chain_future(cb(), f))
+        f.result(timeout=1)
+
 
     def test_user_data(self):
         """Test callbacks with user data."""
@@ -831,6 +836,19 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(replies[0].name, "foo")
         self.assertEqual(replies[0].arguments, ["fail", "Error foo"])
 
+    def test_stop_cleanup(self):
+        self.client.wait_protocol(timeout=1)
+        mid = 56
+        future_reply = Future()
+        self.client.ioloop.add_callback(
+            lambda : gen.chain_future(self.client.future_request(Message.request(
+                'slow-command', 1, mid=mid)), future_reply))
+        # Force a disconnect
+        self.client.stop()
+        reply, informs = future_reply.result(timeout=1)
+        self.assertEqual(reply, Message.reply(
+            'slow-command', 'fail', 'Client stopped before reply was received', mid=mid))
+
 class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase, TestUtilMixin):
     def setUp(self):
         super(test_AsyncClientIntegrated, self).setUp()
@@ -865,24 +883,25 @@ class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase, TestUtilMixin):
         yield self.client.until_protocol()
         mid = 55
         future_reply = self.client.future_request(Message.request(
-            'slow-command', 1, mid=55))
+            'slow-command', 1, mid=mid))
         # Force a disconnect
         self.client._disconnect()
         reply, informs = yield future_reply
         self.assertEqual(reply, Message.reply(
-            'slow-command', 'fail', 'Connection closed before reply was received'))
+            'slow-command', 'fail', 'Connection closed before reply was received',
+            mid=mid))
 
     @tornado.testing.gen_test
     def test_stop_cleanup(self):
         yield self.client.until_protocol()
-        mid = 56
+        mid = 564
         future_reply = self.client.future_request(Message.request(
-            'slow-command', 1, mid=55))
-        # Force a disconnect
+            'slow-command', 1, mid=mid))
+        # Stop client
         self.client.stop()
         reply, informs = yield future_reply
         self.assertEqual(reply, Message.reply(
-            'slow-command', 'fail', 'Client stopped before reply was received'))
+            'slow-command', 'fail', 'Client stopped before reply was received', mid=mid))
 
 
 class test_AsyncClientTimeoutsIntegrated(TimewarpAsyncTestCase):
