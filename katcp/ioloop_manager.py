@@ -108,6 +108,9 @@ class IOLoopManager(object):
                     self._logger.exception('Unhandled exception calling stop callback')
             if self._ioloop_managed:
                 self._logger.info('Stopping ioloop {0!r}'.format(self._ioloop))
+                # Allow ioloop to run once before stopping so that callbacks scheduled by
+                # callback() above get a chance to run.
+                yield gen.moment
                 self._ioloop.stop()
             self._running.clear()
 
