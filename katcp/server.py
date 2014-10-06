@@ -750,10 +750,11 @@ class MessageHandlerThread(object):
 
         handle_message should not be called again until ready_future has resolved
         """
-        MAX_QUEUE_SIZE = 3
+        MAX_QUEUE_SIZE = 30
         if len(self._msg_queue) >= MAX_QUEUE_SIZE:
             # This should never happen if callers to handle_message wait for its futures
             # to resolve before sending another message.
+            # NM 2014-10-06: Except when there are multiple clients. Oops.
             raise RuntimeError('MessageHandlerThread unhandled message queue full, '
                                'not handling message')
         ready_future = Future()
