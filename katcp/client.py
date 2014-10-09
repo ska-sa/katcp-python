@@ -933,7 +933,7 @@ class DeviceClient(object):
 
         Returns
         -------
-        connected : bool
+        running : bool
             Whether the client is running
 
         Notes
