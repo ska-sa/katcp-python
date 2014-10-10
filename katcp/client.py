@@ -864,8 +864,13 @@ class DeviceClient(object):
             raise RuntimeError("Device client already started.")
         # Make sure we have an ioloop
         self.ioloop = self._ioloop_manager.get_ioloop()
+        if timeout:
+            t0 = self.ioloop.time()
         self._ioloop_manager.start(timeout)
         self.ioloop.add_callback(self._install)
+        if timeout:
+            remaining_timeout = timeout - (self.ioloop.time() - t0)
+            self.wait_running(remaining_timeout)
 
     def join(self, timeout=None):
         """Rejoin the client thread.
