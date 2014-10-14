@@ -1,6 +1,7 @@
 from __future__ import print_function
 import logging
 from collections import namedtuple
+from concurrent.futures import Future
 import tornado
 import katcp
 
@@ -98,6 +99,8 @@ class InspectClientAsync(object):
         self.full_inspection = bool(full_inspection)
         self._requests_index = {}
         self._sensors_index = {}
+        # Use AsyncSemaphore a extended AsyncEvent class to keep track of
+        # the sync status, request and sensor updates could happen in parallel.
         self._sync = AsyncSemaphore(3)
         # Set the default behaviour for update.
         self._update_on_lookup = True
@@ -147,8 +150,9 @@ class InspectClientAsync(object):
     def set_ioloop(self, ioloop):
         self.katcp.set_ioloop(ioloop)
 
+    @tornado.gen.coroutine
     def update_sensor(self, name, timestamp, status, value):
-        sensor = self.get_sensor(name)
+        sensor = yield self.future_get_sensor(name)
         if sensor:
             sensor.set(timestamp, status, sensor.parse_value(value))
         else:
@@ -164,29 +168,34 @@ class InspectClientAsync(object):
             name = msg.arguments[2 + n * 3]
             status = msg.arguments[3 + n * 3]
             value = msg.arguments[4 + n * 3]
-            self.update_sensor(name, timestamp, status, value)
+            self.ioloop.add_callback(self.update_sensor,
+                                     name, timestamp, status, value)
 
     def _cb_inform_interface_change(self, msg):
         """Update the sensors and requests available."""
         if self.full_inspection:
-            self.inspect_requests()
-            self.inspect_sensors()
+            self.ioloop.add_callback(self.inspect)
         else:
             # TODO(MS): Look inside msg and update only what is required.
-            self.inspect_requests()
-            self.inspect_sensors()
+            self.ioloop.add_callback(self.inspect)
+
+    @tornado.gen.coroutine
+    def inspect(self):
+        yield self.inspect_requests()
+        yield self.inspect_sensors()
 
     @tornado.gen.coroutine
     def connect(self):
+        # TODO(MS): Add a time out for the connection.
         # Start KATCP device.
         self.katcp.start()
         yield self.katcp.until_running()
         yield self.until_connected()
         if self.full_inspection:
-            self.ioloop.add_callback(self.inspect_requests)
-            self.ioloop.add_callback(self.inspect_sensors)
+            self.ioloop.add_callback(self.inspect)
         else:
             # set synced true.
+            self._sync.value = 0
             self._sync.set()
 
     def until_connected(self):
@@ -237,7 +246,7 @@ class InspectClientAsync(object):
         if requests_removed and self._cb_register.get('request_removed'):
             self.ioloop.add_callback(self._cb_register.get('request_removed'),
                                      list(requests_removed))
-        self._sync.clear_bit(0)  # Clear the flag for request syncing.
+        self._sync.clear_bit(0)  # Clear flag for request syncing.
 
     @tornado.gen.coroutine
     def inspect_sensors(self, name=None):
@@ -285,7 +294,8 @@ class InspectClientAsync(object):
                                      list(sensors_removed))
         self._sync.clear_bit(1)  # Clear the flag for sensor syncing.
 
-    def check_sensor(self, name, update=None):
+    @tornado.gen.coroutine
+    def future_check_sensor(self, name, update=None):
         """Check if the sensor exists.
 
         Used internally by get_sensor. This method is aware of synchronisation
@@ -300,101 +310,19 @@ class InspectClientAsync(object):
             sensor is on the server now.
 
         """
+        exist = False
+        yield self.until_synced()
         if name in self._sensors_index:
-            # Very easy we know about the sensor.
-            return True
-        # We do not have the requested sensor in the index.
-        if not self.synced:
-            # Not yet synced, wait for sync to complete and check.
-            self.wait_synced()
-            if name in self._sensors_index:
-                return True
-
-        if update or (update is None and self._update_on_lookup):
-            # If updating is allowed the inspect the sensors.
-            # When update is False we will not update.
-            self.inspect_sensors(name)
-        self.wait_synced()
-
-        if name in self._sensors_index:
-            return True
+            exist = True
         else:
-            return False
+            if update or (update is None and self._update_on_lookup):
+                yield self.inspect_sensors(name)
+                exist = yield self.future_check_sensor(name, False)
 
-    def check_request(self, name, update=None):
-        """Check if the request exists.
+        raise tornado.gen.Return(exist)
 
-        Used internally by get_request. This method is aware of synchronisation
-        in progress and if inspection of the server is allowed.
-
-        Parameters
-        ----------
-        name: str
-            Name of the request to verify.
-        update: bool default to None.
-            If a katcp request to the server should be made to check if the
-            sensor is on the server. True = Allow, False do not Allow, None
-            use the class default.
-
-        """
-        if name in self._requests_index:
-            # Very easy we know about the request.
-            return True
-        # We do not have the requested request in the index.
-        if not self.synced:
-            # Not yet synced, wait for sync to complete and check.
-            self.wait_synced()
-            if name in self._requests_index:
-                return True
-
-        if update or (update is None and self._update_on_lookup):
-            # If updating is allowed the inspect the sensors.
-            # When update is False we will not update.
-            self.inspect_sensors(name)
-        self.wait_synced()
-
-        if name in self._requests_index:
-            return True
-        else:
-            return False
-
-    def get_sensor(self, name, update=True):
-        """Get the sensor object.
-
-        Check if we have information for this sensor, if not connect to server
-        and update (if allowed) to get information.
-
-        Parameters
-        ----------
-
-        name: String
-            Name of the sensor.
-
-        update: Optional Boolean
-            True allow inspect client to inspect katcp server if the sensor
-            is not known.
-
-        Returns
-        -------
-
-        Sensor object or None if sensor could not be found.
-
-        """
-        if self.check_sensor(name, update):
-            # The sensor exists in our sensor index.
-            sensor_info = self._sensors_index[name]
-            obj = sensor_info.get('obj')
-            if obj is None:
-                sensor_type = katcp.Sensor.parse_type(
-                    sensor_info.get('sensor_type'))
-                obj = katcp.Sensor(name=name,
-                                   sensor_type=sensor_type,
-                                   description=sensor_info.get('description'),
-                                   units=sensor_info.get('units'))
-                self._sensors_index[name]['obj'] = obj
-            return obj
-
-    def get_request(self, name, update=True):
+    @tornado.gen.coroutine
+    def future_get_sensor(self, name, update=None):
         """Get the sensor object.
 
         Check if we have information for this sensor, if not connect to server
@@ -416,9 +344,85 @@ class InspectClientAsync(object):
         Sensor NameTuple or None if sensor could not be found.
 
         """
-        if self.check_request(name, update):
-            description = self._requests_index[name].get('description', '')
-            return RequestType(name, description)
+        obj = None
+        exist = yield self.future_check_sensor(name, update)
+        if exist:
+            sensor_info = self._sensors_index[name]
+            obj = sensor_info.get('obj')
+            if obj is None:
+                sensor_type = katcp.Sensor.parse_type(
+                    sensor_info.get('sensor_type'))
+                obj = katcp.Sensor(name=name,
+                                   sensor_type=sensor_type,
+                                   description=sensor_info.get('description'),
+                                   units=sensor_info.get('units'))
+                self._sensors_index[name]['obj'] = obj
+
+        raise tornado.gen.Return(obj)
+
+    @tornado.gen.coroutine
+    def future_check_request(self, name, update=None):
+        """Check if the request exists.
+
+        Used internally by get_request. This method is aware of synchronisation
+        in progress and if inspection of the server is allowed.
+
+        Parameters
+        ----------
+
+        name: str
+            Name of the request to verify.
+
+        update: bool default to None.
+            If a katcp request to the server should be made to check if the
+            sensor is on the server. True = Allow, False do not Allow, None
+            use the class default.
+
+        """
+        exist = False
+        yield self.until_synced()
+        if name in self._requests_index:
+            exist = True
+        else:
+            if update or (update is None and self._update_on_lookup):
+                yield self.inspect_requests(name)
+                exist = yield self.future_check_request(name, False)
+        raise tornado.gen.Return(exist)
+
+    @tornado.gen.coroutine
+    def future_get_request(self, name, update=None):
+        """Get the request object.
+
+        Check if we have information for this request, if not connect to server
+        and update (if allowed) to get information.
+
+        Parameters
+        ----------
+
+        name: String
+            Name of the request.
+
+        update: Optional Boolean
+            True allow inspect client to inspect katcp server if the request
+            is not known.
+
+        Returns
+        -------
+
+        Request NameTuple or None if request could not be found.
+
+        """
+        obj = None
+        exist = yield self.future_check_request(name, update)
+        if exist:
+            request_info = self._requests_index[name]
+            obj = request_info.get('obj')
+            if obj is None:
+                obj = RequestType(name,
+                                  request_info.get('description', ''))
+                self._requests_index[name]['obj'] = obj
+
+        raise tornado.gen.Return(obj)
 
     def close(self):
         if self.katcp.is_connected() or self.katcp.running():
@@ -473,6 +477,12 @@ class InspectClientAsync(object):
         """
         self._cb_register['request_removed'] = callback
 
+    def simple_request(self, request, *args, **kwargs):
+        use_mid = kwargs.get('use_mid')
+        timeout = kwargs.get('timeout')
+        msg = katcp.Message.request(request, *args)
+        return self.katcp.future_request(msg, timeout, use_mid)
+
 
 class InspectClientBlocking(InspectClientAsync):
 
@@ -487,11 +497,55 @@ class InspectClientBlocking(InspectClientAsync):
         self.katcp.wait_protocol()
         self.ioloop = self.katcp.ioloop
         if self.full_inspection:
-            self.ioloop.add_callback(self.inspect_requests)
-            self.ioloop.add_callback(self.inspect_sensors)
+            self.ioloop.add_callback(self.inspect)
         else:
             # set synced true.
             self._sync.set()
+
+    def get_sensor(self, name, update=True):
+        """Get the sensor object.
+
+        Check if we have information for this sensor, if not connect to server
+        and update (if allowed) to get information.
+
+        Parameters
+        ----------
+
+        name: String
+            Name of the sensor.
+
+        update: Optional Boolean
+            True allow inspect client to inspect katcp server if the sensor
+            is not known.
+
+        Returns
+        -------
+
+        Sensor object or None if sensor could not be found.
+
+        """
+
+        f = Future()
+
+        def cb():
+            return tornado.gen.chain_future(
+                self.future_get_sensor(name, update), f)
+
+        self.katcp.ioloop.add_callback(cb)
+        return f.result()
+        # TODO(MS): Handle Timeouts...
+
+    def get_request(self, name, update=True):
+
+        f = Future()
+
+        def cb():
+            return tornado.gen.chain_future(
+                self.future_get_request(name, update), f)
+
+        self.katcp.ioloop.add_callback(cb)
+        return f.result()
+        # TODO(MS): Handle Timeouts...
 
     def wait_synced(self, timeout=None):
         """Wait until the client is synced.
@@ -513,6 +567,12 @@ class InspectClientBlocking(InspectClientAsync):
         """
         ioloop = getattr(self, 'ioloop', None)
         if not ioloop:
-            raise RuntimeError('Call start() before wait_synced()')
+            raise RuntimeError('Call connect() before wait_synced()')
         return self._sync.wait_with_ioloop(ioloop, timeout)
+
+    def simple_request(self, request, *args, **kwargs):
+        use_mid = kwargs.get('use_mid')
+        timeout = kwargs.get('timeout')
+        msg = katcp.Message.request(request, *args)
+        return self.katcp.blocking_request(msg, timeout, use_mid)
 #
