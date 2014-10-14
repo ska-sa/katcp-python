@@ -1,6 +1,11 @@
 nose
+mock
+pylint
 coverage
 nosexcover
 virtualenv
 unittest2
-twisted
+futures
+tornado
+ply
+ProxyTypes
