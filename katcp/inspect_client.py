@@ -107,30 +107,30 @@ class InspectClientAsync(object):
         self._cb_register = {}  # Register to hold the possible callbacks.
 
         # Setup KATCP device.
-        self.katcp = KatCPDevice(host, port)
+        self.katcp_client = KatCPDevice(host, port)
         if io_loop is False:
             # Called from the blocking client.
-            self.ioloop = self.katcp.ioloop
+            self.ioloop = self.katcp_client.ioloop
         else:
             self.ioloop = io_loop or tornado.ioloop.IOLoop.current()
-            self.katcp.set_ioloop(io_loop)
+            self.katcp_client.set_ioloop(io_loop)
 
-        self.katcp.hook_inform('sensor-status',
-                               self._cb_inform_sensor_status)
-        self.katcp.hook_inform('interface-change',
-                               self._cb_inform_interface_change)
+        self.katcp_client.hook_inform('sensor-status',
+                                      self._cb_inform_sensor_status)
+        self.katcp_client.hook_inform('interface-change',
+                                      self._cb_inform_interface_change)
 
     def __del__(self):
         self.close()
 
     def is_connected(self):
         """Connection status."""
-        return self.katcp.is_connected()
+        return self.katcp_client.is_connected()
 
     @property
     def connected(self):
         """Connection status."""
-        return self.katcp.is_connected()
+        return self.katcp_client.is_connected()
 
     @property
     def synced(self):
@@ -148,7 +148,7 @@ class InspectClientAsync(object):
         return self._requests_index.keys()
 
     def set_ioloop(self, ioloop):
-        self.katcp.set_ioloop(ioloop)
+        self.katcp_client.set_ioloop(ioloop)
 
     @tornado.gen.coroutine
     def update_sensor(self, name, timestamp, status, value):
@@ -188,8 +188,8 @@ class InspectClientAsync(object):
     def connect(self):
         # TODO(MS): Add a time out for the connection.
         # Start KATCP device.
-        self.katcp.start()
-        yield self.katcp.until_running()
+        self.katcp_client.start()
+        yield self.katcp_client.until_running()
         yield self.until_connected()
         if self.full_inspection:
             self.ioloop.add_callback(self.inspect)
@@ -199,7 +199,7 @@ class InspectClientAsync(object):
             self._sync.set()
 
     def until_connected(self):
-        return self.katcp.until_protocol()
+        return self.katcp_client.until_protocol()
 
     def until_synced(self):
         return self._sync.until_set()
@@ -221,7 +221,7 @@ class InspectClientAsync(object):
             msg = katcp.Message.request('help')
         else:
             msg = katcp.Message.request('help', name)
-        reply, informs = yield self.katcp.future_request(msg)
+        reply, informs = yield self.katcp_client.future_request(msg)
         requests_old = set(self._requests_index.keys())
         for msg in informs:
             name = msg.arguments[0]
@@ -265,7 +265,7 @@ class InspectClientAsync(object):
             msg = katcp.Message.request('sensor-list')
         else:
             msg = katcp.Message.request('sensor-list', name)
-        reply, informs = yield self.katcp.future_request(msg)
+        reply, informs = yield self.katcp_client.future_request(msg)
         sensors_old = set(self._sensors_index.keys())
         for msg in informs:
             name = msg.arguments[0]
@@ -425,9 +425,9 @@ class InspectClientAsync(object):
         raise tornado.gen.Return(obj)
 
     def close(self):
-        if self.katcp.is_connected() or self.katcp.running():
-            self.katcp.stop()
-            self.katcp.join()
+        if self.katcp_client.is_connected() or self.katcp_client.running():
+            self.katcp_client.stop()
+            self.katcp_client.join()
 
     def set_sensor_added_callback(self, callback):
         """Set the Callback to be called when a new sensor is added.
@@ -481,7 +481,7 @@ class InspectClientAsync(object):
         use_mid = kwargs.get('use_mid')
         timeout = kwargs.get('timeout')
         msg = katcp.Message.request(request, *args)
-        return self.katcp.future_request(msg, timeout, use_mid)
+        return self.katcp_client.future_request(msg, timeout, use_mid)
 
 
 class InspectClientBlocking(InspectClientAsync):
@@ -492,10 +492,10 @@ class InspectClientBlocking(InspectClientAsync):
 
     def connect(self):
         """Connect to the KATCP device."""
-        self.katcp.start()
-        self.katcp.wait_running()
-        self.katcp.wait_protocol()
-        self.ioloop = self.katcp.ioloop
+        self.katcp_client.start()
+        self.katcp_client.wait_running()
+        self.katcp_client.wait_protocol()
+        self.ioloop = self.katcp_client.ioloop
         if self.full_inspection:
             self.ioloop.add_callback(self.inspect)
         else:
@@ -531,7 +531,7 @@ class InspectClientBlocking(InspectClientAsync):
             return tornado.gen.chain_future(
                 self.future_get_sensor(name, update), f)
 
-        self.katcp.ioloop.add_callback(cb)
+        self.katcp_client.ioloop.add_callback(cb)
         return f.result()
         # TODO(MS): Handle Timeouts...
 
@@ -543,7 +543,7 @@ class InspectClientBlocking(InspectClientAsync):
             return tornado.gen.chain_future(
                 self.future_get_request(name, update), f)
 
-        self.katcp.ioloop.add_callback(cb)
+        self.katcp_client.ioloop.add_callback(cb)
         return f.result()
         # TODO(MS): Handle Timeouts...
 
@@ -574,5 +574,5 @@ class InspectClientBlocking(InspectClientAsync):
         use_mid = kwargs.get('use_mid')
         timeout = kwargs.get('timeout')
         msg = katcp.Message.request(request, *args)
-        return self.katcp.blocking_request(msg, timeout, use_mid)
+        return self.katcp_client.blocking_request(msg, timeout, use_mid)
 #

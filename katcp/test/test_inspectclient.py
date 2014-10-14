@@ -53,6 +53,7 @@ class TestInspectClientBlocking(unittest.TestCase):
         self.assertIsNone(request)
 
     def test_simple_request(self):
+        """Perform a basic request."""
         reply, informs = self.client.simple_request('help', 'watchdog')
         self.assertIn('ok', str(reply))
         self.assertEquals(len(informs), 1)
