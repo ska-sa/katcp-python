@@ -200,9 +200,8 @@ class InspectingClientAsync(object):
         if self.full_inspection:
             self.ioloop.add_callback(self.inspect)
         else:
-            # set synced true.
+            # set synced.
             self._sync.value = 0
-            self._sync.set()
 
     def until_connected(self):
         return self.katcp_client.until_protocol()
@@ -298,17 +297,18 @@ class InspectingClientAsync(object):
         if sensors_removed and self._cb_register.get('sensor_removed'):
             self.ioloop.add_callback(self._cb_register.get('sensor_removed'),
                                      list(sensors_removed))
-        self._sync.clear_bit(1)  # Clear the flag for sensor syncing.
+        self._sync.clear_bit(1)  # Clear flag for sensor syncing.
 
     @tornado.gen.coroutine
     def future_check_sensor(self, name, update=None):
         """Check if the sensor exists.
 
-        Used internally by get_sensor. This method is aware of synchronisation
-        in progress and if inspection of the server is allowed.
+        Used internally by future_get_sensor. This method is aware of
+        synchronisation in progress and if inspection of the server is allowed.
 
         Parameters
         ----------
+
         name: str
             Name of the sensor to verify.
         update: bool
@@ -339,7 +339,6 @@ class InspectingClientAsync(object):
 
         name: String
             Name of the sensor.
-
         update: Optional Boolean
             True allow inspect client to inspect katcp server if the sensor
             is not known.
@@ -370,15 +369,14 @@ class InspectingClientAsync(object):
     def future_check_request(self, name, update=None):
         """Check if the request exists.
 
-        Used internally by get_request. This method is aware of synchronisation
-        in progress and if inspection of the server is allowed.
+        Used internally by future_get_request. This method is aware of
+        synchronisation in progress and if inspection of the server is allowed.
 
         Parameters
         ----------
 
         name: str
             Name of the request to verify.
-
         update: bool default to None.
             If a katcp request to the server should be made to check if the
             sensor is on the server. True = Allow, False do not Allow, None
@@ -400,14 +398,13 @@ class InspectingClientAsync(object):
         """Get the request object.
 
         Check if we have information for this request, if not connect to server
-        and update (if allowed) to get information.
+        and update (if allowed).
 
         Parameters
         ----------
 
         name: String
             Name of the request.
-
         update: Optional Boolean
             True allow inspect client to inspect katcp server if the request
             is not known.
@@ -448,7 +445,7 @@ class InspectingClientAsync(object):
         self._cb_register['sensor_added'] = callback
 
     def set_sensor_removed_callback(self, callback):
-        """Set the Callback to be called when a new sensor is added.
+        """Set the Callback to be called when a new sensor is removed.
 
         Parameters
         ----------
@@ -472,7 +469,7 @@ class InspectingClientAsync(object):
         self._cb_register['request_added'] = callback
 
     def set_request_removed_callback(self, callback):
-        """Set the Callback to be called when a new sensor is added.
+        """Set the Callback to be called when a new sensor is removed.
 
         Parameters
         ----------
@@ -495,12 +492,10 @@ class InspectingClientAsync(object):
 
         request: str
             The request to call.
-
         args:
             Arguments to pass on to the request.
-
         timeout: float
-            The timeout value.
+            Timeout after this amount of seconds.
 
         Returns
         -------
@@ -550,7 +545,6 @@ class InspectingClientBlocking(InspectingClientAsync):
 
         name: String
             Name of the sensor.
-
         update: Optional Boolean
             True allow inspect client to inspect katcp server if the sensor
             is not known.
@@ -573,6 +567,26 @@ class InspectingClientBlocking(InspectingClientAsync):
         # TODO(MS): Handle Timeouts...
 
     def get_request(self, name, update=True):
+        """Get the request information.
+
+        Check if we have information for this request, if not connect to server
+        and update (if allowed).
+
+        Parameters
+        ----------
+
+        name: String
+            Name of the request.
+        update: Optional Boolean
+            True allow inspecting client to inspect katcp server if the
+            request is not known.
+
+        Returns
+        -------
+
+        Sensor object or None if sensor could not be found.
+
+        """
 
         f = Future()
 
@@ -589,11 +603,13 @@ class InspectingClientBlocking(InspectingClientAsync):
 
         Parameters
         ----------
+
         timeout : float in seconds
             Seconds to wait for the client to start synced.
 
         Returns
         -------
+
         running : bool
             Whether the client is synced
 
@@ -601,6 +617,7 @@ class InspectingClientBlocking(InspectingClientAsync):
         -----
 
         Do not call this from the ioloop, use until_synced()
+
         """
         ioloop = getattr(self, 'ioloop', None)
         if not ioloop:
@@ -608,6 +625,31 @@ class InspectingClientBlocking(InspectingClientAsync):
         return self._sync.wait_with_ioloop(ioloop, timeout)
 
     def simple_request(self, request, *args, **kwargs):
+        """Create and send a request to the server.
+
+        This method implements a very small subset of the options
+        possible to send an request, it is provided as a shortcut to
+        sending a simple request.
+
+        Parameters
+        ----------
+
+        request: str
+            The request to call.
+        args:
+            Arguments to pass on to the request.
+        timeout: float
+            Timeout after this amount of seconds.
+
+        Returns
+        -------
+
+        reply : Message object
+            The reply message received.
+        informs : list of Message objects
+            A list of the inform messages received.
+
+        """
         use_mid = kwargs.get('use_mid')
         timeout = kwargs.get('timeout')
         msg = katcp.Message.request(request, *args)

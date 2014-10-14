@@ -11,6 +11,7 @@ from katcp.inspecting_client import (InspectingClientBlocking,
 
 
 class TestInspectingClientBlocking(unittest.TestCase):
+
     def setUp(self):
         self.server = DeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server, start_timeout=1)
