@@ -1,6 +1,0 @@
-nose
-coverage
-nosexcover
-virtualenv
-unittest2
-twisted
