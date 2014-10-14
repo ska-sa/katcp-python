@@ -1,3 +1,9 @@
+# inspect_client.py
+# -*- coding: utf8 -*-
+# vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
+# Copyright 2014 SKA South Africa (http://ska.ac.za/)
+# BSD license - see COPYING for details
+
 from __future__ import print_function
 import logging
 from collections import namedtuple
@@ -41,7 +47,7 @@ class KatCPDevice(katcp.AsyncClient):
             func(msg)
 
     def _slug(self, name):
-        """Turn a name in to a slug."""
+        """Turn a name into a slug."""
         return str(name).strip().lower().replace('-', '_')
 
 
@@ -91,7 +97,7 @@ class AsyncSemaphore(katcp.client.AsyncEvent):
             self.clear()
 
 
-class InspectClientAsync(object):
+class InspectingClientAsync(object):
 
     def __init__(self, host, port, io_loop=None, full_inspection=None):
         if full_inspection is None:
@@ -436,7 +442,7 @@ class InspectClientAsync(object):
         ----------
 
         callback: function
-            reference to the function/method to be called.
+            Reference to the function/method to be called.
 
         """
         self._cb_register['sensor_added'] = callback
@@ -448,7 +454,7 @@ class InspectClientAsync(object):
         ----------
 
         callback: function
-            reference to the function/method to be called.
+            Reference to the function/method to be called.
 
         """
         self._cb_register['sensor_removed'] = callback
@@ -460,7 +466,7 @@ class InspectClientAsync(object):
         ----------
 
         callback: function
-            reference to the function/method to be called.
+            Reference to the function/method to be called.
 
         """
         self._cb_register['request_added'] = callback
@@ -472,22 +478,53 @@ class InspectClientAsync(object):
         ----------
 
         callback: function
-            reference to the function/method to be called.
+            Reference to the function/method to be called.
 
         """
         self._cb_register['request_removed'] = callback
 
     def simple_request(self, request, *args, **kwargs):
+        """Create and send a request to the server.
+
+        This method implements a very small subset of the options
+        possible to send an request, it is provided as a shortcut to
+        sending a simple request.
+
+        Parameters
+        ----------
+
+        request: str
+            The request to call.
+
+        args:
+            Arguments to pass on to the request.
+
+        timeout: float
+            The timeout value.
+
+        Returns
+        -------
+
+        future object.
+
+        Example
+        -------
+
+        ::
+
+        reply, informs = yield ic.simple_request('help', 'sensor-list')
+
+        """
         use_mid = kwargs.get('use_mid')
         timeout = kwargs.get('timeout')
         msg = katcp.Message.request(request, *args)
         return self.katcp_client.future_request(msg, timeout, use_mid)
 
 
-class InspectClientBlocking(InspectClientAsync):
+class InspectingClientBlocking(InspectingClientAsync):
 
     def __init__(self, host, port, full_inspection=None):
-        super(InspectClientBlocking, self).__init__(
+        super(InspectingClientBlocking, self).__init__(
             host, port, False, full_inspection)
 
     def connect(self):

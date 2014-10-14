@@ -6,17 +6,18 @@ import tornado
 from katcp import Sensor, Message
 from katcp.testutils import (DeviceTestServer, start_thread_with_cleanup,
                              DeviceTestSensor)
-from katcp.inspect_client import InspectClientBlocking, InspectClientAsync
+from katcp.inspecting_client import (InspectingClientBlocking,
+                                     InspectingClientAsync)
 
 
-class TestInspectClientBlocking(unittest.TestCase):
+class TestInspectingClientBlocking(unittest.TestCase):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server, start_timeout=1)
 
         host, port = self.server.bind_address
 
-        self.client = InspectClientBlocking(host, port)
+        self.client = InspectingClientBlocking(host, port)
         self.client.connect()
         self.assertTrue(self.client.wait_synced(timeout=1))
 
@@ -107,16 +108,16 @@ class TestInspectClientBlocking(unittest.TestCase):
         self.assertIn('sparkling_new', self.client.requests)
 
 
-class TestInspectClientAsync(tornado.testing.AsyncTestCase):
+class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
 
     def setUp(self):
-        super(TestInspectClientAsync, self).setUp()
+        super(TestInspectingClientAsync, self).setUp()
         self.server = DeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server, start_timeout=1)
         self.host, self.port = self.server.bind_address
 
-        self.client = InspectClientAsync(self.host, self.port,
-                                         io_loop=self.io_loop)
+        self.client = InspectingClientAsync(self.host, self.port,
+                                            io_loop=self.io_loop)
         self.io_loop.add_callback(self.client.connect)
 
     def tearDown(self):
@@ -138,9 +139,9 @@ class TestInspectClientAsync(tornado.testing.AsyncTestCase):
         Calling methods to insure they do not raise exception.
 
         """
-        client = InspectClientAsync(self.host, self.port,
-                                    io_loop=self.io_loop,
-                                    full_inspection=False)
+        client = InspectingClientAsync(self.host, self.port,
+                                       io_loop=self.io_loop,
+                                       full_inspection=False)
 
         yield client.connect()
         yield client.until_connected()
