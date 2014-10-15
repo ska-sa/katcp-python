@@ -5,20 +5,25 @@
 # BSD license - see COPYING for details
 
 from __future__ import print_function
+
 import logging
-from collections import namedtuple
-from concurrent.futures import Future
+
 import tornado
+
 import katcp
+
+from collections import namedtuple
+
+from concurrent.futures import Future
 
 logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', ['name', 'description'])
 
 
-class KatCPDevice(katcp.AsyncClient):
+class KATCPDeviceClient(katcp.AsyncClient):
 
     def __init__(self, *args, **kwargs):
-        super(KatCPDevice, self).__init__(*args, **kwargs)
+        super(KATCPDeviceClient, self).__init__(*args, **kwargs)
         self._inform_hooks = {}
 
     def hook_inform(self, inform_name, callback):
@@ -43,58 +48,16 @@ class KatCPDevice(katcp.AsyncClient):
 
     def unhandled_inform(self, msg):
         """Call a callback on informs."""
-        for func in self._inform_hooks.get(self._slug(msg.name), []):
-            func(msg)
+        try:
+            for func in self._inform_hooks.get(self._slug(msg.name), []):
+                func(msg)
+        except Exception:
+            logger.warning('Call to function "{0}" with message "{1}".'
+                           .format(func, msg), exc_info=True)
 
     def _slug(self, name):
         """Turn a name into a slug."""
         return str(name).strip().lower().replace('-', '_')
-
-
-class AsyncSemaphore(katcp.client.AsyncEvent):
-
-    """Extend the AsyncEvent Class to be a semaphore.
-
-    The Semaphore value is used to set the Event, a value of 0 set the event
-    any other value will clear the event.
-
-    """
-
-    def __init__(self, val):
-        super(AsyncSemaphore, self).__init__()
-        self._value = 0
-        self.value = val
-
-    def set_bit(self, pos):
-        """Set a bit at position."""
-        weight = 2 ** int(pos)
-        self.value = self._value | weight
-
-    def clear_bit(self, pos):
-        """Clear a bit at position."""
-        weight = 2 ** int(pos)
-        self.value = (self._value | weight) ^ weight
-
-    def inc(self, value=1):
-        """Increment the value."""
-        self.value = self._value + value
-
-    def dec(self, value=1):
-        """Decrement value."""
-        self.value = self._value - value
-
-    @property
-    def value(self):
-        return self._value
-
-    @value.setter
-    def value(self, val):
-        val = int(val)
-        self._value = val
-        if not self.is_set() and self._value == 0:
-            self.set()
-        elif self.is_set() and self._value:
-            self.clear()
 
 
 class InspectingClientAsync(object):
@@ -105,15 +68,14 @@ class InspectingClientAsync(object):
         self.full_inspection = bool(full_inspection)
         self._requests_index = {}
         self._sensors_index = {}
-        # Use AsyncSemaphore a extended AsyncEvent class to keep track of
-        # the sync status, request and sensor updates could happen in parallel.
-        self._sync = AsyncSemaphore(3)
+        self._request_sync = katcp.client.AsyncEvent()
+        self._sensor_sync = katcp.client.AsyncEvent()
         # Set the default behaviour for update.
         self._update_on_lookup = True
         self._cb_register = {}  # Register to hold the possible callbacks.
 
         # Setup KATCP device.
-        self.katcp_client = KatCPDevice(host, port)
+        self.katcp_client = KATCPDeviceClient(host, port)
         if io_loop is False:
             # Called from the blocking client.
             self.ioloop = self.katcp_client.ioloop
@@ -141,7 +103,7 @@ class InspectingClientAsync(object):
     @property
     def synced(self):
         """Boolean indicating if the device has been synchronised."""
-        return self._sync.is_set()
+        return self._sensor_sync.is_set() and self._request_sync.is_set()
 
     @property
     def sensors(self):
@@ -201,13 +163,15 @@ class InspectingClientAsync(object):
             self.ioloop.add_callback(self.inspect)
         else:
             # set synced.
-            self._sync.value = 0
+            self._sensor_sync.set()
+            self._request_sync.set()
 
     def until_connected(self):
         return self.katcp_client.until_protocol()
 
+    @tornado.gen.coroutine
     def until_synced(self):
-        return self._sync.until_set()
+        yield [self._sensor_sync.until_set(), self._request_sync.until_set()]
 
     @tornado.gen.coroutine
     def inspect_requests(self, name=None):
@@ -221,7 +185,7 @@ class InspectingClientAsync(object):
 
         """
         yield self.until_connected()
-        self._sync.set_bit(0)  # Set flag for request syncing.
+        self._request_sync.clear()
         if name is None:
             msg = katcp.Message.request('help')
         else:
@@ -251,7 +215,7 @@ class InspectingClientAsync(object):
         if requests_removed and self._cb_register.get('request_removed'):
             self.ioloop.add_callback(self._cb_register.get('request_removed'),
                                      list(requests_removed))
-        self._sync.clear_bit(0)  # Clear flag for request syncing.
+        self._request_sync.set()
 
     @tornado.gen.coroutine
     def inspect_sensors(self, name=None):
@@ -265,7 +229,7 @@ class InspectingClientAsync(object):
 
         """
         yield self.until_connected()
-        self._sync.set_bit(1)  # Set flag for sensor syncing.
+        self._sensor_sync.clear()
         if name is None:
             msg = katcp.Message.request('sensor-list')
         else:
@@ -297,7 +261,7 @@ class InspectingClientAsync(object):
         if sensors_removed and self._cb_register.get('sensor_removed'):
             self.ioloop.add_callback(self._cb_register.get('sensor_removed'),
                                      list(sensors_removed))
-        self._sync.clear_bit(1)  # Clear flag for sensor syncing.
+        self._sensor_sync.set()
 
     @tornado.gen.coroutine
     def future_check_sensor(self, name, update=None):
@@ -532,7 +496,8 @@ class InspectingClientBlocking(InspectingClientAsync):
             self.ioloop.add_callback(self.inspect)
         else:
             # set synced true.
-            self._sync.set()
+            self._sensor_sync.set()
+            self._request_sync.set()
 
     def get_sensor(self, name, update=True):
         """Get the sensor object.
@@ -622,7 +587,9 @@ class InspectingClientBlocking(InspectingClientAsync):
         ioloop = getattr(self, 'ioloop', None)
         if not ioloop:
             raise RuntimeError('Call connect() before wait_synced()')
-        return self._sync.wait_with_ioloop(ioloop, timeout)
+
+        return all([self._sensor_sync.wait_with_ioloop(ioloop, timeout),
+                    self._request_sync.wait_with_ioloop(ioloop, timeout)])
 
     def simple_request(self, request, *args, **kwargs):
         """Create and send a request to the server.

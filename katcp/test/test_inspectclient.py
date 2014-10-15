@@ -146,11 +146,10 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
 
         yield client.connect()
         yield client.until_connected()
-        sync = yield client.until_synced()
+        yield client.until_synced()
         self.assertEquals(len(client.sensors), 0)
 
         self.assertEquals(len(client.requests), 0)
-        self.assertTrue(sync)
         self.assertTrue(client.synced)
         self.assertTrue(client.is_connected())
         self.assertTrue(client.connected)
