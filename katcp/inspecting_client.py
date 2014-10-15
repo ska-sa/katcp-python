@@ -12,7 +12,7 @@ import tornado
 
 import katcp
 
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 
 from concurrent.futures import Future
 
@@ -24,7 +24,7 @@ class KATCPDeviceClient(katcp.AsyncClient):
 
     def __init__(self, *args, **kwargs):
         super(KATCPDeviceClient, self).__init__(*args, **kwargs)
-        self._inform_hooks = {}
+        self._inform_hooks = defaultdict(list)
 
     def hook_inform(self, inform_name, callback):
         """Hookup a function to be called when an inform is received.
@@ -41,10 +41,7 @@ class KATCPDeviceClient(katcp.AsyncClient):
 
         """
         name = self._slug(inform_name)
-        if name not in self._inform_hooks:
-            self._inform_hooks[name] = []
-        if callback not in self._inform_hooks[name]:
-            self._inform_hooks[name].append(callback)
+        self._inform_hooks[name].append(callback)
 
     def unhandled_inform(self, msg):
         """Call a callback on informs."""
