@@ -59,6 +59,11 @@ class KATCPDeviceClient(katcp.AsyncClient):
 
 class InspectingClientAsync(object):
 
+    """
+    Note: This class is not threadsafe at present,
+          it should only be called from the ioloop.
+    """
+
     def __init__(self, host, port, io_loop=None, full_inspection=None,
                  logger=ic_logger):
         self._logger = logger
@@ -533,6 +538,11 @@ class InspectingClientAsync(object):
 
 
 class InspectingClientBlocking(InspectingClientAsync):
+
+    """
+    Note: This class is not threadsafe at present,
+          it should only be called from the ioloop.
+    """
 
     def __init__(self, host, port, full_inspection=None, logger=ic_logger):
         super(InspectingClientBlocking, self).__init__(
