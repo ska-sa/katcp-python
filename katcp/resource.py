@@ -312,10 +312,10 @@ class KATCPReply(_KATCPReplyTuple):
         """True if katcp request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
 
-class KATCPResourceClient(KATCPResource):
+class KATCPClientResource(KATCPResource):
     """Connects to a KATCP device resource and exposes a KATCPResource interface"""
     # TODO Implementation
 
-class KATCPResourceContainer(KATCPResource):
+class KATCPContainerResource(KATCPResource):
     """KATCPResource container for single-root 2-level KATCPResource hierarchy"""
     # TODO Implementation
