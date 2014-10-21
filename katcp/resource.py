@@ -38,7 +38,7 @@ class KATCPResource(object):
 
     A class `C` implementing the KATCPResource API should register itself using
     KATCPResource.register(C), or subclass KATCPResource directly. A complication involved
-    with subclassing is theat all the abstract properties must be implemented as
+    with subclassing is that all the abstract properties must be implemented as
     properties; normal instance attributes cannot be used.
 
     Attributes
