@@ -312,7 +312,8 @@ class InspectingClientAsync(object):
                 sensor_params = katcp.Sensor.parse_params(
                     sensor_type,
                     sensor_info.get('params'))
-                obj = self.sensor_factory(name=name,
+                obj = self.sensor_factory(
+                    name=name,
                     sensor_type=sensor_type,
                     description=sensor_info.get('description'),
                     units=sensor_info.get('units'),
