@@ -58,6 +58,10 @@ class KATCPDeviceClient(katcp.AsyncClient):
 
 
 class InspectingClientAsync(object):
+    """
+    Note: This class is not threadsafe at present,
+          it should only be called from the ioloop.
+    """
 
     sensor_factory = katcp.Sensor
     """Factory that produces a KATCP Sensor compatible instance.
@@ -503,8 +507,9 @@ class InspectingClientAsync(object):
         Removed items will be removed from item_index, new items should have
         been added by the discovery process. (?help or ?sensor-list)
 
-        Update and remove callbacks as set by the set_calback_*
-        methods of this class will be called from here.
+        Update and remove callbacks as set by the set_calback_* methods of this class will
+        be called from here. `add_cb` and `rem_cb` are the names of the callbacks in the
+        register, not the callables themselves.
 
         This method is for use in inspect_requests and inspect_sensors only.
 
@@ -546,6 +551,11 @@ class InspectingClientAsync(object):
 
 
 class InspectingClientBlocking(InspectingClientAsync):
+
+    """
+    Note: This class is not threadsafe at present,
+          it should only be called from the ioloop.
+    """
 
     def __init__(self, host, port, full_inspection=None, logger=ic_logger):
         super(InspectingClientBlocking, self).__init__(
