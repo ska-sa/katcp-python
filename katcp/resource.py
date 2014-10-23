@@ -1,3 +1,5 @@
+"""A high-level abstract interface to KATCP clients, sensors and requests."""
+
 import abc
 
 import collections
@@ -5,33 +7,41 @@ import collections
 from katcp import Message
 from katcp.sampling import SampleStrategy
 
+
 def normalize_strategy_parameters(params):
-    # Normalize strategy parameters to be a list of strings, e.g.:
-    # ['1.234', # number
-    #  'stringparameter']
+    """Normalize strategy parameters to be a list of strings.
+
+    Parameters
+    ----------
+    params : (space-delimited) string or number or sequence of strings/numbers
+        Parameters expected by :class:`SampleStrategy` object, in various forms
+
+    Returns
+    -------
+    params : list of strings
+        Strategy parameters as a list of strings
+
+    """
     if not params:
         return []
     def fixup_numbers(val):
-        try:                          # See if it is a number
+        try:
+            # See if it is a number
             return str(float(val))
         except ValueError:
             # ok, it is not a number we know of, perhaps a string
             return str(val)
-
     if isinstance(params, basestring):
-        param_args = [fixup_numbers(p) for p in params.split(' ')]
-    else:
-        if not is_iterable(params):
-            params = (params,)
-        param_args = [fixup_numbers(p) for p in params]
-    return param_args
+        params = params.split(' ')
+    elif not isinstance(params, collections.Iterable):
+        params = (params,)
+    return [fixup_numbers(p) for p in params]
+
 
 def escape_name(name):
-    """Helper function for escaping sensor and request names as python identifiers
-
-    Replaces '.' and '-' with '_'
-    """
+    """Escape sensor and request names to be valid Python identifiers."""
     return name.replace(".","_").replace("-","_")
+
 
 class KATCPResource(object):
     """Base class to serve as the definition of the KATCPResource API
