@@ -91,6 +91,11 @@ class InspectingClientAsync(object):
                                       self._cb_inform_sensor_status)
         self.katcp_client.hook_inform('interface-change',
                                       self._cb_inform_interface_change)
+        # Hook a callback for/to deprecated informs.
+        # _cb_inform_deprecated will log a message when one of these informs
+        # are received.
+        self.katcp_client.hook_inform('device-change',
+                                      self._cb_inform_deprecated)
 
     def __del__(self):
         self.close()
@@ -404,6 +409,11 @@ class InspectingClientAsync(object):
             # TODO(MS): Look inside msg and update only what is required.
             self.inspect()
 
+    def _cb_inform_deprecated(self, msg):
+        """Log a message that an deprecated inform has been received.."""
+        self._logger.warning("Received a deprecated inform: {0}."
+                             .format(msg.name))
+
     def set_sensor_added_callback(self, callback):
         """Set the Callback to be called when a new sensor is added.
 
@@ -495,8 +505,9 @@ class InspectingClientAsync(object):
         Removed items will be removed from item_index, new items should have
         been added by the discovery process. (?help or ?sensor-list)
 
-        Update and remove callbacks as set by the set_calback_* methods of this class will
-        be called from here. `add_cb` and `rem_cb` are the names of the callbacks in the
+        Update and remove callbacks as set by the set_calback_* methods of this
+        class will be called from here. `add_cb` and `rem_cb` are the names of
+        the callbacks in the
         register, not the callables themselves.
 
         This method is for use in inspect_requests and inspect_sensors only.
