@@ -160,7 +160,10 @@ class KATCPResource(object):
 class KATCPRequest(object):
     """Abstract Base class to serve as the definition of the KATCPRequest API.
 
-    Wrapper around a specific KATCP request to a given KATCP device.
+    Wrapper around a specific KATCP request to a given KATCP device. This
+    supports two modes of operation: blocking and asynchronous. The blocking
+    mode blocks on the KATCP request and returns the actual reply, while the
+    asynchronous mode returns a tornado future that resolves with the reply.
 
     Each available KATCP request for a particular device has an associated
     :class:`KATCPRequest` object in the object hierarchy. This wrapper is mainly
@@ -199,21 +202,9 @@ class KATCPRequest(object):
 
         Returns
         -------
-        reply : tornado future that resolves with :class:`KATCPReply` object
-            KATCP request reply wrapped in KATCPReply object wrapped in future
-
-        """
-
-    @abc.abstractmethod
-    def blocking(self, *args, **kwargs):
-        """Blocking execution of the KATCP request described by this object.
-
-        Implementation of this method is optional. If not implemented should
-        raise NotImplementedError.
-
-        See docstring of __call__. Only difference is that it blocks and returns
-        the KATCPReply object directly. Should not be called from an ioloop
-        thread.
+        reply : tornado future or :class:`KATCPReply` object
+            KATCP request reply wrapped in KATCPReply object in blocking mode,
+            and additionally wrapped in a future in asynchronous mode
 
         """
 
@@ -334,13 +325,3 @@ class KATCPReply(_KATCPReplyTuple):
     def succeeded(self):
         """True if katcp request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
-
-
-class KATCPClientResource(KATCPResource):
-    """Connects to a KATCP device resource and exposes a KATCPResource interface"""
-    # TODO Implementation
-
-
-class KATCPContainerResource(KATCPResource):
-    """KATCPResource container for single-root 2-level KATCPResource hierarchy"""
-    # TODO Implementation
