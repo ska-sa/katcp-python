@@ -58,10 +58,21 @@ class KATCPDeviceClient(katcp.AsyncClient):
 
 
 class InspectingClientAsync(object):
-
     """
     Note: This class is not threadsafe at present,
           it should only be called from the ioloop.
+    """
+
+    sensor_factory = katcp.Sensor
+    """Factory that produces a KATCP Sensor compatible instance.
+
+    signature: sensor_factory(name,
+                              sensor_type,
+                              description,
+                              units,
+                              params)
+
+    Should be set before calling connect()/start().
     """
 
     def __init__(self, host, port, io_loop=None, full_inspection=None,
@@ -310,11 +321,12 @@ class InspectingClientAsync(object):
                 sensor_params = katcp.Sensor.parse_params(
                     sensor_type,
                     sensor_info.get('params'))
-                obj = katcp.Sensor(name=name,
-                                   sensor_type=sensor_type,
-                                   description=sensor_info.get('description'),
-                                   units=sensor_info.get('units'),
-                                   params=sensor_params)
+                obj = self.sensor_factory(
+                    name=name,
+                    sensor_type=sensor_type,
+                    description=sensor_info.get('description'),
+                    units=sensor_info.get('units'),
+                    params=sensor_params)
                 self._sensors_index[name]['obj'] = obj
 
         raise tornado.gen.Return(obj)
