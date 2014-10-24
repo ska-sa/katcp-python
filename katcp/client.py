@@ -23,6 +23,7 @@ from thread import get_ident as get_thread_ident
 from concurrent.futures import Future, TimeoutError
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
+from tornado.util import ObjectDict
 
 from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
@@ -30,7 +31,7 @@ from .core import (DeviceMetaclass, MessageParser, Message,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
 from .ioloop_manager import IOLoopManager, with_relative_timeout
 
-#logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")
 
 def until_later(delay, ioloop=None):
@@ -252,6 +253,8 @@ class DeviceClient(object):
         self._tcp_client = None
         # Indicate whether we are threadsafe or not. Managed by self.enable_thread_safety()
         self._threadsafe = False
+        # Version information as received from the server
+        self.versions = ObjectDict()
 
     @property
     def protocol_flags(self):
@@ -330,6 +333,9 @@ class DeviceClient(object):
         """Process a #version-connect message."""
         if len(msg.arguments) < 2:
             return
+        # Store version information, remove the katcp- prefix.
+        name = msg.arguments[0].replace('katcp-', '')
+        self.versions[name] = ' '.join(msg.arguments[1:])
         if msg.arguments[0] == "katcp-protocol":
             protocol_flags = ProtocolFlags.parse_version(msg.arguments[1])
             self._set_protocol_from_inform(protocol_flags, msg)
