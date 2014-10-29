@@ -1,7 +1,8 @@
  (0.6.?)
  * Backwards-incompatible change in Sensor observer API
  * Sensor strategies now call back with raw Python datatype values rather than
-   KATCP formatted values.
+   KATCP formatted values, using the same 'reading' API as Sensor
+   observers' update methods.
  * Tornado ioloop / iostream based sensor sampling
  * Tornado ioloop / iostream based server
  * Sever message handlers can now return futures
@@ -18,7 +19,7 @@
  * Threadsafe mode (default for BlockingClient and CallbackClient) available, but
    comes with performance overhead even async for usage.
  * Hundreds of test-suite reliablility improvements.
-	
+
 14 July 2014 (0.5.5)
  * Add utility code to katcp.version.py that other modules can use to parse svn
    or git revisions for use in build-state informs or sensors

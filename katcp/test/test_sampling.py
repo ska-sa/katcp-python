@@ -38,10 +38,10 @@ class TestSampling(TimewarpAsyncTestCase):
                 [-40, 30],
                 timestamp=self.ioloop_time, status=Sensor.NOMINAL, value=3)
         # test callback
-        def inform(sensor, timestamp, status, value):
+        def inform(sensor, reading):
             assert get_ident() == self.ioloop_thread_id, (
                 "inform must be called from in the ioloop")
-            self.calls.append((sensor, timestamp, status, value))
+            self.calls.append((sensor, reading))
 
         self.calls = []
         self.inform = inform
@@ -90,20 +90,20 @@ class TestSampling(TimewarpAsyncTestCase):
         t, status, value = self.sensor.read()
         DUT.start()
         yield self.wake_ioloop()
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
         # Warp the ioloop clock forward a bit more than one DUT. Check that
         #   1) a sample is sent,
         #   2) the next sample is scheduled at t0+DUT, not t0+DUT+extra delay
         yield self.set_ioloop_time(t0 + sample_p*1.15)
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
         # Don't expect an update, since we are at just before the next sample DUT
         yield self.set_ioloop_time(t0 + sample_p*1.99)
         self.assertEqual(self.calls, [])
         # Now we are at exactly the next sample time, expect update
         yield self.set_ioloop_time(t0 + sample_p*2)
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
         # Bit past previous sample time, expect no update
         yield self.set_ioloop_time(t0 + sample_p*2.16)
@@ -116,7 +116,7 @@ class TestSampling(TimewarpAsyncTestCase):
         yield self.set_ioloop_time(t0 + sample_p*2.6)
         self.assertEqual(self.calls, [])
         yield self.set_ioloop_time(t0 + sample_p*3)
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
 
         # Cancel strategy and check that its timeout call is cancelled.
@@ -137,7 +137,7 @@ class TestSampling(TimewarpAsyncTestCase):
         # Check that it is attached
         self.assertTrue(DUT in self.sensor._observers)
         # The initial update
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
         # Move along in time, don't expect any updates
         yield self.set_ioloop_time(t0 + 20)
@@ -147,8 +147,8 @@ class TestSampling(TimewarpAsyncTestCase):
         t2, status2, value2 = t0 + 22, Sensor.NOMINAL, -1
         self.sensor.set(t1, status1, value1)
         self.sensor.set(t2, status2, value2)
-        self.assertEqual(self.calls, [(self.sensor, t1, status1, value1),
-                                      (self.sensor, t2, status2, value2)])
+        self.assertEqual(self.calls, [(self.sensor, (t1, status1, value1)),
+                                      (self.sensor, (t2, status2, value2))])
         self.calls = []
 
         self._thread_update_check(t, status, value)
@@ -170,7 +170,7 @@ class TestSampling(TimewarpAsyncTestCase):
         t.start()
         yield f
         yield self.wake_ioloop()
-        self.assertEqual(self.calls, [(self.sensor, ts, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (ts, status, value))])
 
     @gen.coroutine
     def _check_cancel(self, DUT):
@@ -189,7 +189,7 @@ class TestSampling(TimewarpAsyncTestCase):
         DUT.start()
         yield self.wake_ioloop()
         # Check initial update
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
         # Some Updates less than delta from intial value
         self.sensor.set_value(value + 1)
@@ -200,12 +200,12 @@ class TestSampling(TimewarpAsyncTestCase):
         # Now an update bigger than delta from initial value
         self.sensor.set(t, status, value + delta + 1)
         yield self.wake_ioloop()
-        self.assertEqual(self.calls, [(self.sensor, t, status, value + delta + 1)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value + delta + 1))])
         self.calls = []
         # Now change only the status, should update
         t, status, value = self.sensor.read()
         self.sensor.set(t, Sensor.ERROR, value)
-        self.assertEqual(self.calls, [(self.sensor, t, Sensor.ERROR, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, Sensor.ERROR, value))])
         # Test threaded update
         yield self._thread_update_check(t, status, value)
         yield self._check_cancel(DUT)
@@ -232,7 +232,7 @@ class TestSampling(TimewarpAsyncTestCase):
         yield self.wake_ioloop()
         # Check initial update
         t_last_sent = self.ioloop_time
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
 
         # Too soon, should not send update
@@ -252,7 +252,7 @@ class TestSampling(TimewarpAsyncTestCase):
         # Should now get minimum time update
         yield self.set_ioloop_time(t_last_sent + shortest)
         t_last_sent = self.ioloop_time
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
 
         # Warp to just before longest period, should not update
@@ -262,7 +262,7 @@ class TestSampling(TimewarpAsyncTestCase):
         # Warp to longest period, should update
         yield self.set_ioloop_time(t_last_sent + longest)
         t_last_sent = self.ioloop_time
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
 
         # Warp to just before next longest period, should not update
@@ -272,7 +272,7 @@ class TestSampling(TimewarpAsyncTestCase):
         # Warp to longest period, should update
         yield self.set_ioloop_time(t_last_sent + longest)
         t_last_sent = self.ioloop_time
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
 
         # Set identical value, jump past min update time, no update should happen
@@ -284,14 +284,14 @@ class TestSampling(TimewarpAsyncTestCase):
         value = value - 2
         self.sensor.set(self.ioloop_time, status, value)
         t_last_sent = self.ioloop_time
-        self.assertEqual(self.calls, [(self.sensor, t_last_sent, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t_last_sent, status, value))])
         self.calls = []
 
         # Now warp to after min period, change only status, update should happen
         yield self.set_ioloop_time(t_last_sent + shortest)
         status = Sensor.ERROR
         self.sensor.set(self.ioloop_time, status, value)
-        self.assertEqual(self.calls, [(self.sensor, self.ioloop_time, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (self.ioloop_time, status, value))])
         t_last_sent = self.ioloop_time
         self.calls = []
 
@@ -349,7 +349,7 @@ class TestSampling(TimewarpAsyncTestCase):
         yield self.wake_ioloop()
         # Check initial update
         t_last_sent = self.ioloop_time
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
 
         # Too soon, should not send update
@@ -369,7 +369,7 @@ class TestSampling(TimewarpAsyncTestCase):
         # Should now get minimum time update
         yield self.set_ioloop_time(t_last_sent + shortest)
         t_last_sent = self.ioloop_time
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
 
         # Warp to just before longest period, should not update
@@ -379,7 +379,7 @@ class TestSampling(TimewarpAsyncTestCase):
         # Warp to longest period, should update
         yield self.set_ioloop_time(t_last_sent + longest)
         t_last_sent = self.ioloop_time
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
 
         # Warp to just before next longest period, should not update
@@ -389,7 +389,7 @@ class TestSampling(TimewarpAsyncTestCase):
         # Warp to longest period, should update
         yield self.set_ioloop_time(t_last_sent + longest)
         t_last_sent = self.ioloop_time
-        self.assertEqual(self.calls, [(self.sensor, t, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
 
         # Set value with to small a change, jump past min update time, no update should
@@ -403,14 +403,14 @@ class TestSampling(TimewarpAsyncTestCase):
         value = value - 1
         self.sensor.set(self.ioloop_time, status, value)
         t_last_sent = self.ioloop_time
-        self.assertEqual(self.calls, [(self.sensor, t_last_sent, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (t_last_sent, status, value))])
         self.calls = []
 
         # Now warp to after min period, change only status, update should happen
         yield self.set_ioloop_time(t_last_sent + shortest)
         status = Sensor.ERROR
         self.sensor.set(self.ioloop_time, status, value)
-        self.assertEqual(self.calls, [(self.sensor, self.ioloop_time, status, value)])
+        self.assertEqual(self.calls, [(self.sensor, (self.ioloop_time, status, value))])
         t_last_sent = self.ioloop_time
         self.calls = []
 
