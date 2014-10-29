@@ -13,6 +13,7 @@ import sys
 import re
 import time
 import warnings
+import collections
 
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
@@ -28,6 +29,8 @@ MID_KATCP_MAJOR = 5
 VERSION_CONNECT_KATCP_MAJOR = 5
 # First major version to support #interface-changed informs
 INTERFACE_CHANGED_KATCP_MAJOR = 5
+
+ValueTuple = collections.namedtuple('ValueTuple', 'timestamp status value')
 
 def convert_method_name(prefix, name):
     """Convert a method name to the corresponding command name."""
@@ -779,7 +782,7 @@ class Sensor(object):
         # and the value and/or status from a different update.
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-        self._value_tuple = (time.time(), Sensor.UNKNOWN, default_value)
+        self._value_tuple = ValueTuple(time.time(), Sensor.UNKNOWN, default_value)
         self._formatter = self._kattype.pack
         self._parser = self._kattype.unpack
         self.stype = self._kattype.name
@@ -973,8 +976,9 @@ class Sensor(object):
         Parameters
         ----------
         observer : object
-            Object with an .update(sensor) method that will be called
-            when the sensor value is set.
+            Object with an .update(sensor, reading) method that will be called when the
+            sensor value is set. reading is a ValueTuple instance, matching the return
+            value of the read() method.
         """
         self._observers.add(observer)
 
@@ -1024,7 +1028,7 @@ class Sensor(object):
             The value of the sensor (the type should be appropriate to the
             sensor's type).
         """
-        reading = self._value_tuple = (timestamp, status, value)
+        reading = self._value_tuple = ValueTuple(timestamp, status, value)
         self.notify(reading)
 
     def set_formatted(self, raw_timestamp, raw_status, raw_value,
@@ -1108,6 +1112,9 @@ class Sensor(object):
 
         Returns
         -------
+
+        As namedtuple with fields:
+
         timestamp : float in seconds
            The time at which the sensor value was determined.
         status : Sensor status constant

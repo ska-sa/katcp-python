@@ -2058,9 +2058,10 @@ class DeviceServer(DeviceServerBase):
             format_inform = (format_inform_v5 if katcp_version >= SEC_TS_KATCP_MAJOR
                              else format_inform_v4)
 
-            def inform_callback(sensor_name, timestamp, status, value):
+            def inform_callback(sensor, reading):
                 """Inform callback for sensor strategy."""
-                cb_msg = format_inform(sensor_name, timestamp, status, value)
+                timestamp, status, value = reading
+                cb_msg = format_inform(sensor, timestamp, status, value)
                 client.inform(cb_msg)
 
             if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
@@ -2083,7 +2084,7 @@ class DeviceServer(DeviceServerBase):
         current_strategy = self._strategies[client].get(sensor, None)
         if not current_strategy:
             current_strategy = SampleStrategy.get_strategy(
-                "none", lambda msg: None, sensor)
+                "none", lambda *args: None, sensor)
 
         strategy, params = current_strategy.get_sampling_formatted()
         if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':

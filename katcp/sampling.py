@@ -61,7 +61,7 @@ class SampleStrategy(object):
     ----------
     inform_callback : callable
         Callback to send inform messages with,
-        used as inform_callback(msg).
+        used as inform_callback(sensor_object, timestamp, status, value).
     sensor : Sensor object
         Sensor to sample.
     params : list of objects
@@ -108,7 +108,7 @@ class SampleStrategy(object):
         ----------
         inform_callback : callable
             Callback to send inform messages with,
-            used as inform_callback(msg).
+            used as inform_callback(sensor_object, sensor_reading).
         sensor : Sensor object
             Sensor to sample.
         params : list of objects
@@ -167,11 +167,6 @@ class SampleStrategy(object):
             Sensor reading as would be returned by sensor.read()
         """
         pass
-
-    def inform(self, reading):
-        """Inform strategy creator of the sensor status."""
-        timestamp, status, value = self._sensor.format_reading(reading)
-        self._inform_callback(self._sensor.name, timestamp, status, value)
 
     def get_sampling(self):
         """Return the Strategy constant for this sampling strategy.
@@ -237,8 +232,7 @@ class SampleStrategy(object):
     def inform(self, reading):
         """Inform strategy creator of the sensor status."""
         try:
-            timestamp, status, value = reading
-            self._inform_callback(self._sensor, timestamp, status, value)
+            self._inform_callback(self._sensor, reading)
         except Exception:
             log.exception('Unhandled exception trying to send a sensor update')
 
