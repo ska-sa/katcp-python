@@ -392,7 +392,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         # the server
         try:
             slow_sock.sendall('?help\n'*1000000)
-        except socket.timeout:
+        except (socket.error, socket.timeout):
             pass
 
         t0 = time.time()
