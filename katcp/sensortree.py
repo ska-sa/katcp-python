@@ -1,41 +1,36 @@
 """Sensor trees implementation.
 
-   A sensor tree is a DAG (directed acyclic graph) of sensor objects
-   where an edge represents a dependency. E.g.
+A sensor tree is a DAG (directed acyclic graph) of sensor objects
+where an edge represents a dependency. E.g.
 
-   S1 -> S2
-      |
-      -> S3 -> S4
-            |
-   S6 -------> S5
+S1 -> S2
+  |
+  -> S3 -> S4
+        |
+S6 -------> S5
 
-   is a sensor tree where the value of S3 depends on the values of S4
-   and S5, the value of S1 depends on S3 and S2 and the value of S6
-   depends on just S5.
+is a sensor tree where the value of S3 depends on the values of S4
+and S5, the value of S1 depends on S3 and S2 and the value of S6
+depends on just S5.
 
-   When a sensor is added to the tree, the tree attaches itself to the
-   sensor's update notification list. A sensor update triggers a recalculation
-   of the sensor values that depend on it. These value changes may then trigger
-   further updates.
+When a sensor is added to the tree, the tree attaches itself to the
+sensor's update notification list. A sensor update triggers a recalculation
+of the sensor values that depend on it. These value changes may then trigger
+further updates.
 
-   The acyclic requirement on the graph structure is required to ensure
-   that the update chain eventually terminates. It is not enforced.
-   """
+The acyclic requirement on the graph structure is required to ensure
+that the update chain eventually terminates. It is not enforced.
+
+"""
 
 
 class GenericSensorTree(object):
-    """Holds a tree of boolean sensors.
-
-    Non-leaf sensors have their values updated to be the logical AND
-    of their child nodes.
-    """
-
+    """A tree of generic sensors."""
     # TODO: consider adding detection of cycles.
-    #       Fastests method is probably maintaining a spanning tree
+    #       Fastest method is probably maintaining a spanning tree
     #       and checking for back edges. As always, deletions are likely
     #       to be a bit of a pain and require tree shuffling.
-    #       Disconnected graphs will also make life a little more difficult
-
+    #       Disconnected graphs will also make life a little more difficult.
     def __init__(self):
         # map of child -> set of all parent sensors
         self._child_to_parents = {}
@@ -47,10 +42,11 @@ class GenericSensorTree(object):
 
         Parameters
         ----------
-        sensor : :class:`katcp.Sensor`
+        sensor : :class:`katcp.Sensor` object
             The sensor whose value has changed.
         reading : (timestamp, status, value) tuple
             Sensor reading as would be returned by sensor.read()
+
         """
         parents = list(self._child_to_parents[sensor])
         for parent in parents:
@@ -69,10 +65,11 @@ class GenericSensorTree(object):
 
         Parameters
         ----------
-        parent : :class:`katcp.Sensor`
+        parent : :class:`katcp.Sensor` object
             The sensor that needs to be updated.
-        updates : sequence of :class:`katcp.Sensor`
+        updates : sequence of :class:`katcp.Sensor` objects
             The child sensors which triggered the update.
+
         """
         raise NotImplementedError
 
@@ -81,8 +78,9 @@ class GenericSensorTree(object):
 
         Parameters
         ----------
-        sensor : :class:`katcp.Sensor`
+        sensor : :class:`katcp.Sensor` object
             New sensor to add to the tree.
+
         """
         self._parent_to_children[sensor] = set()
         self._child_to_parents[sensor] = set()
@@ -92,8 +90,9 @@ class GenericSensorTree(object):
 
         Parameters
         ----------
-        sensor : :class:`katcp.Sensor`
+        sensor : :class:`katcp.Sensor` object
             Sensor to remove from the tree.
+
         """
         del self._parent_to_children[sensor]
         del self._child_to_parents[sensor]
@@ -108,10 +107,11 @@ class GenericSensorTree(object):
 
         Parameters
         ----------
-        parent : :class:`katcp.Sensor`
+        parent : :class:`katcp.Sensor` object
             The sensor that depends on children.
-        children : sequence of :class:`katcp.Sensor`
+        children : sequence of :class:`katcp.Sensor` objects
             The sensors parent depends on.
+
         """
         new_sensors = []
         if parent not in self:
@@ -138,10 +138,11 @@ class GenericSensorTree(object):
 
         Parameters
         ----------
-        parent : :class:`katcp.Sensor`
+        parent : :class:`katcp.Sensor` object
             The sensor that used to depend on children.
-        children : list of :class:`katcp.Sensor`
+        children : sequence of :class:`katcp.Sensor` objects
             The sensors that parent used to depend on.
+
         """
         old_sensors = []
         if parent in self:
@@ -168,13 +169,14 @@ class GenericSensorTree(object):
 
         Parameters
         ----------
-        parent : :class:`katcp.Sensor`
+        parent : :class:`katcp.Sensor` object
             Parent whose children to return.
 
         Returns
         -------
-        children : set of :class:`katcp.Sensor`
+        children : set of :class:`katcp.Sensor` objects
             The child sensors of parent.
+
         """
         if parent not in self._parent_to_children:
             raise ValueError("Parent sensor %r not in tree." % parent)
@@ -185,32 +187,34 @@ class GenericSensorTree(object):
 
         Parameters
         ----------
-        child : :class:`katcp.Sensor`
+        child : :class:`katcp.Sensor` object
             Child whose parents to return.
 
         Returns
         -------
-        parents : set of :class:`katcp.Sensor`
+        parents : set of :class:`katcp.Sensor` objects
             The parent sensors of child.
+
         """
         if child not in self._child_to_parents:
             raise ValueError("Child sensor %r not in tree." % child)
         return self._child_to_parents[child].copy()
 
     def __contains__(self, sensor):
-        """Return True if sensor is in the tree, false otherwise.
+        """Return True if sensor is in the tree, False otherwise.
 
         Parameters
         ----------
         sensor : object
             Sensor to check for in tree. Objects that are not sensors
             cannot appear in the tree and so will return False.
+
         """
         return sensor in self._parent_to_children
 
 
 class BooleanSensorTree(GenericSensorTree):
-    """Holds a tree of boolean sensors.
+    """A tree of boolean sensors.
 
     Non-leaf sensors have their values updated to be the logical AND
     of their child nodes.
@@ -228,8 +232,8 @@ class BooleanSensorTree(GenericSensorTree):
     >>> sensor1.value()
     >>> tree.remove(sensor1, sensor2)
     >>> sensor1.value()
-    """
 
+    """
     def __init__(self):
         super(BooleanSensorTree, self).__init__()
         # map of parent -> set of child sensors not ok
@@ -247,6 +251,7 @@ class BooleanSensorTree(GenericSensorTree):
             The sensor that depends on child.
         child : boolean instance of :class:`katcp.Sensor`
             The sensor parent depends on.
+
         """
         if parent not in self:
             if parent.stype != "boolean":
@@ -267,6 +272,7 @@ class BooleanSensorTree(GenericSensorTree):
             The sensor that used to depend on child.
         child : boolean instance of :class:`katcp.Sensor` or None
             The sensor parent used to depend on.
+
         """
         self.remove_links(parent, (child,))
         if parent not in self and parent in self._parent_to_not_ok:
@@ -277,14 +283,15 @@ class BooleanSensorTree(GenericSensorTree):
     def recalculate(self, parent, updates):
         """Re-calculate the value of parent sensor.
 
-        Parent's value is the boolean and of all child sensors.
+        Parent's value is the boolean AND of all child sensors.
 
         Parameters
         ----------
-        parent : :class:`katcp.Sensor`
+        parent : :class:`katcp.Sensor` object
             The sensor that needs to be updated.
-        updates : :class:`katcp.Sensor`
+        updates : sequence of :class:`katcp.Sensor` objects
             The child sensors which triggered the update.
+
         """
         not_ok = self._parent_to_not_ok[parent]
         children = self.children(parent) if parent in self else set()
@@ -342,8 +349,8 @@ class AggregateSensorTree(GenericSensorTree):
     >>> sensor2.set_value(3)
     >>> tree.register_sensor(sensor2)
     >>> agg.value() # now 8
-    """
 
+    """
     def __init__(self):
         super(AggregateSensorTree, self).__init__()
         # map of aggregate sensor -> (rule_function, children)
@@ -359,16 +366,17 @@ class AggregateSensorTree(GenericSensorTree):
 
         Parameters
         ----------
-        parent : :class:`katcp.Sensor`
+        parent : :class:`katcp.Sensor` object
             The aggregate sensor.
         rule_function : f(parent, children)
             Function to update the parent sensor value.
-        children : sequence of :class:`katcp.Sensor`
+        children : sequence of :class:`katcp.Sensor` objects
             The sensors the aggregate sensor depends on.
+
         """
         if parent in self._aggregates or parent in self._incomplete_aggregates:
-            raise ValueError("Sensor %r already has an aggregate rule"
-                             " associated" % parent)
+            raise ValueError("Sensor %r already has an aggregate rule "
+                             "associated" % parent)
         self._aggregates[parent] = (rule_function, children)
         self.add_links(parent, children)
 
@@ -377,7 +385,7 @@ class AggregateSensorTree(GenericSensorTree):
 
         Parameters
         ----------
-        parent : :class:`katcp.Sensor`
+        parent : :class:`katcp.Sensor` object
             The aggregate sensor.
         rule_function : f(parent, children)
             Function to update the parent sensor value.
@@ -385,6 +393,7 @@ class AggregateSensorTree(GenericSensorTree):
             The names of the sensors the aggregate sensor depends on. These
             sensor must be registered using :meth:`register_sensor` to become
             active.
+
         """
         if parent in self._aggregates or parent in self._incomplete_aggregates:
             raise ValueError("Sensor %r already has an aggregate rule"
@@ -404,8 +413,9 @@ class AggregateSensorTree(GenericSensorTree):
 
         Parameters
         ----------
-        child : :class:`katcp.Sensor`
+        child : :class:`katcp.Sensor` object
             A child sensor required by one or more delayed aggregate sensors.
+
         """
         child_name = self._get_sensor_reference(child)
         if child_name in self._registered_sensors:
@@ -458,11 +468,13 @@ class AggregateSensorTree(GenericSensorTree):
         Parameters
         ----------
         reference : str
+            Reference to sensor (typically its name).
 
         Returns
         -------
-        child : :class:`katcp.Sensor`
+        child : :class:`katcp.Sensor` object
             A child sensor linked to one or more aggregate sensors.
+
         """
         for child in self._child_to_parents:
             if self._get_sensor_reference(child) == reference:
@@ -473,12 +485,13 @@ class AggregateSensorTree(GenericSensorTree):
 
         Parameters
         ----------
-        parent : :class:`katcp.Sensor`
+        parent : :class:`katcp.Sensor` object
             The aggregate sensor to remove.
+
         """
         if parent not in self._aggregates:
-            raise ValueError("Sensor %r does not have an aggregate rule"
-                             " associated" % parent)
+            raise ValueError("Sensor %r does not have an aggregate rule "
+                             "associated" % parent)
         children = self.children(parent)
         try:
             self.remove_links(parent, children)
@@ -491,14 +504,15 @@ class AggregateSensorTree(GenericSensorTree):
 
         Parameters
         ----------
-        parent : :class:`katcp.Sensor`
+        parent : :class:`katcp.Sensor` object
 
         Returns
         -------
         rule_function : f(parent, children)
             Function give to update the parent sensor value.
-        children : sequence of :class:`katcp.Sensor`
+        children : sequence of :class:`katcp.Sensor` objects
             The sensors the aggregate sensor depends on.
+
         """
         return self._aggregates[parent]
 
@@ -509,10 +523,11 @@ class AggregateSensorTree(GenericSensorTree):
 
         Parameters
         ----------
-        parent : :class:`katcp.Sensor`
+        parent : :class:`katcp.Sensor` object
             The sensor that needs to be updated.
-        updates : :class:`katcp.Sensor`
+        updates : sequence of :class:`katcp.Sensor` objects
             The child sensors which triggered the update.
+
         """
         rule_function, children = self._aggregates[parent]
         rule_function(parent, children)
@@ -522,10 +537,13 @@ class AggregateSensorTree(GenericSensorTree):
 
         Parameters
         ----------
-        sensor : :class:`katcp.Sensor`
+        sensor : :class:`katcp.Sensor` object
+            Sensor to refer to.
 
         Returns
         -------
         reference : str
+            Sensor name as reference.
+
         """
         return sensor.name

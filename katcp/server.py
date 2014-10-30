@@ -4,8 +4,8 @@
 # Copyright 2009 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
 
-"""Servers for the KAT device control language.
-"""
+"""Servers for the KAT device control language."""
+
 import socket
 import errno
 import threading
@@ -15,14 +15,12 @@ import logging
 import sys
 import re
 import time
-
-import tornado.ioloop
-import tornado.tcpserver
-
 from functools import partial, wraps
 from collections import deque
 from thread import get_ident as get_thread_ident
 
+import tornado.ioloop
+import tornado.tcpserver
 from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
 from tornado.concurrent import chain_future
@@ -40,6 +38,7 @@ from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
 from .version import VERSION, VERSION_STR
 from .kattypes import (request, return_reply)
 
+
 log = logging.getLogger("katcp.server")
 
 BASE_REQUESTS = frozenset(['client-list',
@@ -55,14 +54,16 @@ BASE_REQUESTS = frozenset(['client-list',
                            'sensor-value',
                            'version-list',
                            'watchdog',
-                           'sensor-sampling',])
-"List of basic KATCP request that a minimal device server should implement"
+                           'sensor-sampling', ])
+"List of basic KATCP requests that a minimal device server should implement"
+
 
 def return_future(fn):
-    """Decorator that turns a syncronous function into one returning a tornado Future
+    """Decorator that turns a synchronous function into one returning a future.
 
-    This should only be applied to non-blocking functions. Will do set_result() with the
-    return value, or set_exc_info() if an exception is raised.
+    This should only be applied to non-blocking functions. Will do set_result()
+    with the return value, or set_exc_info() if an exception is raised.
+
     """
     @wraps(fn)
     def decorated(*args, **kwargs):
@@ -70,24 +71,26 @@ def return_future(fn):
 
     return decorated
 
+
 def construct_name_filter(pattern):
     """Return a function for filtering sensor names based on a pattern.
 
     Parameters
     ----------
     pattern : None or str
-        If None, returned function matches all names.
+        If None, the returned function matches all names.
         If pattern starts and ends with '/' the text between the slashes
-        is used a regular expression to search the names.
+        is used as a regular expression to search the names.
         Otherwise the pattern must match the name of the sensor exactly.
 
-    Return
-    ------
+    Returns
+    -------
     exact : bool
-        Return True if pattern is expected to matche exactly. Used
-        to determine whether no matching sensors constitutes an error.
+        Return True if pattern is expected to match exactly. Used to
+        determine whether having no matching sensors constitutes an error.
     filter_func : f(str) -> bool
         Function for determining whether a name matches the pattern.
+
     """
     if pattern is None:
         return False, lambda name: True
@@ -95,6 +98,7 @@ def construct_name_filter(pattern):
         name_re = re.compile(pattern[1:-1])
         return False, lambda name: name_re.search(name) is not None
     return True, lambda name: name == pattern
+
 
 class ClientConnection(object):
     @property
@@ -127,8 +131,8 @@ class ClientConnection(object):
         ----------
         msg : Message object
             The inform message to send.
-        """
 
+        """
         assert (msg.mtype == Message.INFORM)
         return self._send_message(msg)
 
@@ -143,6 +147,7 @@ class ClientConnection(object):
             The request message being replied to. The inform message's
             id is overridden with the id from orig_req before the
             inform is sent.
+
         """
         assert (inform.mtype == Message.INFORM)
         assert (inform.name == orig_req.name)
@@ -156,6 +161,7 @@ class ClientConnection(object):
         ----------
         msg : Message object
             The inform message to send.
+
         """
         assert (msg.mtype == Message.INFORM)
         return self._mass_send_message(msg)
@@ -171,6 +177,7 @@ class ClientConnection(object):
             The request message being replied to. The reply message's
             id is overridden with the id from orig_req before the
             reply is sent.
+
         """
         assert (reply.mtype == Message.REPLY)
         assert reply.name == orig_req.name
@@ -178,89 +185,93 @@ class ClientConnection(object):
         return self._send_message(reply)
 
     def on_client_disconnect_was_called(self):
-        """Should be called when an on_client_disconnect handler has been called
+        """Prevent multiple calls to on_client_disconnect handler.
 
-        Used to prevent multiple calls to on_client_disconnect handler"""
+        Call this when an on_client_disconnect handler has been called.
+
+        """
         if self._disconnect_called:
-            raise RuntimeError('"on_client_disconnect" already called for this connection')
+            raise RuntimeError('"on_client_disconnect" already called '
+                               'for this connection')
         self._disconnect_called = True
 
-class ThreadsafeClientConnection(ClientConnection):
-    """Make ClientConnection compatible with messages being sent from other threads
-    """
 
+class ThreadsafeClientConnection(ClientConnection):
+    """Make ClientConnection compatible with messages sent from other threads."""
     def __init__(self, server, conn_id):
         super(ThreadsafeClientConnection, self).__init__(server, conn_id)
         self._send_message = partial(server.send_message_from_thread, conn_id)
         self._mass_send_message = server.mass_send_message_from_thread
 
+
 class KATCPServer(object):
+    """Tornado IO backend for a KATCP Device.
+
+    Listens for connections on a server socket, reads KATCP messages off
+    the wire and passes them on to a DeviceServer-like class.
+
+    All class CONSTANT attributes can be changed until start() is called.
+
     """
-    Tornado IO backend for a KATCP Device
-
-    Listens for connections on a server socket, reads KATCP messages off the wire and
-    passes them on a DeviceServer-like class.
-
-    All class CONSTANT attributes can be changed until start() is called
-
-    """
-    BACKLOG = 5                        # Size of server socket backlog
+    BACKLOG = 5              # Size of server socket backlog
     MAX_MSG_SIZE = 128*1024
-    """Maximum message size that can be received in bytes
+    """Maximum message size that can be received in bytes.
 
-    If more than MAX_MSG_SIZE bytes are read from the client without encountering a
-    message terminator (i.e. newline), the connection is closed.
+    If more than MAX_MSG_SIZE bytes are read from the client without
+    encountering a message terminator (i.e. newline), the connection is closed.
+
     """
     MAX_WRITE_BUFFER_SIZE = 2*MAX_MSG_SIZE
-    """Maximum outstanding bytes to be buffered by the server process
+    """Maximum outstanding bytes to be buffered by the server process.
 
-    If more than MAX_WRITE_BUFFER_SIZE bytes are outstanding, the client connection is
-    closed. Note that the OS also buffers socket writes, so more than
-    MAX_WRITE_BUFFER_SIZE bytes may be untransmitted in total.
+    If more than MAX_WRITE_BUFFER_SIZE bytes are outstanding, the client
+    connection is closed. Note that the OS also buffers socket writes,
+    so more than MAX_WRITE_BUFFER_SIZE bytes may be untransmitted in total.
+
     """
-
     DISCONNECT_TIMEOUT = 1
-    """How long to wait for the device on_client_disconnect() to complete
+    """How long to wait for the device on_client_disconnect() to complete.
 
-    Not this will only work if the device on_client_disconnect() method is non-blocking
-    (i.e. returns a future immediately. Otherwise the ioloop will be blocked and unable to
-    apply the timeout
+    Note that this will only work if the device on_client_disconnect() method
+    is non-blocking (i.e. returns a future immediately). Otherwise the ioloop
+    will be blocked and unable to apply the timeout.
+
     """
 
     client_connection_factory = ClientConnection
-    """Factory that produces a ClientConnection compatible instance
+    """Factory that produces a ClientConnection compatible instance.
 
     signature: client_connection_factory(server, conn_id)
 
-    Should be set before calling start()
+    Should be set before calling start().
+
     """
 
-    @property
-    def bind_address(self):
-        """(host, port) where the server is listening for connections"""
-        return self._bindaddr
-
     def __init__(self, device, host, port, tb_limit=20, logger=log):
-        """Initialise the IO server instance
+        """Initialise the IO server instance.
 
-        Arguments
-        =========
-
-        device -- DeviceServer like KATCP message-eating device
-        host -- IP to bind the server socket on
-        port -- Port to listen on
-        tb_limit -- Maximum traceback length that is sent to clients when an uhandled
-                     exception is encountered
-        logger -- logging.Logger instance to use for logging, defaults to module log
+        Parameters
+        ----------
+        device : object
+            :class:`katcp.DeviceServer`-like KATCP message-eating device
+        host : str
+            IP to bind the server socket on
+        port : int
+            Port to listen on
+        tb_limit : int, optional
+            Maximum traceback length that is sent to clients when an unhandled
+            exception is encountered
+        logger : :class:`logging.Logger` object, optional
+            Logger instance to use for logging, defaults to module log
 
         API with device
         ===============
 
         Device methods called
         ---------------------
-
-        All device methods called should be non-blocking. Expects all device.on_* methods
-        to return a future that resolves when it is done or ready to be called again.
+        All device methods called should be non-blocking. Expects all
+        device.on_* methods to return a future that resolves when it is done
+        or ready to be called again.
 
         ready = device.on_client_connect(client_conn)
 
@@ -270,7 +281,7 @@ class KATCPServer(object):
 
         ready = device.on_client_disconnect(client_conn, reason, connection_open)
 
-            client_conn, ready -- as above
+            client_conn -- as above
             reason -- string reason for disconnect
             connection_open -- True if the connection can still be written to
             ready -- Future that resolves when the connection can be closed
@@ -278,7 +289,7 @@ class KATCPServer(object):
         ready = device.on_message(client_conn, msg)
 
             client_conn -- as above
-            msg -- katcp.Message object representing the message most recently received
+            msg -- katcp.Message object representing the most recent message
             ready -- Future that resolves when device is ready to accept another message
 
         inform = device.create_log_inform(level_name, msg, name, timestamp=None)
@@ -288,14 +299,15 @@ class KATCPServer(object):
         Services provided to device
         ===========================
 
-        It is expected that device will use the KATCPServer instance's ioloop. Devices
-        would mainly interact using:
+        It is expected that device will use the KATCPServer instance's ioloop.
+        Devices would mainly interact using:
 
-        set_ioloop(), start(), stop(), join(), send_message(), mass_send_message(), and
-        _from_thread() versions of message sending methods. Except for the _from_thread()
-        methods, all calls must be made from the ioloop thread.
+        set_ioloop(), start(), stop(), join(), send_message(),
+        mass_send_message(), and _from_thread() versions of message sending
+        methods. Except for the _from_thread() methods, all calls must be made
+        from the ioloop thread.
+
         """
-
         self._device = device
         self._bindaddr = (host, port)
         self._tb_limit = tb_limit
@@ -307,33 +319,40 @@ class KATCPServer(object):
         self._stopped = threading.Event()
         self.ioloop = None
         "The Tornado IOloop to use, set by self.set_ioloop()"
-        # ID of Thread that hosts the IOLoop. Used to check that we are running in the
-        # ioloop.
+        # ID of Thread that hosts the IOLoop.
+        # Used to check that we are running in the ioloop.
         self.ioloop_thread_id = None
-        # map from tornado IOStreams to ClientConnection objects
+        # Map from tornado IOStreams to ClientConnection objects
         self._connections = {}
         self._ioloop_manager = IOLoopManager(managed_default=True)
 
-    def set_ioloop(self, ioloop=None):
-        """Set the tornado.ioloop.IOLoop instance to use, default to IOLoop.current()
+    @property
+    def bind_address(self):
+        """The (host, port) where the server is listening for connections."""
+        return self._bindaddr
 
-        If set_ioloop() is never called the IOLoop is started in a new thread, and will
-        be stopped if self.stop() is called.
+    def set_ioloop(self, ioloop=None):
+        """Set the tornado IOLoop to use.
+
+        Sets the tornado.ioloop.IOLoop instance to use, defaulting to
+        IOLoop.current(). If set_ioloop() is never called the IOLoop is started
+        in a new thread, and will be stopped if self.stop() is called.
 
         Notes
-        =====
+        -----
+        Must be called before start() is called.
 
-        Must be called before start() is called
         """
         self._ioloop_manager.set_ioloop(ioloop, managed=False)
 
     def start(self, timeout=None):
-        """Install the server on its IOLoop, starting the IOLoop in a thread if needed
+        """Install the server on its IOLoop, optionally starting the IOLoop.
 
         Parameters
         ----------
-        timeout : float in seconds
-            Time to wait for server thread to start.
+        timeout : float or None, optional
+            Time in seconds to wait for server thread to start.
+
         """
         if self._running.isSet():
             raise RuntimeError('Server already started')
@@ -341,8 +360,8 @@ class KATCPServer(object):
         # Make sure we have an ioloop
         self.ioloop = self._ioloop_manager.get_ioloop()
         self._ioloop_manager.start()
-        # Set max_buffer_size to ensure streams are closed if too-large messages are
-        # received
+        # Set max_buffer_size to ensure streams are closed
+        # if too-large messages are received
         self._tcp_server = tornado.tcpserver.TCPServer(
             self.ioloop, max_buffer_size=self.MAX_MSG_SIZE)
         self._tcp_server.handle_stream = self._handle_stream
@@ -358,8 +377,9 @@ class KATCPServer(object):
 
         Parameters
         ----------
-        timeout : float in seconds or None
+        timeout : float or None, optional
             Seconds to wait for server to have *started*.
+
         """
         if timeout:
             self._running.wait(timeout)
@@ -370,14 +390,14 @@ class KATCPServer(object):
 
         Parameters
         ----------
-        timeout : float in seconds
-            Time to wait for the thread to finish.
+        timeout : float or None, optional
+            Time in seconds to wait for the thread to finish.
 
         Notes
         -----
+        If the ioloop is not managed, this function will block until the server
+        port is closed, meaning a new server can be started on the same port.
 
-        If the ioloop is not managed, this function will block until the server port is
-        closed, meaning a new server can be started on the same port.
         """
         t0 = time.time()
         self._ioloop_manager.join(timeout=timeout)
@@ -413,12 +433,13 @@ class KATCPServer(object):
 
     @gen.coroutine
     def _uninstall(self):
-        # Stop listening, close all open connections and remove us from the IOLoop
+        # Stop listening, close all open connections and remove us from IOLoop
         assert get_thread_ident() == self.ioloop_thread_id
         try:
             self._tcp_server.stop()
             for stream, conn in self._connections.items():
-                yield self._disconnect_client(stream, conn, 'Device server shutting down.')
+                yield self._disconnect_client(stream, conn,
+                                              'Device server shutting down.')
         finally:
             self.ioloop = None
             self._running.clear()
@@ -426,19 +447,20 @@ class KATCPServer(object):
 
     @gen.coroutine
     def _handle_stream(self, stream, address):
-        """Handle a new connection as a tornado.iostream.IOStream instance"""
+        """Handle a new connection as a tornado.iostream.IOStream instance."""
         try:
             assert get_thread_ident() == self.ioloop_thread_id
-            stream.set_close_callback(partial(self._stream_closed_callback, stream))
-            # our message packets are small, don't delay sending them.
+            stream.set_close_callback(partial(self._stream_closed_callback,
+                                              stream))
+            # Our message packets are small, don't delay sending them.
             stream.set_nodelay(True)
             stream.max_write_buffer_size = self.MAX_WRITE_BUFFER_SIZE
 
-            # Abuse the IOStream object slightly by adding 'address' and 'closing'
-            # attributes. Use nasty prefix to prevent naming collisions
+            # Abuse IOStream object slightly by adding 'address' and 'closing'
+            # attributes. Use nasty prefix to prevent naming collisions.
             stream.KATCPServer_address = address
-            # Flag to indicate that no more write should be accepted so that we can flush
-            # the write buffer when closing a connection
+            # Flag to indicate that no more write should be accepted so that
+            # we can flush the write buffer when closing a connection
             stream.KATCPServer_closing = False
 
             client_conn = self.client_connection_factory(self, stream)
@@ -446,8 +468,9 @@ class KATCPServer(object):
             try:
                 yield gen.maybe_future(self._device.on_client_connect(client_conn))
             except Exception:
-                # If on_client_connect fails there is no reason to continue trying to handle
-                # this connection. Try and send exception info to the client and disconnect
+                # If on_client_connect fails there is no reason to continue
+                # trying to handle this connection. Try and send exception info
+                # to the client and disconnect
                 e_type, e_value, trace = sys.exc_info()
                 reason = "\n".join(traceback.format_exception(
                     e_type, e_value, trace, self._tb_limit))
@@ -458,8 +481,8 @@ class KATCPServer(object):
             else:
                 self._line_read_loop(stream, client_conn)
         except Exception:
-            self._logger.error('Unhandled exception trying to handle new connection',
-                              exc_info=True)
+            self._logger.error('Unhandled exception trying '
+                               'to handle new connection', exc_info=True)
 
     @gen.coroutine
     def _line_read_loop(self, stream, client_conn):
@@ -469,15 +492,18 @@ class KATCPServer(object):
             while True:
                 try:
                     if stream.closed():
-                        # read_until_regex() below will still give us the backlogged messages
-                        # buffered by the iostream, resulting in message handlers being
-                        # called with a closed connection. Exit early instead.
+                        # read_until_regex() below will still give us the
+                        # backlogged messages buffered by the iostream,
+                        # resulting in message handlers being called with a
+                        # closed connection. Exit early instead.
                         break
                     line = yield stream.read_until_regex('\n|\r')
                 except iostream.StreamClosedError:
-                    break # Assume that _stream_closed_callback() will handle this case
+                    # Assume that _stream_closed_callback() will handle this
+                    break
                 except Exception:
-                        self._logger.warn('Unhandled Exception while reading from client {0}:'
+                        self._logger.warn('Unhandled Exception '
+                                          'while reading from client {0}:'
                                           .format(client_address), exc_info=True)
                 try:
                     line = line.replace("\r", "\n").split("\n")[0]
@@ -487,25 +513,28 @@ class KATCPServer(object):
                     e_type, e_value, trace = sys.exc_info()
                     reason = "\n".join(traceback.format_exception(
                         e_type, e_value, trace, self._tb_limit))
-                    self._logger.error("BAD COMMAND: %s in line %r" % (reason, line))
+                    self._logger.error("BAD COMMAND: %s in line %r"
+                                       % (reason, line))
                     self.send_message(
                         stream, self._device.create_log_inform("error", reason, "root"))
-                    continue # Wait for the next message and hope it is better
+                    continue  # Wait for the next message and hope it is better
                 try:
-                    if msg: # Ignore empty messages (i.e empty lines)
+                    if msg:  # Ignore empty messages (i.e empty lines)
                         yield self._device.on_message(client_conn, msg)
                 except Exception:
-                    self._logger.error('Error handling message {0!s}'.format(msg),
-                                       exc_info=True)
-                # Allow the ioloop to run since we may be starving it if there is buffered
-                # data in the stream, resulting in yield stream.read_until_regex('\n|\r')
-                # never actually yielding control to the ioloop
+                    self._logger.error('Error handling message {0!s}'
+                                       .format(msg), exc_info=True)
+                # Allow the ioloop to run since we may be starving it if
+                # there is buffered data in the stream, resulting in yield
+                # stream.read_until_regex('\n|\r') never actually yielding
+                # control to the ioloop
                 yield gen.moment
         except Exception:
             self._logger.error('Unexpected exception in read-loop for client {0}:'
                                .format(client_address))
         finally:
-            self._logger.info('Reading loop for client {0} completed'.format(client_address))
+            self._logger.info('Reading loop for client {0} completed'
+                              .format(client_address))
 
     def _stream_closed_callback(self, stream):
         assert get_thread_ident() == self.ioloop_thread_id
@@ -533,28 +562,29 @@ class KATCPServer(object):
                         conn, reason, stream_open))
                     yield with_relative_timeout(self.DISCONNECT_TIMEOUT, f)
                 except Exception:
-                    self._logger.error(
-                        'Error while calling on_client_disconnect for client {0}'
-                        .format(address), exc_info=True)
+                    self._logger.error('Error while calling '
+                                       'on_client_disconnect for client {0}'
+                                       .format(address), exc_info=True)
 
         finally:
             # Make sure stream is closed.
             stream.close()
 
     def get_address(self, stream):
-        """Text representation of the network address of a connection stream
+        """Text representation of the network address of a connection stream.
 
         Notes
         -----
-
         This method is thread-safe
+
         """
         try:
             addr = ":".join(str(part) for part in stream.KATCPServer_address)
         except AttributeError:
             # Something weird happened, but keep trucking
             addr = '<error>'
-            self._logger.warn('Could not determine address of stream', exc_info=True)
+            self._logger.warn('Could not determine address of stream',
+                              exc_info=True)
         return addr
 
     def send_message(self, stream, msg):
@@ -562,25 +592,26 @@ class KATCPServer(object):
 
         Parameters
         ----------
-        stream : tornado.iostream.IOStream object
+        stream : :class:`tornado.iostream.IOStream` object
             The stream to send the message to.
         msg : Message object
             The message to send.
 
         Notes
         -----
-
-        This method can only be called in the IOLoop thread
+        This method can only be called in the IOLoop thread.
 
         Failed sends disconnect the client connection and calls the device
-        on_client_disconnect() method. They do not raise exceptions, but they are
-        logged. Sends also fail if more than self.MAX_WRITE_BUFFER_SIZE bytes are queued
-        for sending, implying that the client is falling behind.
+        on_client_disconnect() method. They do not raise exceptions, but they
+        are logged. Sends also fail if more than self.MAX_WRITE_BUFFER_SIZE
+        bytes are queued for sending, implying that client is falling behind.
+
         """
         assert get_thread_ident() == self.ioloop_thread_id
         try:
             if stream.KATCPServer_closing:
-                raise RuntimeError('Stream is closing so we cannot accept any more writes')
+                raise RuntimeError('Stream is closing so we cannot '
+                                   'accept any more writes')
             return stream.write(str(msg) + '\n')
         except Exception:
             addr = self.get_address(stream)
@@ -589,23 +620,25 @@ class KATCPServer(object):
             stream.close(exc_info=True)
 
     def flush_on_close(self, stream):
-        """Prevent further writes to a stream and flush tornado iostream write buffer
+        """Flush tornado iostream write buffer and prevent further writes.
 
-        Returns a future that resolves when the stream is flushed
+        Returns a future that resolves when the stream is flushed.
+
         """
         assert get_thread_ident() == self.ioloop_thread_id
         # Prevent futher writes
         stream.KATCPServer_closing = True
-        # Write an empty message to get a future that resolves when the buffer is flushed
+        # Write empty message to get future that resolves when buffer is flushed
         return stream.write('\n')
 
     def call_from_thread(self, fn):
-        """Allow thread-safe calls to ioloop functions
+        """Allow thread-safe calls to ioloop functions.
 
-        Uses add_callback if not in the IOLoop thread, otherwise calls directly.  Returns
-        an already resolved tornado.concurrent.Future if in ioloop, otherwise a
-        concurrent.Future. Logs unhandled exceptions. Resolves with an exception if one
-        occured.
+        Uses add_callback if not in the IOLoop thread, otherwise calls
+        directly. Returns an already resolved `tornado.concurrent.Future` if in
+        ioloop, otherwise a `concurrent.Future`. Logs unhandled exceptions.
+        Resolves with an exception if one occurred.
+
         """
         if self.in_ioloop_thread():
             f = tornado_Future()
@@ -613,7 +646,8 @@ class KATCPServer(object):
                 f.set_result(fn())
             except Exception, e:
                 f.set_exception(e)
-                self._logger.exception('Error executing callback in ioloop thread')
+                self._logger.exception('Error executing callback '
+                                       'in ioloop thread')
             finally:
                 return f
         else:
@@ -634,35 +668,34 @@ class KATCPServer(object):
                 return f
 
     def send_message_from_thread(self, stream, msg):
-        """Thread-safe version of send_message() returning a Future instance
+        """Thread-safe version of send_message() returning a Future instance.
 
-        Return Value
-        ============
-
-        Future that will resolve without raising an exception as soon as the call to
-        send_message() completes. This does not guarantee that the message has been
-        delivered yet. If the call to send_message() failed, the exception will be logged,
-        and the future will resolve with the exception raised. Since a failed call to
-        send_message() will result in the connection being closed, no real error
-        handling apart from logging will be possible.
+        Returns
+        -------
+        A Future that will resolve without raising an exception as soon as
+        the call to send_message() completes. This does not guarantee that the
+        message has been delivered yet. If the call to send_message() failed,
+        the exception will be logged, and the future will resolve with the
+        exception raised. Since a failed call to send_message() will result
+        in the connection being closed, no real error handling apart from
+        logging will be possible.
 
         Notes
-        =====
+        -----
+        This method is thread-safe. If called from within the ioloop,
+        send_message is called directly and a resolved tornado.concurrent.Future
+        is returned, otherwise a callback is submitted to the ioloop that will
+        resolve a thread-safe concurrent.futures.Future instance.
 
-        This method is thread-safe. If called from within the ioloop, send_message is
-        called directly and a resolved tornado.concurrent.Future is returned, otherwise a
-        callback is submitted to the ioloop that will resolve a thread-safe
-        concurrent.futures.Future instance.
         """
         return self.call_from_thread(partial(self.send_message, stream, msg))
 
     def mass_send_message(self, msg):
-        """Send a message to all connected clients
+        """Send a message to all connected clients.
 
         Notes
         -----
-
-        This method can only be called in the IOLoop thread
+        This method can only be called in the IOLoop thread.
 
         """
         for stream in self._connections.keys():
@@ -671,14 +704,15 @@ class KATCPServer(object):
                 self.send_message(stream, msg)
 
     def mass_send_message_from_thread(self, msg):
-        """Thread-safe version of send_message() returning a Future instance
+        """Thread-safe version of send_message() returning a Future instance.
 
-        See return value and notes for send_message_from_thread()
+        See return value and notes for send_message_from_thread().
+
         """
         return self.call_from_thread(partial(self.mass_send_message, msg))
 
     def in_ioloop_thread(self):
-        """Return True if called in the IOLoop thread of this server"""
+        """Return True if called in the IOLoop thread of this server."""
         return get_thread_ident() == self.ioloop_thread_id
 
 
@@ -699,10 +733,10 @@ class ClientRequestConnection(object):
         return self.client_connection.reply(rep_msg, self.msg)
 
     def reply_with_message(self, rep_msg):
-        """
-        Send a pre-created reply message to the client connection
+        """Send a pre-created reply message to the client connection.
 
-        Will check that rep_msg.name matches the bound request
+        Will check that rep_msg.name matches the bound request.
+
         """
         self._post_reply()
         return self.client_connection.reply(rep_msg, self.msg)
@@ -717,10 +751,12 @@ class ClientRequestConnection(object):
         raise RuntimeError('Reply to request %r already sent.' % self.msg)
 
     def inform_after_reply(self, *args):
-        raise RuntimeError('Cannot send infrom for request %r after sending reply.' % self.msg)
+        raise RuntimeError('Cannot send inform for '
+                           'request %r after sending reply.' % self.msg)
 
     def make_reply(self, *args):
         return Message.reply_to_request(self.msg, *args)
+
 
 class MessageHandlerThread(object):
     def __init__(self, handler, log_inform_formatter, logger=log):
@@ -738,25 +774,25 @@ class MessageHandlerThread(object):
         self.ioloop = ioloop
 
     def on_message(self, client_conn, msg):
-        """Handle message
+        """Handle message.
 
-        Return value
-        ============
-
-        ready_future -- a future that will resolve once we're ready, else None
+        Returns
+        -------
+        ready : Future
+            A future that will resolve once we're ready, else None.
 
         Notes
-        =====
+        -----
+        *on_message* should not be called again until *ready* has resolved.
 
-        handle_message should not be called again until ready_future has resolved
         """
         MAX_QUEUE_SIZE = 30
         if len(self._msg_queue) >= MAX_QUEUE_SIZE:
-            # This should never happen if callers to handle_message wait for its futures
-            # to resolve before sending another message.
+            # This should never happen if callers to handle_message wait
+            # for its futures to resolve before sending another message.
             # NM 2014-10-06: Except when there are multiple clients. Oops.
-            raise RuntimeError('MessageHandlerThread unhandled message queue full, '
-                               'not handling message')
+            raise RuntimeError('MessageHandlerThread unhandled '
+                               'message queue full, not handling message')
         ready_future = Future()
         self._msg_queue.append((ready_future, client_conn, msg))
         self._wake.set()
@@ -764,8 +800,8 @@ class MessageHandlerThread(object):
 
     def run(self):
         self._running.set()
-        # Set the default ioloop for anything using IOLoop.current() in this thread gets
-        # self.ioloop
+        # Set the default ioloop for anything using IOLoop.current()
+        # in this thread gets self.ioloop
         self.ioloop.make_current()
         try:
             while self._running.isSet():
@@ -776,11 +812,13 @@ class MessageHandlerThread(object):
                     try:
                         res = self.handler(client_conn, msg)
                         if gen.is_future(res):
-                            self.ioloop.add_callback(chain_future, res, ready_future)
+                            self.ioloop.add_callback(chain_future, res,
+                                                     ready_future)
                         else:
                             ready_future.set_result(res)
                     except Exception, e:
-                        err_msg = 'Error calling message handler for msg:\n {0!s}'.format(msg)
+                        err_msg = ('Error calling message '
+                                   'handler for msg:\n {0!s}'.format(msg))
                         self._logger.error(err_msg, exc_info=True)
                         client_conn.inform(self.log_inform_formatter(
                             'error', 'See device logs:\n' + err_msg, root))
@@ -807,8 +845,9 @@ class MessageHandlerThread(object):
 
         Parameters
         ----------
-        timeout : float in seconds
+        timeout : float, optional
             Seconds to wait for server to have *started*.
+
         """
         if timeout:
             self._running.wait(timeout)
@@ -821,8 +860,9 @@ class MessageHandlerThread(object):
 
         Parameters
         ----------
-        timeout : float in seconds
-            Time to wait for the thread to finish.
+        timeout : float or None, optional
+            Time in seconds to wait for the thread to finish.
+
         """
         self._thread.join(timeout)
 
@@ -862,10 +902,11 @@ class DeviceServerBase(object):
         Host to listen on.
     port : int
         Port to listen on.
-    tb_limit : int
+    tb_limit : int, optional
         Maximum number of stack frames to send in error tracebacks.
-    logger : logging.Logger object
+    logger : logging.Logger object, optional
         Logger to log messages to.
+
     """
 
     __metaclass__ = DeviceMetaclass
@@ -877,10 +918,6 @@ class DeviceServerBase(object):
         ProtocolFlags.MESSAGE_IDS,
         ]))
 
-    @property
-    def bind_address(self):
-        return self._server.bind_address
-
     def __init__(self, host, port, tb_limit=20, logger=log):
         self._server = KATCPServer(self, host, port, tb_limit, logger)
         self._logger = logger
@@ -890,35 +927,37 @@ class DeviceServerBase(object):
         # Set default concurrency options
         self.set_concurrency_options()
 
+    @property
+    def bind_address(self):
+        return self._server.bind_address
+
     def create_log_inform(self, level_name, msg, name, timestamp=None):
         """Create a katcp logging inform message.
 
-           Usually this will be called from inside a DeviceLogger object,
-           but it is also used by the methods in this class when errors
-           need to be reported to the client.
-           """
+        Usually this will be called from inside a DeviceLogger object,
+        but it is also used by the methods in this class when errors
+        need to be reported to the client.
 
+        """
         if timestamp is None:
             timestamp = time.time()
 
         katcp_version = self.PROTOCOL_INFO.major
-        timestamp_msg = ('%.6f' % timestamp if katcp_version >= SEC_TS_KATCP_MAJOR
-                         else str(int(timestamp*1000)) )
-        return Message.inform("log",
-                level_name,
-                timestamp_msg,  # time since epoch in seconds
-                name,
-                msg,
-        )
+        timestamp_msg = ('%.6f' % timestamp
+                         if katcp_version >= SEC_TS_KATCP_MAJOR
+                         else str(int(timestamp*1000)))
+        return Message.inform("log", level_name, timestamp_msg, name, msg)
 
     def on_message(self, client_conn, msg):
-        """Dummy implementation of on_message required by KATCPServer
+        """Dummy implementation of on_message required by KATCPServer.
 
-        Will by replaced by a handler with the appropriate concurrency semantics when
-        set_concurrency_options is called (defaults are set in __init__())
+        Will be replaced by a handler with the appropriate concurrency
+        semantics when set_concurrency_options is called
+        (defaults are set in __init__()).
+
         """
-        raise RuntimeError(
-            'set_concurrency_options() need to be called once before on_message')
+        raise RuntimeError('set_concurrency_options() '
+                           'need to be called once before on_message')
 
     def handle_message(self, client_conn, msg):
         """Handle messages of all types from clients.
@@ -929,6 +968,7 @@ class DeviceServerBase(object):
             The client connection the message was from.
         msg : Message object
             The message to process.
+
         """
         # log messages received so that no one else has to
         self._logger.debug('received: {0!s}'.format(msg))
@@ -954,13 +994,12 @@ class DeviceServerBase(object):
         msg : Message object
             The request message to process.
 
-        Return value
-        ------------
+        Returns
+        -------
+        done_future : Future or None
+            Returns Future for async request handlers that will resolve when
+            done, or None for sync request handlers once they have completed.
 
-        msg_future or None.
-
-        Returns msg_future for async request handlers that will resolve when done,
-        or None for sync request handlers once they have completed.
         """
         send_reply = True
         # TODO Should check presence of Message-ids against protocol flags and
@@ -969,9 +1008,10 @@ class DeviceServerBase(object):
             req_conn = ClientRequestConnection(connection, msg)
             try:
                 reply = self._request_handlers[msg.name](self, req_conn, msg)
-                # If we get a future, assume this is an async message handler that will
-                # resolve the future with the reply message when it is complete. Attach a
-                # message-sending callback to the future, and return the future
+                # If we get a future, assume this is an async message handler
+                # that will resolve the future with the reply message when it
+                # is complete. Attach a message-sending callback to the future,
+                # and return the future.
                 if gen.is_future(reply):
                     done_future = Future()
                     def async_reply(f):
@@ -979,12 +1019,13 @@ class DeviceServerBase(object):
                             connection.reply(f.result(), msg)
                         except FailReply, e:
                             reason = str(e)
-                            self._logger.error(
-                                "Request %s FUTURE FAIL: %s" % (msg.name, reason))
+                            self._logger.error("Request %s FUTURE FAIL: %s"
+                                               % (msg.name, reason))
                             reply = Message.reply(msg.name, "fail", reason)
                             connection.reply(reply, msg)
                         except AsyncReply:
-                            self._logger.debug("%s FUTURE ASYNC OK" % (msg.name,))
+                            self._logger.debug("%s FUTURE ASYNC OK"
+                                               % (msg.name,))
                         except Exception:
                             error_reply = self.create_exception_reply_and_log(
                                 msg, sys.exc_info())
@@ -992,12 +1033,12 @@ class DeviceServerBase(object):
                         finally:
                             done_future.set_result(None)
 
-                    # TODO When using the return_reply() decorator the future returned is
-                    # not currently threadsafe, must either deal with it here, or in
-                    # kattypes.py. Would be nice if we don't have to always fall back to
-                    # adding a callback, or wrapping a thread safe future. Supporting
-                    # sync-with-thread and async futures is turning out to be a pain in
-                    # the ass ;)
+                    # TODO When using the return_reply() decorator the future
+                    # returned is not currently threadsafe, must either deal
+                    # with it here, or in kattypes.py. Would be nice if we don't
+                    # have to always fall back to adding a callback, or wrapping
+                    # a thread-safe future. Supporting sync-with-thread and
+                    # async futures is turning out to be a pain in the ass ;)
                     self.ioloop.add_callback(reply.add_done_callback, async_reply)
                     # reply.add_done_callback(async_reply)
                     self._logger.debug("%s FUTURE OK" % (msg.name,))
@@ -1038,6 +1079,7 @@ class DeviceServerBase(object):
             The client connection the message was from.
         msg : Message object
             The inform message to process.
+
         """
         if msg.name in self._inform_handlers:
             try:
@@ -1059,6 +1101,7 @@ class DeviceServerBase(object):
             The client connection the message was from.
         msg : Message object
             The reply message to process.
+
         """
         if msg.name in self._reply_handlers:
             try:
@@ -1070,7 +1113,6 @@ class DeviceServerBase(object):
                 self._logger.error("Reply %s FAIL: %s" % (msg.name, reason))
         else:
             self._logger.warn("%s INVALID: Unknown reply." % (msg.name,))
-
 
     def inform(self, connection, msg):
         """Send an inform message to a particular client.
@@ -1087,12 +1129,13 @@ class DeviceServerBase(object):
             The client to send the message to.
         msg : Message object
             The inform message to send.
+
         """
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
                 'Deprecation warning: do not use self.inform() '
                 'within a reply handler context -- use req.inform()\n'
-                'Traceback:\n %s', "".join(traceback.format_stack() ))
+                'Traceback:\n %s', "".join(traceback.format_stack()))
             # Get the underlying ClientConnection instance
             connection = connection.client_connection
         connection.inform(msg)
@@ -1104,10 +1147,10 @@ class DeviceServerBase(object):
         ----------
         msg : Message object
             The inform message to send.
+
         """
         assert (msg.mtype == Message.INFORM)
         self._server.mass_send_message_from_thread(msg)
-
 
     def reply(self, connection, reply, orig_req):
         """Send an asynchronous reply to an earlier request.
@@ -1122,13 +1165,14 @@ class DeviceServerBase(object):
             The request message being replied to. The reply message's
             id is overridden with the id from orig_req before the
             reply is sent.
+
         """
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
                 'Deprecation warning: do not use self.reply() '
                 'within a reply handler context -- use req.reply(*msg_args)\n'
                 'or req.reply_with_message(msg) Traceback:\n %s',
-                "".join(traceback.format_stack() ))
+                "".join(traceback.format_stack()))
             # Get the underlying ClientConnection instance
             connection = connection.client_connection
         connection.reply(reply, orig_req)
@@ -1146,27 +1190,29 @@ class DeviceServerBase(object):
             The request message being replied to. The inform message's
             id is overridden with the id from orig_req before the
             inform is sent.
+
         """
         if isinstance(connection, ClientRequestConnection):
             self._logger.warn(
                 'Deprecation warning: do not use self.reply_inform() '
                 'within a reply handler context -- '
                 'use req.inform(*inform_arguments)\n'
-                'Traceback:\n %s', "".join(traceback.format_stack() ))
+                'Traceback:\n %s', "".join(traceback.format_stack()))
             # Get the underlying ClientConnection instance
             connection = connection.client_connection
         connection.reply_inform(inform, orig_req)
 
     def set_ioloop(self, ioloop=None):
-        """Set the tornado.ioloop.IOLoop instance to use, default to IOLoop.current()
+        """Set the tornado IOLoop to use.
 
-        If set_ioloop() is never called the IOLoop is started in a new thread, and will
-        be stopped if self.stop() is called.
+        Sets the tornado.ioloop.IOLoop instance to use, defaulting to
+        IOLoop.current(). If set_ioloop() is never called the IOLoop is
+        started in a new thread, and will be stopped if self.stop() is called.
 
         Notes
-        =====
+        -----
+        Must be called before start() is called.
 
-        Must be called before start() is called
         """
         self._server.set_ioloop(ioloop)
         self.ioloop = self._server.ioloop
@@ -1175,7 +1221,7 @@ class DeviceServerBase(object):
         if handler_thread:
             assert thread_safe, "handler_thread=True requires thread_safe=True"
         self._server.client_connection_factory = (
-                ThreadsafeClientConnection if thread_safe else ClientConnection)
+            ThreadsafeClientConnection if thread_safe else ClientConnection)
         if handler_thread:
             self._handler_thread = MessageHandlerThread(
                 self.handle_message, self.create_log_inform, self._logger)
@@ -1192,8 +1238,9 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        timeout : float in seconds
-            Time to wait for server thread to start.
+        timeout : float or None, optional
+            Time in seconds to wait for server thread to start.
+
         """
         if self._handler_thread and self._handler_thread.isAlive():
             raise RuntimeError('Message handler thread already started')
@@ -1208,8 +1255,9 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        timeout : float in seconds
-            Time to wait for the thread to finish.
+        timeout : float or None, optional
+            Time in seconds to wait for the thread to finish.
+
         """
         self._server.join(timeout)
         if self._handler_thread:
@@ -1220,8 +1268,9 @@ class DeviceServerBase(object):
 
         Parameters
         ----------
-        timeout : float in seconds
+        timeout : float, optional
             Seconds to wait for server to have *started*.
+
         """
         self._server.stop(timeout)
         if self._handler_thread:
@@ -1247,13 +1296,12 @@ class DeviceServerBase(object):
         conn : ClientConnection object
             The client connection that has been successfully established.
 
-        Return Value
-        ------------
+        Returns
+        -------
+        Future that resolves when the device is ready to accept messages.
 
-        Future that resolves when the device is ready to accept messages
         """
         pass
-
 
     @return_future
     def on_client_disconnect(self, conn, msg, connection_valid):
@@ -1275,20 +1323,20 @@ class DeviceServerBase(object):
             True if connection is still open for sending,
             False otherwise.
 
-        Return Value
-        ------------
+        Returns
+        -------
+        Future that resolves when the client connection can be closed.
 
-        Future that resolves when the client connection can be closed
         """
-
         return None
 
     def sync_with_ioloop(self, timeout=None):
-        """Block for ioloop to complete a loop if called from another thread
+        """Block for ioloop to complete a loop if called from another thread.
 
         Returns a future if called from inside the ioloop.
 
-        Raises concurrent.futures.TimeoutError if timed out while blocking
+        Raises concurrent.futures.TimeoutError if timed out while blocking.
+
         """
         in_ioloop = self._server.in_ioloop_thread()
         if in_ioloop:
@@ -1305,6 +1353,7 @@ class DeviceServerBase(object):
             return f
         else:
             f.result(timeout)
+
 
 class DeviceServer(DeviceServerBase):
     """Implements some standard messages on top of DeviceServerBase.
@@ -1354,8 +1403,8 @@ class DeviceServer(DeviceServerBase):
 
     Subclasses must override the .setup_sensors() method. If they
     have no sensors to register, the method should just be a pass.
-    """
 
+    """
     # DeviceServer has a lot of methods because there is a method
     # per request type and it's an abstract class which is only
     # used outside this module
@@ -1369,9 +1418,9 @@ class DeviceServer(DeviceServerBase):
 
     UNSUPPORTED_REQUESTS_BY_MAJOR_VERSION = {
         4: set(['version-list']),
-        }
+    }
 
-    SUPPORTED_PROTOCOL_MAJOR_VERSIONS = (4,5)
+    SUPPORTED_PROTOCOL_MAJOR_VERSIONS = (4, 5)
 
     ## @var log
     # @brief DeviceLogger instance for sending log messages to the client.
@@ -1381,10 +1430,10 @@ class DeviceServer(DeviceServerBase):
 
     def __init__(self, *args, **kwargs):
         if self.PROTOCOL_INFO.major not in self.SUPPORTED_PROTOCOL_MAJOR_VERSIONS:
-            raise ValueError(
-        'Device server only supports katcp procotol versions %r, not '
-        '%r as specified in self.PROTOCOL_INFO' % (
-            self.SUPPORTED_PROTOCOL_MAJOR_VERSIONS, self.PROTOCOL_INFO.major) )
+            raise ValueError('Device server only supports katcp procotol '
+                             'versions %r, not %r as specified in self.PROTOCOL_INFO'
+                             % (self.SUPPORTED_PROTOCOL_MAJOR_VERSIONS,
+                                self.PROTOCOL_INFO.major))
         super(DeviceServer, self).__init__(*args, **kwargs)
         self.log = DeviceLogger(self, python_logger=self._logger)
         # map names to (version, build state/serial no.) tuples.
@@ -1410,10 +1459,10 @@ class DeviceServer(DeviceServerBase):
         client_conn : ClientConnection object
             The client connection that has been successfully established.
 
-        Return Value
-        ------------
+        Returns
+        -------
+        Future that resolves when the device is ready to accept messages.
 
-        Future that resolves when the device is ready to accept messages
         """
         assert get_thread_ident() == self._server.ioloop_thread_id
         self._client_conns.add(client_conn)
@@ -1428,22 +1477,22 @@ class DeviceServer(DeviceServerBase):
                 "katcp-python-%s" % VERSION_STR))
             client_conn.inform(Message.inform(
                 "version-connect", "katcp-device",
-                self.version(), self.build_state() ))
+                self.version(), self.build_state()))
         else:
             client_conn.inform(Message.inform("version", self.version()))
             client_conn.inform(Message.inform("build-state", self.build_state()))
 
     def clear_strategies(self, client_conn, remove_client=False):
-        """
-        Clear the sensor strategies of a client connection
+        """Clear the sensor strategies of a client connection.
 
         Parameters
         ----------
         client_connection : ClientConnection instance
             The connection that should have its sampling strategies cleared
-        remove_client : bool, default=False
+        remove_client : bool, optional
             Remove the client connection from the strategies datastructure.
-            Usefull for clients that disconnect.
+            Useful for clients that disconnect.
+
         """
         assert get_thread_ident() == self._server.ioloop_thread_id
 
@@ -1464,14 +1513,14 @@ class DeviceServer(DeviceServerBase):
             The client connection being disconnected.
         msg : str
             Reason client is being disconnected.
-        connection_valid : boolean
+        connection_valid : bool
             True if connection is still open for sending,
             False otherwise.
 
-        Return Value
-        ------------
+        Returns
+        -------
+        Future that resolves when the client connection can be closed.
 
-        Future that resolves when the client connection can be closed
         """
         f = tornado_Future()
         @gen.coroutine
@@ -1483,15 +1532,13 @@ class DeviceServer(DeviceServerBase):
 
         try:
             self._client_conns.remove(client_conn)
-            self.ioloop.add_callback(lambda : chain_future(remove_strategies(), f))
+            self.ioloop.add_callback(lambda: chain_future(remove_strategies(), f))
         except Exception:
             f.set_exc_info(sys.exc_info())
         return f
 
     def build_state(self):
-        """Return a build state string in the form
-        name-major.minor[(a|b|rc)n]
-        """
+        """Return build state string of the form name-major.minor[(a|b|rc)n]."""
         return "%s-%s.%s%s" % self.BUILD_INFO
 
     def version(self):
@@ -1508,11 +1555,12 @@ class DeviceServer(DeviceServerBase):
         ----------
         sensor : Sensor object
             The sensor object to register with the device server.
+
         """
         self._sensors[sensor.name] = sensor
 
     def has_sensor(self, sensor_name):
-        """Whether a sensor_name is known."""
+        """Whether the sensor with specified name is known."""
         return sensor_name in self._sensors
 
     def remove_sensor(self, sensor):
@@ -1523,7 +1571,8 @@ class DeviceServer(DeviceServerBase):
         Parameters
         ----------
         sensor : Sensor object or name string
-            The sensor object (or name of sensor) to remove from the device server.
+            The sensor to remove from the device server.
+
         """
         if isinstance(sensor, basestring):
             sensor_name = sensor
@@ -1550,6 +1599,7 @@ class DeviceServer(DeviceServerBase):
         -------
         sensor : Sensor object
             The sensor with the given name.
+
         """
         sensor = self._sensors.get(sensor_name, None)
         if not sensor:
@@ -1557,12 +1607,13 @@ class DeviceServer(DeviceServerBase):
         return sensor
 
     def get_sensors(self):
-        """Fetch a list of all sensors
+        """Fetch a list of all sensors.
 
         Returns
         -------
         sensors : list of Sensor objects
             The list of sensors registered with the device server.
+
         """
         return self._sensors.values()
 
@@ -1576,6 +1627,7 @@ class DeviceServer(DeviceServerBase):
         ----------
         restart_queue : Queue.Queue object
             The queue to add the device server to when it should be restarted.
+
         """
         self._restart_queue = restart_queue
 
@@ -1592,9 +1644,10 @@ class DeviceServer(DeviceServerBase):
         ...         self.add_sensor(Sensor(...))
         ...         self.add_sensor(Sensor(...))
         ...
+
         """
-        raise NotImplementedError("Device server subclasses must implement"
-                                    " setup_sensors.")
+        raise NotImplementedError("Device server subclasses must implement "
+                                  "setup_sensors.")
 
     # request implementations
 
@@ -1616,6 +1669,7 @@ class DeviceServer(DeviceServerBase):
 
             ?halt
             !halt ok
+
         """
         f = Future()
         @gen.coroutine
@@ -1631,7 +1685,7 @@ class DeviceServer(DeviceServerBase):
     def request_help(self, req, msg):
         """Return help on the available requests.
 
-        Return a description of the available requests using a seqeunce of
+        Return a description of the available requests using a sequence of
         #help informs.
 
         Parameters
@@ -1667,6 +1721,7 @@ class DeviceServer(DeviceServerBase):
             ?help halt
             #help halt ...description...
             !help ok 1
+
         """
         if not msg.arguments:
             for name, method in sorted(self._request_handlers.items()):
@@ -1710,6 +1765,7 @@ class DeviceServer(DeviceServerBase):
 
             ?log-level info
             !log-level ok info
+
         """
         if msg.arguments:
             try:
@@ -1732,6 +1788,7 @@ class DeviceServer(DeviceServerBase):
 
             ?restart
             !restart ok
+
         """
         if self._restart_queue is None:
             raise FailReply("No restart queue registered -- cannot restart.")
@@ -1740,7 +1797,7 @@ class DeviceServer(DeviceServerBase):
 
         @gen.coroutine
         def _restart():
-            # .put should never block because the queue should have no size limit.
+            # .put should never block because queue should have no size limit
             self._restart_queue.put_nowait(self)
             req.reply('ok')
             raise AsyncReply
@@ -1775,8 +1832,9 @@ class DeviceServer(DeviceServerBase):
             ?client-list
             #client-list 127.0.0.1:53600
             !client-list ok 1
+
         """
-        # TODO Get list of ClientConnection* instances, and implement a standard
+        # TODO Get list of ClientConnection* instances and implement a standard
         # 'address-print' method in the ClientConnection class
         clients = self._client_conns
         num_clients = len(clients)
@@ -1817,13 +1875,14 @@ class DeviceServer(DeviceServerBase):
             #version-list katcp-library katcp-python-0.4 katcp-python-0.4.1-py2
             #version-list katcp-device foodevice-1.0 foodevice-1.0.0rc1
             !version-list ok 3
+
         """
         versions = [
             ("katcp-protocol", (self.PROTOCOL_INFO, None)),
             ("katcp-library", ("katcp-python-%d.%d" % VERSION[:2],
                                VERSION_STR)),
             ("katcp-device", (self.version(), self.build_state())),
-            ]
+        ]
         extra_versions = sorted(self.extra_versions.items())
 
         for name, (version, build_state) in versions + extra_versions:
@@ -1894,9 +1953,9 @@ class DeviceServer(DeviceServerBase):
 
         """
         exact, name_filter = construct_name_filter(msg.arguments[0]
-                    if msg.arguments else None)
+                                                   if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
-                    sorted(self._sensors.iteritems()) if name_filter(name)]
+                   sorted(self._sensors.iteritems()) if name_filter(name)]
 
         if exact and not sensors:
             return req.make_reply("fail", "Unknown sensor name.")
@@ -1907,7 +1966,7 @@ class DeviceServer(DeviceServerBase):
     def _send_sensor_value_informs(self, req, sensors):
         for name, sensor in sensors:
             req.inform(name, sensor.description, sensor.units, sensor.stype,
-                        *sensor.formatted_params)
+                       *sensor.formatted_params)
 
     def request_sensor_value(self, req, msg):
         """Request the value of a sensor or sensors.
@@ -1956,11 +2015,12 @@ class DeviceServer(DeviceServerBase):
             ?sensor-value cpu.power.on
             #sensor-value 1244631611.415231 1 cpu.power.on 0
             !sensor-value ok 1
+
         """
         exact, name_filter = construct_name_filter(msg.arguments[0]
-                    if msg.arguments else None)
+                                                   if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
-                    sorted(self._sensors.iteritems()) if name_filter(name)]
+                   sorted(self._sensors.iteritems()) if name_filter(name)]
 
         if exact and not sensors:
             return req.make_reply("fail", "Unknown sensor name.")
@@ -1994,7 +2054,7 @@ class DeviceServer(DeviceServerBase):
             For the period strategy, the parameter is the sampling period
             in float seconds.
             The event strategy has no parameters. Note that this has changed
-            from KATCPv4,
+            from KATCPv4.
             For the event-rate strategy, a minimum period between updates and
             a maximum period between updates (both in float seconds) must be
             given. If the event occurs more than once within the minimum period,
@@ -2022,6 +2082,7 @@ class DeviceServer(DeviceServerBase):
 
             ?sensor-sampling cpu.power.on period 500
             !sensor-sampling ok cpu.power.on period 500
+
         """
         f = Future()
         self.ioloop.add_callback(lambda: chain_future(
@@ -2053,9 +2114,10 @@ class DeviceServer(DeviceServerBase):
 
             if not self.PROTOCOL_INFO.strategy_allowed(strategy):
                 raise FailReply("Strategy %s not allowed for version %d of katcp"
-                                % (strategy, katcp_version) )
+                                % (strategy, katcp_version))
 
-            format_inform = (format_inform_v5 if katcp_version >= SEC_TS_KATCP_MAJOR
+            format_inform = (format_inform_v5
+                             if katcp_version >= SEC_TS_KATCP_MAJOR
                              else format_inform_v4)
 
             def inform_callback(sensor, reading):
@@ -2090,11 +2152,11 @@ class DeviceServer(DeviceServerBase):
         if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
             # Another slightly nasty hack, but since period is the only
             # v4 strategy involving timestamps it's not _too_ nasty :)
-            params = [int(float(params[0])* SEC_TO_MS_FAC)] + params[1:]
+            params = [int(float(params[0]) * SEC_TO_MS_FAC)] + params[1:]
 
-        # Let the ioloop run so that the #sensor-status inform is sent before the
-        # reply. Not strictly neccesary, but a number of tests depend on this
-        # behaviour, less effort to fix it here :-/
+        # Let the ioloop run so that the #sensor-status inform is sent before
+        # the reply. Not strictly neccesary, but a number of tests depend on
+        # this behaviour, less effort to fix it here :-/
         yield gen.moment
         raise gen.Return(req.make_reply("ok", name, strategy, *params))
 
@@ -2112,6 +2174,7 @@ class DeviceServer(DeviceServerBase):
         --------
         ?sensor-sampling-clear
         !sensor-sampling-clear ok
+
         """
         f = Future()
         @gen.coroutine
@@ -2121,7 +2184,6 @@ class DeviceServer(DeviceServerBase):
 
         self.ioloop.add_callback(lambda: chain_future(_clear_strategies(), f))
         return f
-
 
     def request_watchdog(self, req, msg):
         """Check that the server is still alive.
@@ -2136,12 +2198,14 @@ class DeviceServer(DeviceServerBase):
 
             ?watchdog
             !watchdog ok
+
         """
         # not a function, just doesn't use self
         # pylint: disable-msg = R0201
         return req.make_reply("ok")
 
     # pylint: enable-msg = W0613
+
 
 class DeviceLogger(object):
     """Object for logging messages from a DeviceServer.
@@ -2156,6 +2220,7 @@ class DeviceLogger(object):
         The device server this logger should use for sending out logs.
     root_logger : str
         The name of the root logger.
+
     """
 
     # level values are used as indexes into the LEVELS list
@@ -2196,6 +2261,7 @@ class DeviceLogger(object):
         -------
         level_name : str
             The name of the logging level.
+
         """
         if level is None:
             level = self._log_level
@@ -2204,7 +2270,7 @@ class DeviceLogger(object):
     def level_from_name(self, level_name):
         """Return the level constant for a given name.
 
-        If the level_name is not known, raise a ValueError.
+        If the *level_name* is not known, raise a ValueError.
 
         Parameters
         ----------
@@ -2216,6 +2282,7 @@ class DeviceLogger(object):
         -------
         level : logging level constant
             The logging level constant associated with the name.
+
         """
         try:
             return self.LEVELS.index(level_name)
@@ -2229,6 +2296,7 @@ class DeviceLogger(object):
         ----------
         level : logging level constant
             The value to set the logging level to.
+
         """
         self._log_level = level
         if self._python_logger:
@@ -2241,6 +2309,7 @@ class DeviceLogger(object):
         ----------
         level_name : str
             The name of the logging level.
+
         """
         self.set_log_level(self.level_from_name(level_name))
 
@@ -2261,11 +2330,12 @@ class DeviceLogger(object):
             of the logger to log the message to. If not given the name defaults
             to the root logger. The timestamp is a float in seconds. If not
             given the timestamp defaults to the current time.
+
         """
         timestamp = kwargs.get("timestamp")
         python_msg = msg
         if self._python_logger is not None:
-            if not timestamp is None:
+            if timestamp is not None:
                 python_msg = ' '.join((
                     'katcp timestamp: %r' % timestamp,
                     python_msg))
@@ -2312,6 +2382,7 @@ class DeviceLogger(object):
             The Python logger to log the given message to.
         msg : Message object
             The #log message to create a log entry from.
+
         """
         (level, timestamp, name, message) = tuple(msg.arguments)
         log_string = "%s %s: %s" % (timestamp, name, message)
@@ -2321,4 +2392,3 @@ class DeviceLogger(object):
                     "warn": logging.WARN,
                     "error": logging.ERROR,
                     "fatal": logging.FATAL}[level], log_string)
-

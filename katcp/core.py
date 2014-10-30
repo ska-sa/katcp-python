@@ -4,9 +4,7 @@
 # Copyright 2009 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
 
-"""Utilities for dealing with KAT device control
-language messages.
-"""
+"""Utilities for dealing with KAT device control language messages."""
 
 import threading
 import sys
@@ -14,6 +12,7 @@ import re
 import time
 import warnings
 from collections import namedtuple
+
 
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
@@ -53,19 +52,20 @@ def convert_method_name(prefix, name):
 
 
 class KatcpSyntaxError(ValueError):
-    """Exception raised by parsers on encountering syntax errors."""
+    """Raised by parsers when encountering a syntax error."""
+
 
 class KatcpClientError(Exception):
-    """Raised by KATCP clients when errors occur."""
+    """Raised by KATCP clients when an error occurs."""
+
 
 class KatcpVersionError(KatcpClientError):
-    """
-    Exception raised when a katcp feature not supported by the katcp version
-    of the server/client is requested
-    """
+    """KATCP feature unsupported by KATCP version of the server/client."""
+
 
 class KatcpClientDisconnected(KatcpClientError):
-    """Raised when trying to send a message to disconnected server"""
+    """Raised when trying to send a message to a disconnected server."""
+
 
 class Message(object):
     """Represents a KAT device control language message.
@@ -82,8 +82,8 @@ class Message(object):
         The message identifier. Replies and informs that
         are part of the reply to a request should have the
         same id as the request did.
-    """
 
+    """
     # Message types
     REQUEST, REPLY, INFORM = range(3)
 
@@ -178,13 +178,13 @@ class Message(object):
         if not name:
             raise KatcpSyntaxError("Command missing command name.")
         if not name.replace("-", "").isalnum():
-            raise KatcpSyntaxError("Command name should consist only of"
-                                " alphanumeric characters and dashes (got %r)."
-                                % (name,))
+            raise KatcpSyntaxError("Command name should consist only of "
+                                   "alphanumeric characters and dashes (got %r)."
+                                   % (name,))
         if not name[0].isalpha():
-            raise KatcpSyntaxError("Command name should start with an"
-                                " alphabetic character (got %r)."
-                                % (name,))
+            raise KatcpSyntaxError("Command name should start with an "
+                                   "alphabetic character (got %r)."
+                                   % (name,))
 
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
@@ -193,6 +193,7 @@ class Message(object):
         -------
         msg : Message
             A copy of the message object.
+
         """
         return Message(self.mtype, self.name, self.arguments)
 
@@ -203,6 +204,7 @@ class Message(object):
         -------
         msg : str
            The message encoded as a ASCII string.
+
         """
         if self.arguments:
             escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
@@ -221,8 +223,7 @@ class Message(object):
                              mid_str, arg_str)
 
     def __repr__(self):
-        """ Return message displayed in a readable form
-        """
+        """ Return message displayed in a readable form."""
         tp = self.TYPE_NAMES[self.mtype].lower()
         name = self.name
         if self.arguments:
@@ -269,6 +270,7 @@ class Message(object):
             The name of the message.
         args : list of strings
             The message arguments.
+
         """
         mid = kwargs.pop('mid', None)
         if len(kwargs) > 0:
@@ -285,6 +287,7 @@ class Message(object):
             The name of the message.
         args : list of strings
             The message arguments.
+
         """
         mid = kwargs.pop('mid', None)
         if len(kwargs) > 0:
@@ -295,7 +298,7 @@ class Message(object):
     def reply_to_request(cls, req_msg, *args):
         """Helper method for creating reply messages to a specific request.
 
-        Copies the message name and message identifier from the request message
+        Copies the message name and message identifier from request message.
 
         Parameters
         ----------
@@ -303,9 +306,9 @@ class Message(object):
             The request message that this inform if in reply to
         args : list of strings
             The message arguments.
+
         """
         return cls(cls.REPLY, req_msg.name, args, req_msg.mid)
-
 
     @classmethod
     def inform(cls, name, *args, **kwargs):
@@ -317,6 +320,7 @@ class Message(object):
             The name of the message.
         args : list of strings
             The message arguments.
+
         """
         mid = kwargs.pop('mid', None)
         if len(kwargs) > 0:
@@ -327,7 +331,7 @@ class Message(object):
     def reply_inform(cls, req_msg, *args):
         """Helper method for creating inform messages in reply to a request.
 
-        Copies the message name and message identifier from the request message
+        Copies the message name and message identifier from request message.
 
         Parameters
         ----------
@@ -335,6 +339,7 @@ class Message(object):
             The request message that this inform if in reply to
         args : list of strings
             The message arguments except name
+
         """
         return cls(cls.INFORM, req_msg.name, args, req_msg.mid)
 
@@ -396,6 +401,7 @@ class MessageParser(object):
         -------
         msg : Message object
             The resulting Message.
+
         """
         # find command type and check validity
         if not line:
@@ -458,8 +464,8 @@ class ProtocolFlags(object):
     message_ids : bool
         Whether the server the version string came from supports
         message ids.
-    """
 
+    """
     VERSION_RE = re.compile(r"^(?P<major>\d+)\.(?P<minor>\d+)"
                             r"(-(?P<flags>.*))?$")
 
@@ -468,7 +474,8 @@ class ProtocolFlags(object):
     MULTI_CLIENT = 'M'
     MESSAGE_IDS = 'I'
 
-    STRATEGIES_V4 = frozenset(['none', 'auto', 'period', 'event', 'differential'])
+    STRATEGIES_V4 = frozenset(['none', 'auto', 'period', 'event',
+                               'differential'])
     STRATEGIES_V5 = STRATEGIES_V4 | frozenset(
         ['event-rate', 'differential-rate'])
 
@@ -512,6 +519,7 @@ class ProtocolFlags(object):
         version_str : str
             The version string from a #version-connect katcp-protocol
             message.
+
         """
         match = cls.VERSION_RE.match(version_str)
         if match:
@@ -526,15 +534,15 @@ class ProtocolFlags(object):
 class DeviceMetaclass(type):
     """Metaclass for DeviceServer and DeviceClient classes.
 
-       Collects up methods named request\_* and adds
-       them to a dictionary of supported methods on the class.
-       All request\_* methods must have a doc string so that help
-       can be generated.  The same is done for inform\_* and
-       reply\_* methods.
-       """
+    Collects up methods named request\_* and adds
+    them to a dictionary of supported methods on the class.
+    All request\_* methods must have a doc string so that help
+    can be generated.  The same is done for inform\_* and
+    reply\_* methods.
 
+    """
     def __init__(mcs, name, bases, dct):
-        """Constructor for DeviceMetaclass.  Should not be used directly.
+        """Constructor for DeviceMetaclass. Should not be used directly.
 
         Parameters
         ----------
@@ -546,6 +554,7 @@ class DeviceMetaclass(type):
             List of base classes
         dct : dict
             Class dictionary
+
         """
         super(DeviceMetaclass, mcs).__init__(name, bases, dct)
         mcs._request_handlers = {}
@@ -577,6 +586,7 @@ class KatcpDeviceError(Exception):
     .. versionchanged:: 0.1
         Deprecated in 0.1. Servers should not raise errors if communication
         with a client fails -- errors are simply logged instead.
+
     """
     pass
 
@@ -595,6 +605,7 @@ class FailReply(Exception):
     ...     def request_myreq(self, req, msg):
     ...         raise FailReply("This request always fails.")
     ...
+
     """
     pass
 
@@ -664,8 +675,8 @@ class Sensor(object):
     default : object
         An initial value for the sensor. By default this is
         determined by the sensor type.
-    """
 
+    """
     # Sensor needs the instance attributes it has and
     # is an abstract class used only outside this module
     # pylint: disable-msg = R0902
@@ -702,7 +713,7 @@ class Sensor(object):
         float: FLOAT,
         str: STRING,
         bool: BOOLEAN,
-      }
+    }
 
     # map type strings to types
     SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
@@ -757,8 +768,8 @@ class Sensor(object):
     # @brief List of strings containing the additional parameters (length and
     #        interpretation are specific to the sensor type)
 
-    def __init__(self, sensor_type, name, description=None, units='', params=None,
-                 default=None):
+    def __init__(self, sensor_type, name, description=None, units='',
+                 params=None, default=None):
         if params is None:
             params = []
 
@@ -797,16 +808,18 @@ class Sensor(object):
         # and the value and/or status from a different update.
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-        self._current_reading = Reading(time.time(), Sensor.UNKNOWN, default_value)
+        self._current_reading = Reading(time.time(), Sensor.UNKNOWN,
+                                        default_value)
         self._formatter = self._kattype.pack
         self._parser = self._kattype.unpack
         self.stype = self._kattype.name
 
         self.name = name
         if description is None:
-            description = '%(type)s sensor %(name)r %(unit_description)s' % dict(
-               type=self.stype.capitalize(), name=self.name,
-               unit_description=('in unit '+units if units else 'with no unit'))
+            description = '%(type)s sensor %(name)r %(unit_description)s' % \
+                          dict(type=self.stype.capitalize(), name=self.name,
+                               unit_description=('in unit '+units if units else
+                                                 'with no unit'))
 
         self.description = description
         self.units = units
@@ -836,10 +849,12 @@ class Sensor(object):
                (cls.__module__, cls.__name__, self.name, id(self))
 
     @classmethod
-    def integer(cls, name, description=None, unit='', params=None, default=None):
-        """
-        Instantiate a new integer sensor object.
+    def integer(cls, name, description=None, unit='', params=None,
+                default=None):
+        """Instantiate a new integer sensor object.
 
+        Parameters
+        ----------
         name : str
             The name of the sensor.
         description : str
@@ -851,14 +866,17 @@ class Sensor(object):
             [min, max] -- miniumum and maximum values of the sensor
         default : int
             An initial value for the sensor. Defaults to 0.
+
         """
         return cls(cls.INTEGER, name, description, unit, params, default)
 
     @classmethod
-    def float(cls, name, description=None, unit='', params=None, default=None):
-        """
-        Instantiate a new float sensor object.
+    def float(cls, name, description=None, unit='', params=None,
+              default=None):
+        """Instantiate a new float sensor object.
 
+        Parameters
+        ----------
         name : str
             The name of the sensor.
         description : str
@@ -870,14 +888,16 @@ class Sensor(object):
             [min, max] -- miniumum and maximum values of the sensor
         default : float
             An initial value for the sensor. Defaults to 0.0.
+
         """
         return cls(cls.FLOAT, name, description, unit, params, default)
 
     @classmethod
     def boolean(cls, name, description=None, unit='', default=None):
-        """
-        Instantiate a new boolean sensor object.
+        """Instantiate a new boolean sensor object.
 
+        Parameters
+        ----------
         name : str
             The name of the sensor.
         description : str
@@ -887,14 +907,16 @@ class Sensor(object):
             if there are no applicable units.
         default : bool
             An initial value for the sensor. Defaults to False.
+
         """
         return cls(cls.BOOLEAN, name, description, unit, None, default)
 
     @classmethod
     def lru(cls, name, description=None, unit='', default=None):
-        """
-        Instantiate a new lru sensor object.
+        """Instantiate a new lru sensor object.
 
+        Parameters
+        ----------
         name : str
             The name of the sensor.
         description : str
@@ -904,14 +926,16 @@ class Sensor(object):
             if there are no applicable units.
         default : enum, Sensor.LRU_*
             An initial value for the sensor. Defaults to self.LRU_NOMINAL
+
         """
         return cls(cls.LRU, name, description, unit, None, default)
 
     @classmethod
     def string(cls, name, description=None, unit='', default=None):
-        """
-        Instantiate a new string sensor object.
+        """Instantiate a new string sensor object.
 
+        Parameters
+        ----------
         name : str
             The name of the sensor.
         description : str
@@ -921,14 +945,17 @@ class Sensor(object):
             if there are no applicable units.
         default : string
             An initial value for the sensor. Defaults to the empty string.
+
         """
         return cls(cls.STRING, name, description, unit, None, default)
 
     @classmethod
-    def discrete(cls, name, description=None, unit='', params=None, default=None):
-        """
-        Instantiate a new discrete sensor object.
+    def discrete(cls, name, description=None, unit='', params=None,
+                 default=None):
+        """Instantiate a new discrete sensor object.
 
+        Parameters
+        ----------
         name : str
             The name of the sensor.
         description : str
@@ -941,14 +968,16 @@ class Sensor(object):
         default : str
             An initial value for the sensor. Defaults to the first item
             of params
+
         """
         return cls(cls.DISCRETE, name, description, unit, params, default)
 
     @classmethod
     def timestamp(cls, name, description=None, unit='', default=None):
-        """
-        Instantiate a new timestamp sensor object.
+        """Instantiate a new timestamp sensor object.
 
+        Parameters
+        ----------
         name : str
             The name of the sensor.
         description : str
@@ -959,14 +988,16 @@ class Sensor(object):
         default : string
             An initial value for the sensor in seconds since the Unix Epoch.
             Defaults to 0.
+
         """
         return cls(cls.TIMESTAMP, name, description, unit, None, default)
 
     @classmethod
     def address(cls, name, description=None, unit='', default=None):
-        """
-        Instantiate a new IP address sensor object.
+        """Instantiate a new IP address sensor object.
 
+        Parameters
+        ----------
         name : str
             The name of the sensor.
         description : str
@@ -977,23 +1008,24 @@ class Sensor(object):
         default : (string, int)
             An initial value for the sensor. Tuple contaning (host, port).
             default is ("0.0.0.0", None)
+
         """
         return cls(cls.ADDRESS, name, description, unit, None, default)
-
 
     def attach(self, observer):
         """Attach an observer to this sensor.
 
-        The observer must support a call to observer.update(sensor, reading), where
-        sensor -- the sensor object
-        reading -- (timestamp, status, value) tuple for this update
+        The observer must support a call to observer.update(sensor, reading),
+        where *sensor* is the sensor object and *reading* is a (timestamp,
+        status, value) tuple for this update (matching the return value of
+        the :meth:`read` method).
 
         Parameters
         ----------
         observer : object
-            Object with an .update(sensor, reading) method that will be called when the
-            sensor value is set. reading is a Reading instance, matching the return
-            value of the read() method.
+            Object with an .update(sensor, reading) method that will be called
+            when the sensor value is set
+
         """
         self._observers.add(observer)
 
@@ -1005,6 +1037,7 @@ class Sensor(object):
         observer : object
             The observer to remove from the set of observers notified
             when the sensor value is set.
+
         """
         self._observers.discard(observer)
 
@@ -1027,6 +1060,7 @@ class Sensor(object):
         -------
         value : object
             A value of a type appropriate to the sensor.
+
         """
         return self._parser(s_value, katcp_major)
 
@@ -1042,6 +1076,7 @@ class Sensor(object):
         value : object
             The value of the sensor (the type should be appropriate to the
             sensor's type).
+
         """
         reading = self._current_reading = Reading(timestamp, status, value)
         self.notify(reading)
@@ -1060,6 +1095,7 @@ class Sensor(object):
             KATCP formatted sensor value
         major : int, default = 5
             KATCP major version to use for interpreting the raw values
+
         """
         timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp, major)
         status = self.STATUS_NAMES[raw_status]
@@ -1074,8 +1110,9 @@ class Sensor(object):
 
         Parameters
         ----------
-        major : int. Defaults to latest implemented KATCP version (5)
-            Major version of KATCP to use when interpreting types
+        major : int
+            Major version of KATCP to use when interpreting types.
+            Defaults to latest implemented KATCP version.
 
         Returns
         -------
@@ -1085,6 +1122,7 @@ class Sensor(object):
             KATCP formatted sensor status string
         value : str
             KATCP formatted sensor value
+
         """
         return self.format_reading(self.read(), major)
 
@@ -1097,9 +1135,10 @@ class Sensor(object):
         Parameters
         ----------
         reading : :class:`Reading` object
-            Sensor reading as returned by read()
-        major : int. Defaults to latest implemented KATCP version (5)
-            Major version of KATCP to use when interpreting types
+            Sensor reading as returned by :meth:`read`
+        major : int
+            Major version of KATCP to use when interpreting types.
+            Defaults to latest implemented KATCP version.
 
         Returns
         -------
@@ -1112,8 +1151,8 @@ class Sensor(object):
 
         Note
         ----
-
         Should only be used for a reading obtained from the same sensor.
+
         """
 
         timestamp, status, value = reading
@@ -1143,10 +1182,12 @@ class Sensor(object):
         status : Sensor status constant
             Whether the value represents an error condition or not.
         timestamp : float in seconds or None
-           The time at which the sensor value was determined. Uses current time
-           if None.
-        major : int. Defaults to latest implemented KATCP version (5)
-            Major version of KATCP to use when interpreting types
+            The time at which the sensor value was determined.
+            Uses current time if None.
+        major : int
+            Major version of KATCP to use when interpreting types.
+            Defaults to latest implemented KATCP version.
+
         """
         self._kattype.check(value, major)
         if timestamp is None:
@@ -1161,6 +1202,7 @@ class Sensor(object):
         value : object
             The value of the sensor (the type will be appropriate to the
             sensor's type).
+
         """
         return self.read().value
 
@@ -1177,6 +1219,7 @@ class Sensor(object):
         -------
         sensor_type : Sensor type constant
             The corresponding Sensor type constant.
+
         """
         if type_string in cls.SENSOR_TYPE_LOOKUP:
             return cls.SENSOR_TYPE_LOOKUP[type_string]
@@ -1195,13 +1238,15 @@ class Sensor(object):
             The type of sensor the parameters are for.
         formatted_params : list of strings
             The formatted parameters that should be parsed.
-        major : int. Defaults to latest implemented KATCP version (5)
-            Major version of KATCP to use when interpreting types
+        major : int
+            Major version of KATCP to use when interpreting types.
+            Defaults to latest implemented KATCP version.
 
         Returns
         -------
         params : list of objects
             The parsed parameters.
+
         """
         typeclass, _value = cls.SENSOR_TYPES[sensor_type]
         if sensor_type == cls.DISCRETE:

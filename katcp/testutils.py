@@ -4,8 +4,7 @@
 # Copyright 2009 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
 
-"""Test utils for katcp package tests.
-   """
+"""Test utils for katcp package tests."""
 
 import client
 import logging
@@ -14,10 +13,11 @@ import time
 import Queue
 import threading
 import functools
+from thread import get_ident
+
+from peak.util.proxies import ObjectWrapper
 import mock
 import tornado.testing
-
-from thread import get_ident
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
@@ -26,7 +26,9 @@ from .core import Sensor, Message, AsyncReply
 from .server import (DeviceServer, FailReply, ClientRequestConnection,
                      ClientConnection)
 
+
 logger = logging.getLogger(__name__)
+
 
 def add_mid_to_msg_str(msg_str, mid):
     if mid:
@@ -38,9 +40,10 @@ def add_mid_to_msg_str(msg_str, mid):
 
 
 class ClientConnectionTest(object):
-    """
-    A version of katcp.server.ClientConnection* suitable for testing
-    Records all messages
+    """A version of katcp.server.ClientConnection* suitable for testing.
+
+    Records all messages.
+
     """
     def __init__(self):
         self.messages = []
@@ -63,9 +66,9 @@ class ClientConnectionTest(object):
     def replies(self):
         return [m for m in self.messages if m.mtype == Message.REPLY]
 
+
 class TestLogHandler(logging.Handler):
     """A logger for KATCP tests."""
-
     def __init__(self):
         """Create a TestLogHandler."""
         logging.Handler.__init__(self)
@@ -82,7 +85,6 @@ class TestLogHandler(logging.Handler):
 
 class DeviceTestSensor(Sensor):
     """Test sensor."""
-
     def __init__(self, sensor_type, name, description, units, params,
                  timestamp, status, value):
         super(DeviceTestSensor, self).__init__(
@@ -91,30 +93,27 @@ class DeviceTestSensor(Sensor):
 
 
 class MessageRecorder(object):
-    """
-        Parameters
-        ----------
-        msg_types : container supporting `in` operator
-            Record only message of these types (eg. [Message.REQUEST])
-        whitelist : container supporting `in` operator
-            Record only messages matching these names.  If the list is empty,
-            all received messages will be saved except any specified in the
-            blacklist.
-        blacklist : container supporting `in` operator
-            Ignore messages matching these names.  If any names appear both in
-            the whitelist and the blacklist, the whitelist will take
-            precedence.
-        regex_filter : str
-            Record only messages that matches this regexes. Applied to the
-            unescaped message string. Messages are pre-filtered by the whitelist
-            parameter, so only messages that match both this regexe and have
-            names listed in whitelist are recorded.
-        informs : boolean
-            Whether to record informs.  Default: True.
-        replies : boolean
-            Whether to record replies.  Default: False.
-    """
+    """Message recorder.
 
+    Parameters
+    ----------
+    msg_types : container supporting `in` operator
+        Record only message of these types (eg. [Message.REQUEST])
+    whitelist : container supporting `in` operator
+        Record only messages matching these names.  If the list is empty,
+        all received messages will be saved except any specified in the
+        blacklist.
+    regex_filter : str
+        Record only messages that matches this regex. Applied to the
+        unescaped message string. Messages are pre-filtered by the whitelist
+        parameter, so only messages that match both this regex and have
+        names listed in whitelist are recorded.
+    blacklist : container supporting `in` operator
+        Ignore messages matching these names.  If any names appear both in
+        the whitelist and the blacklist, the whitelist will take
+        precedence.
+
+    """
     def __init__(self, msg_types, whitelist, regex_filter, blacklist):
         self.msgs = []
         self.msg_types = msg_types
@@ -124,12 +123,15 @@ class MessageRecorder(object):
         self.msg_received = threading.Event()
 
     def get_msgs(self, min_number=0, timeout=1):
-        """Return the messages recorded so far. and delete them
+        """Return the messages recorded so far and delete them.
 
         Parameters
-        ==========
-        min_number -- Minumum number of messages to return, else wait
-        timeout: int seconds or None -- Don't wait longer than this
+        ----------
+        min_number : int, optional
+            Minimum number of messages to return, else wait
+        timeout : int or None, optional
+            Don't wait longer than this in seconds
+
         """
         self.wait_number(min_number, timeout)
         msg_count = len(self.msgs)
@@ -140,13 +142,15 @@ class MessageRecorder(object):
     __call__ = get_msgs           # For backwards compatibility
 
     def wait_number(self, number, timeout=1):
-        """
-        Wait until at least certain number of messages have been recorded
+        """Wait until at least certain number of messages have been recorded.
 
         Parameters
-        ==========
-        number -- Number of messages to wait for
-        timeout: int seconds or None -- Don't wait longer than this
+        ----------
+        number : int
+            Number of messages to wait for
+        timeout : int or None, optional
+            Don't wait longer than this in seconds
+
         """
         start_time = time.time()
         while True:
@@ -183,7 +187,6 @@ class MessageRecorder(object):
 
 class BlockingTestClient(client.BlockingClient):
     """Test blocking client."""
-
     def __init__(self, test, *args, **kwargs):
         """Takes a TestCase class as an additional parameter."""
         self.test = test
@@ -217,30 +220,31 @@ class BlockingTestClient(client.BlockingClient):
 
         Parameters
         ----------
-        whitelist : list or tuple
-            Record only messages matching these names.  If the list is empty,
+        whitelist : list or tuple, optional
+            Record only messages matching these names. If the list is empty,
             all received messages will be saved except any specified in the
             blacklist.
-        blacklist : list or tuple
-            Ignore messages matching these names.  If any names appear both in
+        blacklist : list or tuple, optional
+            Ignore messages matching these names. If any names appear both in
             the whitelist and the blacklist, the whitelist will take
             precedence.
-        regex_filter : str
-            Record only messages that matches this regexes. Applied to the
+        regex_filter : str or None, optional
+            Record only messages that matches this regex. Applied to the
             unescaped message string. Messages are pre-filtered by the whitelist
-            parameter, so only messages that match both this regexe and have
+            parameter, so only messages that match both this regex and have
             names listed in whitelist are recorded.
-        informs : boolean
-            Whether to record informs.  Default: True.
-        replies : boolean
-            Whether to record replies.  Default: False.
+        informs : bool, optional
+            Whether to record informs.
+        replies : bool, optional
+            Whether to record replies.
 
-        Return
-        ------
-        get_msgs : object
-            Callable Instance of MessageRecorder. Returns a list of messages
+        Returns
+        -------
+        get_msgs : :class:`MessageRecorder` object
+            Callable instance of MessageRecorder. Returns a list of messages
             that have matched so far.  Each call returns the list of message
             since the previous call.
+
         """
         msg_types = set()
         if informs:
@@ -258,22 +262,21 @@ class BlockingTestClient(client.BlockingClient):
     @staticmethod
     def expected_sensor_value_tuple(sensorname, value, sensortype=str,
                                     places=7):
-        """Helper method for completing optional values in expected sensor
-        value tuples.
+        """Helper for completing optional values in expected sensor value tuple.
 
         Parameters
         ----------
         sensorname : str
             The name of the sensor.
         value : obj
-            The expected value of the sensor.  Type must match sensortype.
+            The expected value of the sensor. Type must match sensortype.
         sensortype : type, optional
-            The type to use to convert the sensor value. Default: str.
+            The type to use to convert the sensor value.
         places : int, optional
-            The number of places to use in a float comparison.  Has no effect
-            if sensortype is not float. Default: 7.
-        """
+            The number of places to use in a float comparison. Has no effect
+            if sensortype is not float.
 
+        """
         return (sensorname, value, sensortype, places)
 
     # SENSOR VALUES
@@ -286,26 +289,27 @@ class BlockingTestClient(client.BlockingClient):
         sensorname : str
             The name of the sensor.
         sensortype : type, optional
-            The type to use to convert the sensor value. Default: str.
-        """
+            The type to use to convert the sensor value.
 
+        """
         reply, informs = self.blocking_request(Message.request("sensor-value",
                                                                sensorname))
-        self.test.assertTrue(reply.reply_ok(),
-            "Could not retrieve sensor '%s': %s"
-            % (sensorname, (reply.arguments[1] if len(reply.arguments) >= 2
-                            else "")))
+        msg = ("Could not retrieve sensor '%s': %s"
+               % (sensorname, (reply.arguments[1]
+                               if len(reply.arguments) >= 2 else "")))
+        self.test.assertTrue(reply.reply_ok(), msg)
 
         self.test.assertEqual(len(informs), 1,
-            "Expected one sensor value inform for sensor '%s', but"
-            " received %d." % (sensorname, len(informs)))
+                              "Expected one sensor value inform for "
+                              "sensor '%s', but received %d."
+                              % (sensorname, len(informs)))
 
         inform = informs[0]
 
         self.test.assertEqual(len(inform.arguments), 5,
-            "Expected sensor value inform for sensor '%s' to have five"
-            " arguments, but received %d." %
-            (sensorname, len(inform.arguments)))
+                              "Expected sensor value inform for sensor "
+                              "'%s' to have five arguments, but received %d."
+                              % (sensorname, len(inform.arguments)))
 
         timestamp, _num, _name, status, value = inform.arguments
 
@@ -317,18 +321,18 @@ class BlockingTestClient(client.BlockingClient):
                 typestr = "%r" % sensortype
                 value = sensortype(value)
         except ValueError, e:
-            self.test.fail("Could not convert value %r of sensor '%s' to type"
-                           " %s: %s" % (value, sensorname, typestr, e))
+            self.test.fail("Could not convert value %r of sensor '%s' to type "
+                           "%s: %s" % (value, sensorname, typestr, e))
 
         self.test.assertTrue(status in Sensor.STATUSES.values(),
-                "Got invalid status value %r for sensor '%s'." %
-                (status, sensorname))
+                             "Got invalid status value %r for sensor '%s'."
+                             % (status, sensorname))
 
         try:
             timestamp = float(timestamp)
         except ValueError, e:
-            self.test.fail("Could not convert timestamp %r of sensor '%s' to"
-                           " type %r: %s" % (timestamp, sensorname, float, e))
+            self.test.fail("Could not convert timestamp %r of sensor '%s' to "
+                           "type %r: %s" % (timestamp, sensorname, float, e))
 
         return value, status, timestamp
 
@@ -340,9 +344,9 @@ class BlockingTestClient(client.BlockingClient):
         sensorname : str
             The name of the sensor.
         sensortype : type, optional
-            The type to use to convert the sensor value. Default: str.
-        """
+            The type to use to convert the sensor value.
 
+        """
         value, _, _ = self.get_sensor(sensorname, sensortype)
         return value
 
@@ -353,8 +357,8 @@ class BlockingTestClient(client.BlockingClient):
         ----------
         sensorname : str
             The name of the sensor.
-        """
 
+        """
         _, status, _ = self.get_sensor(sensorname)
         return status
 
@@ -365,8 +369,8 @@ class BlockingTestClient(client.BlockingClient):
         ----------
         sensorname : str
             The name of the sensor.
-        """
 
+        """
         _, _, timestamp = self.get_sensor(sensorname)
         return timestamp
 
@@ -379,20 +383,20 @@ class BlockingTestClient(client.BlockingClient):
         sensorname : str
             The name of the sensor.
         expected : obj
-            The expected value of the sensor.  Type must match sensortype.
+            The expected value of the sensor. Type must match sensortype.
         sensortype : type, optional
-            The type to use to convert the sensor value. Default: str.
+            The type to use to convert the sensor value.
         msg : str, optional
-            A custom message to print if the assertion fails.  If the string
+            A custom message to print if the assertion fails. If the string
             contains %r, it will be replaced with the sensor's value. A default
             message is defined in this method.
         places : int, optional
-            The number of places to use in a float comparison.  Has no effect
-            if sensortype is not float. Default: 7.
-        status : str, optional
+            The number of places to use in a float comparison. Has no effect
+            if sensortype is not float.
+        status : str or None, optional
             The expected status of the sensor.
-        """
 
+        """
         if msg is None:
             places_msg = " (within %d decimal places)" % \
                          places if sensortype == float else ""
@@ -409,10 +413,9 @@ class BlockingTestClient(client.BlockingClient):
             self.test.assertEqual(got, expected, msg)
 
         if status is not None:
-            self.test.assertEqual(got_status, status, "Status of sensor '%s'"
-                                  " is %r. Expected %r." % (sensorname,
-                                                            got_status,
-                                                            status))
+            msg = ("Status of sensor '%s' is %r. Expected %r."
+                   % (sensorname, got_status, status))
+            self.test.assertEqual(got_status, status, msg)
 
     def assert_sensor_status_equals(self, sensorname, expected_status,
                                     msg=None):
@@ -424,12 +427,12 @@ class BlockingTestClient(client.BlockingClient):
             The name of the sensor.
         expected_status : str
             The expected status of the sensor.
-        msg : str, optional
-            A custom message to print if the assertion fails.  If the string
+        msg : str or None, optional
+            A custom message to print if the assertion fails. If the string
             contains %r, it will be replaced with the sensor's value. A default
             message is defined in this method.
-        """
 
+        """
         if msg is None:
             msg = "Status of sensor '%s' is %%r. Expected %r." % \
                   (sensorname, expected_status)
@@ -450,18 +453,18 @@ class BlockingTestClient(client.BlockingClient):
         sensorname : str
             The name of the sensor.
         expected : obj
-            The expected value of the sensor.  Type must match sensortype.
+            The expected value of the sensor. Type must match sensortype.
         sensortype : type, optional
-            The type to use to convert the sensor value. Default: str.
+            The type to use to convert the sensor value.
         msg : str, optional
-            A custom message to print if the assertion fails.  If the string
+            A custom message to print if the assertion fails. If the string
             contains %r, it will be replaced with the sensor's value. A default
             message is defined in this method.
         places : int, optional
-            The number of places to use in a float comparison.  Has no effect
-            if sensortype is not float. Default: 7.
-        """
+            The number of places to use in a float comparison. Has no effect
+            if sensortype is not float.
 
+        """
         if msg is None:
             places_msg = " (within %d decimal places)" % \
                          places if sensortype == float else ""
@@ -478,20 +481,19 @@ class BlockingTestClient(client.BlockingClient):
             self.test.assertNotEqual(got, expected, msg)
 
     def assert_sensors_equal(self, sensor_tuples, msg=None):
-        """Assert that the values of several sensors are equal to the given
-        values.
+        """Assert that the values of several sensors are equal to given values.
 
         Parameters
         ----------
         sensor_tuples : list of tuples
-            A list of tuples specifying the sensor values to be checked.  See
+            A list of tuples specifying the sensor values to be checked. See
             :meth:`expected_sensor_value_tuple`.
-        msg : str, optional
-            A custom message to print if the assertion fails.  If the string
+        msg : str or None, optional
+            A custom message to print if the assertion fails. If the string
             contains %r, it will be replaced with the sensor's value. A default
             message is defined in this method.
-        """
 
+        """
         sensor_tuples = [self.expected_sensor_value_tuple(*t)
                          for t in sensor_tuples]
         for sensorname, expected, sensortype, places in sensor_tuples:
@@ -499,20 +501,19 @@ class BlockingTestClient(client.BlockingClient):
                                       msg=msg, places=places)
 
     def assert_sensors_not_equal(self, sensor_tuples, msg=None):
-        """Assert that the values of several sensors are not equal to the given
-        values.
+        """Assert that values of several sensors are not equal to given values.
 
         Parameters
         ----------
         sensor_tuples : list of tuples
-            A list of tuples specifying the sensor values to be checked.  See
+            A list of tuples specifying the sensor values to be checked. See
             :meth:`expected_sensor_value_tuple`.
-        msg : str, optional
-            A custom message to print if the assertion fails.  If the string
+        msg : str or None, optional
+            A custom message to print if the assertion fails. If the string
             contains %r, it will be replaced with the sensor's value. A default
             message is defined in this method.
-        """
 
+        """
         sensor_tuples = [self.expected_sensor_value_tuple(*t)
                          for t in sensor_tuples]
         for sensorname, expected, sensortype, places in sensor_tuples:
@@ -521,8 +522,7 @@ class BlockingTestClient(client.BlockingClient):
 
     def wait_until_sensor_equals(self, timeout, sensorname, value,
                                  sensortype=str, places=7, pollfreq=0.02):
-        """Wait until a sensor's value is equal to the given value, or time
-        out.
+        """Wait until a sensor's value equals the given value, or times out.
 
         Parameters
         ----------
@@ -531,16 +531,16 @@ class BlockingTestClient(client.BlockingClient):
         sensorname : str
             The name of the sensor.
         value : obj
-            The expected value of the sensor.  Type must match sensortype.
+            The expected value of the sensor. Type must match sensortype.
         sensortype : type, optional
-            The type to use to convert the sensor value. Default: str.
+            The type to use to convert the sensor value.
         places : int, optional
-            The number of places to use in a float comparison.  Has no effect
-            if sensortype is not float. Default: 7.
+            The number of places to use in a float comparison. Has no effect
+            if sensortype is not float.
         pollfreq : float, optional
-            How frequently to poll for the sensor value. Default: 0.1.
-        """
+            How frequently to poll for the sensor value.
 
+        """
         # TODO Should be changed to use some varient of SensorTransitionWaiter
 
         stoptime = time.time() + timeout
@@ -567,19 +567,18 @@ class BlockingTestClient(client.BlockingClient):
     # REQUEST PARAMETERS
 
     def test_sensor_list(self, expected_sensors, ignore_descriptions=False):
-        """Test that the list of sensors on the device equals the provided
-        list.
+        """Test that list of sensors on the device equals the provided list.
 
         Parameters
         ----------
         expected_sensors : list of tuples
-            The list of expected sensors.  Each tuple contains the arguments
+            The list of expected sensors. Each tuple contains the arguments
             returned by each sensor-list inform, as unescaped strings.
         ignore_descriptions : boolean, optional
             If this is true, sensor descriptions will be ignored in the
-            comparison. Default: False.
-        """
+            comparison.
 
+        """
         def sensortuple(name, description, units, stype, *params):
             # ensure float params reduced to the same format
             if stype == "float":
@@ -588,14 +587,14 @@ class BlockingTestClient(client.BlockingClient):
 
         reply, informs = self.blocking_request(Message.request("sensor-list"))
 
-        self.test.assertTrue(reply.reply_ok(),
-            "Could not retrieve sensor list: %s"
-            % (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
+        msg = ("Could not retrieve sensor list: %s"
+               % (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
+        self.test.assertTrue(reply.reply_ok(), msg)
 
         expected_sensors = [sensortuple(*t) for t in expected_sensors]
         got_sensors = [sensortuple(*m.arguments) for m in informs]
 
-        #print ",\n".join([str(t) for t in got_sensors])
+        # print ",\n".join([str(t) for t in got_sensors])
 
         if ignore_descriptions:
             expected_sensors = [s[:1] + s[2:] for s in expected_sensors]
@@ -604,43 +603,42 @@ class BlockingTestClient(client.BlockingClient):
         expected_set = set(expected_sensors)
         got_set = set(got_sensors)
 
-        self.test.assertEqual(got_set, expected_set,
-            "Sensor list differs from expected list.\nThese sensors are"
-            " missing:\n%s\nFound these unexpected sensors:\n%s"
-            % ("\n".join(sorted([str(t) for t in expected_set - got_set])),
-               "\n".join(sorted([str(t) for t in got_set - expected_set]))))
+        msg = ("Sensor list differs from expected list.\n"
+               "These sensors are missing:\n%s\n"
+               "Found these unexpected sensors:\n%s"
+               % ("\n".join(sorted([str(t) for t in expected_set - got_set])),
+                  "\n".join(sorted([str(t) for t in got_set - expected_set]))))
+        self.test.assertEqual(got_set, expected_set, msg)
 
     def test_help(self, expected_requests, full_descriptions=False,
                   exclude_defaults=True):
-        """Test that the list of requests on the device equals the provided
-        list.
+        """Test that list of requests on the device equals the provided list.
 
         Parameters
         ----------
         expected_requests : list of tuples or strings
-            The list of expected requests.  May be a list of request names as
-            strings.  May also be a list of tuples, each of which contains the
+            The list of expected requests. May be a list of request names as
+            strings. May also be a list of tuples, each of which contains the
             request name and either the first line or the full text of the
-            request description, as unescaped strings.  If full_descriptions is
+            request description, as unescaped strings. If full_descriptions is
             true, full description text must be provided.
         full_descriptions : boolean, optional
             If this is true, the full text of descriptions is compared,
             otherwise only text up to the first newline is compared.  Has no
-            effect if expected_requests is a list of strings.  Default: False.
+            effect if expected_requests is a list of strings.
         exclude_defaults : boolean, optional
             If this is true, exclude requests on the device which match
             requests found on :class:`katcp.DeviceServer` by name.
-            Default: True.
-        """
 
+        """
         descriptions = True
         if not expected_requests or isinstance(expected_requests[0], str):
             descriptions = False
 
         reply, informs = self.blocking_request(Message.request("help"))
-        self.test.assertTrue(reply.reply_ok(),
-            "Could not retrieve help list: %s"
-            % (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
+        msg = ("Could not retrieve help list: %s"
+               % (reply.arguments[1] if len(reply.arguments) >= 2 else ""))
+        self.test.assertTrue(reply.reply_ok(), msg)
 
         got_requests = [tuple(m.arguments) for m in informs]
 
@@ -665,15 +663,17 @@ class BlockingTestClient(client.BlockingClient):
                 got_set = set([(name, desc) for (name, desc) in got_set
                                if name not in default_request_names])
 
-        self.test.assertEqual(got_set, expected_set,
-            "Help list differs from expected list.\nThese requests are"
-            " missing:\n%s\nFound these unexpected requests:\n%s"
-            % ("\n".join(sorted([str(t) for t in expected_set - got_set])),
-               "\n".join(sorted([str(t) for t in got_set - expected_set]))))
+        msg = ("Help list differs from expected list.\n"
+               "These requests are missing:\n%s\n"
+               "Found these unexpected requests:\n%s"
+               % ("\n".join(sorted([str(t) for t in expected_set - got_set])),
+                  "\n".join(sorted([str(t) for t in got_set - expected_set]))))
+        self.test.assertEqual(got_set, expected_set, msg)
 
     def assert_request_succeeds(self, requestname, *params, **kwargs):
-        """Assert that the given request completes successfully when called
-        with the given parameters, and optionally check the arguments.
+        """Assert that given request succeeds when called with given parameters.
+
+        Optionally also checks the arguments.
 
         Parameters
         ----------
@@ -681,39 +681,39 @@ class BlockingTestClient(client.BlockingClient):
             The name of the request.
         params : list of objects
             The parameters with which to call the request.
-        args_echo : boolean, optional
+        args_echo : bool, optional
             Keyword parameter.  Assert that the reply arguments after 'ok'
             equal the request parameters.  Takes precedence over args_equal,
-            args_in and args_length. Default False.
-        args_equal : list of strings, optional
+            args_in and args_length. Defaults to False.
+        args_equal : None or list of strings, optional
             Keyword parameter.  Assert that the reply arguments after 'ok'
             equal this list.  Ignored if args_echo is present; takes precedence
             over args_echo, args_in and args_length.
-        args_in : list of lists, optional
+        args_in : None or list of lists, optional
             Keyword parameter.  Assert that the reply arguments after 'ok'
             equal one of these tuples.  Ignored if args_equal or args_echo is
             present; takes precedence over args_length.
-        args_length : int, optional
+        args_length : None or int, optional
             Keyword parameter.  Assert that the length of the reply arguments
             after 'ok' matches this number. Ignored if args_equal, args_echo or
             args_in is present.
-        informs_count : int, optional
+        informs_count : None or int, optional
             Keyword parameter.  Assert that the number of informs received
-            matches this number.
-        """
+            matches this number, if not None.
 
+        """
         reply, informs = self.blocking_request(Message.request(requestname,
                                                                *params))
 
         self.test.assertEqual(reply.name, requestname, "Reply to request '%s'"
                               " has name '%s'." % (requestname, reply.name))
 
-        self.test.assertTrue(reply.reply_ok(),
-            "Expected request '%s' called with parameters %r to succeed, but"
-            " it failed %s." %
-            (requestname, params, ("with error '%s'" % reply.arguments[1]
-                                   if len(reply.arguments) >= 2
-                                   else "(with no error message)")))
+        msg = ("Expected request '%s' called with parameters %r to succeed, "
+               "but it failed %s."
+               % (requestname, params, ("with error '%s'" % reply.arguments[1]
+                                        if len(reply.arguments) >= 2 else
+                                        "(with no error message)")))
+        self.test.assertTrue(reply.reply_ok(), msg)
 
         args = reply.arguments[1:]
 
@@ -727,32 +727,31 @@ class BlockingTestClient(client.BlockingClient):
             args_equal = [str(p) for p in params]
 
         if args_equal is not None:
-            self.test.assertEqual(args, args_equal,
-                "Expected reply to request '%s' called with parameters %r to"
-                " have arguments %s, but received %s."
-                % (requestname, params, args_equal, args))
+            msg = ("Expected reply to request '%s' called with parameters %r "
+                   "to have arguments %s, but received %s."
+                   % (requestname, params, args_equal, args))
+            self.test.assertEqual(args, args_equal, msg)
         elif args_in is not None:
-            self.test.assertTrue(args in args_in,
-                "Expected reply to request '%s' called with parameters %r to"
-                " have arguments in %s, but received %s."
-                % (requestname, params, args_in, args))
+            msg = ("Expected reply to request '%s' called with parameters %r "
+                   "to have arguments in %s, but received %s."
+                   % (requestname, params, args_in, args))
+            self.test.assertTrue(args in args_in, msg)
         elif args_length is not None:
-            self.test.assertEqual(len(args), args_length,
-                "Expected reply to request '%s' called with parameters %r to"
-                " have %d arguments, but received %d: %s."
-                % (requestname, params, args_length, len(args), args))
+            msg = ("Expected reply to request '%s' called with parameters %r "
+                   "to have %d arguments, but received %d: %s."
+                   % (requestname, params, args_length, len(args), args))
+            self.test.assertEqual(len(args), args_length, msg)
 
         if informs_count is not None:
-            self.test.assertEqual(len(informs), informs_count,
-                "Expected %d informs in reply to request '%s' called with"
-                " parameters %r, but received %d."
-                % (informs_count, requestname, params, len(informs)))
+            msg = ("Expected %d informs in reply to request '%s' called with "
+                   "parameters %r, but received %d."
+                   % (informs_count, requestname, params, len(informs)))
+            self.test.assertEqual(len(informs), informs_count, msg)
 
         return args
 
     def assert_request_fails(self, requestname, *params, **kwargs):
-        """Assert that the given request fails when called with the given
-        parameters.
+        """Assert that given request fails when called with given parameters.
 
         Parameters
         ----------
@@ -761,23 +760,22 @@ class BlockingTestClient(client.BlockingClient):
         params : list of objects
             The parameters with which to call the request.
         status_equals : string, optional
-            Keyword parameter.  Assert that the reply status equals this
+            Keyword parameter. Assert that the reply status equals this
             string.
         error_equals : string, optional
-            Keyword parameter.  Assert that the error message equals this
+            Keyword parameter. Assert that the error message equals this
             string.
-        """
 
+        """
         reply, informs = self.blocking_request(Message.request(requestname,
                                                                *params))
 
-        self.test.assertEqual(reply.name, requestname,
-                              "Reply to request '%s' has name '%s'." %
-                              (requestname, reply.name))
+        msg = "Reply to request '%s' has name '%s'." % (requestname, reply.name)
+        self.test.assertEqual(reply.name, requestname, msg)
 
-        self.test.assertFalse(reply.reply_ok(), "Expected request '%s' called"
-                              " with parameters %r to fail, but it was"
-                              " successful." % (requestname, params))
+        msg = ("Expected request '%s' called with parameters %r to fail, "
+               "but it was successful." % (requestname, params))
+        self.test.assertFalse(reply.reply_ok(), msg)
 
         status = reply.arguments[0]
         error = reply.arguments[1] if len(reply.arguments) > 1 else None
@@ -786,16 +784,16 @@ class BlockingTestClient(client.BlockingClient):
         error_equals = kwargs.get("error_equals")
 
         if status_equals is not None:
-            self.test.assertTrue(status == status_equals,
-                "Expected request '%s' called with parameters %r to return"
-                " status %s, but the status was %r."
-                % (requestname, params, status_equals, status))
+            msg = ("Expected request '%s' called with parameters %r to return "
+                   "status %s, but the status was %r."
+                   % (requestname, params, status_equals, status))
+            self.test.assertTrue(status == status_equals, msg)
 
         if error_equals is not None:
-            self.test.assertTrue(error is not None and error == error_equals,
-                "Expected request '%s' called with parameters %r to fail with"
-                " error %s, but the error was %r."
-                % (requestname, params, error_equals, error))
+            msg = ("Expected request '%s' called with parameters %r to fail "
+                   "with error %s, but the error was %r."
+                   % (requestname, params, error_equals, error))
+            self.test.assertTrue(error is not None and error == error_equals, msg)
 
         return status, error
 
@@ -810,32 +808,32 @@ class BlockingTestClient(client.BlockingClient):
         sensorname : str
             The name of the sensor.
         sensortype : type, optional
-            The type to use to convert the sensor value. Default: str.
-        good : list of objects
+            The type to use to convert the sensor value.
+        good : list of objects, optional
             A list of values to which this request can successfully set the
             sensor.  The object type should match sensortype.
-        bad : list of objects
+        bad : list of objects, optional
             A list of values to which this request cannot successfully set the
             sensor.  The object type should match sensortype.
         places : int, optional
-            The number of places to use in a float comparison.  Has no effect
-            if sensortype is not float. Default: 7.
+            The number of places to use in a float comparison. Has no effect
+            if sensortype is not float.
         args_echo : boolean, optional
             Check that the value is echoed as an argument by the reply to the
-            request.  Default: False.
-        """
+            request.
 
+        """
         for value in good:
             self.assert_request_succeeds(requestname, value,
                                          args_echo=args_echo)
             time.sleep(self._sensor_lag())
 
-            self.assert_sensor_equals(sensorname, value, sensortype,
-                "After request '%s' was called with parameter %r, value of"
-                " sensor '%s' is %%r. Expected %r%s."
-                % (requestname, value, sensorname, value,
-                   (" (within %d decimal places)" % places
-                    if sensortype == float else "")), places)
+            msg = ("After request '%s' was called with parameter %r, "
+                   "value of sensor '%s' is %%r. Expected %r%s."
+                   % (requestname, value, sensorname, value,
+                      (" (within %d decimal places)" % places
+                       if sensortype == float else "")))
+            self.assert_sensor_equals(sensorname, value, sensortype, msg, places)
 
         for value in bad:
             self.assert_request_fails(requestname, value)
@@ -847,18 +845,18 @@ class BlockingTestClient(client.BlockingClient):
         ----------
         requestname : str
             The name of the request.
-        good : list of tuples
+        good : list of tuples, optional
             Each tuple contains a tuple of successful parameters, a tuple of
             expected sensor values (see :meth:`expected_sensor_value_tuple`),
             and optionally a dict of options. Permitted options are: "statuses"
             and a list of status tuples to check, or "delay" and a float in
             seconds specifying an additional delay before the sensors are
             expected to change.
-        bad : list of tuples
+        bad : list of tuples, optional
             Each tuple is set of parameters which should cause the request to
             fail.
-        """
 
+        """
         def testtuple(params, expected_values, options={}):
             return (params, expected_values, options)
 
@@ -875,18 +873,19 @@ class BlockingTestClient(client.BlockingClient):
                                for t in expected_values]
 
             for sensorname, value, sensortype, places in expected_values:
+                msg = ("After request '%s' was called with parameters %r, "
+                       "value of sensor '%s' is %%r. Expected %r%s."
+                       % (requestname, params, sensorname, value,
+                          (" (within %d decimal places)" % places
+                           if sensortype == float else "")))
                 self.assert_sensor_equals(sensorname, value, sensortype,
-                    "After request '%s' was called with parameters %r, value"
-                    " of sensor '%s' is %%r. Expected %r%s."
-                    % (requestname, params, sensorname, value,
-                       (" (within %d decimal places)" % places
-                        if sensortype == float else "")), places)
+                                          msg, places)
 
             for sensorname, status in expected_statuses:
-                self.assert_sensor_status_equals(sensorname, status,
-                    "After request '%s' was called with parameters %r, status"
-                    " of sensor '%s' is %%r. Expected %r."
-                    % (requestname, params, sensorname, status))
+                msg = ("After request '%s' was called with parameters %r, "
+                       "status of sensor '%s' is %%r. Expected %r."
+                       % (requestname, params, sensorname, status))
+                self.assert_sensor_status_equals(sensorname, status, msg)
 
         for params in bad:
             self.assert_request_fails(requestname, *params)
@@ -900,7 +899,7 @@ class DeviceTestServer(DeviceServer):
         self.__msgs = []
         self.restart_queue = Queue.Queue()
         self.set_restart_queue(self.restart_queue)
-        # Map of ClientConnection -> futures that can be resolved to cancel the command
+        # Map of ClientConnection -> futures that can be resolved to cancel command
         self._slow_futures = {}
         self._cnt_futures = set()
 
@@ -927,7 +926,7 @@ class DeviceTestServer(DeviceServer):
         raise FailReply("There was a problem with your request.")
 
     def request_slow_command(self, req, msg):
-        """A slow command, waits for msg.arguments[0] seconds"""
+        """A slow command, waits for msg.arguments[0] seconds."""
         if req.client_connection in self._slow_futures:
             raise FailReply(
                 'A slow command is already running for this connection')
@@ -950,7 +949,7 @@ class DeviceTestServer(DeviceServer):
         raise AsyncReply
 
     def request_cancel_slow_command(self, req, msg):
-        """Cancel slow command request, resulting in it replying immediately"""
+        """Cancel slow command request, resulting in it replying immediately."""
         fut = self._slow_futures.pop(req.client_connection, None)
         if fut:
             fut.set_result(None)
@@ -978,8 +977,7 @@ class DeviceTestServer(DeviceServer):
                 fut.set_result(self.__msgs)
 
     def stop(self, *args, **kwargs):
-        # Make sure a slow command with long timeout does not hold us
-        # up.
+        # Make sure a slow command with long timeout does not hold us up.
         for fut in self._slow_futures.values():
             if not fut.done:
                 fut.set_result(None)
@@ -987,10 +985,7 @@ class DeviceTestServer(DeviceServer):
 
 
 class TestUtilMixin(object):
-    """Mixin class implementing test helper methods for making
-       assertions about lists of KATCP messages.
-       """
-
+    """Mixin class for making assertions about lists of KATCP messages."""
     def _assert_msgs_length(self, actual_msgs, expected_number):
         """Assert that the number of messages is as expected."""
         num_msgs = len(actual_msgs)
@@ -1004,10 +999,13 @@ class TestUtilMixin(object):
     def _assert_msgs_equal(self, actual_msgs, expected_msgs, mid=None):
         """Assert that the actual and expected messages are equal.
 
-           actual_msgs: list of message objects received
-           expected_msgs: expected message strings
-           mid: Add message identifier to message if not None
-           """
+        Parameters
+        ----------
+        actual_msgs : list of message objects received
+        expected_msgs : expected message strings
+        mid : Add message identifier to message if not None
+
+        """
         for msg, msg_str in zip(actual_msgs, expected_msgs):
             desired_msg_str = add_mid_to_msg_str(msg_str, mid)
             logger.debug('actual: %r, desired: %r' % (str(msg), msg_str))
@@ -1015,12 +1013,14 @@ class TestUtilMixin(object):
         self._assert_msgs_length(actual_msgs, len(expected_msgs))
 
     def _assert_msgs_match(self, actual_msgs, expected):
-        """Assert that the actual messages match the expected regular
-           expression patterns.
+        """Assert that the actual messages match the expected regex patterns.
 
-           actual_msgs: list of message objects received
-           expected: expected patterns
-           """
+        Parameters
+        ----------
+        actual_msgs : list of message objects received
+        expected : expected patterns
+
+        """
         for msg, pattern in zip(actual_msgs, expected):
             self.assertTrue(re.match(pattern, str(msg)),
                             "Message did match pattern %r: %s" %
@@ -1028,47 +1028,51 @@ class TestUtilMixin(object):
         self._assert_msgs_length(actual_msgs, len(expected))
 
     def _assert_msgs_like(self, actual_msgs, expected, mid=None):
-        """Assert that the actual messages start and end with
-           the expected strings.
+        """Assert that the actual messages start and end with expected strings.
 
-           actual_msgs: list of message objects received
-           expected_msgs: tuples of (expected_prefix, expected_suffix)
-           mid: Add message identifier to message if not None
-           """
+        Parameters
+        ----------
+        actual_msgs : list of message objects received
+        expected_msgs : tuples of (expected_prefix, expected_suffix)
+        mid : Add message identifier to message if not None
+
+        """
         for msg, (prefix, suffix) in zip(actual_msgs, expected):
             str_msg = str(msg)
 
             prefix = add_mid_to_msg_str(prefix, mid)
 
             if prefix and not str_msg.startswith(prefix):
-                self.assertEqual(str_msg, prefix,
-                    msg="Message '%s' does not start with '%s'."
-                    % (str_msg, prefix))
+                m = "Message '%s' does not start with '%s'." % (str_msg, prefix)
+                self.assertEqual(str_msg, prefix, msg=m)
 
             if suffix and not str_msg.endswith(suffix):
-                self.assertEqual(str_msg, suffix,
-                    msg="Message '%s' does not end with '%s'."
-                    % (str_msg, suffix))
+                m = "Message '%s' does not end with '%s'." % (str_msg, suffix)
+                self.assertEqual(str_msg, suffix, msg=m)
+
         self._assert_msgs_length(actual_msgs, len(expected))
 
+
 def counting_callback(event=None, number_of_calls=1):
-    """Decorate a callback to set an event once it has been called a certain number of times
+    """Decorate callback to set event once it's called certain number of times.
 
     Parameters
-    ==========
-    event: threading.Event() -- will be set when enough calls have been made.
-        If None, a new event will be created
-    number_of_calls: int > 0 -- Number of calls before event.set() is called
+    ----------
+    event: :class:`threading.Event` object or None, optional
+        Will be set when enough calls have been made.
+        If None, a new event will be created.
+    number_of_calls: int, optional
+        Number of calls before event.set() is called (must be > 0).
 
     Decorated Properties
-    ====================
-
+    --------------------
     done -- The event object
     get_no_calls() -- Returns current number of calls
     wait(timeout=None) -- Wait for number_of_calls to be made
     assert_wait(timeout=None) -- Wait for number_of_calls and raises
         AssertionError if they are not made before the timeout.
     reset() -- Set call count back to zero
+
     """
     if event is None:
         event = threading.Event()
@@ -1085,7 +1089,7 @@ def counting_callback(event=None, number_of_calls=1):
                 event.set()
             return retval
 
-        wrapped_callback.get_no_calls = lambda : calls[0]
+        wrapped_callback.get_no_calls = lambda: calls[0]
         wrapped_callback.done = event
         wrapped_callback.wait = event.wait
 
@@ -1105,12 +1109,13 @@ def counting_callback(event=None, number_of_calls=1):
 
 
 def suppress_queue_repeats(queue, initial_value, read_time=None):
-    """Generator that reads a Queue.Queue() and suppresses runs of repeated values
+    """Generator that reads a Queue and suppresses runs of repeated values.
 
     The queue is consumed, and a value yielded whenever it differs from the
-    previous value. If read_time is specified, stops iteration if the
-    queue is empty after reading the queue for read_time seconds. read_time=None
-    continues reading forever.
+    previous value. If *read_time* is specified, stops iteration if the
+    queue is empty after reading the queue for *read_time* seconds. If
+    *read_time* is None, continue reading forever.
+
     """
     start_time = time.time()
     cur_value = initial_value
@@ -1128,63 +1133,63 @@ def suppress_queue_repeats(queue, initial_value, read_time=None):
             yield next_value
             cur_value = next_value
 
-class SensorTransitionWaiter(object):
-    """
-    Wait for a given set of sensor transitions
 
-    Can be used to test sensor transitions indepedent of timing. If the
+class SensorTransitionWaiter(object):
+    """Wait for a given set of sensor transitions.
+
+    Can be used to test sensor transitions independent of timing. If the
     SensorTransitionWaiter object is instantiated before the test is triggered
     the transitions are guaranteed (I hope) to be detected.
+
+    Parameters
+    ----------
+    sensor : KATSensor object
+        Sensor to watch
+    value_sequence : list of sensor values or callable conditions or None
+        Will check that this sequence of values occurs on the watched
+        sensor. The first value is the starting value -- an error will be
+        raised if that is not the initial value. If an object in the list
+        is a callable, it will be called on the actual sensor value. If it
+        returns True, the value will be considered as matched.
+        If value_sequence is None, no checking will be done, and the .wait()
+        method cannot be called. However, the received values can be
+        retrieved using get_received_values().
+
+    Notes
+    -----
+    If an exact value sequence is passed, the sensor is watched
+    until its value changes. If the sensor does not take on the
+    exact sequence of values, the transition is not matched. If
+    expected values are repeated (e.g. [1, 2, 2, 3]) the repeated
+    values (i.e. the second 2 in the example) are ignored.
+
+    The following algorithm is used to test a sequence for validity
+    when callable tests are used:
+
+    * The initial value needs to satisfy at least the first test
+    * While the current and not next test passes, continue reading
+    * If neither current nor next passes, signal failure
+    * If next passes, move test sequence along
+
+    This can be used to check a sequence of floating point values::
+
+      waiter = WaitForSensorTransition(sensor, value_sequence=(
+          lambda x: x < 0.7,
+          lambda x: x >= 0.7,
+          lambda x: x >= 1,
+          lambda x: x < 1,
+          lambda x: x < 0.3)
+      waiter.wait(timeout=1)
+
+    The above can be used to check that a sensor starts at a value smaller
+    than 0.7, then grows to a value larger than 1 and then shrinks to a value
+    smaller than 0.3. Note that the x >= 0.7 test is required in case the
+    sensor value attains exactly 0.7.
+
+    For tests like this it is important to specify a timeout.
+
     """
     def __init__(self, sensor, value_sequence=None):
-        """
-        Parameters
-        ----------
-        sensor : KATSensor object to watch
-        value_sequence : list of sensor values or callable conditions or None
-
-            Will check that this sequence of values occurs on the watched
-            sensor. The first value is the starting value -- an error will be
-            raised if that is not the initial value.  If an object in the list
-            is a callable, it will be called on the actual sensor value. If it
-            returns True, the value will be considered as matched. If
-            value_sequence is None, no checking will be done, and the .wait()
-            method cannot be called. However, the received values can be
-            retrieved using get_received_values().
-
-        If an exact value sequence is passed, the sensor is watched
-        until its value changes. If the sensor does not take on the
-        exact sequence of values, the transition is not matched. If
-        expected values are repeated (e.g. [1, 2, 2, 3]) the repeated
-        values (i.e. the second 2 in the example) are ignored.
-
-
-        The following algorithm is used to test a For a sequence for validity
-        when callable tests are used:
-
-        * The initial value needs to satisfy at least the first test
-        * While the current and not next test passes, continue reading
-        * If neither current nor next passes, signal failure
-        * If next passes, move test sequence along
-
-        This can be used to check a sequence of floating point values:
-
-        waiter = WaitForSensorTransition(sensor, value_sequence=(
-            lambda x: x < 0.7,
-            lambda x: x >= 0.7,
-            lambda x: x >= 1,
-            lambda x: x < 1,
-            lambda x: x < 0.3)
-        waiter.wait(timeout=1)
-
-        can be used to check that a sensor starts at a value smaller than 0.7,
-        then grows to a value larger than 1 and then shrinks to a value smaller
-        than 0.3. Note that the x >= 0.7 test is required in case the sensor
-        value attains exactly 0.7.
-
-        For tests like this it is important to specify a timeout.
-        """
-
         self.sensor = sensor
         self.desired_value_sequence = value_sequence
         self._torn_down = False
@@ -1202,11 +1207,11 @@ class SensorTransitionWaiter(object):
         return self.sensor.value()
 
     def _configure_sensor(self):
-        # Do neccesary sensor configuration. Assumes sensor is stored as
+        # Do necessary sensor configuration. Assumes sensor is stored as
         # self.sensor
-
         # Attach our observer to the katcp sensor
-        class observer(object): pass
+        class observer(object):
+            pass
         observer.update = self._sensor_callback
         self._observer = observer
         self.sensor.attach(self._observer)
@@ -1220,12 +1225,12 @@ class SensorTransitionWaiter(object):
         self._value_queue.put(reading[2])
 
     def _test_value(self, value, value_test):
-        """
-        Test value against value_test
+        """Test value against value_test.
 
-        value_test can be a callable or a simple value. If it is a simple
+        The *value_test* can be a callable or a simple value. If it is a simple
         value it is compared for equality, otherwise value_test(value)
-        is called and the result returned
+        is called and the result returned.
+
         """
         if callable(value_test):
             return value_test(value)
@@ -1233,29 +1238,28 @@ class SensorTransitionWaiter(object):
             return value == value_test
 
     def wait(self, timeout=5):
-        """
-        Wait until the specified transition occurs
+        """Wait until the specified transition occurs.
 
         Parameters
         ----------
-        timeout : float seconds or None
-            Time to wait for the transition. Wait forever if None
+        timeout : float or None, optional
+            Time to wait for the transition in seconds. Wait forever if None.
 
         Returns
         -------
-
         Returns True if the sequence is matched within the
         timeout. Returns False if the sequence does not match or if
         the timeout expired. The actual received values is available
         as the `received_values` member of the object. Sets the member
-        `timed_out` to True if a timeout occured.
+        `timed_out` to True if a timeout occurred.
+
         """
         if self._done:
-            raise RuntimeError('Transition already triggered. Instantiate a new '
-                               'SensorTransitionWaiter object')
+            raise RuntimeError('Transition already triggered. Instantiate '
+                               'a new SensorTransitionWaiter object')
         if self._torn_down:
-            raise RuntimeError('This object has been torn down. Instantiate a new '
-                               'SensorTransitionWaiter object')
+            raise RuntimeError('This object has been torn down. Instantiate '
+                               'a new SensorTransitionWaiter object')
         nonrepeat_sensor_values = suppress_queue_repeats(
             self._value_queue, self.received_values[-1], timeout)
 
@@ -1267,7 +1271,7 @@ class SensorTransitionWaiter(object):
                     self.desired_value_sequence[:-1],
                     self.desired_value_sequence[1:]):
                 if self._test_value(self.received_values[-1], next_test):
-                    continue # Next test already satisfied by current value
+                    continue  # Next test already satisfied by current value
                 while True:
                     # Read values from the queue until either the timeout
                     # expires or a value different from the last is found
@@ -1296,11 +1300,15 @@ class SensorTransitionWaiter(object):
 
         Parameters
         ----------
+        stop : bool, optional
+            Stop listening, tear down and unsubscribe from sensor
+        reset: bool, optional
+            Reset the recieved values to an empty list
 
-        stop -- Stop listening, tear down and unsubscribe from sensor
-        reset -- Reset the recieved values to an empty list
+        Notes
+        -----
+        Once this method has been called, wait() can no longer work.
 
-        Note, once this method has been called, wait() can no longer work
         """
         try:
             while True:
@@ -1315,14 +1323,15 @@ class SensorTransitionWaiter(object):
         return received_values
 
     def teardown(self):
-        """Clean up, restoring sensor strategy and deregistering the sensor callback"""
+        """Clean up: restore sensor strategy and deregister sensor callback."""
         if self._torn_down:
             return
         self._teardown_sensor()
         self._torn_down = True
 
+
 class SensorTransitionStatusWaiter(SensorTransitionWaiter):
-    """Also check for sensor status transitions, not just value"""
+    """Also check for sensor status transitions, not just value."""
     def _get_current_sensor_value(self):
         # Return (status, value) tuple
         return self.sensor.read()[1:]
@@ -1333,10 +1342,10 @@ class SensorTransitionStatusWaiter(SensorTransitionWaiter):
 
 
 def wait_sensor(sensor, value, status=None, timeout=5):
-    """Wait for a katcp sensor to attain a certain value
+    """Wait for a katcp sensor to attain a certain value.
 
-    Temporarily attaches to the sensor to get sensor updates. It is assumed that
-    the sensor is getting updated by another thread.
+    Temporarily attaches to the sensor to get sensor updates.
+    It is assumed that the sensor is getting updated by another thread.
 
     """
     test_val = value if status is None else (status, value)
@@ -1348,15 +1357,17 @@ def wait_sensor(sensor, value, status=None, timeout=5):
     return waiter.wait(timeout=timeout)
 
 
-def start_thread_with_cleanup(
-        test_instance, thread_object, timeout=1, start_timeout=None):
-    """Start thread_object and add cleanup functions to test_instance
+def start_thread_with_cleanup(test_instance, thread_object, timeout=1,
+                              start_timeout=None):
+    """Start thread_object and add cleanup functions to test_instance.
 
-    thread_object.start() is called to start the thread, or thread_object.start(
-    timeout=start_timeout if the start_timeout parameter is not None.
+    thread_object.start() is called to start the thread, or
+    thread_object.start(timeout=start_timeout) if the start_timeout parameter
+    is not None.
 
-    thread_object.join(timeout=timeout) and thread_object.stop() is added to the
-    test instance cleanup. Parameter timeout defaults to 1.
+    thread_object.join(timeout=timeout) and thread_object.stop() is added to
+    the test instance cleanup.
+
     """
     test_instance.addCleanup(thread_object.join, timeout=timeout)
     test_instance.addCleanup(thread_object.stop)
@@ -1365,13 +1376,10 @@ def start_thread_with_cleanup(
     else:
         thread_object.start()
 
-import threading
-from peak.util.proxies import ObjectWrapper
-
 
 class AtomicIaddCallback(ObjectWrapper):
-    # Attributes must be in the class definition, or else they will be proxied to
-    # __subject__
+    # Attributes must be in the class definition, or else they will be
+    # proxied to __subject__
     _mutex = None
     _callback = None
 
@@ -1387,18 +1395,19 @@ class AtomicIaddCallback(ObjectWrapper):
         self._callback(val)
         return self
 
+
 class WaitingMock(mock.Mock):
     def __init__(self, *args, **kwargs):
         super(WaitingMock, self).__init__(*args, **kwargs)
         self._counted_queue = Queue.Queue(maxsize=1)
-        # Replace the underlying value for self.call_count with a proxied int that uses a
-        # threading.RLock to allow atomic incrementation in case multiple threads are
-        # calling the mock, and does a callback as soon as the value is updated. This is
-        # needed in case the side_effect function is blocking. The original
-        # mock.CallableMixin._mock_call() updates the call_count before calling
-        # side_effect(). This means we can notify someone waiting on
-        # self.assert_wait_call_count in another thread as soon as the call is made, even
-        # if side_effect blocks
+        # Replace the underlying value for self.call_count with a proxied int
+        # that uses a threading.RLock to allow atomic incrementation in case
+        # multiple threads are calling the mock, and does a callback as soon as
+        # the value is updated. This is needed in case the side_effect function
+        # is blocking. The original mock.CallableMixin._mock_call() updates the
+        # call_count before calling side_effect(). This means we can notify
+        # someone waiting on self.assert_wait_call_count in another thread as
+        # soon as the call is made, even if side_effect blocks.
         self.call_count = AtomicIaddCallback(0, callback=self._call_count_callback)
 
     def _call_count_callback(self, call_count):
@@ -1408,17 +1417,17 @@ class WaitingMock(mock.Mock):
             pass
 
     def reset_mock(self):
-        # Re-set call_count as an AtomicIaddCallback instance since the reset_mock()
-        # super-method does self.call_count=0
+        # Re-set call_count as an AtomicIaddCallback instance since
+        # the reset_mock() super-method does self.call_count=0
         super(WaitingMock, self).reset_mock()
         self.call_count = AtomicIaddCallback(
             self.call_count, callback=self._call_count_callback)
 
     def assert_wait_call_count(self, count, timeout=1.):
-        """
-        Wait for mock to be called at least 'count' times within 'timeout' seconds
+        """Wait for mock to be called >= *count* times within *timeout* seconds.
 
         Raises AssertionError if the call count is not reached.
+
         """
         t0 = time.time()
         to_wait = timeout
@@ -1434,8 +1443,8 @@ class WaitingMock(mock.Mock):
         assert(self.call_count >= count)
         # The _mock_call method increments call_count before adding the call to
         # call_args or call_args_list, so it is possible that we return from
-        # assert_wait_call_count() before the results are available. Try sleep some
-        # more until this stops being the case
+        # assert_wait_call_count() before the results are available. Try sleep
+        # some more until this stops being the case.
         quantum = to_wait / 100.
         while to_wait >= 0 and len(self.call_args_list) < count:
             try:
@@ -1444,43 +1453,40 @@ class WaitingMock(mock.Mock):
                 pass
             to_wait -= quantum
 
+
 def mock_req(req_name, *args, **kwargs):
-    """
-    Create a mock ClientRequestConnection object
+    """Create a mock ClientRequestConnection object.
 
     Parameters
     ----------
-
     req_name : str
         Name of the request
-    *args : obj
-        arguments for the request, used to construct a request Message object
+    *args : list of objects
+        Arguments for the request, used to construct a request Message object
 
     Optional Keyword Arguments
     --------------------------
-
     server : obj
        Used as the server instance when constructing a client_connection.
-       Cannot be specified together with client_conn
+       Cannot be specified together with client_conn.
     client_conn : obj
        Used as the client_connection object when constructing mock
-       ClientReqeuestConnection object. Cannot be specified together with sock
+       ClientRequestConnection object. Cannot be specified together with sock.
     sock : obj
-       Used as the socket object when constructing a server and client_connection
+       Used as the socket object when constructing server and client_connection
 
-    If server but not sock is specified, a mock sock and real a
-    ClientConnection instances are used. If client_conn is not specified, a
-    WaitingMock instance is used instead.
+    If server but not sock is specified, a mock sock and real ClientConnection
+    instances are used. If client_conn is not specified, a WaitingMock instance
+    is used instead.
 
     Returns
     -------
-
-    req : WaitingMock instance
+    req : :class:`WaitingMock` object
         The `client_connection` and `msg` attributes are set. The
         :meth:`make_reply()` method returns the appropriate request Message
         object as a side effect.
-    """
 
+    """
     server = kwargs.get('server')
     client_conn = kwargs.get('client_conn')
     sock = kwargs.get('sock')
@@ -1495,12 +1501,12 @@ def mock_req(req_name, *args, **kwargs):
     if not client_conn:
         client_conn = WaitingMock()
 
-    # TODO Consider making the mocks autospecced from the real classes to test somewhat
-    # more strictly.
+    # TODO Consider making the mocks autospecced from the real classes to test
+    # somewhat more strictly.
 
-    # TODO Consider making .reply_msg and .inform_msgs attributes containing the actualy
-    # reply/inform Message objects that would have been sent. May make certain kinds of
-    # test comparisons easier.
+    # TODO Consider making .reply_msg and .inform_msgs attributes containing
+    # the actual reply/inform Message objects that would have been sent.
+    # May make certain kinds of test comparisons easier.
 
     req = WaitingMock()
     req.client_connection = client_conn
@@ -1509,14 +1515,16 @@ def mock_req(req_name, *args, **kwargs):
         req.msg, *args)
     return req
 
+
 def handle_mock_req(dev, req):
-    """Instrument a real not-started server.DeviceServer subclass to handle a mock request
+    """Instrument a real unstarted server.DeviceServer to handle a mock request.
 
     Parameters
     ----------
-
-    dev : a katcp.server.DeviceServer instance that has not neccesarily been started
-    req : a mock request created with katcp.testutils.mock_req()
+    dev : :class:`katcp.server.DeviceServer` object
+         A device server that has not necessarily been started
+    req : :class:`WaitingMock` object
+        A mock request created with katcp.testutils.mock_req()
 
     Example
     -------
@@ -1525,22 +1533,26 @@ def handle_mock_req(dev, req):
     handle_mock_req(dev, req)
     # All replies / informs can now be asserted on the mock request
     req.reply.assert_called_once_with('ok')
+
     """
     client_connection = req.client_connection
-    # Hook up client_connection reply so that it logs the reply on the mock request obj
-    client_connection.reply.side_effect = lambda rep_msg, _: req.reply(*rep_msg.arguments)
+    # Hook up client_connection reply so that it logs reply on mock request obj
+    client_connection.reply.side_effect = \
+        lambda rep_msg, _: req.reply(*rep_msg.arguments)
     with mock.patch('katcp.server.ClientRequestConnection') as CRC:
         CRC.return_value = req
         dev.handle_request(req.client_connection, req.msg)
 
+
 def call_in_ioloop(ioloop, fn, *args, **kwargs):
     """Run fn in ioloop and block until the result is available.
 
-    Should raise exceptions with proper tracebacks
+    Should raise exceptions with proper tracebacks.
 
-    kwargs ioloop_timeout is used as the maximum time to wait for a result, defaults to
-    5s. This kwarg is not sent to fn. Raises concurrent.futures.TimeoutError if the result
-    times out.
+    The *ioloop_timeout* kwarg is used as the maximum time to wait for a
+    result, which defaults to 5 seconds. This kwarg is not sent to fn.
+    Raises concurrent.futures.TimeoutError if the result times out.
+
     """
     ioloop_timeout = kwargs.pop('ioloop_timeout', 5)
     f = Future()
@@ -1549,7 +1561,7 @@ def call_in_ioloop(ioloop, fn, *args, **kwargs):
     @gen.coroutine
     def cb():
         return fn(*args, **kwargs)
-    ioloop.add_callback(lambda : gen.chain_future(cb(), tf))
+    ioloop.add_callback(lambda: gen.chain_future(cb(), tf))
     try:
         f.result(timeout=ioloop_timeout)
     except TimeoutError:
@@ -1560,18 +1572,18 @@ def call_in_ioloop(ioloop, fn, *args, **kwargs):
 
 
 class TimewarpAsyncTestCase(tornado.testing.AsyncTestCase):
-    """Subclass of tornado.testing.AsyncTestCase that supports timewarping
+    """Tornado AsyncTestCase that supports timewarping.
 
-    The io_loop.time() method is replaced by a mock-timer, that only progresses when moved
-    along using set_ioloop_time().
+    The io_loop.time() method is replaced by a mock-timer, that only progresses
+    when moved along using set_ioloop_time().
 
-    Note, subclasses must call their super setUp() methods.
+    Note: subclasses must call their super setUp() methods.
+
     """
-
     def get_new_ioloop(self):
         ioloop = super(TimewarpAsyncTestCase, self).get_new_ioloop()
         self.ioloop_time = 0
-        ioloop.time = lambda : self.ioloop_time
+        ioloop.time = lambda: self.ioloop_time
         def set_ioloop_thread_id():
             self.ioloop_thread_id = get_ident()
         ioloop.add_callback(set_ioloop_thread_id)
@@ -1579,7 +1591,7 @@ class TimewarpAsyncTestCase(tornado.testing.AsyncTestCase):
 
     def wake_ioloop(self):
         f = tornado.concurrent.Future()
-        self.io_loop.add_callback(lambda : f.set_result(None))
+        self.io_loop.add_callback(lambda: f.set_result(None))
         return f
 
     def set_ioloop_time(self, new_time, wake_ioloop=True):

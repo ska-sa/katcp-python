@@ -27,17 +27,19 @@ try:
 
     from .server import DeviceServerBase, DeviceServer, DeviceLogger
 
-    from .client import DeviceClient, AsyncClient, CallbackClient, BlockingClient
+    from .client import (DeviceClient, AsyncClient, CallbackClient,
+                         BlockingClient)
 
-    from .sensortree import GenericSensorTree, BooleanSensorTree, \
-                            AggregateSensorTree
+    from .sensortree import (GenericSensorTree, BooleanSensorTree,
+                             AggregateSensorTree)
 
 except ImportError:
-    # Ignore this error to prevent import errors during setup.py when katcp.version is
-    # imported. Things should break soon enough afterwards :)
+    # Ignore this error to prevent import errors during setup.py when
+    # katcp.version is imported. Things should break soon enough afterwards :)
     import warnings
-    warnings.warn('Could not import some modules, fine during setup, but will prevent the '
-                  'library from working if you see this after installation')
+    warnings.warn('Could not import some modules, fine during setup, '
+                  'but will prevent the library from working if you see '
+                  'this after installation')
     logging.exception('Error importing:')
 
 del logging

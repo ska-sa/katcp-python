@@ -19,7 +19,9 @@ from .core import (Message, FailReply, DEFAULT_KATCP_MAJOR,
                    SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC, MS_TO_SEC_FAC,
                    convert_method_name)
 
+
 logger = logging.getLogger(__name__)
+
 
 # KATCP Type Classes
 #
@@ -37,13 +39,14 @@ class KatcpType(object):
 
     Parameters
     ----------
-    default : object
+    default : object, optional
         The default value for this type.
-    optional : boolean
+    optional : boolean, optional
         Whether the value is allowed to be None.
-    multiple : boolean
+    multiple : boolean, optional
         Whether multiple values of this type are expected. Must be the
         last type parameter if this is True.
+
     """
 
     name = "unknown"
@@ -63,6 +66,7 @@ class KatcpType(object):
         -------
         default : object
             The default value.
+
         """
         if self._default is None and not self._optional:
             raise ValueError("No value or default given")
@@ -74,6 +78,7 @@ class KatcpType(object):
         Do nothing if the value is valid. Raise an exception if the value is not
         valid. Parameter major describes the KATCP major version to use when
         interpreting the validity of a value.
+
         """
         pass
 
@@ -84,15 +89,18 @@ class KatcpType(object):
         ----------
         value : object
             The value to pack.
-        nocheck : bool
+        nocheck : bool, optional
             Whether to check that the value is valid before
             packing it.
-        major : int. Defaults to latest implemented KATCP version (5)
-             Major version of KATCP to use when interpreting types
+        major : int, optional
+            Major version of KATCP to use when interpreting types.
+            Defaults to latest implemented KATCP version.
+
         Returns
         -------
         packed_value : str
             The unescaped KATCP string representing the value.
+
         """
         if value is None:
             value = self.get_default()
@@ -109,13 +117,15 @@ class KatcpType(object):
         ----------
         packed_value : str
             The unescaped KATCP string to parse into a value.
-        major : int. Defaults to latest implemented KATCP version (5)
-             Major version of KATCP to use when interpreting types
+        major : int, optional
+            Major version of KATCP to use when interpreting types.
+            Defaults to latest implemented KATCP version.
 
         Returns
         -------
         value : object
             The value the KATCP string represented.
+
         """
         if packed_value is None:
             value = self.get_default()
@@ -138,6 +148,7 @@ class Int(KatcpType):
         The minimum allowed value. Ignored if not given.
     max : int
         The maximum allowed value. Ignored if not given.
+
     """
 
     name = "integer"
@@ -159,13 +170,14 @@ class Int(KatcpType):
         """Check whether the value is between the minimum and maximum.
 
         Raise a ValueError if it is not.
+
         """
         if self._min is not None and value < self._min:
             raise ValueError("Integer %d is lower than minimum %d."
-                % (value, self._min))
+                             % (value, self._min))
         if self._max is not None and value > self._max:
             raise ValueError("Integer %d is higher than maximum %d."
-                % (value, self._max))
+                             % (value, self._max))
 
 
 class Float(KatcpType):
@@ -177,6 +189,7 @@ class Float(KatcpType):
         The minimum allowed value. Ignored if not given.
     max : float
         The maximum allowed value. Ignored if not given.
+
     """
 
     name = "float"
@@ -197,13 +210,14 @@ class Float(KatcpType):
         """Check whether the value is between the minimum and maximum.
 
         Raise a ValueError if it is not.
+
         """
         if self._min is not None and value < self._min:
             raise ValueError("Float %g is lower than minimum %g."
-                % (value, self._min))
+                             % (value, self._min))
         if self._max is not None and value > self._max:
             raise ValueError("Float %g is higher than maximum %g."
-                % (value, self._max))
+                             % (value, self._max))
 
 
 class Bool(KatcpType):
@@ -216,7 +230,7 @@ class Bool(KatcpType):
     def decode(self, value, major):
         if value not in ("0", "1"):
             raise ValueError("Boolean value must be '0' or '1' but is '%s'."
-                % (value,))
+                             % (value,))
         return value == "1"
 
 
@@ -238,6 +252,7 @@ class Discrete(Str):
         List of the values the discrete type may accept.
     case_insensitive : bool
         Whether case-insensitive value matching should be used.
+
     """
 
     name = "discrete"
@@ -255,6 +270,7 @@ class Discrete(Str):
         """Check whether the value in the set of allowed values.
 
         Raise a ValueError if it is not.
+
         """
         if self._case_insensitive:
             value = value.lower()
@@ -263,9 +279,9 @@ class Discrete(Str):
         else:
             values = self._valid_values
             caseflag = ""
-        if not value in values:
+        if value not in values:
             raise ValueError("Discrete value '%s' is not one of %s%s."
-                % (value, list(self._values), caseflag))
+                             % (value, list(self._values), caseflag))
 
 
 class Lru(KatcpType):
@@ -305,6 +321,7 @@ class Address(KatcpType):
     .. note::
 
        The address type was added in katcp 0.4.
+
     """
 
     name = "address"
@@ -342,6 +359,7 @@ class Timestamp(KatcpType):
     """The KATCP timestamp type."""
 
     name = "timestamp"
+
     # Use microsecond precision, which is about as much as you can expect with a
     # 64-bit float representing epoch-seconds
     def encode(self, value, major):
@@ -351,7 +369,6 @@ class Timestamp(KatcpType):
         else:
             # In milliseconds please!
             return "%i" % int(float(value) * SEC_TO_MS_FAC)
-
 
     def decode(self, value, major):
         try:
@@ -366,13 +383,13 @@ class Timestamp(KatcpType):
 
 
 class TimestampOrNow(Timestamp):
-    """KatcpType representing either a Timestamp or the special value
-       :const:`katcp.kattypes.TimestampOrNow.NOW`.
+    """KatcpType representing either a Timestamp or the special value for now.
 
-       Floats are encoded as for :class:`katcp.kattypes.Timestamp`.
-       :const:`katcp.kattypes.TimestampOrNow.NOW` is encoded as the string
-       "now".
-       """
+    Floats are encoded as for :class:`katcp.kattypes.Timestamp`. The special
+    value for now, :const:`katcp.kattypes.TimestampOrNow.NOW`, is encoded as
+    the string "now".
+
+    """
 
     name = "timestamp_or_now"
 
@@ -390,8 +407,7 @@ class TimestampOrNow(Timestamp):
 
 
 class StrictTimestamp(KatcpType):
-    """A timestamp that enforces the XXXX.YYY format for timestamps.
-    """
+    """A timestamp that enforces the XXXX.YYY format for timestamps."""
 
     name = "strict_timestamp"
 
@@ -415,6 +431,7 @@ class StrictTimestamp(KatcpType):
         """Check whether the value is positive.
 
         Raise a ValueError if it is not.
+
         """
         if value < 0:
             raise ValueError("Strict timestamps may not be negative.")
@@ -428,6 +445,7 @@ class Struct(KatcpType):
     fmt : str
         Format to use for packing and unpacking values. It is passed directly
         into :func:`struct.pack` and :func:`struct.unpack`.
+
     """
 
     name = "struct"
@@ -458,6 +476,7 @@ class Regex(Str):
     ----------
     regex : str or regular expression object
         Regular expression that values should match.
+
     """
 
     name = "regex"
@@ -475,7 +494,7 @@ class Regex(Str):
             self._pattern = regex
             self._compiled = re.compile(regex)
         self._flags = ",".join([name for name, value in self._re_flags
-            if self._compiled.flags & value])
+                                if self._compiled.flags & value])
         super(Regex, self).__init__(**kwargs)
 
     def check(self, value, major):
@@ -493,10 +512,11 @@ class DiscreteMulti(Discrete):
     ----------
     values : list of str
         Set of allowed values.
-    all_keyword : str
+    all_keyword : str, optional
         The string which represents the list of all allowed values.
-    separator : str
+    separator : str, optional
         The separator used in the packed value string.
+
     """
 
     name = "discretemulti"
@@ -522,7 +542,7 @@ class DiscreteMulti(Discrete):
 
 
 class Parameter(object):
-    """Wrapper for kattypes which holds parameter-specific information
+    """Wrapper for kattypes which holds parameter-specific information.
 
     Parameters
     ----------
@@ -534,6 +554,7 @@ class Parameter(object):
         The parameter's kattype
     major : integer
         Major version of KATCP to use when interpreting types
+
     """
 
     def __init__(self, position, name, kattype, major):
@@ -554,6 +575,7 @@ class Parameter(object):
         -------
         packed_value : str
             The unescaped KATCP string representing the value.
+
         """
         return self._kattype.pack(value, self.major)
 
@@ -569,6 +591,7 @@ class Parameter(object):
         -------
         value : object
             The unpacked value.
+
         """
         # Wrap errors in FailReplies with information identifying the parameter
         try:
@@ -577,8 +600,8 @@ class Parameter(object):
             raise FailReply("Error in parameter %s (%s): %s" %
                             (self.position, self.name, message))
 
-## request, return_reply and inform method decorators
-#
+
+# request, return_reply and inform method decorators
 
 def request(*types, **options):
     """Decorator for request handler methods.
@@ -595,11 +618,12 @@ def request(*types, **options):
 
     Keyword Arguments
     -----------------
-    include_msg : bool, default: False
-        Pass the request message as the third parameter to the decorated request
-        handler function
-    major : int. Defaults to latest implemented KATCP version (5)
-        Major version of KATCP to use when interpreting types
+    include_msg : bool, optional
+        Pass the request message as the third parameter to the decorated
+        request handler function (default is False).
+    major : int, optional
+        Major version of KATCP to use when interpreting types.
+        Defaults to latest implemented KATCP version.
 
     Examples
     --------
@@ -617,7 +641,7 @@ def request(*types, **options):
     ...         return ("ok", my_int % 2)
     ...
 
-"""
+    """
     include_msg = options.pop('include_msg', False)
     major = options.pop('major', DEFAULT_KATCP_MAJOR)
     check_req = options.pop('_check_req', True)
@@ -628,8 +652,8 @@ def request(*types, **options):
     if len(types) > 1:
         for type_ in types[:-1]:
             if type_._multiple:
-                raise TypeError(
-                    'Only the last parameter type can accept multiple arguments.')
+                raise TypeError('Only the last parameter type '
+                                'can accept multiple arguments.')
 
     def decorator(handler):
         argnames = []
@@ -645,8 +669,8 @@ def request(*types, **options):
         # Slightly hacky way of determining whether there is a req
         # For backward-compatibility also check for 'sock' and handle it the
         # same as 'req'
-        has_req = check_req and len(all_argnames) > 1 and all_argnames[1] in (
-                "req", "sock")
+        has_req = (check_req and len(all_argnames) > 1 and
+                   all_argnames[1] in ("req", "sock"))
 
         params_start = 1
         if has_req:
@@ -688,14 +712,15 @@ inform.__doc__ = """Decorator for inform handler methods.
 
        This is currently identical to the request decorator, and is
        thus an alias.
+
        """
 
 unpack_message = partial(request, _check_req=False)
 unpack_message.__doc__ = (
-"""Decorator that unpacks katcp.Messages to function arguments
+"""Decorator that unpacks katcp.Messages to function arguments.
 
-The method being decorated should take arguments matching the list of types. The
-decorator will unpack the request message into the arguments.
+The method being decorated should take arguments matching the list of types.
+The decorator will unpack the request message into the arguments.
 
 Parameters
 ----------
@@ -705,11 +730,12 @@ types : list of kattypes
 
 Keyword Arguments
 -----------------
-include_msg: bool, default: False
-    Pass the request message as the second parameter to the decorated request
-    handler function
-major : int. Defaults to latest implemented KATCP version (5)
-    Major version of KATCP to use when interpreting types
+include_msg : bool, optional
+    Pass the request message as the third parameter to the decorated
+    request handler function (default is False).
+major : int, optional
+    Major version of KATCP to use when interpreting types.
+    Defaults to latest implemented KATCP version.
 
 Examples
 --------
@@ -722,10 +748,12 @@ Examples
 ...     def inform_fruit_picked(self, msg, fruit, no_picked):
 ...         print no_picked, 'of fruit ', fruit, ' picked.'
 ...         print 'Raw inform message: ', str(msg)
+
 """)
 
+
 def return_reply(*types, **options):
-    """Decorator for returning replies from request handler methods
+    """Decorator for returning replies from request handler methods.
 
     The method being decorated should return an iterable of result
     values. If the first value is 'ok', the decorator will check the
@@ -740,12 +768,11 @@ def return_reply(*types, **options):
     types : list of kattypes
         The types of the reply message parameters (in order).
 
-
     Keyword Arguments
     -----------------
-
-    major : int. Defaults to latest implemented KATCP version (5)
-        Major version of KATCP protocol to use when interpreting types
+    major : int, optional
+        Major version of KATCP to use when interpreting types.
+        Defaults to latest implemented KATCP version.
 
     Examples
     --------
@@ -755,6 +782,7 @@ def return_reply(*types, **options):
     ...     def request_myreq(self, req, my_int):
     ...         return ("ok", my_int + 1, my_int * 2.0)
     ...
+
     """
     major = options.pop('major', DEFAULT_KATCP_MAJOR)
     if len(options) > 0:
@@ -765,8 +793,8 @@ def return_reply(*types, **options):
     if len(types) > 1:
         for type_ in types[:-1]:
             if type_._multiple:
-                raise TypeError(
-                    'Only the last parameter type can accept multiple arguments.')
+                raise TypeError('Only the last parameter type '
+                                'can accept multiple arguments.')
 
     def decorator(handler):
         if not handler.__name__.startswith("request_"):
@@ -795,7 +823,7 @@ def return_reply(*types, **options):
 
 
 def send_reply(*types, **options):
-    """Decorator for sending replies from request callback methods
+    """Decorator for sending replies from request callback methods.
 
     This decorator constructs a reply from a list or tuple returned
     from a callback method, but unlike the return_reply decorator it
@@ -815,9 +843,9 @@ def send_reply(*types, **options):
 
     Keyword Arguments
     -----------------
-
-    major : int. Defaults to latest implemented KATCP version (5)
-        Major version of KATCP to use when interpreting types
+    major : int, optional
+        Major version of KATCP to use when interpreting types.
+        Defaults to latest implemented KATCP version.
 
     Examples
     --------
@@ -826,8 +854,8 @@ def send_reply(*types, **options):
     ...     def my_callback(self, req):
     ...         return (req, "ok", 5, 2.0)
     ...
-    """
 
+    """
     major = options.pop('major', DEFAULT_KATCP_MAJOR)
     if len(options) > 0:
         raise TypeError('send_reply does not take keyword argument(s) %r.'
@@ -845,7 +873,7 @@ def send_reply(*types, **options):
 
 
 def make_reply(msgname, types, arguments, major):
-    """Helper method for constructing a reply message from a list or tuple
+    """Helper method for constructing a reply message from a list or tuple.
 
     Parameters
     ----------
@@ -857,6 +885,7 @@ def make_reply(msgname, types, arguments, major):
         The (unpacked) reply message parameters.
     major : integer
         Major version of KATCP to use when packing types
+
     """
     status = arguments[0]
     if status == "fail":
@@ -867,11 +896,13 @@ def make_reply(msgname, types, arguments, major):
             msgname, *pack_types((Str(),) + types, arguments, major))
     raise ValueError("First returned value must be 'ok' or 'fail'.")
 
+
 @gen.coroutine
 def async_make_reply(msgname, types, arguments_future, major):
-    """Wrap a future that will resolve with arguments as needed by make_reply()"""
+    """Wrap future that will resolve with arguments needed by make_reply()."""
     arguments = yield arguments_future
     raise gen.Return(make_reply(msgname, types, arguments, major))
+
 
 def unpack_types(types, args, argnames, major):
     """Parse arguments according to types list.
@@ -886,6 +917,7 @@ def unpack_types(types, args, argnames, major):
         The names of the arguments.
     major : integer
         Major version of KATCP to use when packing types
+
     """
     if len(types) > 0:
         multiple = types[-1]._multiple
@@ -903,13 +935,13 @@ def unpack_types(types, args, argnames, major):
             name = argnames[i]
         params.append(Parameter(i+1, name, kattype, major))
 
-
     if len(args) > len(types) and multiple:
         for i in range(len(types), len(args)):
             params.append(Parameter(i+1, name, kattype, major))
 
     # if len(args) < len(types) this passes in None for missing args
     return map(lambda param, arg: param.unpack(arg), params, args)
+
 
 def pack_types(types, args, major):
     """Pack arguments according the the types list.
@@ -922,6 +954,7 @@ def pack_types(types, args, major):
         The arguments to format.
     major : integer
         Major version of KATCP to use when packing types
+
     """
     if len(types) > 0:
         multiple = types[-1]._multiple
@@ -933,9 +966,11 @@ def pack_types(types, args, major):
 
     if len(args) < len(types):
         # this passes in None for missing args
-        retvals = map(lambda ktype, arg: ktype.pack(arg, major=major), types, args)
+        retvals = map(lambda ktype, arg: ktype.pack(arg, major=major),
+                      types, args)
     else:
-        retvals = [ktype.pack(arg, major=major) for ktype, arg in zip(types, args)]
+        retvals = [ktype.pack(arg, major=major)
+                   for ktype, arg in zip(types, args)]
 
     if len(args) > len(types) and multiple:
         last_ktype = types[-1]
