@@ -13,7 +13,7 @@ import sys
 import re
 import time
 import warnings
-import collections
+from collections import namedtuple
 
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
@@ -30,7 +30,22 @@ VERSION_CONNECT_KATCP_MAJOR = 5
 # First major version to support #interface-changed informs
 INTERFACE_CHANGED_KATCP_MAJOR = 5
 
-ReadingTuple = collections.namedtuple('ReadingTuple', 'timestamp status value')
+
+class Reading(namedtuple('Reading', 'timestamp status value')):
+    """Sensor reading as a (timestamp, status, value) tuple.
+
+    Attributes
+    ----------
+    timestamp : float
+       The time (in seconds) at which the sensor value was determined.
+    status : Sensor status constant
+        Whether the value represents an error condition or not.
+    value : object
+        The value of the sensor (the type will be appropriate to the
+        sensor's type).
+
+    """
+
 
 def convert_method_name(prefix, name):
     """Convert a method name to the corresponding command name."""
@@ -776,13 +791,13 @@ class Sensor(object):
             default_value = default
 
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # self._value_tuple should also be set and read in a single
+        # self._current_reading should be set and read in a single
         # bytecode to avoid situations were an update in one thread
         # causes another thread to read the timestamp from one update
         # and the value and/or status from a different update.
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-        self._value_tuple = ReadingTuple(time.time(), Sensor.UNKNOWN, default_value)
+        self._current_reading = Reading(time.time(), Sensor.UNKNOWN, default_value)
         self._formatter = self._kattype.pack
         self._parser = self._kattype.unpack
         self.stype = self._kattype.name
@@ -802,18 +817,18 @@ class Sensor(object):
     # read _timestamp, _status and _value. Such usage will be
     # deprecated in a future version of KATCP.
 
-    def _value_tuple_getter(i, name):
+    def _reading_getter(i, name):
         def getter(self):
             warnings.warn("Use of katcp.Sensor.%s attribute is deprecated"
                           % name, DeprecationWarning)
-            return self._value_tuple[i]
+            return self._current_reading[i]
         return getter
 
-    _timestamp = property(_value_tuple_getter(0, "_timestamp"))
-    _status = property(_value_tuple_getter(1, "_status"))
-    _value = property(_value_tuple_getter(2, "_value"))
+    _timestamp = property(_reading_getter(0, "_timestamp"))
+    _status = property(_reading_getter(1, "_status"))
+    _value = property(_reading_getter(2, "_value"))
 
-    del _value_tuple_getter
+    del _reading_getter
 
     def __repr__(self):
         cls = self.__class__
@@ -1028,7 +1043,7 @@ class Sensor(object):
             The value of the sensor (the type should be appropriate to the
             sensor's type).
         """
-        reading = self._value_tuple = ReadingTuple(timestamp, status, value)
+        reading = self._current_reading = Reading(timestamp, status, value)
         self.notify(reading)
 
     def set_formatted(self, raw_timestamp, raw_status, raw_value,
@@ -1052,7 +1067,7 @@ class Sensor(object):
         self.set(timestamp, status, value)
 
     def read_formatted(self, major=DEFAULT_KATCP_MAJOR):
-        """Read the sensor and return a timestamp, status, value tuple.
+        """Read the sensor and return a (timestamp, status, value) tuple.
 
         All values are strings formatted as specified in the Sensor Type
         Formats in the katcp specification.
@@ -1074,16 +1089,15 @@ class Sensor(object):
         return self.format_reading(self.read(), major)
 
     def format_reading(self, reading, major=DEFAULT_KATCP_MAJOR):
-        """Format sensor reading as timestamp, status, value tuple of strings.
+        """Format sensor reading as (timestamp, status, value) tuple of strings.
 
         All values are strings formatted as specified in the Sensor Type
         Formats in the katcp specification.
 
         Parameters
         ----------
-
-        reading : tuple (timestamp, status, value)
-            sensor reading as returned by read()
+        reading : :class:`Reading` object
+            Sensor reading as returned by read()
         major : int. Defaults to latest implemented KATCP version (5)
             Major version of KATCP to use when interpreting types
 
@@ -1108,22 +1122,15 @@ class Sensor(object):
                 self._formatter(value, True, major))
 
     def read(self):
-        """Read the sensor and return a timestamp, status, value tuple.
+        """Read the sensor and return a (timestamp, status, value) tuple.
 
         Returns
         -------
+        reading : :class:`Reading` object
+            Sensor reading as a (timestamp, status, value) tuple.
 
-        As namedtuple with fields:
-
-        timestamp : float in seconds
-           The time at which the sensor value was determined.
-        status : Sensor status constant
-            Whether the value represents an error condition or not.
-        value : object
-            The value of the sensor (the type will be appropriate to the
-            sensor's type).
         """
-        return self._value_tuple
+        return self._current_reading
 
     def set_value(self, value, status=NOMINAL, timestamp=None,
                   major=DEFAULT_KATCP_MAJOR):
