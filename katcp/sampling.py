@@ -61,7 +61,7 @@ class SampleStrategy(object):
     ----------
     inform_callback : callable
         Callback to send inform messages with,
-        used as inform_callback(sensor_object, timestamp, status, value).
+        used as inform_callback(sensor_object, sensor_reading)
     sensor : Sensor object
         Sensor to sample.
     params : list of objects
