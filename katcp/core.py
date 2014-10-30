@@ -992,7 +992,7 @@ class Sensor(object):
         ----------
         observer : object
             Object with an .update(sensor, reading) method that will be called when the
-            sensor value is set. reading is a ReadingTuple instance, matching the return
+            sensor value is set. reading is a Reading instance, matching the return
             value of the read() method.
         """
         self._observers.add(observer)
@@ -1162,7 +1162,7 @@ class Sensor(object):
             The value of the sensor (the type will be appropriate to the
             sensor's type).
         """
-        return self.read()[2]
+        return self.read().value
 
     @classmethod
     def parse_type(cls, type_string):
