@@ -30,7 +30,7 @@ VERSION_CONNECT_KATCP_MAJOR = 5
 # First major version to support #interface-changed informs
 INTERFACE_CHANGED_KATCP_MAJOR = 5
 
-ValueTuple = collections.namedtuple('ValueTuple', 'timestamp status value')
+ReadingTuple = collections.namedtuple('ReadingTuple', 'timestamp status value')
 
 def convert_method_name(prefix, name):
     """Convert a method name to the corresponding command name."""
@@ -782,7 +782,7 @@ class Sensor(object):
         # and the value and/or status from a different update.
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-        self._value_tuple = ValueTuple(time.time(), Sensor.UNKNOWN, default_value)
+        self._value_tuple = ReadingTuple(time.time(), Sensor.UNKNOWN, default_value)
         self._formatter = self._kattype.pack
         self._parser = self._kattype.unpack
         self.stype = self._kattype.name
@@ -977,7 +977,7 @@ class Sensor(object):
         ----------
         observer : object
             Object with an .update(sensor, reading) method that will be called when the
-            sensor value is set. reading is a ValueTuple instance, matching the return
+            sensor value is set. reading is a ReadingTuple instance, matching the return
             value of the read() method.
         """
         self._observers.add(observer)
@@ -1028,7 +1028,7 @@ class Sensor(object):
             The value of the sensor (the type should be appropriate to the
             sensor's type).
         """
-        reading = self._value_tuple = ValueTuple(timestamp, status, value)
+        reading = self._value_tuple = ReadingTuple(timestamp, status, value)
         self.notify(reading)
 
     def set_formatted(self, raw_timestamp, raw_status, raw_value,
