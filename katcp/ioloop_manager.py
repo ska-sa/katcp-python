@@ -1,7 +1,6 @@
 import time
 import logging
 import threading
-from thread import get_ident
 
 import tornado.ioloop
 from tornado import gen

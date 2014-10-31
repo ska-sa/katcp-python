@@ -7,7 +7,6 @@ from __future__ import with_statement
 
 """Clients for the KAT device control language."""
 
-import threading
 import sys
 import traceback
 import logging
@@ -25,7 +24,7 @@ from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
                    ProtocolFlags,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
-from .ioloop_manager import IOLoopManager, with_relative_timeout
+from .ioloop_manager import IOLoopManager
 
 
 # logging.basicConfig(level=logging.DEBUG)

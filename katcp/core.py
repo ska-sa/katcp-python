@@ -6,8 +6,6 @@
 
 """Utilities for dealing with KAT device control language messages."""
 
-import threading
-import sys
 import re
 import time
 import warnings

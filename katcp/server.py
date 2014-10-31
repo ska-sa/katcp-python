@@ -7,9 +7,7 @@
 """Servers for the KAT device control language."""
 
 import socket
-import errno
 import threading
-import Queue
 import traceback
 import logging
 import sys
@@ -25,7 +23,7 @@ from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
 from tornado.concurrent import chain_future
 from tornado.util import ObjectDict
-from concurrent.futures import Future, TimeoutError
+from concurrent.futures import Future
 
 from .ioloop_manager import IOLoopManager, with_relative_timeout
 from .core import (DeviceMetaclass, Message, MessageParser,
@@ -33,8 +31,7 @@ from .core import (DeviceMetaclass, Message, MessageParser,
 from .sampling import SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
 from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
-                   VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR,
-                   convert_method_name)
+                   VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR)
 from .version import VERSION, VERSION_STR
 from .kattypes import (request, return_reply)
 
@@ -419,7 +416,7 @@ class KATCPServer(object):
         sock.setblocking(0)
         try:
             sock.bind(bindaddr)
-        except Exception, e:
+        except Exception:
             self._logger.exception("Unable to bind to %s" % str(bindaddr))
             raise
         sock.listen(self.BACKLOG)
@@ -821,7 +818,7 @@ class MessageHandlerThread(object):
                                    'handler for msg:\n {0!s}'.format(msg))
                         self._logger.error(err_msg, exc_info=True)
                         client_conn.inform(self.log_inform_formatter(
-                            'error', 'See device logs:\n' + err_msg, root))
+                            'error', 'See device logs:\n' + err_msg, 'root'))
                         ready_future.set_exception(e)
                 self._wake.clear()
 

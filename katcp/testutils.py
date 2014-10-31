@@ -23,8 +23,7 @@ from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
 
 from .core import Sensor, Message, AsyncReply
-from .server import (DeviceServer, FailReply, ClientRequestConnection,
-                     ClientConnection)
+from .server import DeviceServer, FailReply, ClientConnection
 
 
 logger = logging.getLogger(__name__)

@@ -13,7 +13,7 @@ import struct
 import re
 import logging
 
-from tornado import gen, ioloop
+from tornado import gen
 
 from .core import (Message, FailReply, DEFAULT_KATCP_MAJOR,
                    SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC, MS_TO_SEC_FAC,
@@ -420,6 +420,7 @@ class StrictTimestamp(KatcpType):
 
     def decode(self, value, major):
         try:
+            # Presumably these parts are only used to trigger an exception
             parts = value.split(".", 1)
             _int_parts = [int(x) for x in parts]
             return float(value)
