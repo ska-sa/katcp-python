@@ -14,6 +14,8 @@ def with_relative_timeout(timeout, future, io_loop=None):
 
 
 class IOLoopManager(object):
+    """Manages an IOLoop instance, optionally in a separate thread."""
+
     def __init__(self, managed_default=True, logger=log):
         # True if we manage the ioloop. Will be updated by self.set_ioloop()
         self._ioloop_managed = managed_default

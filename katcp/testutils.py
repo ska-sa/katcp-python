@@ -15,12 +15,12 @@ import threading
 import functools
 from thread import get_ident
 
-from peak.util.proxies import ObjectWrapper
 import mock
 import tornado.testing
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
+from peak.util.proxies import ObjectWrapper
 
 from .core import Sensor, Message, AsyncReply
 from .server import DeviceServer, FailReply, ClientConnection

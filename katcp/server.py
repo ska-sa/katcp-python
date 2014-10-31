@@ -98,13 +98,7 @@ def construct_name_filter(pattern):
 
 
 class ClientConnection(object):
-    @property
-    def address(self):
-        return self._get_address()
-
-    @property
-    def client_disconnect_called(self):
-        return self._disconnect_called
+    """Encapsulates the connection between a single client and the server."""
 
     def __init__(self, server, conn_id):
         self._server = server
@@ -114,6 +108,14 @@ class ClientConnection(object):
         self._send_message = partial(server.send_message, conn_id)
         self._mass_send_message = server.mass_send_message
         self.flush_on_close = partial(server.flush_on_close, conn_id)
+
+    @property
+    def address(self):
+        return self._get_address()
+
+    @property
+    def client_disconnect_called(self):
+        return self._disconnect_called
 
     def inform(self, msg):
         """Send an inform message to a particular client.
@@ -714,6 +716,8 @@ class KATCPServer(object):
 
 
 class ClientRequestConnection(object):
+    """Encapsulates specific KATCP request and associated client connection."""
+
     def __init__(self, client_connection, req_msg):
         self.client_connection = client_connection
         assert(req_msg.mtype == Message.REQUEST)
@@ -756,6 +760,7 @@ class ClientRequestConnection(object):
 
 
 class MessageHandlerThread(object):
+    """Provides backwards compatibility for server expecting its own thread."""
     def __init__(self, handler, log_inform_formatter, logger=log):
         self.handler = handler
         self.log_inform_formatter = log_inform_formatter

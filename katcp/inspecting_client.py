@@ -19,10 +19,11 @@ ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', ['name', 'description'])
 
 
-class KATCPDeviceClient(katcp.AsyncClient):
+class _InformHookDeviceClient(katcp.AsyncClient):
+    """DeviceClient that adds inform hooks."""
 
     def __init__(self, *args, **kwargs):
-        super(KATCPDeviceClient, self).__init__(*args, **kwargs)
+        super(_InformHookDeviceClient, self).__init__(*args, **kwargs)
         self._inform_hooks = defaultdict(list)
 
     def hook_inform(self, inform_name, callback):
@@ -56,11 +57,12 @@ class KATCPDeviceClient(katcp.AsyncClient):
 
 
 class InspectingClientAsync(object):
-    """
-    Note: This class is not threadsafe at present,
-          it should only be called from the ioloop.
-    """
+    """Higher-level client that inspects KATCP interface.
 
+    Note: This class is not threadsafe at present, it should only be called
+    from the ioloop.
+
+    """
     sensor_factory = katcp.Sensor
     """Factory that produces a KATCP Sensor compatible instance.
 
@@ -89,7 +91,7 @@ class InspectingClientAsync(object):
         self._cb_register = {}  # Register to hold the possible callbacks.
 
         # Setup KATCP device.
-        self.katcp_client = KATCPDeviceClient(host, port, logger=logger)
+        self.katcp_client = _InformHookDeviceClient(host, port, logger=logger)
         if io_loop is False:
             # Called from the blocking client.
             self.ioloop = self.katcp_client.ioloop
@@ -535,11 +537,7 @@ class InspectingClientAsync(object):
 
 
 class InspectingClientBlocking(InspectingClientAsync):
-
-    """
-    Note: This class is not threadsafe at present,
-          it should only be called from the ioloop.
-    """
+    """Higher-level client that inspects KATCP interfaces and is thread-safe."""
 
     def __init__(self, host, port, full_inspection=None, logger=ic_logger):
         super(InspectingClientBlocking, self).__init__(
@@ -676,4 +674,3 @@ class InspectingClientBlocking(InspectingClientAsync):
         timeout = kwargs.get('timeout')
         msg = katcp.Message.request(request, *args)
         return self.katcp_client.blocking_request(msg, timeout, use_mid)
-#
