@@ -13,12 +13,14 @@ import logging
 import sys
 import re
 import time
+
+import tornado.ioloop
+import tornado.tcpserver
+
 from functools import partial, wraps
 from collections import deque
 from thread import get_ident as get_thread_ident
 
-import tornado.ioloop
-import tornado.tcpserver
 from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
 from tornado.concurrent import chain_future

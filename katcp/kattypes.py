@@ -8,10 +8,11 @@
    """
 
 import inspect
-from functools import partial
 import struct
 import re
 import logging
+
+from functools import partial
 
 from tornado import gen
 

@@ -10,12 +10,14 @@ from __future__ import with_statement
 import sys
 import traceback
 import logging
-from functools import partial, wraps
-from thread import get_ident as get_thread_ident
 
 import tornado.ioloop
 import tornado.tcpclient
 import tornado.iostream
+
+from functools import partial, wraps
+from thread import get_ident as get_thread_ident
+
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError

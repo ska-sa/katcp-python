@@ -13,10 +13,12 @@ import time
 import Queue
 import threading
 import functools
-from thread import get_ident
 
 import mock
 import tornado.testing
+
+from thread import get_ident
+
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError

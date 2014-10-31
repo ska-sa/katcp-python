@@ -7,12 +7,14 @@
 from __future__ import print_function
 
 import logging
-from collections import namedtuple, defaultdict
 
 import tornado
-from concurrent.futures import Future
 
 import katcp
+
+from collections import namedtuple, defaultdict
+
+from concurrent.futures import Future
 
 
 ic_logger = logging.getLogger("katcp.inspect_client")

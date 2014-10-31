@@ -8,9 +8,10 @@
 
 import logging
 import os
-from thread import get_ident as get_thread_ident
 
 import tornado.ioloop
+
+from thread import get_ident as get_thread_ident
 
 from .core import Message, Sensor
 

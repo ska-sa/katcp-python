@@ -1,7 +1,6 @@
 """A high-level abstract interface to KATCP clients, sensors and requests."""
 
 import abc
-
 import collections
 
 from katcp import Message

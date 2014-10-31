@@ -1,4 +1,4 @@
-"""Sensor trees implementation.
+"""Sensor tree implementation.
 
 A sensor tree is a DAG (directed acyclic graph) of sensor objects
 where an edge represents a dependency. E.g.
