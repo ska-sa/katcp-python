@@ -1,7 +1,6 @@
 """A high-level abstract interface to KATCP clients, sensors and requests."""
 
 import abc
-
 import collections
 
 from katcp import Message
@@ -40,7 +39,7 @@ def normalize_strategy_parameters(params):
 
 def escape_name(name):
     """Escape sensor and request names to be valid Python identifiers."""
-    return name.replace(".","_").replace("-","_")
+    return name.replace('.', '_').replace('-', '_')
 
 
 class KATCPResource(object):
@@ -112,7 +111,8 @@ class KATCPResource(object):
 
         A :class:`KATCPResource` object that exposes a hierarchical device can
         choose to include lower-level sensors here such that
-        `resource.sensor.dev_sensorname` maps to `resource.dev.sensor.sensorname`.
+        `resource.sensor.dev_sensorname` maps to
+        `resource.dev.sensor.sensorname`.
 
         """
 
@@ -127,7 +127,8 @@ class KATCPResource(object):
     SensorResultTuple = collections.namedtuple('SensorResultTuple', [
         'name', 'object', 'value', 'seconds', 'type', 'units'])
 
-    def list_sensors(self, filter="", strategy=False, status="", expand_underscore=True):
+    def list_sensors(self, filter="", strategy=False, status="",
+                     expand_underscore=True):
         """List sensors available on this resource matching certain criteria.
 
         Parameters
@@ -142,13 +143,13 @@ class KATCPResource(object):
         strategy : {False, True}, optional
             Only list sensors with a set strategy if True
         status : string, optional
-            Filter each returned sensor's status against this regexp if specified
+            Filter each returned sensor's status against this regexp if given
         expand_underscore : {True, False}, optional
             Expand '_' in `filter` parameter to '[.-_]' if True
 
         Returns
         -------
-        sensors : list of (name, object, value, seconds, type, units) namedtuples
+        sensors : list of (name, object, value, seconds, type, units) tuples
             List of matching sensors presented as named tuples. The `object`
             field is the :class:`KATCPSensor` object associated with the sensor.
             Note that the name of the object may not match `name` if it
@@ -166,9 +167,9 @@ class KATCPRequest(object):
     asynchronous mode returns a tornado future that resolves with the reply.
 
     Each available KATCP request for a particular device has an associated
-    :class:`KATCPRequest` object in the object hierarchy. This wrapper is mainly
-    for interactive convenience. It provides the KATCP request help string as a
-    docstring and pretty-prints the result of the request.
+    :class:`KATCPRequest` object in the object hierarchy. This wrapper is
+    mainly for interactive convenience. It provides the KATCP request help
+    string as a docstring and pretty-prints the result of the request.
 
     """
     __metaclass__ = abc.ABCMeta
@@ -258,7 +259,8 @@ class KATCPSensor(object):
         Parameters
         ----------
         listener : function
-            Callback signature: listener(update_seconds, value_seconds, status, value)
+            Callback signature:
+            listener(update_seconds, value_seconds, status, value)
 
         """
         self._listeners.add(listener)
@@ -280,6 +282,7 @@ class KATCPSensor(object):
 
 
 _KATCPReplyTuple = collections.namedtuple('_KATCPReplyTuple', 'reply informs')
+
 
 class KATCPReply(_KATCPReplyTuple):
     """Container for return messages of KATCP request (reply and informs).
@@ -313,7 +316,7 @@ class KATCPReply(_KATCPReplyTuple):
                           for m in self.messages])
 
     def __nonzero__(self):
-        """True if katcp request succeeded (i.e. first reply argument is 'ok')."""
+        """True if request succeeded (i.e. first reply argument is 'ok')."""
         return self.messages[0].reply_ok()
 
     @property
@@ -323,5 +326,5 @@ class KATCPReply(_KATCPReplyTuple):
 
     @property
     def succeeded(self):
-        """True if katcp request succeeded (i.e. first reply argument is 'ok')."""
+        """True if request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
