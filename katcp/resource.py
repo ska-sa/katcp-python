@@ -2,10 +2,12 @@
 
 import abc
 import collections
+import logging
 
 from katcp import Message
 from katcp.sampling import SampleStrategy
 
+logger = logging.getLogger(__name__)
 
 def normalize_strategy_parameters(params):
     """Normalize strategy parameters to be a list of strings.
@@ -157,7 +159,6 @@ class KATCPResource(object):
 
         """
 
-
 class KATCPRequest(object):
     """Abstract Base class to serve as the definition of the KATCPRequest API.
 
@@ -209,6 +210,23 @@ class KATCPRequest(object):
 
         """
 
+class KATCPSensorReading(collections.namedtuple(
+        'KATCPSensorReading', 'received_timestamp timestamp status value')):
+
+    """Sensor reading as a (received_timestamp, status, value) tuple.
+
+    Attributes
+    ----------
+    received_timestamp : float
+       Time (in seconds since UTC epoch) at which the sensor value was determined.
+    timestamp : float
+       Time (in seconds since UTC epoch) at which the sensor value was determined.
+    status : Sensor status constant
+        Whether the value represents an error condition or not.
+    value : object
+        The value of the sensor (the type will be appropriate to the
+        sensor's type).
+    """
 
 class KATCPSensor(object):
     """Abstract Base class to serve as the definition of the KATCPSensor API.
@@ -239,7 +257,7 @@ class KATCPSensor(object):
 
     def __init__(self):
         """Subclasses must arrange to call this in their __init__()."""
-        self._listeners = set()
+        self.clear_listeners()
 
     @property
     def strategy(self):
@@ -260,10 +278,12 @@ class KATCPSensor(object):
         ----------
         listener : function
             Callback signature:
-            listener(update_seconds, value_seconds, status, value)
-
+            listener(katcp_sensor, reading) where
+                `katcp_sensor` is this KATCPSensor instance
+                 `reading` is an instance of :class:`KATCPSensorReading`
         """
-        self._listeners.add(listener)
+        listener_id = _hashable_identity(listener)
+        self._listeners[listener_id] = listener
 
     def unregister_listener(self, listener):
         """Remove a listener callback added with register_listener().
@@ -274,11 +294,21 @@ class KATCPSensor(object):
             Reference to the callback function that should be removed
 
         """
-        self._listeners.discard(listener)
+        listener_id = _hashable_identity(listener)
+        del self._listeners[listener_id]
 
     def clear_listeners(self):
         """Clear any registered listeners to updates from this sensor."""
-        self._listeners = set()
+        self._listeners = {}
+
+    def call_listeners(self, reading):
+        for listener in self._listeners.values():
+            try:
+                listener(self, reading)
+            except Exception:
+                logger.exception(
+                    'Unhandled exception calling KATCPSensor callback {0!r}'
+                    .format(listener))
 
 
 _KATCPReplyTuple = collections.namedtuple('_KATCPReplyTuple', 'reply informs')
@@ -328,3 +358,19 @@ class KATCPReply(_KATCPReplyTuple):
     def succeeded(self):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
+
+
+def _hashable_identity(obj):
+    """Generate a hashabe ID that is stable for methods etc
+
+    Approach borrowed from blinker. Why it matters: see e.g.
+    http://stackoverflow.com/questions/13348031/python-bound-and-unbound-method-object
+    """
+    if hasattr(obj, '__func__'):
+        return (id(obj.__func__), id(obj.__self__))
+    elif hasattr(obj, 'im_func'):
+        return (id(obj.im_func), id(obj.im_self))
+    elif isinstance(obj, text):
+        return obj
+    else:
+        return id(obj)
