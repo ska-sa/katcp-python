@@ -16,7 +16,7 @@ class TestICAClass(tornado.testing.AsyncTestCase):
     def setUp(self):
         super(TestICAClass, self).setUp()
         self.client = InspectingClientAsync('', 0, full_inspection=False,
-                                            io_loop=self.io_loop)
+                                            ioloop=self.io_loop)
 
         self.client._cb_register['cb_add'] = self._cb_add
         self.client._cb_register['cb_rem'] = self._cb_rem
@@ -219,7 +219,7 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         self.host, self.port = self.server.bind_address
 
         self.client = InspectingClientAsync(self.host, self.port,
-                                            io_loop=self.io_loop)
+                                            ioloop=self.io_loop)
         self.io_loop.add_callback(self.client.connect)
 
     @tornado.testing.gen_test
@@ -238,7 +238,7 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
 
         """
         client = InspectingClientAsync(self.host, self.port,
-                                       io_loop=self.io_loop,
+                                       ioloop=self.io_loop,
                                        full_inspection=False)
 
         yield client.connect()

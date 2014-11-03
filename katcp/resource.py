@@ -44,7 +44,7 @@ def escape_name(name):
     return name.replace('.', '_').replace('-', '_')
 
 
-class KATCPResource(object):
+class KATCPesource(object):
     """Base class to serve as the definition of the KATCPResource API.
 
     A class `C` implementing the KATCPResource API should register itself using
