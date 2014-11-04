@@ -1252,3 +1252,15 @@ class Sensor(object):
         else:
             kattype = typeclass()
         return [kattype.decode(x, major) for x in formatted_params]
+
+class AttrDict(dict):
+    """
+    Based on JSObject : Python Objects that act like Javascript Objects
+    based on James Robert blog entry:
+    Making Python Objects that act like Javascript Objects
+    http://jiaaro.com/making-python-objects-that-act-like-javascrip
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self

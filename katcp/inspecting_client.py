@@ -16,6 +16,7 @@ from collections import namedtuple, defaultdict
 
 from concurrent.futures import Future
 
+from katcp.core import SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC, MS_TO_SEC_FAC
 
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', ['name', 'description'])
@@ -214,6 +215,11 @@ class InspectingClientAsync(object):
                 if orig_data.get(key) != value:
                     orig_data[key] = value
                     orig_data['_changed'] = True
+
+    def handle_sensor_value(self):
+        """Handle #sensor-value informs just like #sensor-status informs"""
+        self.katcp_client.hook_inform('sensor-value',
+                                      self._cb_inform_sensor_status)
 
     @tornado.gen.coroutine
     def inspect(self):
@@ -421,7 +427,8 @@ class InspectingClientAsync(object):
     def update_sensor(self, name, timestamp, status, value):
         sensor = yield self.future_get_sensor(name)
         if sensor:
-            sensor.set(timestamp, status, sensor.parse_value(value))
+            katcp_major = self.katcp_client.protocol_flags.major
+            sensor.set_formatted(timestamp, status, value, katcp_major)
         else:
             self._logger.error('Received update for "%s", but could not create'
                                ' sensor object.' % name)
