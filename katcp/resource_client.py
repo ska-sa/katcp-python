@@ -10,6 +10,7 @@
 import logging
 
 from katcp import resource, inspecting_client
+from katcp.core import AttrDict
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +26,8 @@ class KATCPResourceClient(object):
 
         Parameters
         ----------
+        name : str
+          Name of the resource
         resource_spec : dict with resource specifications. Keys:
           address : (host, port), host as str, port as int
           always_allowed_requests : seq of str,
@@ -46,9 +49,6 @@ class KATCPResourceClient(object):
               Inspect the resource's KATCP interface for sensors and requests
           assumed_requests : ...
           assumed_sensors : ...
-
-        name : str
-          Name of the resource
         """
 
         self.address = resource_spec['address']
@@ -60,6 +60,11 @@ class KATCPResourceClient(object):
         self.auto_reconnect = resource_spec.get('auto_reconnect', True)
         self.auto_reconnect_delay = resource_spec.get('auto_reconnect_delay', 0.5)
         self._ioloop_set_to = None
+        self.sensor = AttrDict()
+        self.req = AttrDict()
+        # Save the pop() methods in case a sensor/request with name 'pop' is added
+        self._sensor_pop = self.sensor.pop
+        self._req_pop = self.req.pop
 
     def set_ioloop(self, ioloop=None):
         """Set the tornado ioloop to use
@@ -75,17 +80,14 @@ class KATCPResourceClient(object):
         ic = self._inspecting_client = inspecting_client.InspectingClientAsync(
             host, port, ioloop=self._ioloop_set_to, auto_reconnect=self.auto_reconnect)
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
-        ic.set_sensor_added_callback(self._sensor_added_callback)
-        ic.set_sensor_removed_callback(self._sensor_removed_callback)
         ic.set_request_added_callback(self._request_added_callback)
         ic.set_request_removed_callback(self._request_removed_callback)
+        ic.set_sensor_added_callback(self._sensor_added_callback)
+        ic.set_sensor_removed_callback(self._sensor_removed_callback)
+
+        self._sensor_manager = sds
         ic.connect()
 
-    def _sensor_added_callback(self, sensor_keys):
-        pass
-
-    def _sensor_removed_callback(self, sensor_keys):
-        pass
 
     def _request_added_callback(self, request_keys):
         pass
@@ -93,4 +95,75 @@ class KATCPResourceClient(object):
     def _request_removed_callback(self, request_keys):
         pass
 
+    def _sensor_added_callback(self, sensor_keys):
+        pass
+
+    def _sensor_removed_callback(self, sensor_keys):
+        pass
+
+
 resource.KATCPResource.register(KATCPResourceClient)
+
+class KATCPResourceClientSensorsManager(object):
+    """Implementation of KATSensorsManager ABC for a directly-connected client
+
+    Assumes that all methods are called from the same ioloop context
+    """
+
+    def __init__(self, inspecting_client):
+        self._inspecting_client = inspecting_client
+        self.time = inspecting_client.ioloop.time
+        self._strategy_cache = {}
+        inspecting_client.handle_sensor_value()
+        inspecting_client.sensor_factory = self._sensor_factory
+
+    def _sensor_factory(self, **sensor_description):
+        # kwargs as for inspecting_client.InspectingClientAsync.sensor_factory
+        sens = resource.KATCPSensor(sensor_description, self)
+        sensor_name = sensor_description['name']
+        cached_strategy = self._strategy_cache.get(sensor_name)
+        if cached_strategy:
+            self.set_sampling_strategy(sensor_name, cached_strategy)
+        return sens
+
+    def set_sampling_strategy(self, sensor_name, strategy_and_parms):
+        """Set the sampling strategy for the named sensor
+
+        Parameters
+        ----------
+
+        sensor_name : str
+            Name of the sensor
+        strategy : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form
+        """
+
+        strategy_and_parms = resource.normalize_strategy_parameters(strategy_and_parms)
+        self._strategy_cache[sensor_name] = abc
+
+    def get_sampling_strategy(self, sensor_name):
+        """Get the current sampling strategy for the named sensor
+
+        Parameters
+        ----------
+
+        sensor_name : str
+            Name of the sensor
+
+        Return Value
+        ------------
+
+        strategy : tuple of str
+            contains (<strat_name>, [<strat_parm1>, ...]) where the strategy names and
+            parameters are as defined by the KATCP spec
+        """
+        cached = self._strategy_cache.get(sensor_name)
+        if not cached:
+            return resource.normalize_strategy_parameters('none')
+        else:
+            return cached
+
+
+resource.KATCPSensorsManager.register(KATCPResourceClientSensorsManager)
