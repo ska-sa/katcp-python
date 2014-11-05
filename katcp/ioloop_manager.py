@@ -26,6 +26,7 @@ class IOLoopManager(object):
         self._ioloop = None
         # Event that indicates that the ioloop is running.
         self._running = threading.Event()
+        self._start_lock = threading.Lock()
 
     @property
     def managed(self):
@@ -63,15 +64,16 @@ class IOLoopManager(object):
                 self._logger.info('Managed tornado IOloop {0} stopped'
                                   .format(ioloop))
 
-        t = threading.Thread(target=run_ioloop)
-        try:
-            if self._ioloop_thread.isAlive():
-                raise RuntimeError('Seems that managed ioloop has already been '
-                                   'started, can only restart after stop()')
-        except AttributeError:
-            pass
-        self._ioloop_thread = t
-        self._ioloop_thread.start()
+        with self._start_lock:
+            t = threading.Thread(target=run_ioloop)
+            try:
+                if self._ioloop_thread.isAlive():
+                    raise RuntimeError('Seems that managed ioloop has already been '
+                                       'started, can only restart after stop()')
+            except AttributeError:
+                pass
+            self._ioloop_thread = t
+            self._ioloop_thread.start()
 
     def start(self, timeout=None):
         """Start managed ioloop thread, or do nothing if not managed.
