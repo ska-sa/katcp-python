@@ -106,8 +106,11 @@ class AsyncEvent(object):
 
         """
         self._flag = True
-        self._waiting_future.set_result(True)
+        old_future = self._waiting_future
+        # Replace _waiting_future with a fresh one incase someone woken up by set_result()
+        # sets this AsyncEvent to False before waiting on it to be set again.
         self._waiting_future = tornado_Future()
+        old_future.set_result(True)
 
     def clear(self):
         self._flag = False
