@@ -499,12 +499,24 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-        callback : function
+        callback : function(request_names)
             Reference to the function/method to be called, where `request_names` is a seq
             of string request keys.
 
         """
         self._cb_register['request_removed'] = callback
+
+    def set_connection_status_change_callback(self, callback):
+        """Set the Callback to be called when the connection status changes.
+
+       Parameters
+        ----------
+        callback : function(connected)
+            Reference to the function/method to be called, where `connected` indicates
+            whether the client has just connected (True) or just disconnected (False).
+
+        """
+        self.katcp_client.notify_connected = callback
 
     def simple_request(self, request, *args, **kwargs):
         """Create and send a request to the server.

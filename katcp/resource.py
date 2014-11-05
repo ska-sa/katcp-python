@@ -9,6 +9,9 @@ from katcp.sampling import SampleStrategy
 
 logger = logging.getLogger(__name__)
 
+class KATCPSensorError(Exception):
+    """Raised if a problem occured dealing with as KATCPSensor operation"""
+
 def normalize_strategy_parameters(params):
     """Normalize strategy parameters to be a list of strings.
 
@@ -159,15 +162,11 @@ class KATCPesource(object):
 class KATCPRequest(object):
     """Abstract Base class to serve as the definition of the KATCPRequest API.
 
-    Wrapper around a specific KATCP request to a given KATCP device. This
-    supports two modes of operation: blocking and asynchronous. The blocking
-    mode blocks on the KATCP request and returns the actual reply, while the
-    asynchronous mode returns a tornado future that resolves with the reply.
-
-    Each available KATCP request for a particular device has an associated
-    :class:`KATCPRequest` object in the object hierarchy. This wrapper is
-    mainly for interactive convenience. It provides the KATCP request help
-    string as a docstring and pretty-prints the result of the request.
+    Wrapper around a specific KATCP request to a given KATCP device.  Each
+    available KATCP request for a particular device has an associated
+    :class:`KATCPRequest` object in the object hierarchy. This wrapper is mainly
+    for interactive convenience. It provides the KATCP request help string as a
+    docstring and pretty-prints the result of the request.
 
     """
     __metaclass__ = abc.ABCMeta
@@ -201,9 +200,8 @@ class KATCPRequest(object):
 
         Returns
         -------
-        reply : tornado future or :class:`KATCPReply` object
-            KATCP request reply wrapped in KATCPReply object in blocking mode,
-            and additionally wrapped in a future in asynchronous mode
+        reply : tornado future resolving with :class:`KATCPReply` object
+            KATCP request reply wrapped in KATCPReply object
 
         """
 
@@ -252,10 +250,10 @@ class KATCPSensorsManager(object):
         sensor_name : str
             Name of the sensor
 
-        Return Value
-        ------------
+        Returns
+        -------
 
-        strategy : tuple of str
+        strategy : tornado Future that resolves with tuple of str
             contains (<strat_name>, [<strat_parm1>, ...]) where the strategy names and
             parameters are as defined by the KATCP spec
         """
@@ -272,21 +270,25 @@ class KATCPSensorsManager(object):
         strategy : seq of str or str
             As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
             names and parameters are as defined by the KATCP spec. As str contains the
-            same elements in space-separated form
+            same elements in space-separated form.
+
+        Returns
+        -------
+
+        done : tornado Future that resolves when done or raises KATCPSensorError
 
         Notes
         -----
 
         It is recommended that implementations use :func:`normalize_strategy_parameters`
         to process the strategy_and_parms parameter, since it will deal with both string
-        and list versions, and makes sure that numbers are represented as strings in a
+        and list versions and makes sure that numbers are represented as strings in a
         consistent format.
 
         This method should arrange for the strategy to be set on the underlying network
         device or whatever other implementation is used. This strategy should also be
         automatically re-set if the device is reconnected, etc.
 
-        TODO: Do we want to return a future that resolves when it is done?
         """
 
     @abc.abstractmethod
@@ -296,13 +298,18 @@ class KATCPSensorsManager(object):
         Return Value
         ------------
 
-        done_future : concurrent.Future or tornado Future instance
-            Resolves when the poll is complete. Whether the future is threadsafe
-            (concurrent.Future) or not (tornado Future) depends on the implementation and
-            should be documented as such.
+        done_future : tornado Future
+            Resolves when the poll is complete, or raises KATCPSensorError
         """
 
-    # TODO NM 2014-11-04 Should we expose the ioloop?
+    @abc.abstractmethod
+    def reapply_sampling_strategies(self):
+        """Reapply all sensor strategies using cached values
+
+        Would typically be called when a connection is re-established. Should
+        not raise errors when resetting stratgies for sensors that no longer
+        exist on the KATCP resource.
+        """
 
 class KATCPSensor(object):
     """Abstract Base class to serve as the definition of the KATCPSensor API.
@@ -327,6 +334,11 @@ class KATCPSensor(object):
         KATCP units of the sensor
     type: str
         KATCP type of the sensor
+
+    Notes
+    -----
+
+    All the methods of this
 
     """
     __metaclass__ = abc.ABCMeta
@@ -361,26 +373,31 @@ class KATCPSensor(object):
 
     @property
     def name(self):
+        """Name of this KATCP resource"""
         return self._name
 
     @property
     def reading(self):
+        """Most recently received sensor reading as KATCPSensorReading instance"""
         return self._reading
 
     @property
     def sampling_strategy(self):
+        """Current sampling strategy"""
         return self._manager.get_sampling_strategy(self.name)
 
     def set_sampling_strategy(self, strategy):
-        pass
+        """Set current sampling strategy for sensor
 
-    @property
-    def strategy_params(self):
-        return self._strategy_params
+        Parameters
+        ----------
 
-    @strategy_params.setter
-    def strategy_params(self, val):
-        self._strategy_params = normalize_strategy_parameters(val)
+        strategy : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+        """
+        return self._manager.set_sampling_strategy(self.name, strategy)
 
     def register_listener(self, listener):
         """Add a callback function that is called when sensor value is updated.
@@ -440,11 +457,9 @@ class KATCPSensor(object):
     def read(self):
         """Get a fresh sensor reading from the KATCP resource
 
-        Return value
-        ------------
-        reply : tornado future or :class:`KATCPSensorReading` object
-            KATCPSensorReading in blocking mode, additionally wrapped in a future in
-            asynchronous mode.
+        Returns
+        -------
+        reply : tornado Future resolving with  :class:`KATCPSensorReading` object
 
         Note
         ----
@@ -484,9 +499,13 @@ class KATCPReply(_KATCPReplyTuple):
     """
     def __repr__(self):
         """String representation for pretty-printing in IPython."""
-        return '\n'.join(["%s%s %s" % (Message.TYPE_SYMBOLS[m.mtype], m.name,
+        return '\n'.join("%s%s %s" % (Message.TYPE_SYMBOLS[m.mtype], m.name,
                                        ' '.join(m.arguments))
-                          for m in self.messages])
+                          for m in self.messages)
+
+    def __str__(self):
+        """String representation using KATCP wire format"""
+        return '\n'.join(str(m) for m in self.message)
 
     def __nonzero__(self):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
