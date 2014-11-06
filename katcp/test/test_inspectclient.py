@@ -35,8 +35,10 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         name = None
         original_keys = ['B', 'C']
         updated_keys = ['B', 'C', 'D']
-        self.client._sensors_index = dict([(n, 'This is {0}'.format(n))
-                                           for n in original_keys])
+        self.client._sensors_index = {}
+        for sen in original_keys:
+            data = {'description': "This is {0}.".format(sen)}
+            self.client.update_index('sensor', sen, data)
         added, removed = self.client._difference(original_keys, updated_keys,
                                                  name, 'sensor')
         self.assertIn('D', added)
@@ -51,8 +53,11 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         name = None
         original_keys = ['A', 'B', 'C']
         updated_keys = ['B', 'C']
-        self.client._sensors_index = dict([(n, 'This is {0}'.format(n))
-                                           for n in original_keys])
+        self.client._sensors_index = {}
+        for sen in original_keys:
+            data = {'description': "This is {0}.".format(sen)}
+            self.client.update_index('sensor', sen, data)
+
         added, removed = self.client._difference(original_keys, updated_keys,
                                                  name, 'sensor')
         self.assertIn('A', removed)
@@ -68,14 +73,55 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         name = 'A'
         original_keys = ['B', 'C']
         updated_keys = []
-        self.client._sensors_index = dict([(n, 'This is {0}'.format(n))
-                                           for n in original_keys])
+        self.client._sensors_index = {}
+        for sen in original_keys:
+            data = {'description': "This is {0}.".format(sen)}
+            self.client.update_index('sensor', sen, data)
         added, removed = self.client._difference(original_keys, updated_keys,
                                                  name, 'sensor')
         self.assertNotIn('A', removed)
         self.assertNotIn('A', self.client.sensors)
         self.assertIn('B', self.client.sensors)
         self.assertIn('C', self.client.sensors)
+
+    def test_util_method_difference_changed(self):
+        """Test the _difference utility method on changed."""
+
+        name = None
+        original_keys = ['B']
+        updated_keys = ['B']
+
+        self.client._sensors_index = {}
+        for sen in original_keys:
+            data = {'description': "This is {0}.".format(sen), '_changed': True}
+            self.client.update_index('sensor', sen, data)
+
+        added, removed = self.client._difference(original_keys, updated_keys,
+                                                 name, 'sensor')
+        self.assertIn('B', self.client.sensors)
+        # Wait for the cb to be called.
+        self.assertEqual(self.wait(), ('add', ['B']))
+
+    def test_update_index(self):
+        """Test the update_index method."""
+
+        self.client._sensors_index = {}
+
+        data = {'description': "This is {0}.".format('A')}
+        self.client.update_index('sensor', 'A', data)
+
+        data = {'description': "This is {0}.".format('B')}
+        self.client.update_index('sensor', 'B', data)
+
+        data = {'description': "This is {0}.".format('A')}
+        self.client.update_index('sensor', 'A', data)
+
+        data = {'description': "This is new {0}.".format('B')}
+        self.client.update_index('sensor', 'B', data)
+
+        self.assertIn('new', self.client._sensors_index['B'].get('description'))
+        self.assertFalse(self.client._sensors_index['A'].get('_changed', False))
+        self.assertTrue(self.client._sensors_index['B'].get('_changed'))
 
 
 class TestInspectingClientBlocking(unittest.TestCase):

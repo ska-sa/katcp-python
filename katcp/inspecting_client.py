@@ -171,6 +171,21 @@ class InspectingClientAsync(object):
     def join(self, timeout=None):
         self.katcp_client.join(timeout)
 
+    def update_index(self, kind, name, data):
+        if kind == 'sensor':
+            index = self._sensors_index
+        else:
+            index = self._requests_index
+
+        if name not in index:
+            index[name] = data
+        else:
+            orig_data = index[name]
+            for key, value in data.items():
+                if key not in orig_data or orig_data[key] != value:
+                    orig_data[key] = value
+                    orig_data['_changed'] = True
+
     @tornado.gen.coroutine
     def inspect(self):
         yield self.inspect_requests()
@@ -199,10 +214,7 @@ class InspectingClientAsync(object):
             req_name = msg.arguments[0]
             req = {'description': msg.arguments[1]}
             requests_updated.add(req_name)
-            if req_name not in self._requests_index:
-                self._requests_index[req_name] = req
-            else:
-                self._requests_index[req_name].update(req)
+            self.update_index('request', req_name, req)
 
         self._difference(requests_old,
                          requests_updated,
@@ -240,10 +252,7 @@ class InspectingClientAsync(object):
                    'params': []}
             if len(msg.arguments) > 4:
                 sen['params'] = msg.arguments[4:]
-            if sen_name not in self._sensors_index:
-                self._sensors_index[sen_name] = sen
-            else:
-                self._sensors_index[sen_name].update(sen)
+            self.update_index('sensor', sen_name, sen)
 
         self._difference(sensors_old,
                          sensors_updated,
@@ -546,7 +555,10 @@ class InspectingClientAsync(object):
         # Check the keys that was not added now or not lined up for removal,
         # and see if they changed.
         for key in updated_keys.difference(added_keys.union(removed_keys)):
-            print(key)
+            if item_index[key].get('_changed'):
+                item_index[key]['_changed'] = False
+                removed_keys.add(key)
+                added_keys.add(key)
 
         # Call the appropriate callback for the remove action.
         if removed_keys:
