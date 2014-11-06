@@ -1,8 +1,11 @@
 """A high-level abstract interface to KATCP clients, sensors and requests."""
 
 import abc
+import sys
 import collections
 import logging
+
+import tornado
 
 from katcp import Message, Sensor
 from katcp.sampling import SampleStrategy
@@ -11,6 +14,29 @@ logger = logging.getLogger(__name__)
 
 class KATCPSensorError(Exception):
     """Raised if a problem occured dealing with as KATCPSensor operation"""
+
+class SensorResultTuple(collections.namedtuple(
+        'SensorResultTuple',
+        'object name python_identifier description type units reading')):
+    """Per-sensor result of list_sensors() method
+
+    Attributes
+    ----------
+    object : KATCPSensor instance
+    name : str
+        KATCP (i.e. unescaped) name of the sensor
+    python_identifier : str
+        Python-identifier name of the sensor.
+    description : str
+        KATCP description of the sensor
+    units : str
+        KATCP units of the sensor
+    type : str
+        KATCP type of the sensor
+    reading : KATCPSensorReading instance
+        Most recently received sensor reading
+    """
+
 
 def normalize_strategy_parameters(params):
     """Normalize strategy parameters to be a list of strings.
@@ -44,7 +70,7 @@ def escape_name(name):
     return name.replace('.', '_').replace('-', '_')
 
 
-class KATCPesource(object):
+class KATCPResource(object):
     """Base class to serve as the definition of the KATCPResource API.
 
     A class `C` implementing the KATCPResource API should register itself using
@@ -126,11 +152,9 @@ class KATCPesource(object):
     def children(self):
         """Dict of subordinate KATCPResource objects keyed by their names."""
 
-    SensorResultTuple = collections.namedtuple('SensorResultTuple', [
-        'name', 'object', 'value', 'seconds', 'type', 'units'])
-
+    @abc.abstractproperty
     def list_sensors(self, filter="", strategy=False, status="",
-                     expand_underscore=True):
+                     use_python_identifiers=True):
         """List sensors available on this resource matching certain criteria.
 
         Parameters
@@ -138,26 +162,71 @@ class KATCPesource(object):
         filter : string, optional
             Filter each returned sensor's name against this regexp if specified.
             To ease the dichotomy between Python identifier names and actual
-            sensor names, '_' is replaced by '[.-_]' unless `expand_underscore`
-            is set to False. Note that the sensors of subordinate KATCPResource
-            instances are only filtered on Python identifiers, e.g. a device
-            sensor 'piano.tuning-state' is interpreted as 'piano_tuning_state'.
+            sensor names, the default is to search on Python identifier names
+            rather than KATCP sensor names, unless `use_python_identifiers`
+            below is set to False. Note that the sensors of subordinate
+            KATCPResource instances may have inconsistent names and Python
+            identifiers, better to always search on Python identifiers in this
+            case.
         strategy : {False, True}, optional
             Only list sensors with a set strategy if True
         status : string, optional
             Filter each returned sensor's status against this regexp if given
-        expand_underscore : {True, False}, optional
-            Expand '_' in `filter` parameter to '[.-_]' if True
+        use_python_identifiers : {True, False}, optional
+            Match on python identfiers even the the KATCP name is available.
 
         Returns
         -------
-        sensors : list of (name, object, value, seconds, type, units) tuples
+        sensors : list of SensorResultTuples
             List of matching sensors presented as named tuples. The `object`
             field is the :class:`KATCPSensor` object associated with the sensor.
             Note that the name of the object may not match `name` if it
             originates from a subordinate device.
-
         """
+
+    @tornado.gen.coroutine
+    def set_sensor_strategies(self, filter, strategy_and_params, **list_sensors_args):
+        """Set a sampling strategy for all sensors that match the specified filter.
+
+        Parameters
+        ----------
+        filter : string
+            The regular expression filter to use to select the sensors to which
+            to apply the specified strategy.  Use "" to match all sensors. Is
+            matched using :meth:`list_sensors`.
+        strategy_and_params : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+        **list_sensor_args : keyword arguments
+            Passed to the :meth:`list_sensors` call as kwargs
+
+        Returns
+        -------
+        sensors_strategies : tornado Future
+           resolves with a dict with the Python identifier names of the sensors
+           as keys and the value a tuple:
+
+           (success, info) with
+
+           sucess : bool
+              True if setting succeeded for this sensor, else False
+           info : tuple
+               normalised sensor strategy and parameters as tuple if success == True
+               else, sys.exc_info() tuple for the error that occured.
+        """
+        sensors_strategies = {}
+        sensor_results = self.list_sensors(filter, **list_sensor_args)
+        for sensor_res in sensor_results:
+            try:
+                yield sensor_res.object.set_sampling_strategy(strategy_and_params)
+                sensors_strategies[sensor_res.python_identifier] = (
+                    True, sensor_obj.get_sampling_strategy())
+            except Exception:
+                sensors_strategies[sensor_res.python_identifier] = (
+                    False, sys.exc_info())
+        raise tornado.gen.Return(sensors_strategies)
+
 
 class KATCPRequest(object):
     """Abstract Base class to serve as the definition of the KATCPRequest API.

@@ -22,6 +22,32 @@ from katcp.core import AttrDict
 
 log = logging.getLogger(__name__)
 
+def steal_docstring_from(obj):
+    """Decorator that lets you steal a docstring from another object
+
+    Example
+    -------
+
+    ::
+
+    @steal_docstring_from(superclass.meth)
+    def meth(self, arg):
+        "Extra subclass documentation"
+        pass
+
+    In this case the docstring of the new 'meth' will be copied from superclass.meth, and
+    if an additional dosctring was defined for meth it will be appended to the superclass
+    docstring with a two newlines inbetween.
+    """
+    def deco(fn):
+        docs = [obj.__doc__]
+        if fn.__doc__:
+            docs.append(fn.__doc__)
+        fn.__doc__ = '\n\n'.join(docs)
+        return fn
+
+    return deco
+
 def transform_future(transformation, future):
     """Returns a new future that will resolve with a transformed value
 
@@ -137,28 +163,28 @@ class ReplyWrappedInspectingClientAsync(inspecting_client.InspectingClientAsync)
         return transform_future(self.reply_wrapper,
                                 self.katcp_client.future_request(msg, timeout, use_mid))
 
-class KATCPResourceClient(object):
+class KATCPResourceClient(resource.KATCPResource):
     """Class managing a client connection to a single KATCP resource
 
     Inspects the KATCP interface of the resources, exposing sensors and requests as per
     the :class:`katcp.resource.KATCPResource` API. Can also operate without exposin
     """
 
-    def __init__(self, resource_spec, name, logger=log):
+    def __init__(self, resource_spec, parent=None,logger=log):
         """Initialise resource with given specification
 
         Parameters
         ----------
-        name : str
-          Name of the resource
         resource_spec : dict with resource specifications. Keys:
+          name : str
+              Name of the resource
           address : (host, port), host as str, port as int
           always_allowed_requests : seq of str,
               KACTP requests that are always allowed, even when the resource is not
               controlled.
           always_excluded_requests : seq of str,
               KACTP requests that are never allowed, even if the resource is
-              controlled. Overrides reqeusts in `always_allowed_requests`.
+              controlled. Overrides requests in `always_allowed_requests`.
           controlled : bool, default: False
               True if control over the device (i.e. KATCP requests) is to be exposed.
           auto_reconnect : bool
@@ -172,9 +198,14 @@ class KATCPResourceClient(object):
               Inspect the resource's KATCP interface for sensors and requests
           assumed_requests : ...
           assumed_sensors : ...
+
+        parent : :class:`KATCPResource` or None
+            Parent KATCPResource object if this client is a child in a resource
+            hierarcy
         """
 
-        self.address = resource_spec['address']
+        self._address = resource_spec['address']
+        self._name = resource_spec['name']
         self.always_allowed_requests = resource_spec.get(
             'always_allowed_requests', set())
         self.always_excluded_requests = resource_spec.get(
@@ -182,6 +213,7 @@ class KATCPResourceClient(object):
         self.controlled = resource_spec.get('controlled', False)
         self.auto_reconnect = resource_spec.get('auto_reconnect', True)
         self.auto_reconnect_delay = resource_spec.get('auto_reconnect_delay', 0.5)
+        self._parent = parent
         self._ioloop_set_to = None
         self._sensor = AttrDict()
         self._req = AttrDict()
@@ -205,6 +237,22 @@ class KATCPResourceClient(object):
     @property
     def sensor(self):
         return self._sensor
+
+    @property
+    def address(self):
+        return self._address
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def parent(self):
+        return self._parent
+
+    @property
+    def children(self):
+        return {}
 
     def set_ioloop(self, ioloop=None):
         """Set the tornado ioloop to use
@@ -237,37 +285,25 @@ class KATCPResourceClient(object):
         """
         return self._state.until_state(state)
 
-    @tornado.gen.coroutine
-    def set_sensor_strategies(self, filter, strategy_and_params):
-        """Set a sampling strategy for all sensors that match the specified filter.
-
-        Parameters
-        ----------
-        filter : string
-            The regular expression filter to use to select the sensors to which to apply
-            the specified strategy.  Use "" to match all sensors. Is matched on the
-            escaped (e.g. 'the_sensor', not 'the-sensor' sensor names.
-        strategy_and_params : seq of str or str
-            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
-            names and parameters are as defined by the KATCP spec. As str contains the
-            same elements in space-separated form.
-
-        Returns
-        -------
-        sensors_strategies : tornado Future
-           resolves with a dict with the escaped names of the sensors as keys and the
-           normalised sensor strategy and parameters as value if settings was successful,
-           or the exception raised if it failed.
-
-        TODO: Consider attaching a traceback to the exception  ala Python 3000.
-        """
-        sensors_success = {}
+    @steal_docstring_from(resource.KATCPResource.list_sensors)
+    def list_sensors(self, filter="", strategy=False, status="",
+                     use_python_identifiers=True):
         filter_re = re.compile(filter)
-        for sensor_name, sensor_obj in self._sensor_items():
-            if filter_re.search(sensor_name):
-                try:
-                    yield sensor_obj.set_sampling_strategy(strategy_and_params)
-                sensors_success[sensor_name] = success
+        found_sensors = []
+        for sensor_attr, sensor_obj in self._sensor_items():
+            search_name = (sensor_attr if use_python_identifiers
+                           else sensor_obj.name)
+            if filter_re.search(search_name):
+                found_sensors.append(resource.SensorResultTuple(
+                    object=sensor_obj,
+                    name=sensor_obj.name,
+                    python_identifier=sensor_attr,
+                    description=sensor_obj.description,
+                    units=sensor_obj.units,
+                    type=sensor_obj.type,
+                    reading=sensor_obj.reading))
+        return found_sensors
+
 
     def _request_added_callback(self, request_keys):
         # Instantiate KATCPRequest instances and store on self.req
