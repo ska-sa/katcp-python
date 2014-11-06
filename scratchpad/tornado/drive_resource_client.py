@@ -1,3 +1,4 @@
+import time
 import threading
 import logging
 
@@ -29,18 +30,23 @@ def setup_resource_client():
         address=d.bind_address,
         controlled=True
     ))
+    rc.start()
 
 ioloop.add_callback(setup_resource_client)
 
-
+stop = threading.Event()
 
 def run_ipy():
     try:
         IPython.embed()
+        # stop.wait(10000)
     finally:
         ioloop.stop()
 
 t = threading.Thread(target=run_ipy)
 t.start()
 
-ioloop.start()
+try:
+    ioloop.start()
+except KeyboardInterrupt:
+    stop.set()

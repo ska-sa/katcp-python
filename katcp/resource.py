@@ -36,7 +36,7 @@ class SensorResultTuple(collections.namedtuple(
     reading : KATCPSensorReading instance
         Most recently received sensor reading
     """
-
+    __slots__ = []              # Prevent dynamic attributes from being possible
 
 def normalize_strategy_parameters(params):
     """Normalize strategy parameters to be a list of strings.
@@ -291,6 +291,7 @@ class KATCPSensorReading(collections.namedtuple(
         The value of the sensor (the type will be appropriate to the
         sensor's type).
     """
+    __slots__ = []              # Prevent dynamic attributes from being possible
 
 class KATCPSensorsManager(object):
     """Sensor management class used by KATCPSensor. Abstracts communications details.
@@ -436,9 +437,6 @@ class KATCPSensor(object):
         # method with ours, calling set_formatted will result in this KATCPSensor object's
         # value being set.
         self.set_formatted = self._sensor.set_formatted
-        # Set intitial sampling strategy parameters. Assumes sensor_manager will arrange
-        # for the sampling strategies to get set at an appropriate time.
-        self.strategy, self.strategy_params = sensor_manager.get_sampling(name)
 
     @property
     def name(self):
@@ -509,7 +507,7 @@ class KATCPSensor(object):
 
     def set(self, timestamp, status, value):
         """Set sensor with a given received value, matches :meth:`katcp.Sensor.set`"""
-        received_timestamp = self.sensor_manager.time()
+        received_timestamp = self._manager.time()
         reading = KATCPSensorReading(received_timestamp, timestamp, status, value)
         self._reading = reading
         self.call_listeners(reading)
@@ -523,7 +521,7 @@ class KATCPSensor(object):
         set_formatted() method of a katcp.Sensor object.
         """
 
-    def read(self):
+    def get_reading(self):
         """Get a fresh sensor reading from the KATCP resource
 
         Returns
@@ -534,9 +532,9 @@ class KATCPSensor(object):
         ----
 
         As a side-effect this will update the reading stored in this object, and result in
-        all registered listeners being called.
+        registered listeners being called.
         """
-
+        self._manager.poll_sensor(self._name)
 
 _KATCPReplyTuple = collections.namedtuple('_KATCPReplyTuple', 'reply informs')
 
@@ -566,6 +564,8 @@ class KATCPReply(_KATCPReplyTuple):
     The instance evaluates to nonzero (i.e. truthy) if the request succeeded.
 
     """
+    __slots__ = []              # Prevent dynamic attributes from being possible
+
     def __repr__(self):
         """String representation for pretty-printing in IPython."""
         return '\n'.join("%s%s %s" % (Message.TYPE_SYMBOLS[m.mtype], m.name,
@@ -574,7 +574,7 @@ class KATCPReply(_KATCPReplyTuple):
 
     def __str__(self):
         """String representation using KATCP wire format"""
-        return '\n'.join(str(m) for m in self.message)
+        return '\n'.join(str(m) for m in self.messages)
 
     def __nonzero__(self):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
@@ -592,7 +592,7 @@ class KATCPReply(_KATCPReplyTuple):
 
 
 def _hashable_identity(obj):
-    """Generate a hashabe ID that is stable for methods etc
+    """Generate a hashable ID that is stable for methods etc
 
     Approach borrowed from blinker. Why it matters: see e.g.
     http://stackoverflow.com/questions/13348031/python-bound-and-unbound-method-object
@@ -601,7 +601,7 @@ def _hashable_identity(obj):
         return (id(obj.__func__), id(obj.__self__))
     elif hasattr(obj, 'im_func'):
         return (id(obj.im_func), id(obj.im_self))
-    elif isinstance(obj, text):
+    elif isinstance(obj, (basestring, unicode)):
         return obj
     else:
         return id(obj)
