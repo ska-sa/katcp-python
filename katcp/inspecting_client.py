@@ -515,22 +515,22 @@ class InspectingClientAsync(object):
             if req in item_index:
                 del(item_index[req])
 
-        if added_keys and self._cb_register.get(add_cb):
-            func = self._cb_register.get(add_cb)
-            try:
-                # Using ioloop.add_callback is a bit safer here,
-                # want to explicitly put the given function on the ioloop.
-                self.ioloop.add_callback(func, list(added_keys))
-            except Exception:
-                self._logger.warning('Calling function "{0}"'
-                                     .format(func), exc_info=True)
-
         if removed_keys and self._cb_register.get(rem_cb):
             func = self._cb_register.get(rem_cb)
             try:
                 # Using ioloop.add_callback is a bit safer here,
                 # want to explicitly put the given function on the ioloop.
                 self.ioloop.add_callback(func, list(removed_keys))
+            except Exception:
+                self._logger.warning('Calling function "{0}"'
+                                     .format(func), exc_info=True)
+
+        if added_keys and self._cb_register.get(add_cb):
+            func = self._cb_register.get(add_cb)
+            try:
+                # Using ioloop.add_callback is a bit safer here,
+                # want to explicitly put the given function on the ioloop.
+                self.ioloop.add_callback(func, list(added_keys))
             except Exception:
                 self._logger.warning('Calling function "{0}"'
                                      .format(func), exc_info=True)
