@@ -16,7 +16,7 @@ import tornado
 from tornado.concurrent import Future as tornado_Future
 from tornado.gen import Return
 
-from katcp import resource, inspecting_client
+from katcp import resource, inspecting_client, Message
 from katcp.resource import KATCPReply, KATCPSensorError
 from katcp.core import AttrDict
 
@@ -51,9 +51,9 @@ def steal_docstring_from(obj):
 def transform_future(transformation, future):
     """Returns a new future that will resolve with a transformed value
 
-    Takes the resolution value of `future` and applies transformation() to it before
-    setting the result of the new future with the transformed value. If future() resolves
-    with an exception, it is passed through to the new future.
+    Takes the resolution value of `future` and applies transformation(*future.result())
+    to it before setting the result of the new future with the transformed value. If
+    future() resolves with an exception, it is passed through to the new future.
 
     Assumes `future` is a tornado Future.
 
@@ -67,9 +67,12 @@ def transform_future(transformation, future):
             try:
                 new_future.set_result(transformation(f.result()))
             except Exception:
+                # An exception here idicates that the transformation was unsuccesful
                 new_future.set_exc_info(sys.exc_info())
 
+
     future.add_done_callback(_transform)
+    return new_future
 
 class AsyncState(object):
     """Allow async waiting for a state to attain a certain value
@@ -120,11 +123,12 @@ class AsyncState(object):
             f.set_result(True)
             return f
 
+    # TODO Add unit_not_state() ?
 
 class ReplyWrappedInspectingClientAsync(inspecting_client.InspectingClientAsync):
     """Adds wrapped_request() method that wraps reply in a KATCPReply """
 
-    reply_wrapper = KATCPReply
+    reply_wrapper = staticmethod(lambda x : KATCPReply(*x))
 
     def wrapped_request(self, request, *args, **kwargs):
         """Create and send a request to the server.
@@ -156,10 +160,14 @@ class ReplyWrappedInspectingClientAsync(inspecting_client.InspectingClientAsync)
         wrapped_reply = yield ic.simple_request('help', 'sensor-list')
 
         """
-        use_mid = kwargs.get('use_mid')
-        timeout = kwargs.get('timeout')
-        msg = katcp.Message.request(request, *args)
         f = tornado_Future()
+        try:
+            use_mid = kwargs.get('use_mid')
+            timeout = kwargs.get('timeout')
+            msg = Message.request(request, *args)
+        except Exception:
+            f.set_exc_info(sys.exc_info())
+            return f
         return transform_future(self.reply_wrapper,
                                 self.katcp_client.future_request(msg, timeout, use_mid))
 
@@ -203,7 +211,6 @@ class KATCPResourceClient(resource.KATCPResource):
             Parent KATCPResource object if this client is a child in a resource
             hierarcy
         """
-
         self._address = resource_spec['address']
         self._name = resource_spec['name']
         self.always_allowed_requests = resource_spec.get(
@@ -269,10 +276,11 @@ class KATCPResourceClient(resource.KATCPResource):
             host, port, ioloop=self._ioloop_set_to, auto_reconnect=self.auto_reconnect)
         self.ioloop = ic.ioloop
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
-        ic.set_request_added_callback(self._request_added_callback)
-        ic.set_request_removed_callback(self._request_removed_callback)
-        ic.set_sensor_added_callback(self._sensor_added_callback)
-        ic.set_sensor_removed_callback(self._sensor_removed_callback)
+        ic.set_request_added_callback(self._requests_added_callback)
+        ic.set_request_removed_callback(self._requests_removed_callback)
+        ic.set_sensor_added_callback(self._sensors_added_callback)
+        ic.set_sensor_removed_callback(self._sensors_removed_callback)
+        ic.set_connection_status_change_callback(self._connection_status_callback)
         self._sensor_manager = KATCPResourceClientSensorsManager(ic)
         # Steal some methods from _sensor_manager
         self.reapply_sampling_strategies = self._sensor_manager.reapply_sampling_strategies
@@ -305,29 +313,74 @@ class KATCPResourceClient(resource.KATCPResource):
         return found_sensors
 
 
-    def _request_added_callback(self, request_keys):
+    # TODO Design for state transitions. Since the sensors and requests updates will
+    # happen one after the other, it may result in in states blipping if sensors and then
+    # requests are changed at the same time. perhaps immediately clear the 'synced' flags
+    # as soon as a callbackalways defer work that changes sensor or requests sync states
+    # to 'true' to coroutines / callbacks that always yield to the ioloop before setting
+    # the sync state to true. Should allow sync-clearing to always happen immediately (so
+    # the 'and' condition for full-sync will be false) until both sensors and requests
+    # have been updated without blips. 
+
+    def _requests_added_callback(self, request_keys):
+        log.info('here')
         # Instantiate KATCPRequest instances and store on self.req
         pass
 
-    def _request_removed_callback(self, request_keys):
+    def _requests_removed_callback(self, request_keys):
+        log.info('here')
         # Remove KATCPRequest instances from self.req
         pass
 
-    def _sensor_added_callback(self, sensor_keys):
-        # Create KATCPSensor instance, store in self.sensor
+    def _sensors_added_callback(self, sensor_keys):
+        log.info('here')
+        # TODO Set something to indicate that sensors are out of sync
+        # TODO Call update state thing for overall state
+        # Get KATCPSensor instance futures from inspecting client
+        self._add_sensors({key: self._inspecting_client.future_get_sensor(key)
+                           for key in sensor_keys})
+    @tornado.gen.coroutine
+    def _add_sensors(self, sensor_futures):
+        log.info('here')
+        # Store KATCPSensor instances in self.sensor
+        sensor_instances = yield sensor_futures
+        for s_name, s_obj in sensor_instances.items():
+            s_name_escaped = resource.escape_name(s_name)
+            self._sensor[s_name_escaped] = s_obj
+
+        # TODO Notify parent that sensors were added? Or have a dynamic parent sensor
+        # object that inspects all children?
         # Reapply sensor strategies if they were seen before
-        pass
+        self._sensor_manager.reapply_sampling_strategies()
+        # TODO clear something to indicate that sensors are not out of sync
+        # TODO Call update state thing for overall state
 
-    def _sensor_removed_callback(self, sensor_keys):
+    def _sensors_removed_callback(self, sensor_keys):
+        log.info('here')
         # Remove KATCPSensor instances from self.sensor
-        pass
+        # TODO Call update state thing for overall state
+        for s_name in sensor_keys:
+            s_name_escaped = resource.escape_name(s_name)
+            self._sensor_pop(s_name_escaped)
+        # TODO Notify parent that sensors were removed? Or have a dynamic parent sensor
+        # object that inspects all children? Or perhaps just watch chiled synced state
 
+    @tornado.gen.coroutine
     def _connection_status_callback(self, connected):
+        log.info('connected: {0}'.format(connected))
         self._connected_state.set_state(connected)
         if connected:
+            # Make sure the sensors and requests have all been inspected before continuing
+            yield self._inspecting_client.until_synced()
+            # Make sure that all callbacks scheduled by _inspecting_client have run
+            yield tornado.gen.moment
             self._sensor_manager.reapply_sampling_strategies()
+            # TODO Call update state thing for overall state
         else:
             self._state.set('not synced')
+            # TODO Perhaps we should just be setting connected to false and then calling
+            # overall state update thing. Or even better, register some callback to all
+            # our state objects that will call the overall state thing for us!
 
     def stop(self):
         self._inspecting_client.stop()
@@ -356,6 +409,28 @@ class KATCPResourceClientSensorsManager(object):
             self.set_sampling_strategy(sensor_name, cached_strategy)
         return sens
 
+    def get_sampling_strategy(self, sensor_name):
+        """Get the current sampling strategy for the named sensor
+
+        Parameters
+        ----------
+
+        sensor_name : str
+            Name of the sensor
+
+        Returns
+        -------
+
+        strategy : tuple of str
+            contains (<strat_name>, [<strat_parm1>, ...]) where the strategy names and
+            parameters are as defined by the KATCP spec
+        """
+        cached = self._strategy_cache.get(sensor_name)
+        if not cached:
+            return resource.normalize_strategy_parameters('none')
+        else:
+            return cached
+
     @tornado.gen.coroutine
     def set_sampling_strategy(self, sensor_name, strategy_and_params):
         """Set the sampling strategy for the named sensor
@@ -379,32 +454,10 @@ class KATCPResourceClientSensorsManager(object):
         strategy_and_params = resource.normalize_strategy_parameters(strategy_and_params)
         self._strategy_cache[sensor_name] = strategy_and_params
         reply = yield self._inspecting_client.wrapped_request(
-            'sensor-sampling', *strategy_and_params)
+            'sensor-sampling', sensor_name, *strategy_and_params)
         if not reply.succeeded:
             raise KATCPSensorError('Error setting strategy for sensor {0}: \n'
                                    '{1!s}'.format(sensor_name, reply))
-
-    def get_sampling_strategy(self, sensor_name):
-        """Get the current sampling strategy for the named sensor
-
-        Parameters
-        ----------
-
-        sensor_name : str
-            Name of the sensor
-
-        Returns
-        -------
-
-        strategy : tuple of str
-            contains (<strat_name>, [<strat_parm1>, ...]) where the strategy names and
-            parameters are as defined by the KATCP spec
-        """
-        cached = self._strategy_cache.get(sensor_name)
-        if not cached:
-            return resource.normalize_strategy_parameters('none')
-        else:
-            return cached
 
     @tornado.gen.coroutine
     def reapply_sampling_strategies(self):
