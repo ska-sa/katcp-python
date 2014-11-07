@@ -142,7 +142,7 @@ class AsyncEvent(object):
             return True
         except TimeoutError:
             return self._flag
-
+
 
 class DeviceClient(object):
     """Device client proxy.
@@ -174,7 +174,7 @@ class DeviceClient(object):
     ...     def reply_myreq(self, msg):
     ...         print str(msg)
     ...
-    >>> c = MyClient('localhost', 10000)
+    >>> c = MyClient('localhost', 10000)
     >>> c.start()
     >>> c.send_request(katcp.Message.request('myreq'))
     >>> # expect reply to be printed here
@@ -295,8 +295,8 @@ class DeviceClient(object):
         """Convert a time in seconds to the device timestamp units
 
         KATCP v4 and earlier, specified all timestamps in milliseconds. Since
-        KATCP v5, all timestamps are in seconds. If the device KATCP version has
-        been detected, this method converts a value in seconds to the
+        KATCP v5, all timestamps are in seconds. If the device KATCP version has
+        been detected, this method converts a value in seconds to the
         appropriate (seconds or milliseconds) quantity. For version smaller than
         V4, the time value will be truncated to the nearest millisecond.
         """
@@ -333,7 +333,7 @@ class DeviceClient(object):
         """Process a #version-connect message."""
         if len(msg.arguments) < 2:
             return
-        # Store version information, remove the katcp- prefix.
+        # Store version information.
         name = msg.arguments[0]
         self.versions[name] = tuple(msg.arguments[1:])
         if msg.arguments[0] == "katcp-protocol":
