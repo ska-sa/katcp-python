@@ -77,6 +77,14 @@ class InspectingClientAsync(object):
     Should be set before calling connect()/start().
 
     """
+    request_factory = RequestType
+    """Factory that produces KATCP Request objects
+
+    signature: request_factory(name, description')
+
+    Should be set before calling connect()/start().
+
+    """
 
     def __init__(self, host, port, ioloop=None, full_inspection=None, auto_reconnect=True,
                  logger=ic_logger):
@@ -339,7 +347,7 @@ class InspectingClientAsync(object):
 
         Returns
         -------
-        Sensor NameTuple or None if sensor could not be found.
+        Sensor created by :meth:`sensor_factory` or None if sensor not found.
 
         """
         obj = None
@@ -407,7 +415,7 @@ class InspectingClientAsync(object):
 
         Returns
         -------
-        Request NameTuple or None if request could not be found.
+        Request created by :meth:`request_factory` or None if request not found.
 
         """
         obj = None
@@ -416,8 +424,8 @@ class InspectingClientAsync(object):
             request_info = self._requests_index[name]
             obj = request_info.get('obj')
             if obj is None:
-                obj = RequestType(name,
-                                  request_info.get('description', ''))
+                obj = self.request_factory(
+                    name, request_info.get('description', ''))
                 self._requests_index[name]['obj'] = obj
 
         raise tornado.gen.Return(obj)
@@ -528,10 +536,21 @@ class InspectingClientAsync(object):
         ----------
         request : str
             The request to call.
-        args : list of objects
+        *args : list of objects
             Arguments to pass on to the request.
+
+        Keyword Arguments
+        -----------------
         timeout : float or None, optional
             Timeout after this amount of seconds (keyword argument).
+        mid : None or int, optional
+            Message identifier to use for the request message. If None, use either
+            auto-incrementing value or no mid depending on the KATCP protocol version
+            (mid's were only introduced with KATCP v5) and the value of the `use_mid`
+            argument. Defaults to None
+        use_mid : bool
+            Use a mid for the request if True. Defaults to True if the server supports
+            them.
 
         Returns
         -------
@@ -547,7 +566,8 @@ class InspectingClientAsync(object):
         """
         use_mid = kwargs.get('use_mid')
         timeout = kwargs.get('timeout')
-        msg = katcp.Message.request(request, *args)
+        mid = kwargs.get('mid')
+        msg = katcp.Message.request(request, *args, mid=mid)
         return self.katcp_client.future_request(msg, timeout, use_mid)
 
     def _call_cb(self, cb, parameter):

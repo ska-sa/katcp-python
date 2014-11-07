@@ -13,6 +13,8 @@ import re
 
 import tornado
 
+from functools import wraps
+
 from tornado.concurrent import Future as tornado_Future
 from tornado.gen import Return
 
@@ -47,6 +49,46 @@ def steal_docstring_from(obj):
         return fn
 
     return deco
+
+def log_coroutine_exceptions(coro):
+    """Coroutine (or any function that returns a future) decorator to log exceptions
+
+    Using the module logger
+
+    Example
+    -------
+
+    ::
+
+    @log_coroutine_exceptions
+    @tornado.gen.coroutine
+    def raiser(self, arg):
+        yield tornado.gen.moment
+        raise Exception(arg)
+
+    """
+    def log_cb(f):
+        try:
+            f.result()
+        except Exception:
+            log.exception('Unhandled exception calling coroutine {0!r}'
+                               .format(coro))
+
+    @wraps(coro)
+    def wrapped_coro(*args, **kwargs):
+        f = coro(*args, **kwargs)
+        f.add_done_callback(log_cb)
+        return f
+
+    return wrapped_coro
+
+def log_future_exceptions(f):
+    def log_cb(f):
+        try:
+            f.result()
+        except Exception:
+            log.exception('Unhandled exception returned by future')
+    f.add_done_callback(log_cb)
 
 def transform_future(transformation, future):
     """Returns a new future that will resolve with a transformed value
@@ -140,10 +182,20 @@ class ReplyWrappedInspectingClientAsync(inspecting_client.InspectingClientAsync)
         ----------
         request : str
             The request to call.
-        args : list of objects
+        *args : list of objects
             Arguments to pass on to the request.
+
+        Keyword Arguments
+        -----------------
         timeout : float or None, optional
             Timeout after this amount of seconds (keyword argument).
+        mid : None or int, optional
+            Message identifier to use for the request message. If None, use either
+            auto-incrementing value or no mid depending on the KATCP protocol version
+            (mid's were only introduced with KATCP v5) and the value of the `use_mid`
+            argument. Defaults to None.
+        use_mid : bool
+            Use a mid for the request if True.
 
         Returns
         -------
@@ -177,6 +229,34 @@ class KATCPResourceClient(resource.KATCPResource):
     the :class:`katcp.resource.KATCPResource` API. Can also operate without exposin
     """
 
+    @property
+    def state(self):
+        return self._state.state
+
+    @property
+    def req(self):
+        return self._req
+
+    @property
+    def sensor(self):
+        return self._sensor
+
+    @property
+    def address(self):
+        return self._address
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def parent(self):
+        return self._parent
+
+    @property
+    def children(self):
+        return {}
+
     def __init__(self, resource_spec, parent=None,logger=log):
         """Initialise resource with given specification
 
@@ -198,6 +278,9 @@ class KATCPResourceClient(resource.KATCPResource):
               If True, auto-reconnect should the network connection be closed.
           auto_reconnect_delay : float seconds. Default : 0.5s
               Delay between reconnection retries.
+          # TODO(NM) 'keep', ie. katcorelib behaviour where requests / sensors never
+          # disappear even if the device looses them. Or was it only sensors? Should look
+          # at katcorelib
 
           # TODO, not implemented, proposed below for light non-inspecting mode
 
@@ -232,34 +315,6 @@ class KATCPResourceClient(resource.KATCPResource):
         self._state = AsyncState(("not synced", "syncing", "synced"))
         self._connected_state = AsyncState((False, True))
 
-    @property
-    def state(self):
-        return self._state.state
-
-    @property
-    def req(self):
-        return self._req
-
-    @property
-    def sensor(self):
-        return self._sensor
-
-    @property
-    def address(self):
-        return self._address
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def parent(self):
-        return self._parent
-
-    @property
-    def children(self):
-        return {}
-
     def set_ioloop(self, ioloop=None):
         """Set the tornado ioloop to use
 
@@ -280,10 +335,14 @@ class KATCPResourceClient(resource.KATCPResource):
         ic.set_sensor_added_callback(self._sensors_added_callback)
         ic.set_sensor_removed_callback(self._sensors_removed_callback)
         ic.set_connection_status_change_callback(self._connection_status_callback)
+        ic.request_factory = self._request_factory
         self._sensor_manager = KATCPResourceClientSensorsManager(ic)
+        ic.handle_sensor_value()
+        ic.sensor_factory = self._sensor_manager.sensor_factory
+
         # Steal some methods from _sensor_manager
         self.reapply_sampling_strategies = self._sensor_manager.reapply_sampling_strategies
-        ic.connect()
+        log_future_exceptions(ic.connect())
 
     def until_state(self, state):
         """Return a tornado Future that will resolve when the requested state is set
@@ -321,10 +380,15 @@ class KATCPResourceClient(resource.KATCPResource):
     # the 'and' condition for full-sync will be false) until both sensors and requests
     # have been updated without blips.
 
+    def _request_factory(self, name, description):
+        return KATCPResourceClientRequest(name, description, self._inspecting_client)
+
     def _requests_added_callback(self, request_keys):
         log.info('here')
         # Instantiate KATCPRequest instances and store on self.req
-        pass
+        f = self._add_requests({key: self._inspecting_client.future_get_request(key)
+                                for key in request_keys})
+        log_future_exceptions(f)
 
     def _requests_removed_callback(self, request_keys):
         log.info('here')
@@ -336,8 +400,11 @@ class KATCPResourceClient(resource.KATCPResource):
         # TODO Set something to indicate that sensors are out of sync
         # TODO Call update state thing for overall state
         # Get KATCPSensor instance futures from inspecting client
+        log_coroutine_exceptions
         self._add_sensors({key: self._inspecting_client.future_get_sensor(key)
                            for key in sensor_keys})
+
+    @log_coroutine_exceptions
     @tornado.gen.coroutine
     def _add_sensors(self, sensor_futures):
         log.info('here')
@@ -350,9 +417,17 @@ class KATCPResourceClient(resource.KATCPResource):
         # TODO Notify parent that sensors were added? Or have a dynamic parent sensor
         # object that inspects all children?
         # Reapply sensor strategies if they were seen before
-        self._sensor_manager.reapply_sampling_strategies()
+        yield self._sensor_manager.reapply_sampling_strategies()
         # TODO clear something to indicate that sensors are not out of sync
         # TODO Call update state thing for overall state
+
+    @log_coroutine_exceptions
+    @tornado.gen.coroutine
+    def _add_requests(self, request_futures):
+        request_instances = yield request_futures
+        for r_name, r_obj in request_instances.items():
+            r_name_escaped = resource.escape_name(r_name)
+            self._req[r_name_escaped] = r_obj
 
     def _sensors_removed_callback(self, sensor_keys):
         log.info('here')
@@ -364,6 +439,7 @@ class KATCPResourceClient(resource.KATCPResource):
         # TODO Notify parent that sensors were removed? Or have a dynamic parent sensor
         # object that inspects all children? Or perhaps just watch chiled synced state
 
+    @log_coroutine_exceptions
     @tornado.gen.coroutine
     def _connection_status_callback(self, connected):
         log.info('connected: {0}'.format(connected))
@@ -373,7 +449,7 @@ class KATCPResourceClient(resource.KATCPResource):
             yield self._inspecting_client.until_synced()
             # Make sure that all callbacks scheduled by _inspecting_client have run
             yield tornado.gen.moment
-            self._sensor_manager.reapply_sampling_strategies()
+            yield self._sensor_manager.reapply_sampling_strategies()
             # TODO Call update state thing for overall state
         else:
             self._state.set('not synced')
@@ -396,16 +472,15 @@ class KATCPResourceClientSensorsManager(object):
         self._inspecting_client = inspecting_client
         self.time = inspecting_client.ioloop.time
         self._strategy_cache = {}
-        inspecting_client.handle_sensor_value()
-        inspecting_client.sensor_factory = self._sensor_factory
 
-    def _sensor_factory(self, **sensor_description):
+    def sensor_factory(self, **sensor_description):
         # kwargs as for inspecting_client.InspectingClientAsync.sensor_factory
         sens = resource.KATCPSensor(sensor_description, self)
         sensor_name = sensor_description['name']
         cached_strategy = self._strategy_cache.get(sensor_name)
         if cached_strategy:
-            self.set_sampling_strategy(sensor_name, cached_strategy)
+            log_future_exceptions(self.set_sampling_strategy(
+                sensor_name, cached_strategy))
         return sens
 
     def get_sampling_strategy(self, sensor_name):
@@ -485,5 +560,39 @@ class KATCPResourceClientSensorsManager(object):
         if not reply.succeeded:
             raise KATCPSensorError('Error polling sensor {0}: \n'
                                    '{1!s}'.format(sensor_name, reply))
-
+# Register with the ABC
 resource.KATCPSensorsManager.register(KATCPResourceClientSensorsManager)
+
+class KATCPResourceClientRequest(resource.KATCPRequest):
+
+    @property
+    @steal_docstring_from(resource.KATCPRequest.name)
+    def name(self):
+        return self._name
+
+    @property
+    @steal_docstring_from(resource.KATCPRequest.description)
+    def description(self):
+        return self._description
+
+    def __init__(self, name, description, client):
+        """Initialize request with given description and network client
+
+        Parameters
+        ----------
+        name : str
+            KATCP name of the request
+        description : str
+            KATCP request description (as returned by ?help <name>)
+        client : client obj
+            KATCP client connected to the KATCP resource that exposes a wrapped_request()
+            method like :meth:`ReplyWrappedInspectingClientAsync.wrapped_request`.
+
+        """
+        self._name = name
+        self._description = description
+        self._client = client
+
+    def __call__(self, *args, **kwargs):
+        return self._client.wrapped_request(self.name, *args, **kwargs)
+
