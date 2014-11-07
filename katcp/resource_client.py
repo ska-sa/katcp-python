@@ -70,7 +70,6 @@ def transform_future(transformation, future):
                 # An exception here idicates that the transformation was unsuccesful
                 new_future.set_exc_info(sys.exc_info())
 
-
     future.add_done_callback(_transform)
     return new_future
 
@@ -123,7 +122,7 @@ class AsyncState(object):
             f.set_result(True)
             return f
 
-    # TODO Add unit_not_state() ?
+    # TODO Add until_not_state() ?
 
 class ReplyWrappedInspectingClientAsync(inspecting_client.InspectingClientAsync):
     """Adds wrapped_request() method that wraps reply in a KATCPReply """
@@ -320,7 +319,7 @@ class KATCPResourceClient(resource.KATCPResource):
     # to 'true' to coroutines / callbacks that always yield to the ioloop before setting
     # the sync state to true. Should allow sync-clearing to always happen immediately (so
     # the 'and' condition for full-sync will be false) until both sensors and requests
-    # have been updated without blips. 
+    # have been updated without blips.
 
     def _requests_added_callback(self, request_keys):
         log.info('here')
@@ -477,5 +476,14 @@ class KATCPResourceClientSensorsManager(object):
             except Exception:
                 log.exception('Unhandled exception reapplying strategy for '
                               'sensor {}'.format(sensor_name), exc_info=True)
+
+    @tornado.gen.coroutine
+    @steal_docstring_from(resource.KATCPSensorsManager.poll_sensor)
+    def poll_sensor(self, sensor_name):
+        reply = yield self._inspecting_client.wrapped_request(
+            'sensor-value', sensor_name)
+        if not reply.succeeded:
+            raise KATCPSensorError('Error polling sensor {0}: \n'
+                                   '{1!s}'.format(sensor_name, reply))
 
 resource.KATCPSensorsManager.register(KATCPResourceClientSensorsManager)

@@ -16,11 +16,10 @@ from collections import namedtuple, defaultdict
 
 from concurrent.futures import Future
 
-from katcp.core import SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC, MS_TO_SEC_FAC
+from katcp.core import hashable_identity
 
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', ['name', 'description'])
-
 
 class _InformHookDeviceClient(katcp.AsyncClient):
     """DeviceClient that adds inform hooks."""
@@ -42,25 +41,25 @@ class _InformHookDeviceClient(katcp.AsyncClient):
             The function to be called.
 
         """
-        name = self._slug(inform_name)
-        self._inform_hooks[name].append(callback)
+        # Do not hook the same callback multiple times
+        callback_id = hashable_identity(callback)
+        if not any(callback_id == hashable_identity(hook)
+                   for hook in self._inform_hooks):
+            self._inform_hooks[inform_name].append(callback)
 
-    def unhandled_inform(self, msg):
-        """Call a callback on informs."""
+    def handle_inform(self, msg):
+        """Call callbacks on hooked informs followed by normal processing"""
         try:
-            for func in self._inform_hooks.get(self._slug(msg.name), []):
+            for func in self._inform_hooks.get(msg.name, []):
                 func(msg)
         except Exception:
             self._logger.warning('Call to function "{0}" with message "{1}".'
                                  .format(func, msg), exc_info=True)
-
-    def _slug(self, name):
-        """Turn a name into a slug."""
-        return str(name).strip().lower().replace('-', '_')
+        super(_InformHookDeviceClient, self).handle_inform(msg)
 
 
 class InspectingClientAsync(object):
-    """Higher-level client that inspects KATCP interface.
+    """Higher-level client that inspects a KATCP interface.
 
     Note: This class is not threadsafe at present, it should only be called
     from the ioloop.
@@ -435,7 +434,7 @@ class InspectingClientAsync(object):
 
     def _cb_inform_sensor_status(self, msg):
         """Update received for an sensor."""
-        timestamp = float(msg.arguments[0])
+        timestamp = msg.arguments[0]
         num_sensors = int(msg.arguments[1])
         assert len(msg.arguments) == 2 + num_sensors * 3
         for n in xrange(num_sensors):
