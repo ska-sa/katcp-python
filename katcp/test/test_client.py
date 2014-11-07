@@ -31,9 +31,11 @@ logging.getLogger("katcp").addHandler(log_handler)
 
 NO_HELP_MESSAGES = 16         # Number of requests on DeviceTestServer
 
+
 def remove_version_connect(msgs):
     """Remove #version-connect messages from a list of messages"""
     return [msg for msg in msgs if msg.name != 'version-connect']
+
 
 class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
     def setUp(self):
@@ -175,7 +177,9 @@ class TestDeviceClientServerDetection(unittest.TestCase, TestUtilMixin):
         self.assertEqual(self.client._auto_reconnect, True)
         self._check_v5_mid()
 
+
 class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
+
     def setUp(self):
         self.server = DeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server, start_timeout=1)
@@ -186,6 +190,13 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.enable_thread_safety()
         start_thread_with_cleanup(self, self.client, start_timeout=1)
         self.client.wait_connected(timeout=1)
+
+    def test_versions(self):
+        """Test that the versions parameter is populated."""
+        versions = self.client.versions
+        self.assertIn('katcp', ' '.join(versions['katcp-library']))
+        self.assertIn('device', ' '.join(versions['katcp-device']))
+        self.assertTrue(' '.join(versions['katcp-protocol']))
 
     def test_request(self):
         """Test request method."""
