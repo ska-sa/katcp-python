@@ -149,7 +149,6 @@ class AsyncEvent(object):
             return True
         except TimeoutError:
             return self._flag
-
 
 class DeviceClient(object):
     """Device client proxy.

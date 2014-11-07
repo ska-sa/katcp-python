@@ -194,9 +194,9 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
     def test_versions(self):
         """Test that the versions parameter is populated."""
         versions = self.client.versions
-        self.assertIn('katcp', versions.library)
-        self.assertIn('device', versions.device)
-        self.assertTrue(versions.protocol)
+        self.assertIn('katcp', ' '.join(versions['katcp-library']))
+        self.assertIn('device', ' '.join(versions['katcp-device']))
+        self.assertTrue(' '.join(versions['katcp-protocol']))
 
     def test_request(self):
         """Test request method."""
