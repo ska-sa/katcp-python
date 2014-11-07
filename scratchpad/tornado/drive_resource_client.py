@@ -1,6 +1,12 @@
 import time
 import threading
 import logging
+import signal
+
+logging.basicConfig(
+    format="%(asctime)s %(name)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d)%(message)s",
+    level=logging.DEBUG
+)
 
 import tornado
 import IPython
@@ -9,11 +15,6 @@ from katcp.testutils import DeviceTestServer
 
 from katcp import resource_client
 
-
-logging.basicConfig(
-    format="%(asctime)s %(name)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d)%(message)s",
-    level=logging.DEBUG
-)
 
 ioloop = tornado.ioloop.IOLoop.current()
 
@@ -46,7 +47,14 @@ def run_ipy():
 t = threading.Thread(target=run_ipy)
 t.start()
 
+ioloop.set_blocking_log_threshold(0.1)
+def ignore_signal(sig, frame):
+    pass
+# Disable sigint, since it stops the ioloop but not ipython shell ;)
+signal.signal(signal.SIGINT, ignore_signal)
 try:
     ioloop.start()
 except KeyboardInterrupt:
+    print 'Keyboard interrupt'
     stop.set()
+

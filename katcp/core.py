@@ -1264,3 +1264,18 @@ class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
+
+def hashable_identity(obj):
+    """Generate a hashable ID that is stable for methods etc
+
+    Approach borrowed from blinker. Why it matters: see e.g.
+    http://stackoverflow.com/questions/13348031/python-bound-and-unbound-method-object
+    """
+    if hasattr(obj, '__func__'):
+        return (id(obj.__func__), id(obj.__self__))
+    elif hasattr(obj, 'im_func'):
+        return (id(obj.im_func), id(obj.im_self))
+    elif isinstance(obj, (basestring, unicode)):
+        return obj
+    else:
+        return id(obj)

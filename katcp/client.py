@@ -604,9 +604,8 @@ class DeviceClient(object):
             The inform message to dispatch.
 
         """
-        method = self.__class__.unhandled_inform
-        if msg.name in self._inform_handlers:
-            method = self._inform_handlers[msg.name]
+        method = self._inform_handlers.get(
+            msg.name, self.__class__.unhandled_inform)
 
         try:
             return method(self, msg)
@@ -1076,7 +1075,7 @@ class DeviceClient(object):
 
 
 class AsyncClient(DeviceClient):
-    """Implement callback-based requests on top of DeviceClient.
+    """Implement async and callback-based requests on top of DeviceClient.
 
     This client will use message IDs if the server supports them.
 
