@@ -1,18 +1,19 @@
-# /
-/build
-/dist
-/*.egg-info
-*.pyc
-*~
-.ropeproject
-# /docs/
+# Python droppings
+*.py[cod]
+
+# Packages
+build
+dist
+*.egg-info
+*.egg
 /doc/_build
 
-# /katcore/
-/katcore/*.pyc
+# Unit test / coverage reports
+.coverage
+.tox
+nosetests.xml
+.noseids
 
-# /scripts/
-/scripts/build
-/scripts/   dist
-/scripts/   *.egg-info
-/scripts/   *.pyc
+# Developer tools
+.ropeproject
+*~

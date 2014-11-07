@@ -16,27 +16,28 @@ from collections import namedtuple, defaultdict
 
 from concurrent.futures import Future
 
+
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', ['name', 'description'])
 
 
-class KATCPDeviceClient(katcp.AsyncClient):
+class _InformHookDeviceClient(katcp.AsyncClient):
+    """DeviceClient that adds inform hooks."""
 
     def __init__(self, *args, **kwargs):
-        super(KATCPDeviceClient, self).__init__(*args, **kwargs)
+        super(_InformHookDeviceClient, self).__init__(*args, **kwargs)
         self._inform_hooks = defaultdict(list)
 
     def hook_inform(self, inform_name, callback):
         """Hookup a function to be called when an inform is received.
 
-        eg. Useful for interface-changed and sensor-status informs.
+        Useful for interface-changed and sensor-status informs.
 
         Parameters
         ----------
-
-        inform_name: str
+        inform_name : str
             The name of the inform.
-        callback: function
+        callback : function
             The function to be called.
 
         """
@@ -58,11 +59,12 @@ class KATCPDeviceClient(katcp.AsyncClient):
 
 
 class InspectingClientAsync(object):
-    """
-    Note: This class is not threadsafe at present,
-          it should only be called from the ioloop.
-    """
+    """Higher-level client that inspects KATCP interface.
 
+    Note: This class is not threadsafe at present, it should only be called
+    from the ioloop.
+
+    """
     sensor_factory = katcp.Sensor
     """Factory that produces a KATCP Sensor compatible instance.
 
@@ -73,6 +75,7 @@ class InspectingClientAsync(object):
                               params)
 
     Should be set before calling connect()/start().
+
     """
 
     def __init__(self, host, port, io_loop=None, full_inspection=None,
@@ -90,7 +93,7 @@ class InspectingClientAsync(object):
         self._cb_register = {}  # Register to hold the possible callbacks.
 
         # Setup KATCP device.
-        self.katcp_client = KATCPDeviceClient(host, port, logger=logger)
+        self.katcp_client = _InformHookDeviceClient(host, port, logger=logger)
         if io_loop is False:
             # Called from the blocking client.
             self.ioloop = self.katcp_client.ioloop
@@ -184,8 +187,7 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-
-        name: optional str
+        name : str or None, optional
             Name of the sensor or None to get all requests.
 
         """
@@ -222,8 +224,7 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-
-        name: optional str
+        name : str or None, optional
             Name of the sensor or None to get all sensors.
 
         """
@@ -269,10 +270,9 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-
-        name: str
+        name : str
             Name of the sensor to verify.
-        update: bool
+        update : bool or None, optional
             If a katcp request to the server should be made to check if the
             sensor is on the server now.
 
@@ -297,16 +297,14 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-
-        name: String
+        name : string
             Name of the sensor.
-        update: Optional Boolean
+        update : bool or None, optional
             True allow inspect client to inspect katcp server if the sensor
             is not known.
 
         Returns
         -------
-
         Sensor NameTuple or None if sensor could not be found.
 
         """
@@ -340,10 +338,9 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-
-        name: str
+        name : str
             Name of the request to verify.
-        update: bool default to None.
+        update : bool or None, optional
             If a katcp request to the server should be made to check if the
             sensor is on the server. True = Allow, False do not Allow, None
             use the class default.
@@ -368,16 +365,14 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-
-        name: String
+        name : string
             Name of the request.
-        update: Optional Boolean
+        update : bool or None, optional
             True allow inspect client to inspect katcp server if the request
             is not known.
 
         Returns
         -------
-
         Request NameTuple or None if request could not be found.
 
         """
@@ -431,8 +426,7 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-
-        callback: function
+        callback : function
             Reference to the function/method to be called.
 
         """
@@ -443,8 +437,7 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-
-        callback: function
+        callback : function
             Reference to the function/method to be called.
 
         """
@@ -455,8 +448,7 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-
-        callback: function
+        callback : function
             Reference to the function/method to be called.
 
         """
@@ -467,8 +459,7 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-
-        callback: function
+        callback : function
             Reference to the function/method to be called.
 
         """
@@ -478,22 +469,20 @@ class InspectingClientAsync(object):
         """Create and send a request to the server.
 
         This method implements a very small subset of the options
-        possible to send an request, it is provided as a shortcut to
+        possible to send an request. It is provided as a shortcut to
         sending a simple request.
 
         Parameters
         ----------
-
-        request: str
+        request : str
             The request to call.
-        args:
+        args : list of objects
             Arguments to pass on to the request.
-        timeout: float
-            Timeout after this amount of seconds.
+        timeout : float or None, optional
+            Timeout after this amount of seconds (keyword argument).
 
         Returns
         -------
-
         future object.
 
         Example
@@ -511,16 +500,15 @@ class InspectingClientAsync(object):
 
     def _difference(self, original_keys, updated_keys, item_index,
                     name, add_cb, rem_cb):
-        """Calculate the difference between the original set of keys and
-        updated set of keys.
+        """Calculate difference between the original and updated sets of keys.
 
         Removed items will be removed from item_index, new items should have
         been added by the discovery process. (?help or ?sensor-list)
 
         Update and remove callbacks as set by the set_calback_* methods of this
         class will be called from here. `add_cb` and `rem_cb` are the names of
-        the callbacks in the
-        register, not the callables themselves.
+        the callbacks in the register, not the callables themselves.
+        the callbacks in the register, not the callables themselves.
 
         This method is for use in inspect_requests and inspect_sensors only.
 
@@ -562,11 +550,7 @@ class InspectingClientAsync(object):
 
 
 class InspectingClientBlocking(InspectingClientAsync):
-
-    """
-    Note: This class is not threadsafe at present,
-          it should only be called from the ioloop.
-    """
+    """Higher-level client that inspects KATCP interfaces and is thread-safe."""
 
     def __init__(self, host, port, full_inspection=None, logger=ic_logger):
         super(InspectingClientBlocking, self).__init__(
@@ -593,16 +577,14 @@ class InspectingClientBlocking(InspectingClientAsync):
 
         Parameters
         ----------
-
-        name: String
+        name : string
             Name of the sensor.
-        update: Optional Boolean
+        update : boolean, optional
             True allow inspect client to inspect katcp server if the sensor
             is not known.
 
         Returns
         -------
-
         Sensor object or None if sensor could not be found.
 
         """
@@ -625,16 +607,14 @@ class InspectingClientBlocking(InspectingClientAsync):
 
         Parameters
         ----------
-
-        name: String
+        name : string
             Name of the request.
-        update: Optional Boolean
+        update : boolean, optional
             True allow inspecting client to inspect katcp server if the
             request is not known.
 
         Returns
         -------
-
         Sensor object or None if sensor could not be found.
 
         """
@@ -655,7 +635,7 @@ class InspectingClientBlocking(InspectingClientAsync):
         Parameters
         ----------
 
-        timeout : float in seconds
+        timeout : float or None, optional
             Seconds to wait for the client to start synced.
 
         Returns
@@ -687,12 +667,12 @@ class InspectingClientBlocking(InspectingClientAsync):
         Parameters
         ----------
 
-        request: str
+        request : str
             The request to call.
-        args:
+        args : list of objects
             Arguments to pass on to the request.
-        timeout: float
-            Timeout after this amount of seconds.
+        timeout : float or None, optional
+            Timeout after this amount of seconds (keyword argument).
 
         Returns
         -------
@@ -707,4 +687,3 @@ class InspectingClientBlocking(InspectingClientAsync):
         timeout = kwargs.get('timeout')
         msg = katcp.Message.request(request, *args)
         return self.katcp_client.blocking_request(msg, timeout, use_mid)
-#

@@ -4,8 +4,7 @@
 # Copyright 2009 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
 
-"""Tests for client module.
-   """
+"""Tests for client module."""
 
 import unittest2 as unittest
 import socket
@@ -563,27 +562,6 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_like(help_messages,
             [("#help[1] ", "")] * NO_HELP_MESSAGES +
             [("!help[1] ok %d" % NO_HELP_MESSAGES, "")])
-
-    def test_no_timeout(self):
-        self.client._request_timeout = None
-        replies = []
-        informs = []
-        replied = threading.Event()
-        def reply_handler(reply):
-            replies.append(reply)
-            replied.set()
-        def inform_handler(reply):
-            informs.append(reply)
-
-        with mock.patch('katcp.client.threading.Timer') as MockTimer:
-            self.client.callback_request(Message.request("help"),
-                                reply_cb=reply_handler,
-                                inform_cb=inform_handler)
-        replied.wait(1)
-        # With no timeout no Timer object should have been instantiated
-        self.assertEqual(MockTimer.call_count, 0)
-        self.assertEqual(len(replies), 1)
-        self.assertEqual(len(remove_version_connect(informs)), NO_HELP_MESSAGES)
 
     def test_timeout(self):
         self._test_timeout()
