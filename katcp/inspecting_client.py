@@ -176,6 +176,24 @@ class InspectingClientAsync(object):
     def join(self, timeout=None):
         self.katcp_client.join(timeout)
 
+    def _update_index(self, kind, name, data):
+        if kind == 'sensor':
+            index = self._sensors_index
+        elif kind == 'request':
+            index = self._requests_index
+        else:
+            raise ValueError('kind must be either sensor or request not "{0}"'.
+                             format(kind))
+
+        if name not in index:
+            index[name] = data
+        else:
+            orig_data = index[name]
+            for key, value in data.items():
+                if orig_data.get(key) != value:
+                    orig_data[key] = value
+                    orig_data['_changed'] = True
+
     @tornado.gen.coroutine
     def inspect(self):
         yield self.inspect_requests()
@@ -204,17 +222,12 @@ class InspectingClientAsync(object):
             req_name = msg.arguments[0]
             req = {'description': msg.arguments[1]}
             requests_updated.add(req_name)
-            if req_name not in self._requests_index:
-                self._requests_index[req_name] = req
-            else:
-                self._requests_index[req_name].update(req)
+            self._update_index('request', req_name, req)
 
         self._difference(requests_old,
                          requests_updated,
-                         self._requests_index,
                          name,
-                         'request_added',
-                         'request_removed')
+                         'request')
 
         self._request_sync.set()
 
@@ -247,17 +260,12 @@ class InspectingClientAsync(object):
                    'params': []}
             if len(msg.arguments) > 4:
                 sen['params'] = msg.arguments[4:]
-            if sen_name not in self._sensors_index:
-                self._sensors_index[sen_name] = sen
-            else:
-                self._sensors_index[sen_name].update(sen)
+            self._update_index('sensor', sen_name, sen)
 
         self._difference(sensors_old,
                          sensors_updated,
-                         self._sensors_index,
                          name,
-                         'sensor_added',
-                         'sensor_removed')
+                         'sensor')
 
         self._sensor_sync.set()
 
@@ -498,8 +506,31 @@ class InspectingClientAsync(object):
         msg = katcp.Message.request(request, *args)
         return self.katcp_client.future_request(msg, timeout, use_mid)
 
-    def _difference(self, original_keys, updated_keys, item_index,
-                    name, add_cb, rem_cb):
+    def _call_cb(self, cb, parameter):
+        """Lookup the callback with the key cb in _cb_register and call it.
+
+        Only one parameter is passed to the call back.
+
+        Parameters
+        ----------
+
+        cb: str
+            Use cb to look for callback in _cb_register.
+        parameter: any
+            Parameter if callback function. eg. func(parameter)
+
+        """
+        func = self._cb_register.get(cb)
+        if func:
+            try:
+                # Using ioloop.add_callback is a bit safer here,
+                # want to explicitly put the given function on the ioloop.
+                self.ioloop.add_callback(func, parameter)
+            except Exception:
+                self._logger.warning('Calling function "{0}"'
+                                     .format(func), exc_info=True)
+
+    def _difference(self, original_keys, updated_keys, name, kind):
         """Calculate difference between the original and updated sets of keys.
 
         Removed items will be removed from item_index, new items should have
@@ -513,6 +544,15 @@ class InspectingClientAsync(object):
         This method is for use in inspect_requests and inspect_sensors only.
 
         """
+        if kind == 'sensor':
+            add_cb = 'sensor_added'
+            rem_cb = 'sensor_removed'
+            item_index = self._sensors_index
+        else:
+            add_cb = 'request_added'
+            rem_cb = 'request_removed'
+            item_index = self._requests_index
+
         original_keys = set(original_keys)
         updated_keys = set(updated_keys)
         added_keys = updated_keys.difference(original_keys)
@@ -522,29 +562,25 @@ class InspectingClientAsync(object):
         elif name not in updated_keys and name in original_keys:
             removed_keys = set([name])
 
-        for req in removed_keys:
-            if req in item_index:
-                del(item_index[req])
+        for key in removed_keys:
+            if key in item_index:
+                del(item_index[key])
 
-        if added_keys and self._cb_register.get(add_cb):
-            func = self._cb_register.get(add_cb)
-            try:
-                # Using ioloop.add_callback is a bit safer here,
-                # want to explicitly put the given function on the ioloop.
-                self.ioloop.add_callback(func, list(added_keys))
-            except Exception:
-                self._logger.warning('Calling function "{0}"'
-                                     .format(func), exc_info=True)
+        # Check the keys that was not added now or not lined up for removal,
+        # and see if they changed.
+        for key in updated_keys.difference(added_keys.union(removed_keys)):
+            if item_index[key].get('_changed'):
+                item_index[key]['_changed'] = False
+                removed_keys.add(key)
+                added_keys.add(key)
 
-        if removed_keys and self._cb_register.get(rem_cb):
-            func = self._cb_register.get(rem_cb)
-            try:
-                # Using ioloop.add_callback is a bit safer here,
-                # want to explicitly put the given function on the ioloop.
-                self.ioloop.add_callback(func, list(removed_keys))
-            except Exception:
-                self._logger.warning('Calling function "{0}"'
-                                     .format(func), exc_info=True)
+        # Call the appropriate callback for the remove action.
+        if removed_keys:
+            self._call_cb(rem_cb, list(removed_keys))
+
+        # Call the appropriate callback for the added action.
+        if added_keys:
+            self._call_cb(add_cb, list(added_keys))
 
         return added_keys, removed_keys
 

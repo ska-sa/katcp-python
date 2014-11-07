@@ -18,8 +18,8 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.client = InspectingClientAsync('', 0, full_inspection=False,
                                             io_loop=self.io_loop)
 
-        self.client._cb_register['cb_add'] = self._cb_add
-        self.client._cb_register['cb_rem'] = self._cb_rem
+        self.client.set_sensor_added_callback(self._cb_add)
+        self.client.set_sensor_removed_callback(self._cb_rem)
 
     def _cb_add(self, val):
         """A callback used in the test."""
@@ -35,13 +35,15 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         name = None
         original_keys = ['B', 'C']
         updated_keys = ['B', 'C', 'D']
-        item_index = dict([(n, 'This is {0}'.format(n)) for n in original_keys])
+        self.client._sensors_index = {}
+        for sen in original_keys:
+            data = {'description': "This is {0}.".format(sen)}
+            self.client._update_index('sensor', sen, data)
         added, removed = self.client._difference(original_keys, updated_keys,
-                                                 item_index, name,
-                                                 'cb_add', 'cb_rem')
+                                                 name, 'sensor')
         self.assertIn('D', added)
-        self.assertIn('B', item_index.keys())
-        self.assertIn('C', item_index.keys())
+        self.assertIn('B', self.client.sensors)
+        self.assertIn('C', self.client.sensors)
         # Wait for the cb to be called.
         self.assertEqual(self.wait(), ('add', ['D']))
 
@@ -51,14 +53,17 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         name = None
         original_keys = ['A', 'B', 'C']
         updated_keys = ['B', 'C']
-        item_index = dict([(n, 'This is {0}'.format(n)) for n in original_keys])
+        self.client._sensors_index = {}
+        for sen in original_keys:
+            data = {'description': "This is {0}.".format(sen)}
+            self.client._update_index('sensor', sen, data)
+
         added, removed = self.client._difference(original_keys, updated_keys,
-                                                 item_index, name,
-                                                 'cb_add', 'cb_rem')
+                                                 name, 'sensor')
         self.assertIn('A', removed)
-        self.assertNotIn('A', item_index.keys())
-        self.assertIn('B', item_index.keys())
-        self.assertIn('C', item_index.keys())
+        self.assertNotIn('A', self.client.sensors)
+        self.assertIn('B', self.client.sensors)
+        self.assertIn('C', self.client.sensors)
         # Wait for the cb to be called.
         self.assertEqual(self.wait(), ('rem', ['A']))
 
@@ -68,14 +73,55 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         name = 'A'
         original_keys = ['B', 'C']
         updated_keys = []
-        item_index = dict([(n, 'This is {0}'.format(n)) for n in original_keys])
+        self.client._sensors_index = {}
+        for sen in original_keys:
+            data = {'description': "This is {0}.".format(sen)}
+            self.client._update_index('sensor', sen, data)
         added, removed = self.client._difference(original_keys, updated_keys,
-                                                 item_index, name,
-                                                 'cb_add', 'cb_rem')
+                                                 name, 'sensor')
         self.assertNotIn('A', removed)
-        self.assertNotIn('A', item_index.keys())
-        self.assertIn('B', item_index.keys())
-        self.assertIn('C', item_index.keys())
+        self.assertNotIn('A', self.client.sensors)
+        self.assertIn('B', self.client.sensors)
+        self.assertIn('C', self.client.sensors)
+
+    def test_util_method_difference_changed(self):
+        """Test the _difference utility method on changed."""
+
+        name = None
+        original_keys = ['B']
+        updated_keys = ['B']
+
+        self.client._sensors_index = {}
+        for sen in original_keys:
+            data = {'description': "This is {0}.".format(sen), '_changed': True}
+            self.client._update_index('sensor', sen, data)
+
+        added, removed = self.client._difference(original_keys, updated_keys,
+                                                 name, 'sensor')
+        self.assertIn('B', self.client.sensors)
+        # Wait for the cb to be called.
+        self.assertEqual(self.wait(), ('add', ['B']))
+
+    def test_update_index(self):
+        """Test the update_index method."""
+
+        self.client._sensors_index = {}
+
+        data = {'description': "This is {0}.".format('A')}
+        self.client._update_index('sensor', 'A', data)
+
+        data = {'description': "This is {0}.".format('B')}
+        self.client._update_index('sensor', 'B', data)
+
+        data = {'description': "This is {0}.".format('A')}
+        self.client._update_index('sensor', 'A', data)
+
+        data = {'description': "This is new {0}.".format('B')}
+        self.client._update_index('sensor', 'B', data)
+
+        self.assertIn('new', self.client._sensors_index['B'].get('description'))
+        self.assertFalse(self.client._sensors_index['A'].get('_changed', False))
+        self.assertTrue(self.client._sensors_index['B'].get('_changed'))
 
 
 class TestInspectingClientBlocking(unittest.TestCase):
@@ -260,4 +306,3 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         sensor = yield client.future_get_sensor('an.int')
         self.assertTrue(sensor.read())
         self.assertEquals(len(client.requests), 0)
-#
