@@ -20,6 +20,7 @@ from thread import get_ident as get_thread_ident
 
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
+from tornado.util import ObjectDict
 from concurrent.futures import Future, TimeoutError
 
 from .core import (DeviceMetaclass, MessageParser, Message,
@@ -152,7 +153,6 @@ class AsyncEvent(object):
         except TimeoutError:
             return self._flag
 
-
 class DeviceClient(object):
     """Device client proxy.
 
@@ -183,7 +183,7 @@ class DeviceClient(object):
     ...     def reply_myreq(self, msg):
     ...         print str(msg)
     ...
-    >>> c = MyClient('localhost', 10000)
+    >>> c = MyClient('localhost', 10000)
     >>> c.start()
     >>> c.send_request(katcp.Message.request('myreq'))
     >>> # expect reply to be printed here
@@ -265,6 +265,8 @@ class DeviceClient(object):
         self._tcp_client = None
         # Indicate thread safety. Managed by self.enable_thread_safety()
         self._threadsafe = False
+        # Version information as received from the server
+        self.versions = ObjectDict()
 
     @property
     def protocol_flags(self):
@@ -343,6 +345,9 @@ class DeviceClient(object):
         """Process a #version-connect message."""
         if len(msg.arguments) < 2:
             return
+        # Store version information.
+        name = msg.arguments[0]
+        self.versions[name] = tuple(msg.arguments[1:])
         if msg.arguments[0] == "katcp-protocol":
             protocol_flags = ProtocolFlags.parse_version(msg.arguments[1])
             self._set_protocol_from_inform(protocol_flags, msg)
