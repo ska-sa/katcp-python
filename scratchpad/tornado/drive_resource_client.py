@@ -1,12 +1,12 @@
-import time
-import threading
 import logging
-import signal
-
 logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d)%(message)s",
     level=logging.DEBUG
 )
+
+import time
+import threading
+import signal
 
 import tornado
 import IPython
@@ -15,6 +15,8 @@ from katcp.testutils import DeviceTestServer
 
 from katcp import resource_client
 
+
+log = logging.getLogger(__name__)
 
 ioloop = tornado.ioloop.IOLoop.current()
 
@@ -36,6 +38,18 @@ def setup_resource_client():
 ioloop.add_callback(setup_resource_client)
 
 stop = threading.Event()
+
+@tornado.gen.coroutine
+def doreq(req, *args, **kwargs):
+    print 'hi'
+    try:
+        rep = yield req(*args, **kwargs)
+        print rep
+    except Exception:
+        print 'logging'
+        log.exception('oops')
+    finally:
+        print 'blah'
 
 def run_ipy():
     try:
