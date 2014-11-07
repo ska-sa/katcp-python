@@ -171,18 +171,21 @@ class InspectingClientAsync(object):
     def join(self, timeout=None):
         self.katcp_client.join(timeout)
 
-    def update_index(self, kind, name, data):
+    def _update_index(self, kind, name, data):
         if kind == 'sensor':
             index = self._sensors_index
-        else:
+        elif kind == 'request':
             index = self._requests_index
+        else:
+            raise ValueError('kind must be either sensor or request not "{0}"'.
+                             format(kind))
 
         if name not in index:
             index[name] = data
         else:
             orig_data = index[name]
             for key, value in data.items():
-                if key not in orig_data or orig_data[key] != value:
+                if orig_data.get(key) != value:
                     orig_data[key] = value
                     orig_data['_changed'] = True
 
@@ -214,7 +217,7 @@ class InspectingClientAsync(object):
             req_name = msg.arguments[0]
             req = {'description': msg.arguments[1]}
             requests_updated.add(req_name)
-            self.update_index('request', req_name, req)
+            self._update_index('request', req_name, req)
 
         self._difference(requests_old,
                          requests_updated,
@@ -252,7 +255,7 @@ class InspectingClientAsync(object):
                    'params': []}
             if len(msg.arguments) > 4:
                 sen['params'] = msg.arguments[4:]
-            self.update_index('sensor', sen_name, sen)
+            self._update_index('sensor', sen_name, sen)
 
         self._difference(sensors_old,
                          sensors_updated,

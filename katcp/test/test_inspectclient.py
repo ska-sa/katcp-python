@@ -38,7 +38,7 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.client._sensors_index = {}
         for sen in original_keys:
             data = {'description': "This is {0}.".format(sen)}
-            self.client.update_index('sensor', sen, data)
+            self.client._update_index('sensor', sen, data)
         added, removed = self.client._difference(original_keys, updated_keys,
                                                  name, 'sensor')
         self.assertIn('D', added)
@@ -56,7 +56,7 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.client._sensors_index = {}
         for sen in original_keys:
             data = {'description': "This is {0}.".format(sen)}
-            self.client.update_index('sensor', sen, data)
+            self.client._update_index('sensor', sen, data)
 
         added, removed = self.client._difference(original_keys, updated_keys,
                                                  name, 'sensor')
@@ -76,7 +76,7 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.client._sensors_index = {}
         for sen in original_keys:
             data = {'description': "This is {0}.".format(sen)}
-            self.client.update_index('sensor', sen, data)
+            self.client._update_index('sensor', sen, data)
         added, removed = self.client._difference(original_keys, updated_keys,
                                                  name, 'sensor')
         self.assertNotIn('A', removed)
@@ -94,7 +94,7 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.client._sensors_index = {}
         for sen in original_keys:
             data = {'description': "This is {0}.".format(sen), '_changed': True}
-            self.client.update_index('sensor', sen, data)
+            self.client._update_index('sensor', sen, data)
 
         added, removed = self.client._difference(original_keys, updated_keys,
                                                  name, 'sensor')
@@ -108,16 +108,16 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.client._sensors_index = {}
 
         data = {'description': "This is {0}.".format('A')}
-        self.client.update_index('sensor', 'A', data)
+        self.client._update_index('sensor', 'A', data)
 
         data = {'description': "This is {0}.".format('B')}
-        self.client.update_index('sensor', 'B', data)
+        self.client._update_index('sensor', 'B', data)
 
         data = {'description': "This is {0}.".format('A')}
-        self.client.update_index('sensor', 'A', data)
+        self.client._update_index('sensor', 'A', data)
 
         data = {'description': "This is new {0}.".format('B')}
-        self.client.update_index('sensor', 'B', data)
+        self.client._update_index('sensor', 'B', data)
 
         self.assertIn('new', self.client._sensors_index['B'].get('description'))
         self.assertFalse(self.client._sensors_index['A'].get('_changed', False))
@@ -306,4 +306,3 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         sensor = yield client.future_get_sensor('an.int')
         self.assertTrue(sensor.read())
         self.assertEquals(len(client.requests), 0)
-#
