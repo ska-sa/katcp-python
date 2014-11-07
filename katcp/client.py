@@ -334,8 +334,8 @@ class DeviceClient(object):
         if len(msg.arguments) < 2:
             return
         # Store version information, remove the katcp- prefix.
-        name = msg.arguments[0].replace('katcp-', '')
-        self.versions[name] = ' '.join(msg.arguments[1:])
+        name = msg.arguments[0]
+        self.versions[name] = tuple(msg.arguments[1:])
         if msg.arguments[0] == "katcp-protocol":
             protocol_flags = ProtocolFlags.parse_version(msg.arguments[1])
             self._set_protocol_from_inform(protocol_flags, msg)
