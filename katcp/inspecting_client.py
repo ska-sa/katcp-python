@@ -16,8 +16,6 @@ from collections import namedtuple, defaultdict
 
 from concurrent.futures import Future
 
-from katcp.core import hashable_identity
-
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', ['name', 'description'])
 
@@ -42,9 +40,8 @@ class _InformHookDeviceClient(katcp.AsyncClient):
 
         """
         # Do not hook the same callback multiple times
-        callback_id = hashable_identity(callback)
-        if not any(callback_id == hashable_identity(hook)
-                   for hook in self._inform_hooks):
+        if not any(callback == hook
+                   for hook in self._inform_hooks[inform_name]):
             self._inform_hooks[inform_name].append(callback)
 
     def handle_inform(self, msg):
@@ -111,12 +108,12 @@ class InspectingClientAsync(object):
 
         self.katcp_client.hook_inform('sensor-status',
                                       self._cb_inform_sensor_status)
-        self.katcp_client.hook_inform('interface-change',
+        self.katcp_client.hook_inform('interface-changed',
                                       self._cb_inform_interface_change)
         # Hook a callback for/to deprecated informs.
         # _cb_inform_deprecated will log a message when one of these informs
         # are received.
-        self.katcp_client.hook_inform('device-change',
+        self.katcp_client.hook_inform('device-changed',
                                       self._cb_inform_deprecated)
 
     def __del__(self):
@@ -454,9 +451,15 @@ class InspectingClientAsync(object):
     def _cb_inform_interface_change(self, msg):
         """Update the sensors and requests available."""
         if self.full_inspection:
+            # Clear sync flags
+            self._sensor_sync.clear()
+            self._request_sync.clear()
             self.inspect()
         else:
-            # TODO(MS): Look inside msg and update only what is required.
+            # TODO(MS): Look inside msg and update / clear flags only what is required.
+            # Clear sync flags
+            self._sensor_sync.clear()
+            self._request_sync.clear()
             self.inspect()
 
     def _cb_inform_deprecated(self, msg):

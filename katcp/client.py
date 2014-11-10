@@ -1000,10 +1000,12 @@ class DeviceClient(object):
         """
         return self._connected.isSet()
 
+    @tornado.gen.coroutine
     def until_connected(self):
         """Return future that resolves when the client is connected."""
+        yield self.until_running()
         assert get_thread_ident() == self.ioloop_thread_id
-        return self._connected.until_set()
+        yield self._connected.until_set()
 
     def wait_connected(self, timeout=None):
         """Wait until the client is connected.
@@ -1025,6 +1027,7 @@ class DeviceClient(object):
         """
         return self._connected.wait_with_ioloop(self.ioloop, timeout)
 
+    @tornado.gen.coroutine
     def until_protocol(self):
         """Return future that resolves after receipt of katcp protocol info.
 
@@ -1032,8 +1035,9 @@ class DeviceClient(object):
         available in the ProtocolFlags instance self.protocol_flags.
 
         """
+        yield self.until_running()
         assert get_thread_ident() == self.ioloop_thread_id
-        return self._received_protocol_info.until_set()
+        yield self._received_protocol_info.until_set()
 
     def wait_protocol(self, timeout=None):
         """Wait until katcp protocol information has been received from server.

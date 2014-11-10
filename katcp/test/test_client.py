@@ -193,6 +193,11 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     def test_versions(self):
         """Test that the versions parameter is populated."""
+        preamble_done = self.client.handle_reply = WaitingMock()
+        # Do a request and wait for it to be done so that we can be sure we received the
+        # full connection-header before testing
+        self.client.request(Message.request('watchdog'))
+        preamble_done.assert_wait_call_count(1, timeout=1)
         versions = self.client.versions
         self.assertIn('katcp', ' '.join(versions['katcp-library']))
         self.assertIn('device', ' '.join(versions['katcp-device']))
