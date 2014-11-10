@@ -24,7 +24,7 @@ from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
 from peak.util.proxies import ObjectWrapper
 
-from .core import Sensor, Message, AsyncReply
+from .core import Sensor, Message, AsyncReply, AsyncEvent
 from .server import DeviceServer, FailReply, ClientConnection
 
 
@@ -895,6 +895,7 @@ class BlockingTestClient(client.BlockingClient):
 class DeviceTestServer(DeviceServer):
     """Test server."""
 
+
     def __init__(self, *args, **kwargs):
         super(DeviceTestServer, self).__init__(*args, **kwargs)
         self.__msgs = []
@@ -903,6 +904,23 @@ class DeviceTestServer(DeviceServer):
         # Map of ClientConnection -> futures that can be resolved to cancel command
         self._slow_futures = {}
         self._cnt_futures = set()
+        self.proceed_on_client_connect = AsyncEvent()
+        """Do not send #version-connect on connection when True"""
+        self.proceed_on_client_connect.set()
+
+    @property
+    def request_names(self):
+        return self._request_handlers.keys()
+
+    @property
+    def sensor_names(self):
+        return self._sensors.keys()
+
+    @tornado.gen.coroutine
+    def on_client_connect(self, client_conn):
+        yield self.proceed_on_client_connect.until_set()
+        rv = yield super(DeviceTestServer, self).on_client_connect(client_conn)
+        raise gen.Return(rv)
 
     def cancel_slow(self):
         self._cancel_slow_command.set()

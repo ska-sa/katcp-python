@@ -7,10 +7,19 @@
 """Utilities for dealing with KAT device control language messages."""
 
 import re
+import sys
 import time
 import warnings
-from collections import namedtuple
+import logging
 
+import tornado
+
+from collections import namedtuple
+from functools import wraps, partial
+
+from concurrent.futures import Future, TimeoutError
+from tornado import gen
+from tornado.concurrent import Future as tornado_Future
 
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
@@ -27,6 +36,7 @@ VERSION_CONNECT_KATCP_MAJOR = 5
 # First major version to support #interface-changed informs
 INTERFACE_CHANGED_KATCP_MAJOR = 5
 
+logger = logging.getLogger(__name__)
 
 class Reading(namedtuple('Reading', 'timestamp status value')):
     """Sensor reading as a (timestamp, status, value) tuple.
@@ -43,11 +53,78 @@ class Reading(namedtuple('Reading', 'timestamp status value')):
 
     """
 
+def log_coroutine_exceptions(coro):
+    """Coroutine (or any method that returns a future) decorator to log exceptions
+
+    Example
+    -------
+
+    ::
+
+    import logging
+
+    @log_coroutine_exceptions
+    @tornado.gen.coroutine
+    class A(object):
+        _logger = logging.getLogger(__name__)
+
+        def raiser(self, arg):
+            yield tornado.gen.moment
+            raise Exception(arg)
+
+    Assuming that your object (self) has a `_logger` attribute containing a
+    logger instance
+
+    """
+    def log_cb(self, f):
+        try:
+            f.result()
+        except Exception:
+            self._logger.exception('Unhandled exception calling coroutine {0!r}'
+                                   .format(coro))
+
+    @wraps(coro)
+    def wrapped_coro(self, *args, **kwargs):
+        try:
+            f = coro(self, *args, **kwargs)
+        except Exception:
+            f = tornado_Future()
+            f.set_exc_info(sys.exc_info())
+        f.add_done_callback(partial(log_cb, self))
+        return f
+
+    return wrapped_coro
 
 def convert_method_name(prefix, name):
     """Convert a method name to the corresponding command name."""
     return name[len(prefix):].replace("_", "-")
 
+
+def steal_docstring_from(obj):
+    """Decorator that lets you steal a docstring from another object
+
+    Example
+    -------
+
+    ::
+
+    @steal_docstring_from(superclass.meth)
+    def meth(self, arg):
+        "Extra subclass documentation"
+        pass
+
+    In this case the docstring of the new 'meth' will be copied from superclass.meth, and
+    if an additional dosctring was defined for meth it will be appended to the superclass
+    docstring with a two newlines inbetween.
+    """
+    def deco(fn):
+        docs = [obj.__doc__]
+        if fn.__doc__:
+            docs.append(fn.__doc__)
+        fn.__doc__ = '\n\n'.join(docs)
+        return fn
+
+    return deco
 
 class KatcpSyntaxError(ValueError):
     """Raised by parsers when encountering a syntax error."""
@@ -635,8 +712,8 @@ class AsyncReply(Exception):
     pass
 
 
+# Only Imported here to prevent circular import issues.
 from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp, Address
-
 
 class Sensor(object):
     """Instantiate a new sensor object.
@@ -1269,6 +1346,164 @@ class AttrDict(dict):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
+
+class AsyncEvent(object):
+    """tornado.concurrent.Future Event based on threading.Event API
+
+    Supports threading.Event API for setting / clearing / checking, but
+    replaces the wait() method with until_set() that returns a tornado Future
+    that resolves when the event is set.
+
+    Note, this class is NOT THREAD SAFE! It will only work properly if all its
+    methods (apart from isSet() and wait_with_ioloop()) are called from the
+    same thread/ioloop.
+
+    """
+    def __init__(self):
+        self._flag = False
+        self._waiting_future = tornado_Future()
+
+    def isSet(self):
+        """Returns True if the event is set, else False"""
+        return self._flag
+
+    is_set = isSet
+
+    def set(self):
+        """Set event flag to true and resolve future(s) returned by until_set()
+
+        Notes
+        -----
+        A call to set() may result in control being transferred to
+        done_callbacks attached to the future returned by until_set().
+
+        """
+        self._flag = True
+        old_future = self._waiting_future
+        # Replace _waiting_future with a fresh one incase someone woken up by set_result()
+        # sets this AsyncEvent to False before waiting on it to be set again.
+        self._waiting_future = tornado_Future()
+        old_future.set_result(True)
+
+    def clear(self):
+        self._flag = False
+
+    def until_set(self):
+        if not self._flag:
+            return self._waiting_future
+        else:
+            f = tornado_Future()
+            f.set_result(True)
+            return f
+
+    def wait_with_ioloop(self, ioloop, timeout=None):
+        """Do blocking wait until condition is event is set.
+
+        Parameters
+        ----------
+        ioloop : tornadio.ioloop.IOLoop instance
+            MUST be the same ioloop that set() / clear() is called from
+        timeout : float, int or None
+            If not None, only wait up to `timeout` seconds for event to be set.
+
+        Return Value
+        ------------
+        flag : True if event was set within timeout, otherwise False.
+
+        Notes
+        -----
+        This will deadlock if called in the ioloop!
+
+        """
+        f = Future()
+        def cb():
+            return gen.chain_future(self.until_set(), f)
+        ioloop.add_callback(cb)
+        try:
+            f.result(timeout)
+            return True
+        except TimeoutError:
+            return self._flag
+
+
+class AsyncCallbackEvent(AsyncEvent):
+    # Wanted to use @steal_docstring_from() here, but aparently Classes have read-only
+    # __doc__ attributes... Apparently this is fixed in Python 3.3
+    __doc__ = '\n\n'.join((AsyncEvent.__doc__,
+    """Extend AsyncEvent with a callback on event state change
+
+    callback is called with "True" if the event is set, "False" if it is cleared
+    """))
+    def __init__(self, callback=lambda x: x):
+        self._callback = callback
+        super(AsyncCallbackEvent, self).__init__()
+
+    def set(self):
+        super(AsyncCallbackEvent, self).set()
+        try:
+            self._callback(True)
+        except Exception:
+            logger.exception('Unhandled exception calling event change callback')
+
+    def clear(self):
+        super(AsyncCallbackEvent, self).clear()
+        try:
+            self._callback(True)
+        except Exception:
+            logger.exception('Unhandled exception calling event change callback')
+
+class AsyncState(object):
+    """Allow async waiting for a state to attain a certain value
+
+    Note, this class is NOT THREAD SAFE! It will only work properly if all its methods are
+    called from the same thread/ioloop.
+    """
+
+    @property
+    def state(self):
+        return self._state
+
+    @property
+    def valid_states(self):
+        return self._valid_states
+
+    def __init__(self, valid_states):
+        """Init with a seq of valid states
+
+        Parameters
+        ----------
+        valid_states : ordered seq of hashable types
+            Valid states, will be turned into a frozen set
+
+        The initial state will be the first state in the seq
+        """
+        valid_states = tuple(valid_states)
+        self._valid_states = frozenset(valid_states)
+        self._state = valid_states[0]
+        self._waiting_futures = {state: tornado_Future() for state in valid_states}
+
+    def set_state(self, state):
+        assert state in self._valid_states
+        self._state = state
+        old_future = self._waiting_futures[state]
+        # Replace _waiting_future with a fresh one incase someone woken up by set_result()
+        # sets this AsyncState to another value before waiting on it to be set again.
+        self._waiting_futures[state] = tornado_Future()
+        old_future.set_result(True)
+
+    def until_state(self, state):
+        """Return a tornado Future that will resolve when the requested state is set"""
+        assert state in self._valid_states
+        if state != self._state:
+            return self._waiting_futures[state]
+        else:
+            f = tornado_Future()
+            f.set_result(True)
+            return f
+
+    # TODO Add until_not_state() ?
+
+
 def hashable_identity(obj):
     """Generate a hashable ID that is stable for methods etc
 
@@ -1283,3 +1518,11 @@ def hashable_identity(obj):
         return obj
     else:
         return id(obj)
+
+def until_later(delay, ioloop=None):
+    ioloop = ioloop or tornado.ioloop.IOLoop.current()
+    f = tornado_Future()
+    def _done():
+        f.set_result(None)
+    ioloop.call_later(delay, _done)
+    return f

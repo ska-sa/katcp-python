@@ -1,5 +1,6 @@
 import logging
 import time
+import collections
 import unittest2 as unittest
 
 import tornado
@@ -12,8 +13,8 @@ from concurrent.futures import Future
 from katcp import Sensor, Message
 from katcp.testutils import (DeviceTestServer, start_thread_with_cleanup,
                              DeviceTestSensor)
-from katcp.inspecting_client import (InspectingClientBlocking,
-                                     InspectingClientAsync)
+from katcp import inspecting_client
+from katcp.inspecting_client import InspectingClientAsync
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +22,14 @@ class TestICAClass(tornado.testing.AsyncTestCase):
 
     def setUp(self):
         super(TestICAClass, self).setUp()
-        self.client = InspectingClientAsync('', 0, full_inspection=False,
+        self.client = InspectingClientAsync('', 0, initial_inspection=False,
                                             ioloop=self.io_loop)
 
-        self.client.set_sensor_added_callback(self._cb_add)
-        self.client.set_sensor_removed_callback(self._cb_rem)
+        self.client.set_state_callback(self._cb_state)
 
-    def _cb_add(self, val):
+    def _cb_state(self, state, model_changes):
         """A callback used in the test."""
-        self.stop(('add', val))
-
-    def _cb_rem(self, val):
-        """A callback used in the test."""
-        self.stop(('rem', val))
+        self.stop((state, model_changes))
 
     def test_util_method_difference_add(self):
         """Test the _difference utility method on add."""
@@ -44,14 +40,12 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.client._sensors_index = {}
         for sen in original_keys:
             data = {'description': "This is {0}.".format(sen)}
-            self.client._update_index('sensor', sen, data)
-        added, removed = self.client._difference(original_keys, updated_keys,
-                                                 name, 'sensor')
+            self.client._update_index(self.client._sensors_index, sen, data)
+        added, removed = self.client._difference(
+            original_keys, updated_keys, name, self.client._sensors_index)
         self.assertIn('D', added)
         self.assertIn('B', self.client.sensors)
         self.assertIn('C', self.client.sensors)
-        # Wait for the cb to be called.
-        self.assertEqual(self.wait(), ('add', ['D']))
 
     def test_util_method_difference_rem(self):
         """Test the _difference utility method on remove."""
@@ -62,16 +56,14 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.client._sensors_index = {}
         for sen in original_keys:
             data = {'description': "This is {0}.".format(sen)}
-            self.client._update_index('sensor', sen, data)
+            self.client._update_index(self.client._sensors_index, sen, data)
 
-        added, removed = self.client._difference(original_keys, updated_keys,
-                                                 name, 'sensor')
+        added, removed = self.client._difference(
+            original_keys, updated_keys, name, self.client._sensors_index)
         self.assertIn('A', removed)
         self.assertNotIn('A', self.client.sensors)
         self.assertIn('B', self.client.sensors)
         self.assertIn('C', self.client.sensors)
-        # Wait for the cb to be called.
-        self.assertEqual(self.wait(), ('rem', ['A']))
 
     def test_util_method_difference_rem_named(self):
         """Test the _difference utility method on remove with name set."""
@@ -82,9 +74,9 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.client._sensors_index = {}
         for sen in original_keys:
             data = {'description': "This is {0}.".format(sen)}
-            self.client._update_index('sensor', sen, data)
-        added, removed = self.client._difference(original_keys, updated_keys,
-                                                 name, 'sensor')
+            self.client._update_index(self.client._sensors_index, sen, data)
+        added, removed = self.client._difference(
+            original_keys, updated_keys, name, self.client._sensors_index)
         self.assertNotIn('A', removed)
         self.assertNotIn('A', self.client.sensors)
         self.assertIn('B', self.client.sensors)
@@ -100,149 +92,32 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.client._sensors_index = {}
         for sen in original_keys:
             data = {'description': "This is {0}.".format(sen), '_changed': True}
-            self.client._update_index('sensor', sen, data)
+            self.client._update_index(self.client._sensors_index, sen, data)
 
         added, removed = self.client._difference(original_keys, updated_keys,
-                                                 name, 'sensor')
+                                                 name, self.client._sensors_index)
         self.assertIn('B', self.client.sensors)
-        # Wait for the cb to be called.
-        self.assertEqual(self.wait(), ('add', ['B']))
 
     def test_update_index(self):
         """Test the update_index method."""
 
-        self.client._sensors_index = {}
+        index = self.client._sensors_index = {}
 
         data = {'description': "This is {0}.".format('A')}
-        self.client._update_index('sensor', 'A', data)
+        self.client._update_index(index, 'A', data)
 
         data = {'description': "This is {0}.".format('B')}
-        self.client._update_index('sensor', 'B', data)
+        self.client._update_index(index, 'B', data)
 
         data = {'description': "This is {0}.".format('A')}
-        self.client._update_index('sensor', 'A', data)
+        self.client._update_index(index, 'A', data)
 
         data = {'description': "This is new {0}.".format('B')}
-        self.client._update_index('sensor', 'B', data)
+        self.client._update_index(index, 'B', data)
 
-        self.assertIn('new', self.client._sensors_index['B'].get('description'))
-        self.assertFalse(self.client._sensors_index['A'].get('_changed', False))
-        self.assertTrue(self.client._sensors_index['B'].get('_changed'))
-
-
-class TestInspectingClientBlocking(unittest.TestCase):
-
-    def setUp(self):
-        self.server = DeviceTestServer('', 0)
-        start_thread_with_cleanup(self, self.server, start_timeout=1)
-
-        host, port = self.server.bind_address
-
-        self.client = InspectingClientBlocking(host, port)
-        start_thread_with_cleanup(self, self.client, start_timeout=1)
-        self.assertTrue(self.client.wait_synced(timeout=1))
-
-    def test_sensor_access(self):
-        """Test access to sensors."""
-
-        # There is on test sensor on this device.
-        sensor_name = 'an.int'
-        sensor = self.client.get_sensor(sensor_name)
-        self.assertEquals(sensor.name, sensor_name)
-        self.assertEquals(sensor.stype, 'integer')
-
-        # Unknown sensor requests return a None.
-        sensor_name = 'thing.unknown_sensor'
-        sensor = self.client.get_sensor(sensor_name)
-        self.assertIsNone(sensor)
-
-    def test_request_access(self):
-        """Test access to requests."""
-        request_name = 'watchdog'
-        self.assertIn(request_name, self.client.requests)
-        request = self.client.get_request(request_name)
-        self.assertEqual(request.name, request_name)
-        self.assertTrue(request.description,
-                        'Expected an description: got nothing.')
-        # Unknown request return a None.
-        request_name = 'watchcat'
-        self.assertNotIn(request_name, self.client.requests)
-        request = self.client.get_request(request_name)
-        self.assertIsNone(request)
-
-    def test_simple_request(self):
-        """Perform a basic request."""
-        reply, informs = self.client.simple_request('help', 'watchdog')
-        self.assertIn('ok', str(reply))
-        self.assertEquals(len(informs), 1)
-
-    def _inc_verify_number(self, *args, **kwargs):
-        self.vn += 1
-
-    def test_sensor_add_remove(self):
-        """Test a sensor being added and then remove it."""
-        self.vn = 1
-
-        self.client.set_sensor_added_callback(self._inc_verify_number)
-        self.client.set_sensor_removed_callback(self._inc_verify_number)
-
-        sensor = DeviceTestSensor(Sensor.INTEGER, "another.int",
-                                  "An Integer.",
-                                  "count", [-5, 5], timestamp=time.time(),
-                                  status=Sensor.NOMINAL, value=3)
-        # Add a sensor.
-        self.server.add_sensor(sensor)
-        self.server.mass_inform(Message.inform('interface-changed'))
-        # Do a blocking request to ensure #interface-changed has been received
-        self.client.simple_request('watchdog')
-        self.client.wait_synced()
-        self.assertIn('another.int', self.client.sensors)
-        self.assertGreater(self.vn, 1)
-
-        # Remove a sensor.
-        self.server.remove_sensor(sensor)
-        self.server.mass_inform(Message.inform('interface-changed'))
-        # Do a blocking request to ensure #interface-changed has been received
-        self.client.simple_request('watchdog')
-
-        self.client.wait_synced()
-        self.assertNotIn('another.int', self.client.sensors)
-        self.assertGreater(self.vn, 2)
-
-    def test_request_add_remove(self):
-        """Test a request being added and then remove it."""
-
-        self.vn = 1
-        self.client.set_request_added_callback(self._inc_verify_number)
-        self.client.set_request_removed_callback(self._inc_verify_number)
-
-        def request_sparkling_new(self, req, msg):
-            """A new command."""
-            return Message.reply(msg.name, "ok", "bling1", "bling2")
-
-        # Add a request.
-        self.server.request_sparkling_new = request_sparkling_new
-        self.server._request_handlers['sparkling_new'] = request_sparkling_new
-        self.server.mass_inform(Message.inform('interface-changed'))
-        # Do a blocking request to ensure #interface-changed has been received
-        self.client.simple_request('watchdog')
-
-        self.client.wait_synced()
-        self.client.get_request('sparkling_new')
-        self.assertIn('sparkling_new', self.client.requests)
-        self.assertEqual(self.vn, 2)
-
-        # Remove a request.
-        self.server.request_sparkling_new = None
-        del(self.server._request_handlers['sparkling_new'])
-        self.server.mass_inform(Message.inform('interface-changed'))
-        # Do a blocking request to ensure #interface-changed has been received
-        self.client.simple_request('watchdog')
-
-        self.client.wait_synced()
-
-        self.assertNotIn('sparkling_new', self.client.requests)
-        self.assertEqual(self.vn, 3)
+        self.assertIn('new', index['B'].get('description'))
+        self.assertFalse(index['A'].get('_changed', False))
+        self.assertTrue(index['B'].get('_changed'))
 
 
 class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
@@ -257,13 +132,109 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
                                             ioloop=self.io_loop)
         self.io_loop.add_callback(self.client.connect)
 
+
+    @tornado.testing.gen_test
+    def test_simple_request(self):
+        """Perform a basic request."""
+        yield self.client.until_synced()
+        reply, informs = yield self.client.simple_request('help', 'watchdog')
+        self.assertIn('ok', str(reply))
+        self.assertEquals(len(informs), 1)
+
     @tornado.testing.gen_test
     def test_sensor(self):
         """Access the sensor with the Async client."""
+        yield self.client.until_synced()
         sensor_name = 'an.int'
         sensor = yield self.client.future_get_sensor(sensor_name)
         self.assertEquals(sensor.name, sensor_name)
         self.assertEquals(sensor.stype, 'integer')
+
+        # Unknown sensor requests return a None.
+        sensor_name = 'thing.unknown_sensor'
+        sensor = yield self.client.future_get_sensor(sensor_name)
+        self.assertIsNone(sensor)
+
+    @tornado.testing.gen_test
+    def test_request_access(self):
+        """Test access to requests."""
+        yield self.client.until_synced()
+
+        request_name = 'watchdog'
+        self.assertIn(request_name, self.client.requests)
+        request = yield self.client.future_get_request(request_name)
+        self.assertEqual(request.name, request_name)
+        self.assertTrue(request.description,
+                        'Expected an description: got nothing.')
+
+        # Unknown request return a None.
+        request_name = 'watchcat'
+        self.assertNotIn(request_name, self.client.requests)
+        request = yield self.client.future_get_request(request_name)
+        self.assertIsNone(request)
+
+    @tornado.testing.gen_test
+    def test_sensor_add_remove(self):
+        """Test a sensor being added and then remove it."""
+        yield self.client.until_synced()
+
+        sensor = DeviceTestSensor(Sensor.INTEGER, "another.int",
+                                  "An Integer.",
+                                  "count", [-5, 5], timestamp=time.time(),
+                                  status=Sensor.NOMINAL, value=3)
+        # Check that the sensor does not exist currently
+        self.assertNotIn(sensor.name, self.client.sensors)
+
+        # Add a sensor.
+        self.server.add_sensor(sensor)
+        self.server.mass_inform(Message.inform('interface-changed'))
+        # Do a blocking request to ensure #interface-changed has been received
+        yield self.client.simple_request('watchdog')
+        yield self.client.until_synced()
+        self.assertIn('another.int', self.client.sensors)
+
+        # Remove a sensor.
+        self.server.remove_sensor(sensor)
+        self.server.mass_inform(Message.inform('interface-changed'))
+        # Do a blocking request to ensure #interface-changed has been received
+        yield self.client.simple_request('watchdog')
+
+        yield self.client.until_synced()
+        self.assertNotIn('another.int', self.client.sensors)
+
+
+    @tornado.testing.gen_test
+    def test_request_add_remove(self):
+        """Test a request being added and then remove it."""
+        yield self.client.until_synced()
+
+        def request_sparkling_new(self, req, msg):
+            """A new command."""
+            return Message.reply(msg.name, "ok", "bling1", "bling2")
+
+        # Check that the request did not exist before
+        self.assertNotIn('sparkling-new', self.client.requests)
+
+        # Add a request.
+        self.server.request_sparkling_new = request_sparkling_new
+        self.server._request_handlers['sparkling-new'] = request_sparkling_new
+        self.server.mass_inform(Message.inform('interface-changed'))
+        # Do a blocking request to ensure #interface-changed has been received
+        yield self.client.simple_request('watchdog')
+
+        yield self.client.until_synced()
+        self.assertIn('sparkling-new', self.client.requests)
+        req = yield self.client.future_get_request('sparkling-new')
+        self.assertEqual(req.name, 'sparkling-new')
+
+        # Remove a request.
+        self.server.request_sparkling_new = None
+        del(self.server._request_handlers['sparkling-new'])
+        self.server.mass_inform(Message.inform('interface-changed'))
+        # Do a blocking request to ensure #interface-changed has been received
+        self.client.simple_request('watchdog')
+        yield self.client.until_synced()
+        self.assertNotIn('sparkling_new', self.client.requests)
 
     @tornado.testing.gen_test
     def test_send_request(self):
@@ -274,7 +245,7 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         """
         client = InspectingClientAsync(self.host, self.port,
                                        ioloop=self.io_loop,
-                                       full_inspection=False)
+                                       initial_inspection=False)
 
         yield client.connect()
         yield client.until_connected()
@@ -287,15 +258,15 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         self.assertTrue(client.connected)
         yield client.simple_request('sensor-sampling', 'an.int', 'event')
         # Wait for sync and check if the sensor was automaticaly added.
-        yield client.until_synced()
-        self.assertEquals(len(client.sensors), 1)
         # Get the sensor object and see if it has data.
         sensor = yield client.future_get_sensor('an.int')
+        self.assertEquals(len(client.sensors), 1)
         self.assertTrue(sensor.read())
         self.assertEquals(len(client.requests), 0)
 
     @tornado.testing.gen_test
     def test_handle_sensor_value(self):
+        yield self.client.until_connected()
         # Test that #sensor-value informs are handles like #sensor-inform informs if
         # handle_sensor_value() is called.
         sens = yield self.client.future_get_sensor('an.int')
@@ -322,31 +293,9 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         yield self.client.simple_request('sensor-value', 'an.int')
         self.assertEqual(sens.read().value, test_val)
 
-    @tornado.testing.gen_test(timeout=1)
-    def test_connection_state_change_callback(self):
-        yield self.client.until_synced()
-        f = tornado.concurrent.Future()
-        def test_connection_cb(connected):
-            f.set_result(connected)
-
-        self.client.set_connection_status_change_callback(test_connection_cb)
-
-        # cause a disconnection and check that the callback is called
-        self.server.stop()
-        self.server.join()
-        connected = yield f
-        self.assertFalse(connected)
-        # Set up a new future so that we can call it again
-        f = tornado.concurrent.Future()
-        # start server again
-        # start_thread_with_cleanup(self, self.server, start_timeout=1)
-        self.server.start()
-        # Wait for the callback
-        connected = yield f
-        self.assertTrue(connected)
-
     @tornado.testing.gen_test
     def test_factories(self):
+        yield self.client.until_connected()
         # Test that the correct factories are used to construct sensor and request
         # objects, and that the factories are called with the correct parameters.
         sf = self.client.sensor_factory = mock.Mock()
@@ -361,6 +310,89 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
             description='An Integer.', name='an.int')
         self.assertIs(req, rf.return_value)
         rf.assert_called_once_with('watchdog', mock.ANY)
+
+class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
+
+    def setUp(self):
+        super(TestInspectingClientAsyncStateCallback, self).setUp()
+        self.server = DeviceTestServer('', 0)
+        start_thread_with_cleanup(self, self.server, start_timeout=1)
+        self.host, self.port = self.server.bind_address
+        self.state_cb_future = tornado.concurrent.Future()
+        self.client = InspectingClientAsync(self.host, self.port,
+                                            ioloop=self.io_loop)
+        self.client.set_state_callback(self._test_state_cb)
+        self.done_state_cb_futures = []
+        self.cnt_state_cb_futures = collections.defaultdict(tornado.concurrent.Future)
+
+    def _test_state_cb(self, state, model_changes):
+        f = self.state_cb_future
+        self.state_cb_future = tornado.concurrent.Future()
+        self.done_state_cb_futures.append(f)
+        num_calls = len(self.done_state_cb_futures)
+        f.set_result((state, model_changes))
+        self.cnt_state_cb_futures[num_calls].set_result(None)
+
+    @tornado.gen.coroutine
+    def _check_no_cb(self, no_expected):
+        """Let the ioloop run and assert that the callback was not called"""
+        yield tornado.gen.moment
+        self.assertEqual(len(self.done_state_cb_futures), no_expected)
+
+    @tornado.testing.gen_test(timeout=1)
+    def test_from_connect(self):
+        # Hold back #version-connect informs
+        num_calls_before = len(self.done_state_cb_futures)
+        logger.debug('before starting client, num_calls_before:{}'.format(num_calls_before))
+
+        self.server.proceed_on_client_connect.clear()
+        self.client.connect()
+
+        state, model_changes = yield self.state_cb_future
+        self.assertEqual(state, inspecting_client.InspectingClientStateType(
+            connected=True, synced=False, model_changed=False))
+        self.assertIs(model_changes, None)
+        # Due to the structure of the state loop the initial state is sent twice, hence +
+        # 2. If the implmentation changes having + 1 would also be OK.
+        yield self._check_no_cb(num_calls_before + 2)
+
+        # Now let the server send #version-connect informs
+        num_calls_before = len(self.done_state_cb_futures)
+        self.server.ioloop.add_callback(self.server.proceed_on_client_connect.set)
+        # We're expecting two calls hard on each other's heels, so lets wait for them
+        yield self.cnt_state_cb_futures[num_calls_before + 2]
+        # We expected two status callbacks, and no more after
+        yield self._check_no_cb(num_calls_before + 2)
+        state, model_changes = yield self.done_state_cb_futures[-2]
+        state2, model_changes2 = yield self.done_state_cb_futures[-1]
+        self.assertEqual(state, inspecting_client.InspectingClientStateType(
+            connected=True, synced=False, model_changed=True))
+        server_sensors = self.server._sensors.keys()
+        server_requests = self.server._request_handlers.keys()
+        self.assertEqual(model_changes, dict(
+            sensors=dict(added=set(server_sensors), removed=set()),
+            requests=dict(added=set(server_requests), removed=set())))
+        self.assertEqual(state2, inspecting_client.InspectingClientStateType(
+            connected=True, synced=True, model_changed=False))
+        self.assertEqual(model_changes2, None)
+
+    @tornado.testing.gen_test(timeout=1)
+    def test_reconnect(self):
+        self.client.connect()
+        yield self.client.until_synced()
+        yield tornado.gen.moment   # Make sure the ioloop is 'caught up'
+
+        # cause a disconnection and check that the callback is called
+        num_calls_before = len(self.done_state_cb_futures)
+        self.server.stop()
+        self.server.join()
+        state, model_changes = yield self.state_cb_future
+        self.assertEqual(state, inspecting_client.InspectingClientStateType(
+            connected=False, synced=False, model_changed=False))
+        self.assertIs(model_changes, None)
+        yield self._check_no_cb(num_calls_before + 1)
+    
+
 
 class Test_InformHookDeviceClient(tornado.testing.AsyncTestCase):
     def setUp(self):
@@ -397,3 +429,4 @@ class Test_InformHookDeviceClient(tornado.testing.AsyncTestCase):
         self.assertEqual(h1_calls[0].name, 'help')
         self.assertEqual(len(h2_calls), 1)
         self.assertEqual(h2_calls[0].name, 'sensor-list')
+

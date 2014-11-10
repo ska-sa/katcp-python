@@ -13,7 +13,7 @@ import IPython
 
 from katcp.testutils import DeviceTestServer
 
-from katcp import resource_client
+from katcp import resource_client, inspecting_client
 
 
 log = logging.getLogger(__name__)
@@ -35,7 +35,23 @@ def setup_resource_client():
     ))
     rc.start()
 
-ioloop.add_callback(setup_resource_client)
+def printy(*args):
+    print args
+
+@tornado.gen.coroutine
+def setup_inspecting_client():
+    global ic
+    try:
+        print d.bind_address
+        host, port = d.bind_address
+        ic = inspecting_client.InspectingClientAsync(host, port, ioloop=ioloop)
+        ic.set_state_callback(printy)
+        yield ic.connect()
+    except Exception:
+        log.exception('whups')
+
+ioloop.add_callback(setup_inspecting_client)
+#ioloop.add_callback(setup_resource_client)
 
 stop = threading.Event()
 

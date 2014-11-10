@@ -3,8 +3,6 @@
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
 # Copyright 2009 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
-from __future__ import with_statement
-
 """Clients for the KAT device control language."""
 
 import sys
@@ -25,23 +23,13 @@ from concurrent.futures import Future, TimeoutError
 
 from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
-                   ProtocolFlags,
+                   ProtocolFlags, AsyncEvent, until_later,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
 from .ioloop_manager import IOLoopManager
 
 
 # logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")
-
-
-def until_later(delay, ioloop=None):
-    ioloop = ioloop or tornado.ioloop.IOLoop.current()
-    f = tornado_Future()
-    def _done():
-        f.set_result(None)
-    ioloop.call_later(delay, _done)
-    return f
-
 
 def address_to_string(addr_tuple):
     return ":".join(str(part) for part in addr_tuple)
@@ -75,83 +63,6 @@ def make_threadsafe_blocking(meth):
     meth.make_threadsafe_blocking = True
     return meth
 
-
-class AsyncEvent(object):
-    """tornado.concurrent.Future Event based on threading.Event API
-
-    Supports threading.Event API for setting / clearing / checking, but
-    replaces the wait() method with until_set() that returns a tornado Future
-    that resolves when the event is set.
-
-    Note, this class is NOT THREAD SAFE! It will only work properly if all its
-    methods (apart from isSet() and wait_with_ioloop()) are called from the
-    same thread/ioloop.
-
-    """
-    def __init__(self):
-        self._flag = False
-        self._waiting_future = tornado_Future()
-
-    def isSet(self):
-        return self._flag
-
-    is_set = isSet
-
-    def set(self):
-        """Set event flag to true and resolve future(s) returned by until_set()
-
-        Notes
-        -----
-        A call to set() may result in control being transferred to
-        done_callbacks attached to the future returned by until_set().
-
-        """
-        self._flag = True
-        old_future = self._waiting_future
-        # Replace _waiting_future with a fresh one incase someone woken up by set_result()
-        # sets this AsyncEvent to False before waiting on it to be set again.
-        self._waiting_future = tornado_Future()
-        old_future.set_result(True)
-
-    def clear(self):
-        self._flag = False
-
-    def until_set(self):
-        if not self._flag:
-            return self._waiting_future
-        else:
-            f = tornado_Future()
-            f.set_result(True)
-            return f
-
-    def wait_with_ioloop(self, ioloop, timeout=None):
-        """Do blocking wait until condition is event is set.
-
-        Parameters
-        ----------
-        ioloop : tornadio.ioloop.IOLoop instance
-            MUST be the same ioloop that set() / clear() is called from
-        timeout : float, int or None
-            If not None, only wait up to `timeout` seconds for event to be set.
-
-        Return Value
-        ------------
-        flag : True if event was set within timeout, otherwise False.
-
-        Notes
-        -----
-        This will deadlock if called in the ioloop!
-
-        """
-        f = Future()
-        def cb():
-            return gen.chain_future(self.until_set(), f)
-        ioloop.add_callback(cb)
-        try:
-            f.result(timeout)
-            return True
-        except TimeoutError:
-            return self._flag
 
 class DeviceClient(object):
     """Device client proxy.
