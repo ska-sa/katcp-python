@@ -40,8 +40,7 @@ class _InformHookDeviceClient(katcp.AsyncClient):
 
         """
         # Do not hook the same callback multiple times
-        if not any(callback == hook
-                   for hook in self._inform_hooks[inform_name]):
+        if not callback in self._inform_hooks[inform_name]:
             self._inform_hooks[inform_name].append(callback)
 
     def handle_inform(self, msg):
@@ -168,7 +167,7 @@ class InspectingClientAsync(object):
         :class:`tornado.gen.TimeoutError` if the connect timeout expires
         """
         # Start KATCP device client.
-        self.katcp_client.start(timeout)
+        self.katcp_client.start()
         t0 = self.ioloop.time()
         def maybe_timeout(f):
             # Helper function for yielding with a timeout if required, or not
