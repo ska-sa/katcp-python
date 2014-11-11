@@ -23,7 +23,7 @@ try:
     from .core import (Message, KatcpSyntaxError, MessageParser,
                        DeviceMetaclass, FailReply,
                        AsyncReply, KatcpDeviceError, KatcpClientError,
-                       Sensor, ProtocolFlags)
+                       Sensor, ProtocolFlags, AttrDict)
 
     from .server import DeviceServerBase, DeviceServer, DeviceLogger
 

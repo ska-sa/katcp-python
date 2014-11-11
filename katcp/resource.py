@@ -1,28 +1,60 @@
 """A high-level abstract interface to KATCP clients, sensors and requests."""
 
 import abc
+import sys
 import collections
+import logging
 
-from katcp import Message
+import tornado
+
+from tornado.gen import Return
+from katcp import Message, Sensor
+from katcp.core import hashable_identity
 from katcp.sampling import SampleStrategy
 
+logger = logging.getLogger(__name__)
+
+class KATCPSensorError(Exception):
+    """Raised if a problem occured dealing with as KATCPSensor operation"""
+
+class SensorResultTuple(collections.namedtuple(
+        'SensorResultTuple',
+        'object name python_identifier description type units reading')):
+    """Per-sensor result of list_sensors() method
+
+    Attributes
+    ----------
+    object : KATCPSensor instance
+    name : str
+        KATCP (i.e. unescaped) name of the sensor
+    python_identifier : str
+        Python-identifier name of the sensor.
+    description : str
+        KATCP description of the sensor
+    units : str
+        KATCP units of the sensor
+    type : str
+        KATCP type of the sensor
+    reading : KATCPSensorReading instance
+        Most recently received sensor reading
+    """
+    __slots__ = []              # Prevent dynamic attributes from being possible
 
 def normalize_strategy_parameters(params):
     """Normalize strategy parameters to be a list of strings.
 
     Parameters
     ----------
-    params : (space-delimited) string or number or sequence of strings/numbers
-        Parameters expected by :class:`SampleStrategy` object, in various forms
+    params : (space-delimited) string or sequence of strings/numbers Parameters
+        expected by :class:`SampleStrategy` object, in various forms, where the first
+        parameter is the name of the strategy.
 
     Returns
     -------
-    params : list of strings
+    params : tuple of strings
         Strategy parameters as a list of strings
 
     """
-    if not params:
-        return []
     def fixup_numbers(val):
         try:
             # See if it is a number
@@ -32,10 +64,8 @@ def normalize_strategy_parameters(params):
             return str(val)
     if isinstance(params, basestring):
         params = params.split(' ')
-    elif not isinstance(params, collections.Iterable):
-        params = (params,)
-    return [fixup_numbers(p) for p in params]
-
+    # No number
+    return tuple(fixup_numbers(p) for p in params)
 
 def escape_name(name):
     """Escape sensor and request names to be valid Python identifiers."""
@@ -124,11 +154,9 @@ class KATCPResource(object):
     def children(self):
         """Dict of subordinate KATCPResource objects keyed by their names."""
 
-    SensorResultTuple = collections.namedtuple('SensorResultTuple', [
-        'name', 'object', 'value', 'seconds', 'type', 'units'])
-
+    @abc.abstractproperty
     def list_sensors(self, filter="", strategy=False, status="",
-                     expand_underscore=True):
+                     use_python_identifiers=True):
         """List sensors available on this resource matching certain criteria.
 
         Parameters
@@ -136,40 +164,80 @@ class KATCPResource(object):
         filter : string, optional
             Filter each returned sensor's name against this regexp if specified.
             To ease the dichotomy between Python identifier names and actual
-            sensor names, '_' is replaced by '[.-_]' unless `expand_underscore`
-            is set to False. Note that the sensors of subordinate KATCPResource
-            instances are only filtered on Python identifiers, e.g. a device
-            sensor 'piano.tuning-state' is interpreted as 'piano_tuning_state'.
+            sensor names, the default is to search on Python identifier names
+            rather than KATCP sensor names, unless `use_python_identifiers`
+            below is set to False. Note that the sensors of subordinate
+            KATCPResource instances may have inconsistent names and Python
+            identifiers, better to always search on Python identifiers in this
+            case.
         strategy : {False, True}, optional
             Only list sensors with a set strategy if True
         status : string, optional
             Filter each returned sensor's status against this regexp if given
-        expand_underscore : {True, False}, optional
-            Expand '_' in `filter` parameter to '[.-_]' if True
+        use_python_identifiers : {True, False}, optional
+            Match on python identfiers even the the KATCP name is available.
 
         Returns
         -------
-        sensors : list of (name, object, value, seconds, type, units) tuples
+        sensors : list of SensorResultTuples
             List of matching sensors presented as named tuples. The `object`
             field is the :class:`KATCPSensor` object associated with the sensor.
             Note that the name of the object may not match `name` if it
             originates from a subordinate device.
-
         """
+
+    @tornado.gen.coroutine
+    def set_sensor_strategies(self, filter, strategy_and_params, **list_sensors_args):
+        """Set a sampling strategy for all sensors that match the specified filter.
+
+        Parameters
+        ----------
+        filter : string
+            The regular expression filter to use to select the sensors to which
+            to apply the specified strategy.  Use "" to match all sensors. Is
+            matched using :meth:`list_sensors`.
+        strategy_and_params : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+        **list_sensor_args : keyword arguments
+            Passed to the :meth:`list_sensors` call as kwargs
+
+        Returns
+        -------
+        sensors_strategies : tornado Future
+           resolves with a dict with the Python identifier names of the sensors
+           as keys and the value a tuple:
+
+           (success, info) with
+
+           sucess : bool
+              True if setting succeeded for this sensor, else False
+           info : tuple
+               normalised sensor strategy and parameters as tuple if success == True
+               else, sys.exc_info() tuple for the error that occured.
+        """
+        sensors_strategies = {}
+        sensor_results = self.list_sensors(filter, **list_sensor_args)
+        for sensor_res in sensor_results:
+            try:
+                yield sensor_res.object.set_sampling_strategy(strategy_and_params)
+                sensors_strategies[sensor_res.python_identifier] = (
+                    True, sensor_obj.get_sampling_strategy())
+            except Exception:
+                sensors_strategies[sensor_res.python_identifier] = (
+                    False, sys.exc_info())
+        raise tornado.gen.Return(sensors_strategies)
 
 
 class KATCPRequest(object):
     """Abstract Base class to serve as the definition of the KATCPRequest API.
 
-    Wrapper around a specific KATCP request to a given KATCP device. This
-    supports two modes of operation: blocking and asynchronous. The blocking
-    mode blocks on the KATCP request and returns the actual reply, while the
-    asynchronous mode returns a tornado future that resolves with the reply.
-
-    Each available KATCP request for a particular device has an associated
-    :class:`KATCPRequest` object in the object hierarchy. This wrapper is
-    mainly for interactive convenience. It provides the KATCP request help
-    string as a docstring and pretty-prints the result of the request.
+    Wrapper around a specific KATCP request to a given KATCP device.  Each
+    available KATCP request for a particular device has an associated
+    :class:`KATCPRequest` object in the object hierarchy. This wrapper is mainly
+    for interactive convenience. It provides the KATCP request help string as a
+    docstring and pretty-prints the result of the request.
 
     """
     __metaclass__ = abc.ABCMeta
@@ -203,12 +271,117 @@ class KATCPRequest(object):
 
         Returns
         -------
-        reply : tornado future or :class:`KATCPReply` object
-            KATCP request reply wrapped in KATCPReply object in blocking mode,
-            and additionally wrapped in a future in asynchronous mode
+        reply : tornado future resolving with :class:`KATCPReply` object
+            KATCP request reply wrapped in KATCPReply object
 
         """
 
+class KATCPSensorReading(collections.namedtuple(
+        'KATCPSensorReading', 'received_timestamp timestamp status value')):
+
+    """Sensor reading as a (received_timestamp, status, value) tuple.
+
+    Attributes
+    ----------
+    received_timestamp : float
+       Time (in seconds since UTC epoch) at which the sensor value was received.
+    timestamp : float
+       Time (in seconds since UTC epoch) at which the sensor value was determined.
+    status : Sensor status constant
+       Whether the value represents an error condition or not, as in class:`katcp.Sensor`
+    value : object
+        The value of the sensor (the type will be appropriate to the
+        sensor's type).
+    """
+    __slots__ = []              # Prevent dynamic attributes from being possible
+
+class KATCPSensorsManager(object):
+    """Sensor management class used by KATCPSensor. Abstracts communications details.
+
+    This class should arrange:
+
+    1. A mechanism for setting sensor strategies
+    2. A mechanism for polling a sensor value
+    3. Keeping track of- and reapplying sensor strategies after reconnect, etc.
+    4. Providing local time. This is doing to avoid direct calls to time.time, allowing
+       accelerated time testing / simulation / dry-running
+    """
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def time(self):
+        """Returns the current time (in seconds since UTC epoch)"""
+
+    @abc.abstractmethod
+    def get_sampling_strategy(self, sensor_name):
+        """Get the current sampling strategy for the named sensor
+
+        Parameters
+        ----------
+
+        sensor_name : str
+            Name of the sensor
+
+        Returns
+        -------
+
+        strategy : tornado Future that resolves with tuple of str
+            contains (<strat_name>, [<strat_parm1>, ...]) where the strategy names and
+            parameters are as defined by the KATCP spec
+        """
+
+    @abc.abstractmethod
+    def set_sampling_strategy(self, sensor_name, strategy_and_parms):
+        """Set the sampling strategy for the named sensor
+
+        Parameters
+        ----------
+
+        sensor_name : str
+            Name of the sensor
+        strategy : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+
+        Returns
+        -------
+
+        done : tornado Future that resolves when done or raises KATCPSensorError
+
+        Notes
+        -----
+
+        It is recommended that implementations use :func:`normalize_strategy_parameters`
+        to process the strategy_and_parms parameter, since it will deal with both string
+        and list versions and makes sure that numbers are represented as strings in a
+        consistent format.
+
+        This method should arrange for the strategy to be set on the underlying network
+        device or whatever other implementation is used. This strategy should also be
+        automatically re-set if the device is reconnected, etc.
+
+        """
+
+    @abc.abstractmethod
+    def poll_sensor(self, sensor_name):
+        """Poll sensor and arrange for sensor object to be updated
+
+        Return Value
+        ------------
+
+        done_future : tornado Future
+            Resolves when the poll is complete, or raises KATCPSensorError
+        """
+
+    @abc.abstractmethod
+    def reapply_sampling_strategies(self):
+        """Reapply all sensor strategies using cached values
+
+        Would typically be called when a connection is re-established. Should
+        not raise errors when resetting stratgies for sensors that no longer
+        exist on the KATCP resource.
+        """
 
 class KATCPSensor(object):
     """Abstract Base class to serve as the definition of the KATCPSensor API.
@@ -234,24 +407,66 @@ class KATCPSensor(object):
     type: str
         KATCP type of the sensor
 
+    Notes
+    -----
+
+    All the methods of this
+
     """
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self):
-        """Subclasses must arrange to call this in their __init__()."""
-        self._listeners = set()
+    def __init__(self, sensor_description, sensor_manager):
+        """Subclasses must arrange to call this in their __init__().
+
+        Parameters
+        ----------
+        sensor_description : dict
+           Description of the KATCP sensor, with keys same as the parameters of
+           :class:`katcp.Sensor`
+        sensor_manager : :class:`KATCPSensorsManager` instance
+           Manages sensor strategies, allows sensor polling, and provides time
+        """
+        self._manager = sensor_manager
+        self.clear_listeners()
+        self._reading = KATCPSensorReading(0, 0, None, Sensor.UNKNOWN)
+        # We'll be abusing a katcp.Sensor object slightly to make use of its parsing and
+        # formatting functionality
+        self._sensor = Sensor(**sensor_description)
+        name = self._name = self._sensor.name
+        # Overide the katpc.Sensor's set method with ours
+        self._sensor.set = self.set
+        # Steal the the katcp.Sensor's set_formatted method. Since we overrode its set()
+        # method with ours, calling set_formatted will result in this KATCPSensor object's
+        # value being set.
+        self.set_formatted = self._sensor.set_formatted
 
     @property
-    def strategy(self):
-        return SampleStrategy.SAMPLING_LOOKUP[self._strategy.get_sampling()]
+    def name(self):
+        """Name of this KATCP resource"""
+        return self._name
 
     @property
-    def strategy_params(self):
-        return self._strategy_params
+    def reading(self):
+        """Most recently received sensor reading as KATCPSensorReading instance"""
+        return self._reading
 
-    @strategy_params.setter
-    def strategy_params(self, val):
-        self._strategy_params = normalize_strategy_parameters(val)
+    @property
+    def sampling_strategy(self):
+        """Current sampling strategy"""
+        return self._manager.get_sampling_strategy(self.name)
+
+    def set_sampling_strategy(self, strategy):
+        """Set current sampling strategy for sensor
+
+        Parameters
+        ----------
+
+        strategy : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+        """
+        return self._manager.set_sampling_strategy(self.name, strategy)
 
     def register_listener(self, listener):
         """Add a callback function that is called when sensor value is updated.
@@ -260,10 +475,12 @@ class KATCPSensor(object):
         ----------
         listener : function
             Callback signature:
-            listener(update_seconds, value_seconds, status, value)
-
+            listener(katcp_sensor, reading) where
+                `katcp_sensor` is this KATCPSensor instance
+                `reading` is an instance of :class:`KATCPSensorReading`
         """
-        self._listeners.add(listener)
+        listener_id = hashable_identity(listener)
+        self._listeners[listener_id] = listener
 
     def unregister_listener(self, listener):
         """Remove a listener callback added with register_listener().
@@ -274,12 +491,55 @@ class KATCPSensor(object):
             Reference to the callback function that should be removed
 
         """
-        self._listeners.discard(listener)
+        listener_id = hashable_identity(listener)
+        self._listeners.pop(listener_id, None)
 
     def clear_listeners(self):
         """Clear any registered listeners to updates from this sensor."""
-        self._listeners = set()
+        self._listeners = {}
 
+    def call_listeners(self, reading):
+        for listener in self._listeners.values():
+            try:
+                listener(self, reading)
+            except Exception:
+                logger.exception(
+                    'Unhandled exception calling KATCPSensor callback {0!r}'
+                    .format(listener))
+
+    def set(self, timestamp, status, value):
+        """Set sensor with a given received value, matches :meth:`katcp.Sensor.set`"""
+        received_timestamp = self._manager.time()
+        reading = KATCPSensorReading(received_timestamp, timestamp, status, value)
+        self._reading = reading
+        self.call_listeners(reading)
+
+    def set_formatted(self, raw_timestamp, raw_status, raw_value, major):
+        """Set sensor using KATCP string formatted inputs
+
+        Mirrors :meth:`katcp.Sensor.set_formatted`.
+
+        This implementation is empty. Will, during instantiation, be overridden by the
+        set_formatted() method of a katcp.Sensor object.
+        """
+
+    @tornado.gen.coroutine
+    def get_reading(self):
+        """Get a fresh sensor reading from the KATCP resource
+
+        Returns
+        -------
+        reply : tornado Future resolving with  :class:`KATCPSensorReading` object
+
+        Note
+        ----
+
+        As a side-effect this will update the reading stored in this object, and result in
+        registered listeners being called.
+        """
+        yield self._manager.poll_sensor(self._name)
+        # By now the sensor manager should have set the reading
+        raise Return(self._reading)
 
 _KATCPReplyTuple = collections.namedtuple('_KATCPReplyTuple', 'reply informs')
 
@@ -309,11 +569,17 @@ class KATCPReply(_KATCPReplyTuple):
     The instance evaluates to nonzero (i.e. truthy) if the request succeeded.
 
     """
+    __slots__ = []              # Prevent dynamic attributes from being possible
+
     def __repr__(self):
         """String representation for pretty-printing in IPython."""
-        return '\n'.join(["%s%s %s" % (Message.TYPE_SYMBOLS[m.mtype], m.name,
+        return '\n'.join("%s%s %s" % (Message.TYPE_SYMBOLS[m.mtype], m.name,
                                        ' '.join(m.arguments))
-                          for m in self.messages])
+                          for m in self.messages)
+
+    def __str__(self):
+        """String representation using KATCP wire format"""
+        return '\n'.join(str(m) for m in self.messages)
 
     def __nonzero__(self):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
@@ -328,3 +594,4 @@ class KATCPReply(_KATCPReplyTuple):
     def succeeded(self):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
+

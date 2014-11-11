@@ -16,10 +16,8 @@ from collections import namedtuple, defaultdict
 
 from concurrent.futures import Future
 
-
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', ['name', 'description'])
-
 
 class _InformHookDeviceClient(katcp.AsyncClient):
     """DeviceClient that adds inform hooks."""
@@ -41,25 +39,23 @@ class _InformHookDeviceClient(katcp.AsyncClient):
             The function to be called.
 
         """
-        name = self._slug(inform_name)
-        self._inform_hooks[name].append(callback)
+        # Do not hook the same callback multiple times
+        if not callback in self._inform_hooks[inform_name]:
+            self._inform_hooks[inform_name].append(callback)
 
-    def unhandled_inform(self, msg):
-        """Call a callback on informs."""
+    def handle_inform(self, msg):
+        """Call callbacks on hooked informs followed by normal processing"""
         try:
-            for func in self._inform_hooks.get(self._slug(msg.name), []):
+            for func in self._inform_hooks.get(msg.name, []):
                 func(msg)
         except Exception:
             self._logger.warning('Call to function "{0}" with message "{1}".'
                                  .format(func, msg), exc_info=True)
-
-    def _slug(self, name):
-        """Turn a name into a slug."""
-        return str(name).strip().lower().replace('-', '_')
+        super(_InformHookDeviceClient, self).handle_inform(msg)
 
 
 class InspectingClientAsync(object):
-    """Higher-level client that inspects KATCP interface.
+    """Higher-level client that inspects a KATCP interface.
 
     Note: This class is not threadsafe at present, it should only be called
     from the ioloop.
@@ -77,8 +73,16 @@ class InspectingClientAsync(object):
     Should be set before calling connect()/start().
 
     """
+    request_factory = RequestType
+    """Factory that produces KATCP Request objects
 
-    def __init__(self, host, port, io_loop=None, full_inspection=None,
+    signature: request_factory(name, description')
+
+    Should be set before calling connect()/start().
+
+    """
+
+    def __init__(self, host, port, ioloop=None, full_inspection=None, auto_reconnect=True,
                  logger=ic_logger):
         self._logger = logger
         if full_inspection is None:
@@ -94,21 +98,21 @@ class InspectingClientAsync(object):
 
         # Setup KATCP device.
         self.katcp_client = _InformHookDeviceClient(host, port, logger=logger)
-        if io_loop is False:
+        if ioloop is False:
             # Called from the blocking client.
             self.ioloop = self.katcp_client.ioloop
         else:
-            self.ioloop = io_loop or tornado.ioloop.IOLoop.current()
-            self.katcp_client.set_ioloop(io_loop)
+            self.ioloop = ioloop or tornado.ioloop.IOLoop.current()
+            self.katcp_client.set_ioloop(ioloop)
 
         self.katcp_client.hook_inform('sensor-status',
                                       self._cb_inform_sensor_status)
-        self.katcp_client.hook_inform('interface-change',
+        self.katcp_client.hook_inform('interface-changed',
                                       self._cb_inform_interface_change)
         # Hook a callback for/to deprecated informs.
         # _cb_inform_deprecated will log a message when one of these informs
         # are received.
-        self.katcp_client.hook_inform('device-change',
+        self.katcp_client.hook_inform('device-changed',
                                       self._cb_inform_deprecated)
 
     def __del__(self):
@@ -150,10 +154,31 @@ class InspectingClientAsync(object):
 
     @tornado.gen.coroutine
     def connect(self, timeout=None):
-        # Start KATCP device.
-        self.katcp_client.start(timeout)
-        yield self.katcp_client.until_running()
-        yield self.until_connected()
+        """Connect to KATCP interface, starting what is needed
+
+        Parameters
+        ----------
+        timeout : float, None
+            Time to wait until connected. No waiting if None.
+
+        Raises
+        ------
+
+        :class:`tornado.gen.TimeoutError` if the connect timeout expires
+        """
+        # Start KATCP device client.
+        self.katcp_client.start()
+        t0 = self.ioloop.time()
+        def maybe_timeout(f):
+            # Helper function for yielding with a timeout if required, or not
+            if not timeout:
+                return f
+            else:
+                remaining = timeout - (self.ioloop.time() - t0)
+                return tornado.gen.with_timeout(remaining, f)
+
+        yield maybe_timeout(self.katcp_client.until_running())
+        yield maybe_timeout(self.until_connected())
         if self.full_inspection:
             self.inspect()
         else:
@@ -175,6 +200,11 @@ class InspectingClientAsync(object):
 
     def join(self, timeout=None):
         self.katcp_client.join(timeout)
+
+    def handle_sensor_value(self):
+        """Handle #sensor-value informs just like #sensor-status informs"""
+        self.katcp_client.hook_inform('sensor-value',
+                                      self._cb_inform_sensor_status)
 
     def _update_index(self, kind, name, data):
         if kind == 'sensor':
@@ -313,7 +343,7 @@ class InspectingClientAsync(object):
 
         Returns
         -------
-        Sensor NameTuple or None if sensor could not be found.
+        Sensor created by :meth:`sensor_factory` or None if sensor not found.
 
         """
         obj = None
@@ -381,7 +411,7 @@ class InspectingClientAsync(object):
 
         Returns
         -------
-        Request NameTuple or None if request could not be found.
+        Request created by :meth:`request_factory` or None if request not found.
 
         """
         obj = None
@@ -390,8 +420,8 @@ class InspectingClientAsync(object):
             request_info = self._requests_index[name]
             obj = request_info.get('obj')
             if obj is None:
-                obj = RequestType(name,
-                                  request_info.get('description', ''))
+                obj = self.request_factory(
+                    name, request_info.get('description', ''))
                 self._requests_index[name]['obj'] = obj
 
         raise tornado.gen.Return(obj)
@@ -400,14 +430,15 @@ class InspectingClientAsync(object):
     def update_sensor(self, name, timestamp, status, value):
         sensor = yield self.future_get_sensor(name)
         if sensor:
-            sensor.set(timestamp, status, sensor.parse_value(value))
+            katcp_major = self.katcp_client.protocol_flags.major
+            sensor.set_formatted(timestamp, status, value, katcp_major)
         else:
             self._logger.error('Received update for "%s", but could not create'
                                ' sensor object.' % name)
 
     def _cb_inform_sensor_status(self, msg):
         """Update received for an sensor."""
-        timestamp = float(msg.arguments[0])
+        timestamp = msg.arguments[0]
         num_sensors = int(msg.arguments[1])
         assert len(msg.arguments) == 2 + num_sensors * 3
         for n in xrange(num_sensors):
@@ -419,9 +450,15 @@ class InspectingClientAsync(object):
     def _cb_inform_interface_change(self, msg):
         """Update the sensors and requests available."""
         if self.full_inspection:
+            # Clear sync flags
+            self._sensor_sync.clear()
+            self._request_sync.clear()
             self.inspect()
         else:
-            # TODO(MS): Look inside msg and update only what is required.
+            # TODO(MS): Look inside msg and update / clear flags only what is required.
+            # Clear sync flags
+            self._sensor_sync.clear()
+            self._request_sync.clear()
             self.inspect()
 
     def _cb_inform_deprecated(self, msg):
@@ -430,24 +467,26 @@ class InspectingClientAsync(object):
                              .format(msg.name))
 
     def set_sensor_added_callback(self, callback):
-        """Set the Callback to be called when a new sensor is added.
+        """Set the Callback to be called when new sensors are added.
 
         Parameters
         ----------
-        callback : function
-            Reference to the function/method to be called.
+        callback : function(sensor_keys)
+            Reference to the function/method to be called, where `sensor_keys` is a seq
+            of string sensor keys. A sensor object can be retrieved using
+            :meth:`future_get_sensor(sensor_key)`
 
         """
         self._cb_register['sensor_added'] = callback
 
     def set_sensor_removed_callback(self, callback):
-        """Set the Callback to be called when a new sensor is removed.
+        """Set the Callback to be called when existing sensors are removed.
 
         Parameters
         ----------
         callback : function
-            Reference to the function/method to be called.
-
+            Reference to the function/method to be called, where `sensor_names` is a seq
+            of string sensor keys.
         """
         self._cb_register['sensor_removed'] = callback
 
@@ -456,8 +495,10 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-        callback : function
-            Reference to the function/method to be called.
+        callback : function(request_keys)
+            Reference to the function/method to be called, where `request_keys` is a seq
+            of string sensor keys. A sensor object can be retrieved using
+            :meth:`future_get_request(request_key)`
 
         """
         self._cb_register['request_added'] = callback
@@ -467,11 +508,24 @@ class InspectingClientAsync(object):
 
         Parameters
         ----------
-        callback : function
-            Reference to the function/method to be called.
+        callback : function(request_names)
+            Reference to the function/method to be called, where `request_names` is a seq
+            of string request keys.
 
         """
         self._cb_register['request_removed'] = callback
+
+    def set_connection_status_change_callback(self, callback):
+        """Set the Callback to be called when the connection status changes.
+
+       Parameters
+        ----------
+        callback : function(connected)
+            Reference to the function/method to be called, where `connected` indicates
+            whether the client has just connected (True) or just disconnected (False).
+
+        """
+        self.katcp_client.notify_connected = callback
 
     def simple_request(self, request, *args, **kwargs):
         """Create and send a request to the server.
@@ -484,10 +538,21 @@ class InspectingClientAsync(object):
         ----------
         request : str
             The request to call.
-        args : list of objects
+        *args : list of objects
             Arguments to pass on to the request.
+
+        Keyword Arguments
+        -----------------
         timeout : float or None, optional
             Timeout after this amount of seconds (keyword argument).
+        mid : None or int, optional
+            Message identifier to use for the request message. If None, use either
+            auto-incrementing value or no mid depending on the KATCP protocol version
+            (mid's were only introduced with KATCP v5) and the value of the `use_mid`
+            argument. Defaults to None
+        use_mid : bool
+            Use a mid for the request if True. Defaults to True if the server supports
+            them.
 
         Returns
         -------
@@ -503,7 +568,8 @@ class InspectingClientAsync(object):
         """
         use_mid = kwargs.get('use_mid')
         timeout = kwargs.get('timeout')
-        msg = katcp.Message.request(request, *args)
+        mid = kwargs.get('mid')
+        msg = katcp.Message.request(request, *args, mid=mid)
         return self.katcp_client.future_request(msg, timeout, use_mid)
 
     def _call_cb(self, cb, parameter):
@@ -536,7 +602,7 @@ class InspectingClientAsync(object):
         Removed items will be removed from item_index, new items should have
         been added by the discovery process. (?help or ?sensor-list)
 
-        Update and remove callbacks as set by the set_calback_* methods of this
+        Update and remove callbacks as set by the set_*callback methods of this
         class will be called from here. `add_cb` and `rem_cb` are the names of
         the callbacks in the register, not the callables themselves.
         the callbacks in the register, not the callables themselves.
@@ -588,9 +654,10 @@ class InspectingClientAsync(object):
 class InspectingClientBlocking(InspectingClientAsync):
     """Higher-level client that inspects KATCP interfaces and is thread-safe."""
 
-    def __init__(self, host, port, full_inspection=None, logger=ic_logger):
+    def __init__(self, host, port, full_inspection=None, auto_reconnect=True,
+                 logger=ic_logger):
         super(InspectingClientBlocking, self).__init__(
-            host, port, False, full_inspection, logger)
+            host, port, False, full_inspection, auto_reconnect, logger)
 
     def connect(self, timeout=None):
         """Connect to the KATCP device."""

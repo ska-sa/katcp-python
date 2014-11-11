@@ -107,8 +107,11 @@ class AsyncEvent(object):
 
         """
         self._flag = True
-        self._waiting_future.set_result(True)
+        old_future = self._waiting_future
+        # Replace _waiting_future with a fresh one incase someone woken up by set_result()
+        # sets this AsyncEvent to False before waiting on it to be set again.
         self._waiting_future = tornado_Future()
+        old_future.set_result(True)
 
     def clear(self):
         self._flag = False
@@ -606,9 +609,8 @@ class DeviceClient(object):
             The inform message to dispatch.
 
         """
-        method = self.__class__.unhandled_inform
-        if msg.name in self._inform_handlers:
-            method = self._inform_handlers[msg.name]
+        method = self._inform_handlers.get(
+            msg.name, self.__class__.unhandled_inform)
 
         try:
             return method(self, msg)
@@ -998,10 +1000,12 @@ class DeviceClient(object):
         """
         return self._connected.isSet()
 
+    @tornado.gen.coroutine
     def until_connected(self):
         """Return future that resolves when the client is connected."""
+        yield self.until_running()
         assert get_thread_ident() == self.ioloop_thread_id
-        return self._connected.until_set()
+        yield self._connected.until_set()
 
     def wait_connected(self, timeout=None):
         """Wait until the client is connected.
@@ -1023,6 +1027,7 @@ class DeviceClient(object):
         """
         return self._connected.wait_with_ioloop(self.ioloop, timeout)
 
+    @tornado.gen.coroutine
     def until_protocol(self):
         """Return future that resolves after receipt of katcp protocol info.
 
@@ -1030,8 +1035,9 @@ class DeviceClient(object):
         available in the ProtocolFlags instance self.protocol_flags.
 
         """
+        yield self.until_running()
         assert get_thread_ident() == self.ioloop_thread_id
-        return self._received_protocol_info.until_set()
+        yield self._received_protocol_info.until_set()
 
     def wait_protocol(self, timeout=None):
         """Wait until katcp protocol information has been received from server.
@@ -1078,7 +1084,7 @@ class DeviceClient(object):
 
 
 class AsyncClient(DeviceClient):
-    """Implement callback-based requests on top of DeviceClient.
+    """Implement async and callback-based requests on top of DeviceClient.
 
     This client will use message IDs if the server supports them.
 

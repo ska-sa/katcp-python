@@ -269,6 +269,10 @@ class Message(object):
         args : list of strings
             The message arguments.
 
+        Keyword arguments
+        -----------------
+        mid : str or None
+            Message ID to use or None (default) for no Message ID
         """
         mid = kwargs.pop('mid', None)
         if len(kwargs) > 0:
@@ -1252,3 +1256,30 @@ class Sensor(object):
         else:
             kattype = typeclass()
         return [kattype.decode(x, major) for x in formatted_params]
+
+class AttrDict(dict):
+    """
+    Based on JSObject : Python Objects that act like Javascript Objects
+    based on James Robert blog entry:
+    Making Python Objects that act like Javascript Objects
+    http://jiaaro.com/making-python-objects-that-act-like-javascrip
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+def hashable_identity(obj):
+    """Generate a hashable ID that is stable for methods etc
+
+    Approach borrowed from blinker. Why it matters: see e.g.
+    http://stackoverflow.com/questions/13348031/python-bound-and-unbound-method-object
+    """
+    if hasattr(obj, '__func__'):
+        return (id(obj.__func__), id(obj.__self__))
+    elif hasattr(obj, 'im_func'):
+        return (id(obj.im_func), id(obj.im_self))
+    elif isinstance(obj, (basestring, unicode)):
+        return obj
+    else:
+        return id(obj)
