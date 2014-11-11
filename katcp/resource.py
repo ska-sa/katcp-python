@@ -7,6 +7,7 @@ import logging
 
 import tornado
 
+from tornado.gen import Return
 from katcp import Message, Sensor
 from katcp.core import hashable_identity
 from katcp.sampling import SampleStrategy
@@ -522,6 +523,7 @@ class KATCPSensor(object):
         set_formatted() method of a katcp.Sensor object.
         """
 
+    @tornado.gen.coroutine
     def get_reading(self):
         """Get a fresh sensor reading from the KATCP resource
 
@@ -535,7 +537,9 @@ class KATCPSensor(object):
         As a side-effect this will update the reading stored in this object, and result in
         registered listeners being called.
         """
-        self._manager.poll_sensor(self._name)
+        yield self._manager.poll_sensor(self._name)
+        # By now the sensor manager should have set the reading
+        raise Return(self._reading)
 
 _KATCPReplyTuple = collections.namedtuple('_KATCPReplyTuple', 'reply informs')
 

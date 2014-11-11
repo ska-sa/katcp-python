@@ -150,7 +150,7 @@ class AsyncState(object):
         self._state = state
         old_future = self._waiting_futures[state]
         # Replace _waiting_future with a fresh one incase someone woken up by set_result()
-        # sets this AsyncEvent to False before waiting on it to be set again.
+        # sets this AsyncState to another value before waiting on it to be set again.
         self._waiting_futures[state] = tornado_Future()
         old_future.set_result(True)
 
@@ -384,30 +384,25 @@ class KATCPResourceClient(resource.KATCPResource):
         return KATCPResourceClientRequest(name, description, self._inspecting_client)
 
     def _requests_added_callback(self, request_keys):
-        log.info('here')
         # Instantiate KATCPRequest instances and store on self.req
         f = self._add_requests({key: self._inspecting_client.future_get_request(key)
                                 for key in request_keys})
         log_future_exceptions(f)
 
     def _requests_removed_callback(self, request_keys):
-        log.info('here')
         # Remove KATCPRequest instances from self.req
         pass
 
     def _sensors_added_callback(self, sensor_keys):
-        log.info('here')
         # TODO Set something to indicate that sensors are out of sync
         # TODO Call update state thing for overall state
         # Get KATCPSensor instance futures from inspecting client
-        log_coroutine_exceptions
         self._add_sensors({key: self._inspecting_client.future_get_sensor(key)
                            for key in sensor_keys})
 
     @log_coroutine_exceptions
     @tornado.gen.coroutine
     def _add_sensors(self, sensor_futures):
-        log.info('here')
         # Store KATCPSensor instances in self.sensor
         sensor_instances = yield sensor_futures
         for s_name, s_obj in sensor_instances.items():
