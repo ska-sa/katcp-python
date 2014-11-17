@@ -41,7 +41,6 @@ def until_any(*futures):
 class SyncError(Exception):
     """Raised if an error occurs during syncing with a device"""
 
-
 class _InformHookDeviceClient(katcp.AsyncClient):
     """DeviceClient that adds inform hooks."""
 
@@ -313,6 +312,7 @@ class InspectingClientAsync(object):
         """
         self._state_cb = cb
 
+
     def close(self):
         self.stop()
         self.join()
@@ -333,7 +333,6 @@ class InspectingClientAsync(object):
         """Handle #sensor-value informs just like #sensor-status informs"""
         self.katcp_client.hook_inform('sensor-value',
                                       self._cb_inform_sensor_status)
-
     def _update_index(self, index, name, data):
         if name not in index:
             index[name] = data

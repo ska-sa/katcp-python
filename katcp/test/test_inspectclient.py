@@ -391,7 +391,6 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
             connected=False, synced=False, model_changed=False))
         self.assertIs(model_changes, None)
         yield self._check_no_cb(num_calls_before + 1)
-    
 
 
 class Test_InformHookDeviceClient(tornado.testing.AsyncTestCase):
@@ -429,4 +428,3 @@ class Test_InformHookDeviceClient(tornado.testing.AsyncTestCase):
         self.assertEqual(h1_calls[0].name, 'help')
         self.assertEqual(len(h2_calls), 1)
         self.assertEqual(h2_calls[0].name, 'sensor-list')
-

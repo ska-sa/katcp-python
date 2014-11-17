@@ -19,6 +19,7 @@ from katcp.core import (AttrDict, AsyncCallbackEvent, steal_docstring_from,
 
 log = logging.getLogger(__name__)
 
+
 def log_coroutine_exceptions(coro):
     """Coroutine (or any function that returns a future) decorator to log exceptions
 
@@ -272,6 +273,8 @@ class KATCPResourceClient(resource.KATCPResource):
             host, port, ioloop=self._ioloop_set_to, auto_reconnect=self.auto_reconnect)
         self.ioloop = ic.ioloop
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
+        # TODO Commented out since it is not compatable with inspecting_client state-loop
+        # changes
         # ic.set_request_added_callback(self._requests_added_callback)
         # ic.set_request_removed_callback(self._requests_removed_callback)
         # ic.set_sensor_added_callback(self._sensors_added_callback)

@@ -1346,7 +1346,6 @@ class AttrDict(dict):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
-
 class AsyncEvent(object):
     """tornado.concurrent.Future Event based on threading.Event API
 
@@ -1502,7 +1501,6 @@ class AsyncState(object):
             return f
 
     # TODO Add until_not_state() ?
-
 
 def hashable_identity(obj):
     """Generate a hashable ID that is stable for methods etc
