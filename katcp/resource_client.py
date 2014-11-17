@@ -1,11 +1,5 @@
-###############################################################################
-# SKA South Africa (http://ska.ac.za/)                                        #
-# Author: cam@ska.ac.za                                                       #
-# Copyright @ 2013 SKA SA. All rights reserved.                               #
-#                                                                             #
-# THIS SOFTWARE MAY NOT BE COPIED OR DISTRIBUTED IN ANY FORM WITHOUT THE      #
-# WRITTEN PERMISSION OF SKA SA.                                               #
-###############################################################################
+# Copyright 2014 SKA South Africa (http://ska.ac.za/)
+# BSD license - see COPYING for details
 
 import logging
 import sys
@@ -20,35 +14,11 @@ from tornado.gen import Return
 
 from katcp import resource, inspecting_client, Message
 from katcp.resource import KATCPReply, KATCPSensorError
-from katcp.core import AttrDict
+from katcp.core import (AttrDict, AsyncCallbackEvent, steal_docstring_from,
+                        AsyncState)
 
 log = logging.getLogger(__name__)
 
-def steal_docstring_from(obj):
-    """Decorator that lets you steal a docstring from another object
-
-    Example
-    -------
-
-    ::
-
-    @steal_docstring_from(superclass.meth)
-    def meth(self, arg):
-        "Extra subclass documentation"
-        pass
-
-    In this case the docstring of the new 'meth' will be copied from superclass.meth, and
-    if an additional dosctring was defined for meth it will be appended to the superclass
-    docstring with a two newlines inbetween.
-    """
-    def deco(fn):
-        docs = [obj.__doc__]
-        if fn.__doc__:
-            docs.append(fn.__doc__)
-        fn.__doc__ = '\n\n'.join(docs)
-        return fn
-
-    return deco
 
 def log_coroutine_exceptions(coro):
     """Coroutine (or any function that returns a future) decorator to log exceptions
@@ -114,57 +84,6 @@ def transform_future(transformation, future):
 
     future.add_done_callback(_transform)
     return new_future
-
-class AsyncState(object):
-    """Allow async waiting for a state to attain a certain value
-
-    Note, this class is NOT THREAD SAFE! It will only work properly if all its methods are
-    called from the same thread/ioloop.
-    """
-
-    @property
-    def state(self):
-        return self._state
-
-    @property
-    def valid_states(self):
-        return self._valid_states
-
-    def __init__(self, valid_states):
-        """Init with a seq of valid states
-
-        Parameters
-        ----------
-        valid_states : ordered seq of hashable types
-            Valid states, will be turned into a frozen set
-
-        The initial state will be the first state in the seq
-        """
-        valid_states = tuple(valid_states)
-        self._valid_states = frozenset(valid_states)
-        self._state = valid_states[0]
-        self._waiting_futures = {state: tornado_Future() for state in valid_states}
-
-    def set_state(self, state):
-        assert state in self._valid_states
-        self._state = state
-        old_future = self._waiting_futures[state]
-        # Replace _waiting_future with a fresh one incase someone woken up by set_result()
-        # sets this AsyncState to another value before waiting on it to be set again.
-        self._waiting_futures[state] = tornado_Future()
-        old_future.set_result(True)
-
-    def until_state(self, state):
-        """Return a tornado Future that will resolve when the requested state is set"""
-        assert state in self._valid_states
-        if state != self._state:
-            return self._waiting_futures[state]
-        else:
-            f = tornado_Future()
-            f.set_result(True)
-            return f
-
-    # TODO Add until_not_state() ?
 
 class ReplyWrappedInspectingClientAsync(inspecting_client.InspectingClientAsync):
     """Adds wrapped_request() method that wraps reply in a KATCPReply """
@@ -312,8 +231,32 @@ class KATCPResourceClient(resource.KATCPResource):
         self._sensor_items = self.sensor.items
         self._req_pop = self.req.pop
         self._req_items = self.req.items
-        self._state = AsyncState(("not synced", "syncing", "synced"))
-        self._connected_state = AsyncState((False, True))
+        self._state = AsyncState(("disconnected", "syncing", "synced"))
+        self._connected = AsyncCallbackEvent(self._update_state)
+        self._sensors_synced = AsyncCallbackEvent(self._update_state)
+        self._requests_synced = AsyncCallbackEvent(self._update_state)
+
+    def until_state(self, state):
+        """Future that resolves when a certain client state is attained
+
+        Parameters
+        ----------
+
+        state : str
+            Desired state, one of ("disconnected", "syncing", "synced")
+        """
+        return self._state.until_state(state)
+
+    def _update_state(self, _flag=None):
+        # Update self._state, optional _flag parameter is ignored to be compatible with
+        # AsyncCallbackEvent
+        if not self._connected.isSet():
+            self._state.set('disconnected')
+        else:
+            if self._sensors_synced.isSet() and self._requests_synced.isSet():
+                self._state.set('synced')
+            else:
+                self._state.set('syncing')
 
     def set_ioloop(self, ioloop=None):
         """Set the tornado ioloop to use
@@ -330,11 +273,13 @@ class KATCPResourceClient(resource.KATCPResource):
             host, port, ioloop=self._ioloop_set_to, auto_reconnect=self.auto_reconnect)
         self.ioloop = ic.ioloop
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
-        ic.set_request_added_callback(self._requests_added_callback)
-        ic.set_request_removed_callback(self._requests_removed_callback)
-        ic.set_sensor_added_callback(self._sensors_added_callback)
-        ic.set_sensor_removed_callback(self._sensors_removed_callback)
-        ic.set_connection_status_change_callback(self._connection_status_callback)
+        # TODO Commented out since it is not compatable with inspecting_client state-loop
+        # changes
+        # ic.set_request_added_callback(self._requests_added_callback)
+        # ic.set_request_removed_callback(self._requests_removed_callback)
+        # ic.set_sensor_added_callback(self._sensors_added_callback)
+        # ic.set_sensor_removed_callback(self._sensors_removed_callback)
+        # ic.set_connection_status_change_callback(self._connection_status_callback)
         ic.request_factory = self._request_factory
         self._sensor_manager = KATCPResourceClientSensorsManager(ic)
         ic.handle_sensor_value()
@@ -347,7 +292,7 @@ class KATCPResourceClient(resource.KATCPResource):
     def until_state(self, state):
         """Return a tornado Future that will resolve when the requested state is set
 
-        State can be one of ("not synced", "syncing", "synced")
+        State can be one of ("disconnected", "syncing", "synced")
         """
         return self._state.until_state(state)
 
@@ -384,18 +329,25 @@ class KATCPResourceClient(resource.KATCPResource):
         return KATCPResourceClientRequest(name, description, self._inspecting_client)
 
     def _requests_added_callback(self, request_keys):
+        self._requests_synced.clear()
         # Instantiate KATCPRequest instances and store on self.req
-        f = self._add_requests({key: self._inspecting_client.future_get_request(key)
-                                for key in request_keys})
-        log_future_exceptions(f)
+        self._add_requests({key: self._inspecting_client.future_get_request(key)
+                            for key in request_keys})
 
+    @tornado.gen.coroutine
     def _requests_removed_callback(self, request_keys):
+        self._requests_synced.clear()
         # Remove KATCPRequest instances from self.req
-        pass
+        for r_name in request_keys:
+            r_name_escaped = resource.escape_name(r_name)
+            self._request_pop(r_name_escaped)
+        # TODO Uh-oh, I think we are going to get all kinds of blipping here. Perhaps have
+        # something like a "callbacks outstanding" on the inspecting client, or else
+        # investigate the IC code to see if this won't be a problem
+        self.ioloop.add_callback(self._requests_synced.set)
 
     def _sensors_added_callback(self, sensor_keys):
-        # TODO Set something to indicate that sensors are out of sync
-        # TODO Call update state thing for overall state
+        self._sensors_synced.clear()
         # Get KATCPSensor instance futures from inspecting client
         self._add_sensors({key: self._inspecting_client.future_get_sensor(key)
                            for key in sensor_keys})
@@ -411,10 +363,10 @@ class KATCPResourceClient(resource.KATCPResource):
 
         # TODO Notify parent that sensors were added? Or have a dynamic parent sensor
         # object that inspects all children?
+
         # Reapply sensor strategies if they were seen before
         yield self._sensor_manager.reapply_sampling_strategies()
-        # TODO clear something to indicate that sensors are not out of sync
-        # TODO Call update state thing for overall state
+        self._sensors_synced.set()
 
     @log_coroutine_exceptions
     @tornado.gen.coroutine
@@ -423,9 +375,9 @@ class KATCPResourceClient(resource.KATCPResource):
         for r_name, r_obj in request_instances.items():
             r_name_escaped = resource.escape_name(r_name)
             self._req[r_name_escaped] = r_obj
+        self._requests_synced.set()
 
     def _sensors_removed_callback(self, sensor_keys):
-        log.info('here')
         # Remove KATCPSensor instances from self.sensor
         # TODO Call update state thing for overall state
         for s_name in sensor_keys:
@@ -440,17 +392,10 @@ class KATCPResourceClient(resource.KATCPResource):
         log.info('connected: {0}'.format(connected))
         self._connected_state.set_state(connected)
         if connected:
-            # Make sure the sensors and requests have all been inspected before continuing
-            yield self._inspecting_client.until_synced()
-            # Make sure that all callbacks scheduled by _inspecting_client have run
-            yield tornado.gen.moment
             yield self._sensor_manager.reapply_sampling_strategies()
-            # TODO Call update state thing for overall state
         else:
-            self._state.set('not synced')
-            # TODO Perhaps we should just be setting connected to false and then calling
-            # overall state update thing. Or even better, register some callback to all
-            # our state objects that will call the overall state thing for us!
+            self._requests_synced.clear()
+            self._sensor_synced.clear()
 
     def stop(self):
         self._inspecting_client.stop()
