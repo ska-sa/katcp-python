@@ -49,10 +49,13 @@ class test_KATCPResourceClient_Integration(tornado.testing.AsyncTestCase):
             address=self.server.bind_address,
             controlled=True)
 
-    @tornado.testing.gen_test
+    @tornado.testing.gen_test(timeout=0.5)
     def test_requests(self):
         DUT = resource_client.KATCPResourceClient(self.default_resource_spec)
         DUT.start()
-        # yield DUT # Ooops, we actually need to implement states to make this work properly.
-        # # Check that all the test-device requests are listed
-        # self.assertEqual()
+        yield DUT.until_state('synced')
+        # Check that all the test-device requests are listed
+        self.assertEqual(sorted(DUT.req),
+                         sorted(n.replace('-', '_')
+                                for n in self.server.request_names))
+        

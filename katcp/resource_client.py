@@ -273,6 +273,7 @@ class KATCPResourceClient(resource.KATCPResource):
             host, port, ioloop=self._ioloop_set_to, auto_reconnect=self.auto_reconnect)
         self.ioloop = ic.ioloop
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
+        ic.set_state_callback(self._inspecting_client_state_callback)
         # TODO Commented out since it is not compatable with inspecting_client state-loop
         # changes
         # ic.set_request_added_callback(self._requests_added_callback)
@@ -316,47 +317,72 @@ class KATCPResourceClient(resource.KATCPResource):
         return found_sensors
 
 
-    # TODO Design for state transitions. Since the sensors and requests updates will
-    # happen one after the other, it may result in in states blipping if sensors and then
-    # requests are changed at the same time. perhaps immediately clear the 'synced' flags
-    # as soon as a callbackalways defer work that changes sensor or requests sync states
-    # to 'true' to coroutines / callbacks that always yield to the ioloop before setting
-    # the sync state to true. Should allow sync-clearing to always happen immediately (so
-    # the 'and' condition for full-sync will be false) until both sensors and requests
-    # have been updated without blips.
-
     def _request_factory(self, name, description):
         return KATCPResourceClientRequest(name, description, self._inspecting_client)
 
-    def _requests_added_callback(self, request_keys):
-        self._requests_synced.clear()
-        # Instantiate KATCPRequest instances and store on self.req
-        self._add_requests({key: self._inspecting_client.future_get_request(key)
-                            for key in request_keys})
+    @tornado.gen.coroutine
+    def _inspecting_client_state_callback(self, state, model_changes):
+        log.debug('Received {0}, {1}'.format(state, model_changes))
+        if state.connected:
+            if not state.synced:
+                log.debug('Setting state to "syncing"')
+                self._state.set_state('syncing')
+                if model_changes:
+                    log.debug('handling model updates')
+                    yield self._update_model(model_changes)
+                    log.debug('finished handling model updates')
+                # Reapply cached sensor strategies
+                yield self._sensor_manager.reapply_sampling_strategies()
+            else:
+                log.debug('Setting state to "synced"')
+                self._state.set_state('synced')
+        else:
+            log.debug('Setting state to "disconnected"')
+            self._state.set_state('disconnected')
+
+        log.debug('Done with _inspecting_client_state_callback')
 
     @tornado.gen.coroutine
-    def _requests_removed_callback(self, request_keys):
-        self._requests_synced.clear()
+    def _update_model(self, model_changes):
+        if 'requests' in model_changes:
+            log.debug('Removing requests')
+            yield self._remove_requests(model_changes.requests.removed)
+            log.debug('Adding requests')
+            yield self._add_requests(model_changes.requests.added)
+            log.debug('Done with requests')
+        if 'sensors' in model_changes: 
+            log.debug('Removing sensors')
+            yield self._remove_sensors(model_changes.sensors.removed)
+            log.debug('Adding sensors')
+            yield self._add_sensors(model_changes.sensors.added)
+            log.debug('Done with sensors')
+        log.debug('Done with model')
+
+
+    @tornado.gen.coroutine
+    def _add_requests(self, request_keys):
+        # Instantiate KATCPRequest instances and store on self.req
+        log.debug('Getting request objects')
+        request_instances = yield {key: self._inspecting_client.future_get_request(key)
+                                   for key in request_keys}
+        log.debug('Got request objects')
+        for r_name, r_obj in request_instances.items():
+            r_name_escaped = resource.escape_name(r_name)
+            self._req[r_name_escaped] = r_obj
+
+    @tornado.gen.coroutine
+    def _remove_requests(self, request_keys):
         # Remove KATCPRequest instances from self.req
         for r_name in request_keys:
             r_name_escaped = resource.escape_name(r_name)
             self._request_pop(r_name_escaped)
-        # TODO Uh-oh, I think we are going to get all kinds of blipping here. Perhaps have
-        # something like a "callbacks outstanding" on the inspecting client, or else
-        # investigate the IC code to see if this won't be a problem
-        self.ioloop.add_callback(self._requests_synced.set)
 
-    def _sensors_added_callback(self, sensor_keys):
-        self._sensors_synced.clear()
-        # Get KATCPSensor instance futures from inspecting client
-        self._add_sensors({key: self._inspecting_client.future_get_sensor(key)
-                           for key in sensor_keys})
-
-    @log_coroutine_exceptions
     @tornado.gen.coroutine
-    def _add_sensors(self, sensor_futures):
+    def _add_sensors(self, sensor_keys):
+        # Get KATCPSensor instance futures from inspecting client
+        sensor_instances = yield {key: self._inspecting_client.future_get_sensor(key)
+                                  for key in sensor_keys}
         # Store KATCPSensor instances in self.sensor
-        sensor_instances = yield sensor_futures
         for s_name, s_obj in sensor_instances.items():
             s_name_escaped = resource.escape_name(s_name)
             self._sensor[s_name_escaped] = s_obj
@@ -364,38 +390,14 @@ class KATCPResourceClient(resource.KATCPResource):
         # TODO Notify parent that sensors were added? Or have a dynamic parent sensor
         # object that inspects all children?
 
-        # Reapply sensor strategies if they were seen before
-        yield self._sensor_manager.reapply_sampling_strategies()
-        self._sensors_synced.set()
-
-    @log_coroutine_exceptions
     @tornado.gen.coroutine
-    def _add_requests(self, request_futures):
-        request_instances = yield request_futures
-        for r_name, r_obj in request_instances.items():
-            r_name_escaped = resource.escape_name(r_name)
-            self._req[r_name_escaped] = r_obj
-        self._requests_synced.set()
-
-    def _sensors_removed_callback(self, sensor_keys):
+    def _remove_sensors(self, sensor_keys):
         # Remove KATCPSensor instances from self.sensor
-        # TODO Call update state thing for overall state
         for s_name in sensor_keys:
             s_name_escaped = resource.escape_name(s_name)
             self._sensor_pop(s_name_escaped)
         # TODO Notify parent that sensors were removed? Or have a dynamic parent sensor
         # object that inspects all children? Or perhaps just watch chiled synced state
-
-    @log_coroutine_exceptions
-    @tornado.gen.coroutine
-    def _connection_status_callback(self, connected):
-        log.info('connected: {0}'.format(connected))
-        self._connected_state.set_state(connected)
-        if connected:
-            yield self._sensor_manager.reapply_sampling_strategies()
-        else:
-            self._requests_synced.clear()
-            self._sensor_synced.clear()
 
     def stop(self):
         self._inspecting_client.stop()
