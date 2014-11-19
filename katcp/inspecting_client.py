@@ -21,8 +21,23 @@ from katcp.core import AttrDict, until_any
 
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', 'name description')
-InspectingClientStateType = namedtuple(
-    'InspectingClientStateType', 'connected synced model_changed data_synced')
+
+class InspectingClientStateType(namedtuple(
+        'InspectingClientStateType', 'connected synced model_changed data_synced')):
+    """
+    States tuple for the inspecting client. Fields, all bool:
+
+    connected : TCP connection has been established with the server
+    synced : The inspecting client and the user that interfaces through the state change
+        callback are all synchronised with the current device state. Also implies
+        connected = True and data_synced = True
+    model_changed : The device has changed in some way, resulting in the device model
+                    being out of date.
+    data_synced : The inspecting client's internal representation of the device is up to
+                  date, although state change user is not yet up to date.
+    """
+    __slots__ = []
+
 
 class SyncError(Exception):
     """Raised if an error occurs during syncing with a device"""
