@@ -29,6 +29,8 @@ from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 
+logger = logging.getLogger(__name__)
+
 NO_HELP_MESSAGES = 16         # Number of requests on DeviceTestServer
 
 
@@ -230,6 +232,7 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     def test_stop_and_restart(self):
         """Test stopping and then restarting a client."""
+        self.client.wait_running(timeout=1)
         before_threads = threading.enumerate()
         self.client.stop(timeout=1)
         self.client.join(timeout=1)
@@ -237,6 +240,7 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.assertLess(len(threading.enumerate()), len(before_threads))
         self.assertFalse(self.client._running.isSet())
         self.client.start(timeout=1)
+        self.client.wait_running(timeout=1)
         # Now we should have the original number of threads again
         self.assertEqual(len(threading.enumerate()), len(before_threads))
 
