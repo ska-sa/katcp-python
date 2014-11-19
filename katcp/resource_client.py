@@ -19,6 +19,8 @@ from katcp.core import (AttrDict, AsyncCallbackEvent, steal_docstring_from,
 
 log = logging.getLogger(__name__)
 
+def _normalise_request_name_set(reqs):
+    return set(resource.escape_name(r) for r in reqs)
 
 def log_coroutine_exceptions(coro):
     """Coroutine (or any function that returns a future) decorator to log exceptions
@@ -153,6 +155,10 @@ class KATCPResourceClient(resource.KATCPResource):
         return self._state.state
 
     @property
+    def controlled(self):
+        return self._controlled
+
+    @property
     def req(self):
         return self._req
 
@@ -187,10 +193,11 @@ class KATCPResourceClient(resource.KATCPResource):
           address : (host, port), host as str, port as int
           always_allowed_requests : seq of str,
               KACTP requests that are always allowed, even when the resource is not
-              controlled.
+              controlled. '-' and '_' will be treated equivalently.
           always_excluded_requests : seq of str,
               KACTP requests that are never allowed, even if the resource is
-              controlled. Overrides requests in `always_allowed_requests`.
+              controlled. Overrides requests in `always_allowed_requests`. '-' and '_'
+              will be treated equivalently.
           controlled : bool, default: False
               True if control over the device (i.e. KATCP requests) is to be exposed.
           auto_reconnect : bool
@@ -214,11 +221,11 @@ class KATCPResourceClient(resource.KATCPResource):
         """
         self._address = resource_spec['address']
         self._name = resource_spec['name']
-        self.always_allowed_requests = resource_spec.get(
-            'always_allowed_requests', set())
-        self.always_excluded_requests = resource_spec.get(
-            'always_excluded_requests', set())
-        self.controlled = resource_spec.get('controlled', False)
+        self.always_allowed_requests = _normalise_request_name_set(
+            resource_spec.get('always_allowed_requests', set()) )
+        self.always_excluded_requests = _normalise_request_name_set(
+            resource_spec.get('always_excluded_requests', set()) )
+        self._controlled = resource_spec.get('controlled', False)
         self.auto_reconnect = resource_spec.get('auto_reconnect', True)
         self.auto_reconnect_delay = resource_spec.get('auto_reconnect_delay', 0.5)
         self._parent = parent
@@ -274,13 +281,6 @@ class KATCPResourceClient(resource.KATCPResource):
         self.ioloop = ic.ioloop
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
         ic.set_state_callback(self._inspecting_client_state_callback)
-        # TODO Commented out since it is not compatable with inspecting_client state-loop
-        # changes
-        # ic.set_request_added_callback(self._requests_added_callback)
-        # ic.set_request_removed_callback(self._requests_removed_callback)
-        # ic.set_sensor_added_callback(self._sensors_added_callback)
-        # ic.set_sensor_removed_callback(self._sensors_removed_callback)
-        # ic.set_connection_status_change_callback(self._connection_status_callback)
         ic.request_factory = self._request_factory
         self._sensor_manager = KATCPResourceClientSensorsManager(ic)
         ic.handle_sensor_value()
@@ -350,7 +350,7 @@ class KATCPResourceClient(resource.KATCPResource):
             log.debug('Adding requests')
             yield self._add_requests(model_changes.requests.added)
             log.debug('Done with requests')
-        if 'sensors' in model_changes: 
+        if 'sensors' in model_changes:
             log.debug('Removing sensors')
             yield self._remove_sensors(model_changes.sensors.removed)
             log.debug('Adding sensors')
@@ -362,20 +362,23 @@ class KATCPResourceClient(resource.KATCPResource):
     @tornado.gen.coroutine
     def _add_requests(self, request_keys):
         # Instantiate KATCPRequest instances and store on self.req
-        log.debug('Getting request objects')
         request_instances = yield {key: self._inspecting_client.future_get_request(key)
                                    for key in request_keys}
-        log.debug('Got request objects')
         for r_name, r_obj in request_instances.items():
             r_name_escaped = resource.escape_name(r_name)
-            self._req[r_name_escaped] = r_obj
+            if r_name_escaped in self.always_excluded_requests:
+                continue
+            if self.controlled or r_name_escaped in self.always_allowed_requests:
+                self._req[r_name_escaped] = r_obj
 
     @tornado.gen.coroutine
     def _remove_requests(self, request_keys):
         # Remove KATCPRequest instances from self.req
         for r_name in request_keys:
             r_name_escaped = resource.escape_name(r_name)
-            self._request_pop(r_name_escaped)
+            # Must not raise exception when popping a non-existing request, since it may
+            # never have been added due to request exclusion rules.
+            self._request_pop(r_name_escaped, None)
 
     @tornado.gen.coroutine
     def _add_sensors(self, sensor_keys):

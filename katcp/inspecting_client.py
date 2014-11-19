@@ -293,10 +293,10 @@ class InspectingClientAsync(object):
     @tornado.gen.coroutine
     def _send_state(self, connected, synced, model_changed, data_synced,
                     model_changes=None):
+        # Should only be called from _state_loop()
         state = InspectingClientStateType(connected, synced, model_changed, data_synced)
         self._state.set_state(state)
         self._logger.debug('InspectingClient State changed to {0}'.format(state))
-        # Should only be called from _state_loop
 
         if self._state_cb:
             yield maybe_future(self._state_cb(state, model_changes))
