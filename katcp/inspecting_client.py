@@ -17,7 +17,7 @@ from concurrent.futures import Future
 from tornado.gen import maybe_future, Return
 from tornado.concurrent import Future as tornado_Future
 
-from katcp.core import AttrDict, until_any
+from katcp.core import AttrDict, until_any, future_timeout_manager
 
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', 'name description')
@@ -106,7 +106,7 @@ class InspectingClientAsync(object):
     """
 
     sync_timeout = 5
-    connect_timeout = 1
+    reconnect_timeout = 1
 
     def __init__(self, host, port, ioloop=None, initial_inspection=None,
                  auto_reconnect=True, logger=ic_logger):
@@ -155,6 +155,8 @@ class InspectingClientAsync(object):
                 connected=True, synced=False, model_changed=False, data_synced=False),
             InspectingClientStateType(
                 connected=True, synced=False, model_changed=True, data_synced=True),
+            InspectingClientStateType(
+                connected=True, synced=False, model_changed=False, data_synced=True),
             InspectingClientStateType(
                 connected=True, synced=True, model_changed=False, data_synced=True)))
         self._state = katcp.core.AsyncState(self.valid_states)
@@ -224,14 +226,7 @@ class InspectingClientAsync(object):
         """
         # Start KATCP device client.
         assert not self._running
-        t0 = self.ioloop.time()
-        def maybe_timeout(f):
-            # Helper function for yielding with a timeout if required, or not
-            if not timeout:
-                return f
-            else:
-                remaining = timeout - (self.ioloop.time() - t0)
-                return tornado.gen.with_timeout(remaining, f)
+        maybe_timeout = future_timeout_manager(timeout)
 
         self._logger.debug('Starting katcp client')
         self.katcp_client.start()
@@ -264,20 +259,21 @@ class InspectingClientAsync(object):
                                        model_changed=False, data_synced=False)
                 yield until_any(self.katcp_client.until_protocol(),
                                 self._disconnected.until_set())
-                if not self.katcp_client.is_connected():
-                    continue
                 if self.initial_inspection:
+                    if not is_connected():
+                        continue
                     model_changes = yield self.inspect()
                     model_changed = bool(model_changes)
+                    synced = not model_changed
                     yield self._send_state(
-                        connected=is_connected(), synced=False,
+                        connected=True, synced=False,
                         model_changed=model_changed, data_synced=True,
                         model_changes=model_changes)
                 else:
                     self.initial_inspection = True
                 if not is_connected():
                     continue
-                # We wait for the previous _send_state call (and user callbacks) to
+                # We waited for the previous _send_state call (and user callbacks) to
                 # complete before we change the state to synced=True
                 yield self._send_state(connected=True, synced=True,
                                        model_changed=False, data_synced=True)
@@ -287,7 +283,7 @@ class InspectingClientAsync(object):
                 continue
                 # Next loop through should cause re-inspection and handle state updates
             except SyncError, e:
-                retry_wait_time = self.connect_timeout
+                retry_wait_time = self.reconnect_timeout
                 self._logger.warn("Error syncing with device : {0!s} "
                                   "'Retrying in {1}s.".format(e, retry_wait_time))
                 yield katcp.core.until_later(retry_wait_time)
@@ -296,7 +292,7 @@ class InspectingClientAsync(object):
                 # here? Or outsource to a user-supplied class or callback?
                 continue
             except Exception:
-                retry_wait_time = self.connect_timeout
+                retry_wait_time = self.reconnect_timeout
                 self._logger.exception(
                     'Unhandled exception in client-sync loop. Triggering disconnect and '
                     'Retrying in {}s.'
@@ -365,8 +361,9 @@ class InspectingClientAsync(object):
 
     @tornado.gen.coroutine
     def inspect(self):
-        request_changes = yield self.inspect_requests()
-        sensor_changes = yield self.inspect_sensors()
+        timeout_manager = future_timeout_manager(self.sync_timeout)
+        request_changes = yield self.inspect_requests(timeout=timeout_manager.remaining())
+        sensor_changes = yield self.inspect_sensors(timeout=timeout_manager.remaining())
 
         model_changes = AttrDict()
         if request_changes:
@@ -377,13 +374,15 @@ class InspectingClientAsync(object):
             raise Return(model_changes)
 
     @tornado.gen.coroutine
-    def inspect_requests(self, name=None):
+    def inspect_requests(self, name=None, timeout=None):
         """Inspect all or one requests on the device.
 
         Parameters
         ----------
         name : str or None, optional
             Name of the sensor or None to get all requests.
+        timeout : float or None, optional
+            Timeout for request inspection, None for no timeout
 
         TODO Return value
         """
@@ -391,7 +390,8 @@ class InspectingClientAsync(object):
             msg = katcp.Message.request('help')
         else:
             msg = katcp.Message.request('help', name)
-        reply, informs = yield self.katcp_client.future_request(msg)
+        reply, informs = yield self.katcp_client.future_request(
+            msg, timeout=timeout)
         requests_old = set(self._requests_index.keys())
         requests_updated = set()
         for msg in informs:
@@ -406,13 +406,15 @@ class InspectingClientAsync(object):
             raise Return(AttrDict(added=added, removed=removed))
 
     @tornado.gen.coroutine
-    def inspect_sensors(self, name=None):
+    def inspect_sensors(self, name=None, timeout=None):
         """Inspect all or one sensor on the device.
 
         Parameters
         ----------
         name : str or None, optional
             Name of the sensor or None to get all sensors.
+        timeout : float or None, optional
+            Timeout for sensors inspection, None for no timeout
 
         TODO Return value
 
@@ -422,7 +424,8 @@ class InspectingClientAsync(object):
         else:
             msg = katcp.Message.request('sensor-list', name)
 
-        reply, informs = yield self.katcp_client.future_request(msg)
+        reply, informs = yield self.katcp_client.future_request(
+            msg, timeout=timeout)
         sensors_old = set(self._sensors_index.keys())
         sensors_updated = set()
         for msg in informs:

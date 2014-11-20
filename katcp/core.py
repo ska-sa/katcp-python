@@ -19,6 +19,7 @@ from functools import wraps, partial
 
 from concurrent.futures import Future, TimeoutError
 from tornado import gen
+from tornado.gen import with_timeout
 from tornado.concurrent import Future as tornado_Future
 
 SEC_TO_MS_FAC = 1000
@@ -1547,3 +1548,56 @@ def until_any(*futures):
         f.add_done_callback(handle_done)
 
     return any_future
+
+def future_timeout_manager(timeout=None, ioloop=None):
+    """Create Helper function for yielding with a cumulative timeout if required
+
+    Keeps track of time over multiple timeout calls so that a single timeout can be placed
+    over multiple operations.
+
+    Parameters
+    ----------
+    timeout : int or None
+        Timeout, or None for no timeout
+    ioloop : IOLoop instance or None
+        tornado IOloop instance to use, or None for IOLoop.current()
+
+    Return value
+    ------------
+
+    maybe_timeout : func
+        Accepts a future, and wraps it in :func:tornado.gen.with_timeout. maybe_timeout
+        raises :class:`tornado.gen.TimeoutError` if the timeout expires
+
+        Has method attribute `remaining()` that returns the remaining timeout
+
+    Example
+    -------
+
+    ::
+
+    @tornado.gen.coroutine
+    def multi_op(timeout):
+        maybe_timeout = future_timeout_manager(timeout)
+        result1 = yield maybe_timeout(op1())
+        result2 = yield maybe_timeout(op2())
+        # If the cumulative time of op1 and op2 exceeds timeout,
+        # :class:`tornado.gen.TimeoutError` is raised
+
+    """
+    ioloop = ioloop or tornado.ioloop.IOLoop.current()
+    t0 = ioloop.time()
+
+    def _remaining():
+        return timeout - (ioloop.time() - t0) if timeout else None
+
+    def maybe_timeout(f):
+        if not timeout:
+            return f
+        else:
+            remaining = _remaining()
+            return with_timeout(remaining, f, ioloop)
+
+    maybe_timeout.remaining = _remaining
+
+    return maybe_timeout

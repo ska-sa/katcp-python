@@ -378,7 +378,7 @@ class KATCPResourceClient(resource.KATCPResource):
             r_name_escaped = resource.escape_name(r_name)
             # Must not raise exception when popping a non-existing request, since it may
             # never have been added due to request exclusion rules.
-            self._request_pop(r_name_escaped, None)
+            self._req_pop(r_name_escaped, None)
 
     @tornado.gen.coroutine
     def _add_sensors(self, sensor_keys):

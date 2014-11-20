@@ -13,13 +13,13 @@ import logging
 import tornado
 import mock
 
-from katcp.testutils import DeviceTestServer, start_thread_with_cleanup
+from katcp.testutils import (DeviceTestServer, DeviceTestSensor,
+                             start_thread_with_cleanup, TimewarpAsyncTestCase)
 
-from katcp import resource, inspecting_client
+from katcp import resource, inspecting_client, Message
+from katcp import resource
 # module under test
 from katcp import resource_client
-
-
 
 class test_KATCPResourceClientRequest(unittest.TestCase):
     def setUp(self):
@@ -103,9 +103,9 @@ class test_KATCPResourceClient(tornado.testing.AsyncTestCase):
         self.assertEqual(sorted(DUT.req), sorted(['req_one', 'req_two']))
 
 
-class test_KATCPResourceClient_Integration(tornado.testing.AsyncTestCase):
+class test_KATCPResourceClient_Integrated(tornado.testing.AsyncTestCase):
     def setUp(self):
-        super(test_KATCPResourceClient_Integration, self).setUp()
+        super(test_KATCPResourceClient_Integrated, self).setUp()
         self.server = DeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server)
         self.host, self.port = self.server.bind_address
@@ -131,12 +131,128 @@ class test_KATCPResourceClient_Integration(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test(timeout=1)
     def test_sensors(self):
-        DUT = yield self._get_DUT_and_sync(self.default_resource_spec)
-        # Check that all the test-device sensors are listed
-        self.assertEqual(sorted(DUT.sensor),
-                         sorted(n.replace('-', '_').replace('.', '_')
-                                for n in self.server.sensor_names))
+       DUT = yield self._get_DUT_and_sync(self.default_resource_spec)
+       # Check that all the test-device sensors are listed
+       self.assertEqual(sorted(DUT.sensor),
+                        sorted(n.replace('-', '_').replace('.', '_')
+                               for n in self.server.sensor_names))
 
     @tornado.testing.gen_test(timeout=1)
     def test_interface_change(self):
-        pass
+        DUT = yield self._get_DUT_and_sync(self.default_resource_spec)
+        sensors_before = set(DUT.sensor)
+        reqs_before = set(DUT.req)
+
+        # Add a new sensor to the server
+        sensor = DeviceTestSensor(DeviceTestSensor.INTEGER, "another.int",
+                                  "An Integer.",
+                                  "count", [-5, 5], timestamp=self.io_loop.time(),
+                                  status=DeviceTestSensor.NOMINAL, value=3)
+        self.server.add_sensor(sensor)
+        # Check that the sensor does not exist currently
+        self.assertNotIn(resource.escape_name(sensor.name), sensors_before)
+
+        # Add a new request to the server
+        def request_sparkling_new(self, req, msg):
+            """A new command."""
+            return Message.reply(msg.name, "ok", "bling1", "bling2")
+        self.server._request_handlers['sparkling-new'] = request_sparkling_new
+        # Check that the request did not exist before
+        self.assertNotIn('sparkling-new', reqs_before)
+
+        # Issue #interface-changed
+        self.server.mass_inform(Message.inform('interface-changed'))
+        yield DUT.until_state('syncing')
+        yield DUT.until_state('synced')
+
+        # Check if sensor/request was added
+        self.assertEqual(set(DUT.sensor) - sensors_before, set(['another_int']))
+        self.assertEqual(set(DUT.req) - reqs_before, set(['sparkling_new']))
+
+        # And now remove them again
+        self.server._request_handlers.pop('sparkling-new')
+        self.server.remove_sensor('another.int')
+
+        # Issue #interface-changed
+        self.server.mass_inform(Message.inform('interface-changed'))
+        yield DUT.until_state('syncing')
+        yield DUT.until_state('synced')
+
+        # Check if sensor/request was removed
+        self.assertEqual(set(DUT.sensor), sensors_before)
+        self.assertEqual(set(DUT.req), reqs_before)
+
+class test_KATCPResourceClient_IntegratedTimewarp(TimewarpAsyncTestCase):
+    def setUp(self):
+        super(test_KATCPResourceClient_IntegratedTimewarp, self).setUp()
+        self.server = DeviceTestServer('', 0)
+        start_thread_with_cleanup(self, self.server)
+        self.host, self.port = self.server.bind_address
+        self.default_resource_spec = dict(
+            name='thething',
+            address=self.server.bind_address,
+            controlled=True)
+
+    @tornado.gen.coroutine
+    def _get_DUT_and_sync(self, resource_spec):
+        DUT = resource_client.KATCPResourceClient(self.default_resource_spec)
+        DUT.start()
+        yield DUT.until_state('synced')
+        raise tornado.gen.Return(DUT)
+
+    @tornado.testing.gen_test
+    def test_disconnect(self):
+        # Test that a device disconnect / reconnect is correctly handled
+        DUT = yield self._get_DUT_and_sync(self.default_resource_spec)
+        initial_reqs = set(DUT.req)
+        initial_sensors = set(DUT.sensor)
+        self.server.stop()
+        self.server.join(timeout=1)
+        yield DUT.until_state('disconnected')
+
+        # Test that requests fail
+        rep = yield DUT.req.watchdog()
+        self.assertFalse(rep.succeeded)
+
+        # Restart device so that we can reconnect
+        self.server.start()
+        # timewarp beyond reconect delay
+        self.set_ioloop_time(self.ioloop_time + 1)
+        yield DUT.until_state('syncing')
+        yield DUT.until_state('synced')
+        # check that sensors / requests are unchanged
+        self.assertEqual(set(DUT.req), initial_reqs)
+        self.assertEqual(set(DUT.sensor), initial_sensors)
+
+        # Now disconnect and change the device, to check that it is properly resynced.
+        self.server.stop()
+        self.server.join(timeout=1)
+        yield DUT.until_state('disconnected')
+
+        # Add a new request to the server
+        def request_sparkling_new(self, req, msg):
+            """A new command."""
+            return Message.reply(msg.name, "ok", "bling1", "bling2")
+        self.server._request_handlers['sparkling-new'] = request_sparkling_new
+        # Check that the request does not exist currently
+        self.assertNotIn('sparkling_new', initial_reqs)
+
+        # Add a new sensor to the server
+        sensor = DeviceTestSensor(DeviceTestSensor.INTEGER, "another.int",
+                                  "An Integer.",
+                                  "count", [-5, 5], timestamp=self.io_loop.time(),
+                                  status=DeviceTestSensor.NOMINAL, value=3)
+        self.server.add_sensor(sensor)
+        # Check that the sensor does not exist currently
+        escaped_new_sensor = resource.escape_name(sensor.name)
+        self.assertNotIn(resource.escape_name(sensor.name), initial_sensors)
+
+        # Restart device so that we can reconnect
+        self.server.start()
+        # timewarp beyond reconect delay
+        self.set_ioloop_time(self.ioloop_time + 1)
+        yield DUT.until_state('syncing')
+        yield DUT.until_state('synced')
+        # check that sensors / requests are correctly updated
+        self.assertEqual(set(DUT.req), initial_reqs | set(['sparkling_new']))
+        self.assertEqual(set(DUT.sensor), initial_sensors | set([escaped_new_sensor]))
