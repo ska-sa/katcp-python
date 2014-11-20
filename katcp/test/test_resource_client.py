@@ -16,8 +16,9 @@ import mock
 from katcp.testutils import (DeviceTestServer, DeviceTestSensor,
                              start_thread_with_cleanup, TimewarpAsyncTestCase)
 
-from katcp import resource, inspecting_client, Message
-from katcp import resource
+from katcp import resource, inspecting_client, Message, Sensor
+from katcp.core import AttrDict
+
 # module under test
 from katcp import resource_client
 
@@ -102,6 +103,78 @@ class test_KATCPResourceClient(tornado.testing.AsyncTestCase):
         yield DUT._add_requests(dev_requests)
         self.assertEqual(sorted(DUT.req), sorted(['req_one', 'req_two']))
 
+    def test_list_sensors(self):
+        resource_spec = dict(
+            name='testdev',
+            address=('testhost', 12345))
+        DUT = resource_client.KATCPResourceClient(resource_spec)
+        sens_manager = mock.create_autospec(
+            resource_client.KATCPResourceClientSensorsManager(mock.Mock()))
+        test_sensors_info = AttrDict(
+            sens_one=AttrDict(name='sens-one', description='sensor one', value=1),
+            sens_two=AttrDict(name='sens.two', description='sensor one', value=2),
+            sens_three=AttrDict(name='sens_three', description='sensor three', value=3))
+        sensor_strategies = dict(sens_one='event', sens_three='period 10')
+
+        def make_test_sensors(sensors_info):
+            test_sensors = AttrDict()
+            for sens_pyname, info in sensors_info.items():
+                info = dict(info)
+                info['sensor_type'] = Sensor.INTEGER
+                val = info.pop('value')
+                timestamp = val*10
+                received_timestamp = timestamp + 1
+                sens = test_sensors[sens_pyname] =  resource.KATCPSensor(
+                    info, sens_manager)
+                sens._reading = resource.KATCPSensorReading(
+                    received_timestamp, timestamp, Sensor.NOMINAL, val)
+                test_sensors[sens_pyname] = sens
+            return test_sensors
+
+        test_sensors = make_test_sensors(test_sensors_info)
+
+        sens_manager.get_sampling_strategy.side_effect = (
+            lambda sens_name: resource.normalize_strategy_parameters(
+                sensor_strategies.get(
+                    resource.escape_name(sens_name), 'none')) )
+
+        DUT.sensor.update(test_sensors)
+
+        # Simple search based on python identifier
+        result = DUT.list_sensors('sens_one')
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0], resource.SensorResultTuple(
+            test_sensors.sens_one, test_sensors_info.sens_one.name,
+            'sens_one', test_sensors_info.sens_one.description, 'integer', '',
+            test_sensors.sens_one.reading))
+
+        # Now get all the sensors
+        result = DUT.list_sensors('')
+        expected_result = sorted(resource.SensorResultTuple(
+            test_sensors[s_id], test_sensors_info[s_id].name,
+            s_id, test_sensors_info[s_id].description, 'integer', '',
+            test_sensors[s_id].reading)
+                                 for s_id in test_sensors_info)
+        self.assertEqual(sorted(result), expected_result)
+
+        # Test that all sensors are found using their Python identifiers
+        result = DUT.list_sensors('sens_two')
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].object, test_sensors.sens_two)
+        result = DUT.list_sensors('sens_three')
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].object, test_sensors.sens_three)
+
+        # Test using actual sensor name
+        result = DUT.list_sensors('sens_one', use_python_identifiers=False)
+        self.assertEqual(len(result), 0)
+        result = DUT.list_sensors('sens-one', use_python_identifiers=False)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].name, 'sens-one')
+
+        # Now test with strategy filter
+        result = DUT.list_sensors('', strategy=True)
+        self.assertEqual(len(result), len(sensor_strategies))
 
 class test_KATCPResourceClient_Integrated(tornado.testing.AsyncTestCase):
     def setUp(self):

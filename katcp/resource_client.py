@@ -302,10 +302,13 @@ class KATCPResourceClient(resource.KATCPResource):
                      use_python_identifiers=True):
         filter_re = re.compile(filter)
         found_sensors = []
+        none_strat = resource.normalize_strategy_parameters('none')
         for sensor_attr, sensor_obj in self._sensor_items():
             search_name = (sensor_attr if use_python_identifiers
                            else sensor_obj.name)
-            if filter_re.search(search_name):
+            name_match = filter_re.search(search_name)
+            strat_match = not strategy or sensor_obj.sampling_strategy != none_strat
+            if filter_re.search(search_name) and strat_match:
                 found_sensors.append(resource.SensorResultTuple(
                     object=sensor_obj,
                     name=sensor_obj.name,

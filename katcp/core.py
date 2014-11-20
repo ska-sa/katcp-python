@@ -892,7 +892,8 @@ class Sensor(object):
                                         default_value)
         self._formatter = self._kattype.pack
         self._parser = self._kattype.unpack
-        self.stype = self._kattype.name
+        # Also Expose `type` attribute to be compatible with resource.KATCPSensor
+        self.type = self.stype = self._kattype.name
 
         self.name = name
         if description is None:
