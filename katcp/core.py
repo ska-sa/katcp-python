@@ -1482,7 +1482,9 @@ class AsyncState(object):
         self._waiting_futures = {state: tornado_Future() for state in valid_states}
 
     def set_state(self, state):
-        assert state in self._valid_states
+        if state not in self._valid_states:
+            raise ValueError('State must be one of {0}, not {1}'
+                             .format(self._valid_states, state))
         self._state = state
         old_future = self._waiting_futures[state]
         # Replace _waiting_future with a fresh one incase someone woken up by set_result()
@@ -1492,13 +1494,20 @@ class AsyncState(object):
 
     def until_state(self, state):
         """Return a tornado Future that will resolve when the requested state is set"""
-        assert state in self._valid_states
+        if state not in self._valid_states:
+            raise ValueError('State must be one of {0}, not {1}'
+                             .format(self._valid_states, state))
         if state != self._state:
             return self._waiting_futures[state]
         else:
             f = tornado_Future()
             f.set_result(True)
             return f
+
+    def until_state_in(self, *states):
+        """Return a tornado Future, resolves when any of the requested states is set"""
+        state_futures = (self.until_state(s) for s in states)
+        return until_any(*state_futures)
 
     # TODO Add until_not_state() ?
 
@@ -1524,3 +1533,17 @@ def until_later(delay, ioloop=None):
         f.set_result(None)
     ioloop.call_later(delay, _done)
     return f
+
+def until_any(*futures):
+    any_future = tornado_Future()
+    def handle_done(f):
+        if not any_future.done():
+            try:
+                any_future.set_result(f.result())
+            except Exception:
+                any_future.set_exc_info(f.exc_info())
+
+    for f in futures:
+        f.add_done_callback(handle_done)
+
+    return any_future

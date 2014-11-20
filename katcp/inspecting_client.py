@@ -17,26 +17,27 @@ from concurrent.futures import Future
 from tornado.gen import maybe_future, Return
 from tornado.concurrent import Future as tornado_Future
 
-from katcp.core import AttrDict
+from katcp.core import AttrDict, until_any
 
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', 'name description')
-InspectingClientStateType = namedtuple(
-    'InspectingClientStateType', 'connected synced model_changed')
 
-def until_any(*futures):
-    any_future = tornado_Future()
-    def handle_done(f):
-        if not any_future.done():
-            try:
-                any_future.set_result(f.result())
-            except Exception:
-                any_future.set_exc_info(f.exc_info())
+class InspectingClientStateType(namedtuple(
+        'InspectingClientStateType', 'connected synced model_changed data_synced')):
+    """
+    States tuple for the inspecting client. Fields, all bool:
 
-    for f in futures:
-        f.add_done_callback(handle_done)
+    connected : TCP connection has been established with the server
+    synced : The inspecting client and the user that interfaces through the state change
+        callback are all synchronised with the current device state. Also implies
+        connected = True and data_synced = True
+    model_changed : The device has changed in some way, resulting in the device model
+                    being out of date.
+    data_synced : The inspecting client's internal representation of the device is up to
+                  date, although state change user is not yet up to date.
+    """
+    __slots__ = []
 
-    return any_future
 
 class SyncError(Exception):
     """Raised if an error occurs during syncing with a device"""
@@ -109,6 +110,7 @@ class InspectingClientAsync(object):
 
     def __init__(self, host, port, ioloop=None, initial_inspection=None,
                  auto_reconnect=True, logger=ic_logger):
+        # TODO Consider optinal 'name' parameter just to make logging clearer
         self._logger = logger
         if initial_inspection is None:
             initial_inspection = True
@@ -147,10 +149,14 @@ class InspectingClientAsync(object):
         # User callback function to be called on state changes
         self._state_cb = None
         self.valid_states = frozenset((
-            InspectingClientStateType(connected=False, synced=False, model_changed=False),
-            InspectingClientStateType(connected=True, synced=False, model_changed=False),
-            InspectingClientStateType(connected=True, synced=False, model_changed=True),
-            InspectingClientStateType(connected=True, synced=True, model_changed=False)))
+            InspectingClientStateType(
+                connected=False, synced=False, model_changed=False, data_synced=False),
+            InspectingClientStateType(
+                connected=True, synced=False, model_changed=False, data_synced=False),
+            InspectingClientStateType(
+                connected=True, synced=False, model_changed=True, data_synced=True),
+            InspectingClientStateType(
+                connected=True, synced=True, model_changed=False, data_synced=True)))
         self._state = katcp.core.AsyncState(self.valid_states)
 
     def __del__(self):
@@ -174,8 +180,7 @@ class InspectingClientAsync(object):
     @property
     def synced(self):
         """Boolean indicating if the device has been synchronised."""
-        return self._state.state == InspectingClientStateType(
-            connected=True, synced=True, model_changed=False)
+        return self._state.state.synced
 
     def set_ioloop(self, ioloop):
         self.katcp_client.set_ioloop(ioloop)
@@ -193,7 +198,15 @@ class InspectingClientAsync(object):
     @tornado.gen.coroutine
     def until_synced(self):
         yield self._state.until_state(InspectingClientStateType(
-            connected=True, synced=True, model_changed=False))
+            connected=True, synced=True, model_changed=False, data_synced=True))
+
+    @tornado.gen.coroutine
+    def until_data_synced(self):
+        yield self._state.until_state_in(InspectingClientStateType(
+            connected=True, synced=False, model_changed=True, data_synced=True),
+                  InspectingClientStateType(
+            connected=True, synced=True, model_changed=False, data_synced=True))
+
 
     @tornado.gen.coroutine
     def connect(self, timeout=None):
@@ -242,13 +255,13 @@ class InspectingClientAsync(object):
         is_connected = self.katcp_client.is_connected
         while self._running:
             self._logger.debug('Sending intial state')
-            yield self._send_state(
-                connected=is_connected(), synced=False, model_changed=False)
+            yield self._send_state(connected=is_connected(), synced=False,
+                                   model_changed=False, data_synced=False)
             try:
                 yield self.katcp_client.until_connected()
                 self._logger.debug('Sending post-connected  state')
-                yield self._send_state(
-                    connected=is_connected(), synced=False, model_changed=False)
+                yield self._send_state(connected=is_connected(), synced=False,
+                                       model_changed=False, data_synced=False)
                 yield until_any(self.katcp_client.until_protocol(),
                                 self._disconnected.until_set())
                 if not self.katcp_client.is_connected():
@@ -258,21 +271,29 @@ class InspectingClientAsync(object):
                     model_changed = bool(model_changes)
                     yield self._send_state(
                         connected=is_connected(), synced=False,
-                        model_changed=model_changed, model_changes=model_changes)
+                        model_changed=model_changed, data_synced=True,
+                        model_changes=model_changes)
                 else:
                     self.initial_inspection = True
                 if not is_connected():
                     continue
                 # We wait for the previous _send_state call (and user callbacks) to
                 # complete before we change the state to synced=True
-                yield self._send_state(connected=True, synced=True, model_changed=False)
+                yield self._send_state(connected=True, synced=True,
+                                       model_changed=False, data_synced=True)
                 yield until_any(self._interface_changed.until_set(),
                                 self._disconnected.until_set())
                 self._interface_changed.clear()
                 continue
                 # Next loop through should cause re-inspection and handle state updates
             except SyncError, e:
-                self._logger.warn("Error syncing with device : {0!s}".format(e))
+                retry_wait_time = self.connect_timeout
+                self._logger.warn("Error syncing with device : {0!s} "
+                                  "'Retrying in {1}s.".format(e, retry_wait_time))
+                yield katcp.core.until_later(retry_wait_time)
+                # TODO (NM) Perhaps maintain count of unsuccessful attempts, and reconnect
+                # if too many happen. Perhaps also integrate exponential-backoff stuff
+                # here? Or outsource to a user-supplied class or callback?
                 continue
             except Exception:
                 retry_wait_time = self.connect_timeout
@@ -285,21 +306,15 @@ class InspectingClientAsync(object):
                 continue
 
     @tornado.gen.coroutine
-    def _send_state(self, connected, synced, model_changed,
+    def _send_state(self, connected, synced, model_changed, data_synced,
                     model_changes=None):
-        state = InspectingClientStateType(connected, synced, model_changed)
+        # Should only be called from _state_loop()
+        state = InspectingClientStateType(connected, synced, model_changed, data_synced)
         self._state.set_state(state)
         self._logger.debug('InspectingClient State changed to {0}'.format(state))
-        # Should only be called from _state_loop
-        # TODO (NM) Perhaps avoid resending unchanged states?
 
         if self._state_cb:
-            try:
-                yield maybe_future(self._state_cb(state, model_changes))
-                # TODO Perhaps allow _state_cb to abort loop?
-            except Exception:
-                self._logger.exception(
-                    'Unhandled exception calling user state-change callback')
+            yield maybe_future(self._state_cb(state, model_changes))
 
     def set_state_callback(self, cb):
         """Set user callback for state changes
@@ -442,7 +457,7 @@ class InspectingClientAsync(object):
 
         """
         exist = False
-        yield self.until_synced()
+        yield self.until_data_synced()
         if name in self._sensors_index:
             exist = True
         else:
@@ -511,7 +526,7 @@ class InspectingClientAsync(object):
 
         """
         exist = False
-        yield self.until_synced()
+        yield self.until_data_synced()
         if name in self._requests_index:
             exist = True
         else:

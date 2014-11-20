@@ -350,7 +350,7 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
 
         state, model_changes = yield self.state_cb_future
         self.assertEqual(state, inspecting_client.InspectingClientStateType(
-            connected=True, synced=False, model_changed=False))
+            connected=True, synced=False, model_changed=False, data_synced=False))
         self.assertIs(model_changes, None)
         # Due to the structure of the state loop the initial state is sent twice, hence +
         # 2. If the implmentation changes having + 1 would also be OK.
@@ -366,14 +366,14 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         state, model_changes = yield self.done_state_cb_futures[-2]
         state2, model_changes2 = yield self.done_state_cb_futures[-1]
         self.assertEqual(state, inspecting_client.InspectingClientStateType(
-            connected=True, synced=False, model_changed=True))
+            connected=True, synced=False, model_changed=True, data_synced=True))
         server_sensors = self.server._sensors.keys()
         server_requests = self.server._request_handlers.keys()
         self.assertEqual(model_changes, dict(
             sensors=dict(added=set(server_sensors), removed=set()),
             requests=dict(added=set(server_requests), removed=set())))
         self.assertEqual(state2, inspecting_client.InspectingClientStateType(
-            connected=True, synced=True, model_changed=False))
+            connected=True, synced=True, model_changed=False, data_synced=True))
         self.assertEqual(model_changes2, None)
 
     @tornado.testing.gen_test(timeout=1)
@@ -388,7 +388,7 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self.server.join()
         state, model_changes = yield self.state_cb_future
         self.assertEqual(state, inspecting_client.InspectingClientStateType(
-            connected=False, synced=False, model_changed=False))
+            connected=False, synced=False, model_changed=False, data_synced=False))
         self.assertIs(model_changes, None)
         yield self._check_no_cb(num_calls_before + 1)
 
