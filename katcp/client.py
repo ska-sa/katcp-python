@@ -623,6 +623,7 @@ class DeviceClient(object):
 
     @gen.coroutine
     def _install(self):
+        ioloop_before = self.ioloop
         # Do stuff to put us on the IOLoop
         self._logger.debug("Starting client loop for {0!r}"
                            .format(self._bindaddr))
@@ -640,7 +641,12 @@ class DeviceClient(object):
         finally:
             try:
                 # Make sure everything is torn down properly
-                self.stop()
+                if ioloop_before == self.ioloop:
+                    # But only if we are still using the same ioloop. If the ioloop has
+                    # changed that means this client has been stopped and re-started
+                    # before we could get back to this finally clause. This would result
+                    # in us stopping the new ioloop. D'oh!
+                    self.stop()
             except RuntimeError, e:
                 if str(e) == 'IOLoop is closing':
                     # Seems the ioloop was stopped already, no worries.
