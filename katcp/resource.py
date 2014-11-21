@@ -31,10 +31,10 @@ class SensorResultTuple(collections.namedtuple(
         Python-identifier name of the sensor.
     description : str
         KATCP description of the sensor
-    units : str
-        KATCP units of the sensor
     type : str
         KATCP type of the sensor
+    units : str
+        KATCP units of the sensor
     reading : KATCPSensorReading instance
         Most recently received sensor reading
     """
@@ -454,6 +454,18 @@ class KATCPSensor(object):
     def sampling_strategy(self):
         """Current sampling strategy"""
         return self._manager.get_sampling_strategy(self.name)
+
+    @property
+    def description(self):
+        return self._sensor.description
+
+    @property
+    def units(self):
+        return self._sensor.units
+
+    @property
+    def type(self):
+        return self._sensor.type
 
     def set_sampling_strategy(self, strategy):
         """Set current sampling strategy for sensor

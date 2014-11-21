@@ -898,6 +898,11 @@ class DeviceTestServer(DeviceServer):
 
     def __init__(self, *args, **kwargs):
         super(DeviceTestServer, self).__init__(*args, **kwargs)
+        # Make a copies so that test users can modify the available handlers without
+        # breaking other tests
+        self._request_handlers = dict(self._request_handlers)
+        self._inform_handlers = dict(self._inform_handlers)
+        self._reply_handlers = dict(self._reply_handlers)
         self.__msgs = []
         self.restart_queue = Queue.Queue()
         self.set_restart_queue(self.restart_queue)
