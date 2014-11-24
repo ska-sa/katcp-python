@@ -28,7 +28,7 @@ ioloop.add_callback(d.start)
 def setup_resource_client():
     global rc
     print d.bind_address
-    rc = resource_client.KATCPResourceClient(dict(
+    rc = resource_client.KATCPClientResource(dict(
         name='thething',
         address=d.bind_address,
         controlled=True

@@ -143,7 +143,7 @@ class ReplyWrappedInspectingClientAsync(inspecting_client.InspectingClientAsync)
         return transform_future(self.reply_wrapper,
                                 self.katcp_client.future_request(msg, timeout, use_mid))
 
-class KATCPResourceClient(resource.KATCPResource):
+class KATCPClientResource(resource.KATCPResource):
     """Class managing a client connection to a single KATCP resource
 
     Inspects the KATCP interface of the resources, exposing sensors and requests as per
@@ -282,7 +282,7 @@ class KATCPResourceClient(resource.KATCPResource):
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
         ic.set_state_callback(self._inspecting_client_state_callback)
         ic.request_factory = self._request_factory
-        self._sensor_manager = KATCPResourceClientSensorsManager(ic)
+        self._sensor_manager = KATCPClientResourceSensorsManager(ic)
         ic.handle_sensor_value()
         ic.sensor_factory = self._sensor_manager.sensor_factory
 
@@ -321,7 +321,7 @@ class KATCPResourceClient(resource.KATCPResource):
 
 
     def _request_factory(self, name, description):
-        return KATCPResourceClientRequest(name, description, self._inspecting_client)
+        return KATCPClientResourceRequest(name, description, self._inspecting_client)
 
     @tornado.gen.coroutine
     def _inspecting_client_state_callback(self, state, model_changes):
@@ -408,9 +408,9 @@ class KATCPResourceClient(resource.KATCPResource):
     def stop(self):
         self._inspecting_client.stop()
 
-resource.KATCPResource.register(KATCPResourceClient)
+resource.KATCPResource.register(KATCPClientResource)
 
-class KATCPResourceClientSensorsManager(object):
+class KATCPClientResourceSensorsManager(object):
     """Implementation of KATSensorsManager ABC for a directly-connected client
 
     Assumes that all methods are called from the same ioloop context
@@ -509,9 +509,9 @@ class KATCPResourceClientSensorsManager(object):
             raise KATCPSensorError('Error polling sensor {0}: \n'
                                    '{1!s}'.format(sensor_name, reply))
 # Register with the ABC
-resource.KATCPSensorsManager.register(KATCPResourceClientSensorsManager)
+resource.KATCPSensorsManager.register(KATCPClientResourceSensorsManager)
 
-class KATCPResourceClientRequest(resource.KATCPRequest):
+class KATCPClientResourceRequest(resource.KATCPRequest):
 
     @property
     @steal_docstring_from(resource.KATCPRequest.name)
