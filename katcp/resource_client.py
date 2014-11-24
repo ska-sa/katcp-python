@@ -22,6 +22,8 @@ log = logging.getLogger(__name__)
 def _normalise_request_name_set(reqs):
     return set(resource.escape_name(r) for r in reqs)
 
+# TODO (NM) Update exception logging to use instance loggers
+
 def log_coroutine_exceptions(coro):
     """Coroutine (or any function that returns a future) decorator to log exceptions
 
@@ -182,7 +184,7 @@ class KATCPClientResource(resource.KATCPResource):
     def children(self):
         return {}
 
-    def __init__(self, resource_spec, parent=None,logger=log):
+    def __init__(self, resource_spec, parent=None, logger=log):
         """Initialise resource with given specification
 
         Parameters
@@ -218,6 +220,10 @@ class KATCPClientResource(resource.KATCPResource):
         parent : :class:`KATCPResource` or None
             Parent KATCPResource object if this client is a child in a resource
             hierarcy
+
+        logger : object, optional
+           Python Logger object to log to. Default is the module logger
+
         """
         self._address = resource_spec['address']
         self._name = resource_spec['name']
@@ -228,6 +234,7 @@ class KATCPClientResource(resource.KATCPResource):
         self._controlled = resource_spec.get('controlled', False)
         self.auto_reconnect = resource_spec.get('auto_reconnect', True)
         self.auto_reconnect_delay = resource_spec.get('auto_reconnect_delay', 0.5)
+        self._logger = logger
         self._parent = parent
         self._ioloop_set_to = None
         self._sensor = AttrDict()
@@ -282,7 +289,7 @@ class KATCPClientResource(resource.KATCPResource):
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
         ic.set_state_callback(self._inspecting_client_state_callback)
         ic.request_factory = self._request_factory
-        self._sensor_manager = KATCPClientResourceSensorsManager(ic)
+        self._sensor_manager = KATCPClientResourceSensorsManager(ic, logger=self._logger)
         ic.handle_sensor_value()
         ic.sensor_factory = self._sensor_manager.sensor_factory
 
@@ -416,10 +423,11 @@ class KATCPClientResourceSensorsManager(object):
     Assumes that all methods are called from the same ioloop context
     """
 
-    def __init__(self, inspecting_client):
+    def __init__(self, inspecting_client, logger=log):
         self._inspecting_client = inspecting_client
         self.time = inspecting_client.ioloop.time
         self._strategy_cache = {}
+        self._logger = logger
 
     def sensor_factory(self, **sensor_description):
         # kwargs as for inspecting_client.InspectingClientAsync.sensor_factory
