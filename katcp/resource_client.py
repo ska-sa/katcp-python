@@ -89,6 +89,37 @@ def transform_future(transformation, future):
     future.add_done_callback(_transform)
     return new_future
 
+def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers):
+    """Helper for implementing :meth:`katcp.resource.KATCPResource.list_sensors`
+
+    Parameters
+    ----------
+
+    sensor_items : tuple of sensor-item tuples
+        As would be returned the items() method of a dict containing KATCPSensor objects
+        keyed by Python-identifiers.
+    Rest of parameters as for :meth:`katcp.resource.KATCPResource.list_sensors`
+    """
+    filter_re = re.compile(filter)
+    found_sensors = []
+    none_strat = resource.normalize_strategy_parameters('none')
+    for sensor_identifier, sensor_obj in sensor_items:
+        search_name = (sensor_identifier if use_python_identifiers
+                       else sensor_obj.name)
+        name_match = filter_re.search(search_name)
+        strat_match = not strategy or sensor_obj.sampling_strategy != none_strat
+        if filter_re.search(search_name) and strat_match:
+            found_sensors.append(resource.SensorResultTuple(
+                object=sensor_obj,
+                name=sensor_obj.name,
+                python_identifier=sensor_identifier,
+                description=sensor_obj.description,
+                units=sensor_obj.units,
+                type=sensor_obj.type,
+                reading=sensor_obj.reading))
+    return found_sensors
+
+
 class ReplyWrappedInspectingClientAsync(inspecting_client.InspectingClientAsync):
     """Adds wrapped_request() method that wraps reply in a KATCPReply """
 
@@ -304,28 +335,15 @@ class KATCPClientResource(resource.KATCPResource):
         """
         return self._state.until_state(state)
 
+    def until_synced(self):
+        """Convenience method to wait (with Future) until client is synced"""
+        return self._state.until_state('synced')
+
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True):
-        filter_re = re.compile(filter)
-        found_sensors = []
-        none_strat = resource.normalize_strategy_parameters('none')
-        for sensor_attr, sensor_obj in self._sensor_items():
-            search_name = (sensor_attr if use_python_identifiers
-                           else sensor_obj.name)
-            name_match = filter_re.search(search_name)
-            strat_match = not strategy or sensor_obj.sampling_strategy != none_strat
-            if filter_re.search(search_name) and strat_match:
-                found_sensors.append(resource.SensorResultTuple(
-                    object=sensor_obj,
-                    name=sensor_obj.name,
-                    python_identifier=sensor_attr,
-                    description=sensor_obj.description,
-                    units=sensor_obj.units,
-                    type=sensor_obj.type,
-                    reading=sensor_obj.reading))
-        return found_sensors
-
+        return list_sensors(
+            self._sensor_items(), filter, strategy, status, use_python_identifiers)
 
     def _request_factory(self, name, description):
         return KATCPClientResourceRequest(name, description, self._inspecting_client)
@@ -551,4 +569,131 @@ class KATCPClientResourceRequest(resource.KATCPRequest):
 
     def __call__(self, *args, **kwargs):
         return self._client.wrapped_request(self.name, *args, **kwargs)
+
+class KATCPClientResourceContainer(resource.KATCPResource):
+    """Class for containing multiple :class:`KATCPClientResource` instances
+
+    Provides aggregate `sensor` and `req` attributes containing the union of all the
+    sensors in requests in the contained resources. Names are prefixed with <resname>_,
+    where <resname> is the name of the resource to which the sensor / request belongs.
+
+    """
+    @property
+    def req(self):
+        # Inefficient, since whole dict is recreated each time this attribute is
+        # accessed. Could be sped up by e.g. having the children calling back when
+        # requests are added/removed to maintain a dirty flag for a cached copy, or
+        # otherwise think of some more efficent way of proxying the children.  Lets leave
+        # it as simple as possible until it turns out to be problem.
+        return self._create_attrdict_from_children('req')
+
+    @property
+    def sensor(self):
+        # See performance comment in req above.
+        return self._create_attrdict_from_children('sensor')
+
+    @property
+    def address(self):
+        return None
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def parent(self):
+        return None
+
+    @property
+    def children(self):
+        return self._children
+
+    def __init__(self, resources_spec, logger=log):
+        """Initialise Container with specifications for all the child resources
+
+        Parameters
+        ----------
+
+        resources_spec : dict containing the specs of the conained resources. Keys:
+          "clients" : dict, with keys:
+            <name> : resource specifications for :class:`KATCPClientResource` where <name>
+                     is the name of the resource. Note that the `name` key in the
+                     individual resource spec dicts should not be specified, and will
+                     automatically be filled using the <name> key above.
+
+        # TODO (NM)
+
+          "groups" : dict of resource groupings with keys: <group-name> : seq of
+            <group-member>* where <group-name> is the name of the group and
+            <group-member>* is a subset of clients' names as in the "clients" dict
+            above. Also, the <group-name> set must be disjoint from the <name> set above.
+
+        logger : object, optional
+           Python Logger object to log to. Default is the module logger
+        """
+        self._resources_spec = resources_spec
+        self._logger = logger
+        self.init_resources()
+
+    def init_resources(self):
+        resources = self._resources_spec['clients']
+        children = {}
+        for res_name, res_spec in resources.items():
+            # Make a copy since we'll be modifying the dict
+            res_spec = dict(res_spec)
+            res_spec['name'] = res_name
+            res = KATCPClientResource(res_spec, parent=self, logger=self._logger)
+            children[res_name] = res
+        self._children = children
+
+    def set_ioloop(self, ioloop=None):
+        """Set the tornado ioloop to use
+
+        Defaults to tornado.ioloop.IOLoop.current() if set_ioloop() is not called or if
+        ioloop=None. Must be called before start()
+        """
+        for res in self.children.values():
+            res.set_ioloop(ioloop)
+
+    def start(self):
+        """Start and connect all the subordinate clients"""
+        for res in self.children.values():
+            res.start()
+
+    @tornado.gen.coroutine
+    def until_synced(self):
+        """Return a tornado Future; resolves when all subordinate clients are synced"""
+        yield [r.until_synced() for r in self.children.values()]
+
+    @steal_docstring_from(resource.KATCPResource.list_sensors)
+    def list_sensors(self, filter="", strategy=False, status="",
+                     use_python_identifiers=True):
+        return list_sensors(
+            self._sensor_items(), filter, strategy, status, use_python_identifiers)
+
+    def _create_attrdict_from_children(self, attr):
+        attrdict = AttrDict()
+        for child_name, child_resource in self.children.items():
+            prefix = resource.escape_name(child_name) + '_'
+            items_attr = '_' + attr + '_items'
+            for item_name, item in getattr(child_resource, items_attr)():
+                full_item_name = prefix + item_name
+                attrdict[full_item_name] = item
+        return attrdict
+
+    def start(self):
+        """Start all child resources"""
+        for child in self.children.values():
+            child.start()
+
+    def stop(self):
+        """Stop all child resources"""
+        for child_name, child in self.children.items():
+            # Catch child exceptions when stopping so we make sure to stop all children
+            # that want to listen.
+            try:
+                child.stop()
+            except Exception:
+                self._logger.exception('Exception stopping child {!r}'
+                                       .format(child_name))
 

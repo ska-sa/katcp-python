@@ -128,12 +128,8 @@ class InspectingClientAsync(object):
         # Setup KATCP device.
         self.katcp_client = _InformHookDeviceClient(
             host, port, auto_reconnect=auto_reconnect, logger=logger)
-        if ioloop is False:
-            # Called from the blocking client.
-            self.ioloop = self.katcp_client.ioloop
-        else:
-            self.ioloop = ioloop or tornado.ioloop.IOLoop.current()
-            self.katcp_client.set_ioloop(ioloop)
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.current()
+        self.katcp_client.set_ioloop(ioloop)
 
         self.katcp_client.hook_inform('sensor-status',
                                       self._cb_inform_sensor_status)
