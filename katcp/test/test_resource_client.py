@@ -9,6 +9,7 @@
 
 import unittest2 as unittest
 import logging
+import copy
 
 import tornado
 import mock
@@ -22,10 +23,10 @@ from katcp.core import AttrDict
 # module under test
 from katcp import resource_client
 
-class test_KATCPResourceClientRequest(unittest.TestCase):
+class test_KATCPClientresourceRequest(unittest.TestCase):
     def setUp(self):
         self.mock_client = mock.Mock()
-        self.DUT = resource_client.KATCPResourceClientRequest(
+        self.DUT = resource_client.KATCPClientResourceRequest(
             'the-request', 'The description', self.mock_client)
 
     def test_init(self):
@@ -40,13 +41,13 @@ class test_KATCPResourceClientRequest(unittest.TestCase):
             'the-request', 'parm1', 2)
         self.assertIs(reply, self.mock_client.wrapped_request.return_value)
 
-class test_KATCPResourceClient(tornado.testing.AsyncTestCase):
+class test_KATCPClientresource(tornado.testing.AsyncTestCase):
     def test_init(self):
         resource_spec = dict(
             name='testdev',
             address=('testhost', 12345),
             controlled=True)
-        DUT = resource_client.KATCPResourceClient(dict(resource_spec))
+        DUT = resource_client.KATCPClientResource(dict(resource_spec))
         self.assertEqual(DUT.address, resource_spec['address'])
         self.assertEqual(DUT.state, 'disconnected')
         self.assertEqual(DUT.name, resource_spec['name'])
@@ -57,7 +58,7 @@ class test_KATCPResourceClient(tornado.testing.AsyncTestCase):
         # Now try with a parent and no control
         resource_spec['controlled'] = False
         parent = mock.Mock()
-        DUT = resource_client.KATCPResourceClient(
+        DUT = resource_client.KATCPClientResource(
             dict(resource_spec), parent=parent)
         self.assertEqual(DUT.parent, parent)
         self.assertEqual(DUT.controlled, False)
@@ -80,7 +81,7 @@ class test_KATCPResourceClient(tornado.testing.AsyncTestCase):
             controlled=True)
 
         def get_DUT():
-            DUT = resource_client.KATCPResourceClient(dict(resource_spec))
+            DUT = resource_client.KATCPClientResource(dict(resource_spec))
             ic = DUT._inspecting_client = mock.Mock()
             def future_get_request(key):
                 f = tornado.concurrent.Future()
@@ -107,9 +108,9 @@ class test_KATCPResourceClient(tornado.testing.AsyncTestCase):
         resource_spec = dict(
             name='testdev',
             address=('testhost', 12345))
-        DUT = resource_client.KATCPResourceClient(resource_spec)
+        DUT = resource_client.KATCPClientResource(resource_spec)
         sens_manager = mock.create_autospec(
-            resource_client.KATCPResourceClientSensorsManager(mock.Mock()))
+            resource_client.KATCPClientResourceSensorsManager(mock.Mock()))
         test_sensors_info = AttrDict(
             sens_one=AttrDict(name='sens-one', description='sensor one', value=1),
             sens_two=AttrDict(name='sens.two', description='sensor one', value=2),
@@ -176,9 +177,9 @@ class test_KATCPResourceClient(tornado.testing.AsyncTestCase):
         result = DUT.list_sensors('', strategy=True)
         self.assertEqual(len(result), len(sensor_strategies))
 
-class test_KATCPResourceClient_Integrated(tornado.testing.AsyncTestCase):
+class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
     def setUp(self):
-        super(test_KATCPResourceClient_Integrated, self).setUp()
+        super(test_KATCPClientResource_Integrated, self).setUp()
         self.server = DeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server)
         self.host, self.port = self.server.bind_address
@@ -189,7 +190,7 @@ class test_KATCPResourceClient_Integrated(tornado.testing.AsyncTestCase):
 
     @tornado.gen.coroutine
     def _get_DUT_and_sync(self, resource_spec):
-        DUT = resource_client.KATCPResourceClient(self.default_resource_spec)
+        DUT = resource_client.KATCPClientResource(self.default_resource_spec)
         DUT.start()
         yield DUT.until_state('synced')
         raise tornado.gen.Return(DUT)
@@ -255,9 +256,9 @@ class test_KATCPResourceClient_Integrated(tornado.testing.AsyncTestCase):
         self.assertEqual(set(DUT.sensor), sensors_before)
         self.assertEqual(set(DUT.req), reqs_before)
 
-class test_KATCPResourceClient_IntegratedTimewarp(TimewarpAsyncTestCase):
+class test_KATCPClientresource_IntegratedTimewarp(TimewarpAsyncTestCase):
     def setUp(self):
-        super(test_KATCPResourceClient_IntegratedTimewarp, self).setUp()
+        super(test_KATCPClientresource_IntegratedTimewarp, self).setUp()
         self.server = DeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server)
         self.host, self.port = self.server.bind_address
@@ -268,7 +269,7 @@ class test_KATCPResourceClient_IntegratedTimewarp(TimewarpAsyncTestCase):
 
     @tornado.gen.coroutine
     def _get_DUT_and_sync(self, resource_spec):
-        DUT = resource_client.KATCPResourceClient(self.default_resource_spec)
+        DUT = resource_client.KATCPClientResource(self.default_resource_spec)
         DUT.start()
         yield DUT.until_state('synced')
         raise tornado.gen.Return(DUT)
@@ -329,3 +330,123 @@ class test_KATCPResourceClient_IntegratedTimewarp(TimewarpAsyncTestCase):
         # check that sensors / requests are correctly updated
         self.assertEqual(set(DUT.req), initial_reqs | set(['sparkling_new']))
         self.assertEqual(set(DUT.sensor), initial_sensors | set([escaped_new_sensor]))
+
+    # TODO tests
+    #
+    # * Sensor strategy re-application
+    # * Request through request object, also with timeouts
+    # * Sensor callbacks (probably in test_resource.py, no need for full integrated test)
+
+class test_KATCPClientResourceContainer(unittest.TestCase):
+    def setUp(self):
+        self.default_spec_orig = dict(clients={
+            'client1' : dict(address=('client1-addr', 1234)),
+            'client-2' : dict(address=('client2-addr', 1235))})
+        # make a copy in case the test or DUT messes up any of the original dicts.
+        self.default_spec = copy.deepcopy(self.default_spec_orig)
+
+    def test_init(self):
+        m_logger = mock.Mock()
+        DUT = resource_client.KATCPClientResourceContainer(
+            self.default_spec, logger=m_logger)
+        child_specs = self.default_spec_orig['clients']
+        self.assertEqual(sorted(DUT.children), sorted(child_specs))
+        for child_name, child_spec in child_specs.items():
+            child = DUT.children[child_name]
+            self.assertEqual(child.name, child_name)
+            self.assertEqual(child.parent, DUT)
+            self.assertEqual(child.address, child_spec['address'])
+            self.assertIs(child._logger, m_logger)
+
+    def test_set_ioloop(self):
+        # Make two tornado IOLoop instances, one that is installed as the current thread
+        # IOLoop, and one that we will explicity pass to set_ioloop. If set_ioloop is not
+        # doing it's job, the children would automatically use thread_ioloop instance.
+        thread_ioloop = tornado.ioloop.IOLoop()
+        self.addCleanup(thread_ioloop.close, all_fds=True)
+        thread_ioloop.make_current()
+        our_ioloop = tornado.ioloop.IOLoop()
+        self.addCleanup(our_ioloop.close, all_fds=True)
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        DUT.set_ioloop(our_ioloop)
+        DUT.start()
+        for child_name in self.default_spec_orig['clients']:
+            self.assertIs(DUT.children[child_name].ioloop, our_ioloop)
+
+class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase):
+    def setUp(self):
+        super(test_KATCPClientResourceContainerIntegrated, self).setUp()
+        self.default_spec = dict(clients={
+            'resource1' : dict(controlled=True),
+            'resource2' : dict(controlled=True),
+            'resource3' : dict(controlled=True)})
+        self.resource_names = self.default_spec['clients'].keys()
+        self.servers = {rn: DeviceTestServer('', 0) for rn in self.resource_names}
+        for i, (s_name, s) in enumerate(sorted(self.servers.items())):
+            start_thread_with_cleanup(self, s)
+            self.default_spec['clients'][s_name]['address'] = s.bind_address
+            # Add a unique sensor to each server
+            sensor = DeviceTestSensor(DeviceTestSensor.INTEGER, "int."+s_name,
+                                      "An Integer.",
+                                      "count", [-50, 50], timestamp=self.io_loop.time(),
+                                      status=DeviceTestSensor.NOMINAL, value=i)
+            s.add_sensor(sensor)
+            # Add a unique request to each server
+            def handler(self, req, msg):
+                """A new command."""
+                return Message.reply(msg.name, "ok", "bling1", "bling2")
+            s._request_handlers['sparkling-new-'+s_name] = handler
+
+    def get_expected(self, testserv_attr):
+        expected_items = []
+        for i, (serv_name, serv) in enumerate(sorted(self.servers.items())):
+            for item_name in getattr(serv, testserv_attr):
+                expected_items.append((serv_name+'_'+item_name)
+                                        .replace('.', '_')
+                                        .replace('-', '_'))
+        return expected_items
+
+    @tornado.gen.coroutine
+    def get_DUT_synced(self):
+        # make a copy in case the test or DUT messes up any of the original dicts.
+        self.default_spec_orig = copy.deepcopy(self.default_spec)
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        DUT.start()
+        yield DUT.until_synced()
+        raise tornado.gen.Return(DUT)
+
+
+    @tornado.testing.gen_test(timeout=1)
+    def test_sensors(self):
+        DUT = yield self.get_DUT_synced()
+        expected_sensors = self.get_expected('sensor_names')
+        self.assertEqual(sorted(DUT.sensor), sorted(expected_sensors))
+        # Test that some sensor objects are correctly mapped between container and client
+        self.assertIs(DUT.sensor.resource1_int_resource1,
+                      DUT.children['resource1'].sensor.int_resource1)
+        self.assertIs(DUT.sensor.resource2_int_resource2,
+                      DUT.children['resource2'].sensor.int_resource2)
+        self.assertIs(DUT.sensor.resource3_an_int,
+                      DUT.children['resource3'].sensor.an_int)
+
+
+    @tornado.testing.gen_test(timeout=1)
+    def test_requests(self):
+        r2_spec = self.default_spec['clients']['resource2']
+        r2_spec['always_allowed_requests'] = ['sparkling-new-resource2']
+        r2_spec['controlled'] = False
+        DUT = yield self.get_DUT_synced()
+        # Strip out all resource2 requests (since it is not controlled) except for
+        # sparkling-new-resource2 which is in always_allowed_requests.
+        expected_requests = [r for r in self.get_expected('request_names')
+                             if (not r.startswith('resource2_') or
+                                 r == 'resource2_sparkling_new_resource2')]
+        self.assertEqual(sorted(DUT.req), sorted(expected_requests))
+        # Test that some request objects are correctly mapped between container and client
+        self.assertIs(DUT.req.resource1_sparkling_new_resource1,
+                      DUT.children['resource1'].req.sparkling_new_resource1)
+        self.assertIs(DUT.req.resource2_sparkling_new_resource2,
+                      DUT.children['resource2'].req.sparkling_new_resource2)
+        self.assertIs(DUT.req.resource3_halt,
+                      DUT.children['resource3'].req.halt)
+
