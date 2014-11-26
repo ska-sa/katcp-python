@@ -208,6 +208,10 @@ class KATCPClientResource(resource.KATCPResource):
         return self._name
 
     @property
+    def description(self):
+        return self._description
+
+    @property
     def parent(self):
         return self._parent
 
@@ -222,7 +226,9 @@ class KATCPClientResource(resource.KATCPResource):
         ----------
         resource_spec : dict with resource specifications. Keys:
           name : str
-              Name of the resource
+              Name of the resource.
+          description : str, optional
+              Description of the resource.
           address : (host, port), host as str, port as int
           always_allowed_requests : seq of str,
               KACTP requests that are always allowed, even when the resource is not
@@ -258,6 +264,7 @@ class KATCPClientResource(resource.KATCPResource):
         """
         self._address = resource_spec['address']
         self._name = resource_spec['name']
+        self._description = resource_spec.get('description', '')
         self.always_allowed_requests = _normalise_request_name_set(
             resource_spec.get('always_allowed_requests', set()) )
         self.always_excluded_requests = _normalise_request_name_set(
@@ -601,6 +608,10 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         return self._name
 
     @property
+    def description(self):
+        return self._description
+
+    @property
     def parent(self):
         return None
 
@@ -615,6 +626,8 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         ----------
 
         resources_spec : dict containing the specs of the conained resources. Keys:
+          "name" : str, name of this collection of resources
+          "description : str (optional), description of this collection of resources
           "clients" : dict, with keys:
             <name> : resource specifications for :class:`KATCPClientResource` where <name>
                      is the name of the resource. Note that the `name` key in the
@@ -633,6 +646,8 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         """
         self._resources_spec = resources_spec
         self._logger = logger
+        self._name = resources_spec['name']
+        self._description = resources_spec.get('description', '')
         self.init_resources()
 
     def init_resources(self):

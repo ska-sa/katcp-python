@@ -45,12 +45,14 @@ class test_KATCPClientresource(tornado.testing.AsyncTestCase):
     def test_init(self):
         resource_spec = dict(
             name='testdev',
+            description='resource for testing',
             address=('testhost', 12345),
             controlled=True)
         DUT = resource_client.KATCPClientResource(dict(resource_spec))
         self.assertEqual(DUT.address, resource_spec['address'])
         self.assertEqual(DUT.state, 'disconnected')
         self.assertEqual(DUT.name, resource_spec['name'])
+        self.assertEqual(DUT.description, resource_spec['description'])
         self.assertEqual(DUT.parent, None)
         self.assertEqual(DUT.children, {})
         self.assertEqual(DUT.controlled, True)
@@ -341,7 +343,9 @@ class test_KATCPClientResourceContainer(unittest.TestCase):
     def setUp(self):
         self.default_spec_orig = dict(clients={
             'client1' : dict(address=('client1-addr', 1234)),
-            'client-2' : dict(address=('client2-addr', 1235))})
+            'client-2' : dict(address=('client2-addr', 1235))},
+                                      name='test-container',
+                                      description='container for testing')
         # make a copy in case the test or DUT messes up any of the original dicts.
         self.default_spec = copy.deepcopy(self.default_spec_orig)
 
@@ -349,6 +353,8 @@ class test_KATCPClientResourceContainer(unittest.TestCase):
         m_logger = mock.Mock()
         DUT = resource_client.KATCPClientResourceContainer(
             self.default_spec, logger=m_logger)
+        self.assertEqual(DUT.name, 'test-container')
+        self.assertEqual(DUT.description, 'container for testing')
         child_specs = self.default_spec_orig['clients']
         self.assertEqual(sorted(DUT.children), sorted(child_specs))
         for child_name, child_spec in child_specs.items():
@@ -379,7 +385,8 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         self.default_spec = dict(clients={
             'resource1' : dict(controlled=True),
             'resource2' : dict(controlled=True),
-            'resource3' : dict(controlled=True)})
+            'resource3' : dict(controlled=True)},
+                                 name='intgtest')
         self.resource_names = self.default_spec['clients'].keys()
         self.servers = {rn: DeviceTestServer('', 0) for rn in self.resource_names}
         for i, (s_name, s) in enumerate(sorted(self.servers.items())):
