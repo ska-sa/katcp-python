@@ -95,6 +95,10 @@ class KATCPResource(object):
         """Name of this KATCP resource."""
 
     @abc.abstractproperty
+    def description(self):
+        """Description of this KATCP resource."""
+
+    @abc.abstractproperty
     def address(self):
         """Address of the underlying client/device.
 
