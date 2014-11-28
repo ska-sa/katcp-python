@@ -78,7 +78,7 @@ def transform_future(transformation, future):
     def _transform(f):
         assert f is future
         if f.exc_info() is not None:
-            new_futures.set_exc_info(f.exc_info())
+            new_future.set_exc_info(f.exc_info())
         else:
             try:
                 new_future.set_result(transformation(f.result()))
