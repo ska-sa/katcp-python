@@ -23,6 +23,40 @@ from katcp.core import AttrDict
 # module under test
 from katcp import resource_client
 
+class test_transform_future(tornado.testing.AsyncTestCase):
+    def test_transform(self):
+        orig_f = tornado.concurrent.Future()
+        transform = mock.Mock()
+        trans_f = resource_client.transform_future(transform, orig_f)
+        retval = mock.Mock()
+        orig_f.set_result(retval)
+        self.assertIs(trans_f.result(), transform.return_value)
+        transform.assert_called_once_with(retval)
+
+    @tornado.testing.gen_test
+    def test_exception_in_future(self):
+        class AnException(Exception): pass
+        @tornado.gen.coroutine
+        def raiser():
+            raise AnException
+        orig_f = raiser()
+        transform = mock.Mock()
+        trans_f = resource_client.transform_future(transform, orig_f)
+        with self.assertRaises(AnException):
+            trans_f.result()
+
+    def test_exception_in_transform(self):
+        orig_f = tornado.concurrent.Future()
+        transform = mock.Mock()
+        class AnException(Exception): pass
+        transform.side_effect = AnException
+        trans_f = resource_client.transform_future(transform, orig_f)
+        retval = mock.Mock()
+        orig_f.set_result(retval)
+        transform.assert_called_once_with(retval)
+        with self.assertRaises(AnException):
+            trans_f.result()
+
 class test_KATCPClientresourceRequest(unittest.TestCase):
     def setUp(self):
         self.mock_client = mock.Mock()
