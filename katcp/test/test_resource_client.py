@@ -10,14 +10,19 @@
 import unittest2 as unittest
 import logging
 import copy
+import time
 
 import tornado
 import mock
 
+from thread import get_ident as get_thread_ident
+
+from concurrent.futures import Future, TimeoutError
+
 from katcp.testutils import (DeviceTestServer, DeviceTestSensor,
                              start_thread_with_cleanup, TimewarpAsyncTestCase)
 
-from katcp import resource, inspecting_client, Message, Sensor
+from katcp import resource, inspecting_client, ioloop_manager, Message, Sensor
 from katcp.core import AttrDict
 
 # module under test
@@ -490,4 +495,199 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
                       DUT.children['resource2'].req.sparkling_new_resource2)
         self.assertIs(DUT.req.resource3_halt,
                       DUT.children['resource3'].req.halt)
+
+class test_ThreadsafeMethodAttrWrapper(unittest.TestCase):
+    def setUp(self):
+        self.ioloop_manager = ioloop_manager.IOLoopManager(managed_default=True)
+        self.ioloop = self.ioloop_manager.get_ioloop()
+        self.ioloop_thread_wrapper = resource_client.IOLoopThreadWrapper(self.ioloop)
+        start_thread_with_cleanup(self, self.ioloop_manager, start_timeout=1)
+
+    def test_wrapping(self):
+        test_inst = self
+        class Wrappee(object):
+            def __init__(self, ioloop_thread_id):
+                self.thread_id = ioloop_thread_id
+
+            def a_callable(self, arg, kwarg='abc'):
+                test_inst.assertEqual(get_thread_ident(), self.thread_id)
+                return (arg * 2, kwarg * 3)
+
+            @property
+            def not_in_ioloop(self):
+                test_inst.assertNotEqual(get_thread_ident(), self.thread_id)
+                return 'not_in'
+
+            @property
+            def only_in_ioloop(self):
+                test_inst.assertEqual(get_thread_ident(), self.thread_id)
+                return 'only_in'
+
+        class TestWrapper(resource_client.ThreadSafeMethodAttrWrapper):
+            @property
+            def only_in_ioloop(self):
+                return self._getattr('only_in_ioloop')
+
+
+        id_future = Future()
+        self.ioloop.add_callback(lambda : id_future.set_result(get_thread_ident()))
+        wrappee = Wrappee(id_future.result(timeout=1))
+        wrapped = TestWrapper(wrappee, self.ioloop_thread_wrapper)
+        # First test our assumptions about Wrappee
+        with self.assertRaises(AssertionError):
+            wrappee.a_callable(3, 'a')
+        with self.assertRaises(AssertionError):
+            wrappee.only_in_ioloop
+        self.assertEqual(wrappee.not_in_ioloop, 'not_in')
+
+        # Now test the wrapped version
+        self.assertEqual(wrapped.a_callable(5, kwarg='bcd'), (10, 'bcd'*3))
+        self.assertEqual(wrapped.only_in_ioloop, 'only_in')
+        self.assertEqual(wrapped.not_in_ioloop, 'not_in')
+
+class test_AttrMappingProxy(unittest.TestCase):
+    def test_wrapping(self):
+        test_dict = AttrDict(a=2, b=1)
+        class TestWrapper(object):
+            def __init__(self, wrappee):
+                self.wrappee = wrappee
+
+            def __eq__(self, other):
+                return self.wrappee == other.wrappee
+
+        wrapped_dict = resource_client.AttrMappingProxy(test_dict, TestWrapper)
+        # Test keys
+        self.assertEqual(wrapped_dict.keys(), test_dict.keys())
+        # Test key access:
+        for key in test_dict:
+            self.assertEqual(wrapped_dict[key].wrappee, test_dict[key])
+        # Test attribute access
+        for key in test_dict:
+            self.assertEqual(getattr(wrapped_dict, key).wrappee,
+                             getattr(test_dict, key))
+        # Test whole dict comparison
+        self.assertEqual(wrapped_dict,
+                         {k : TestWrapper(v) for k, v in test_dict.items()})
+
+
+
+
+class test_ThreadSafeKATCPClientResourceWrapper(unittest.TestCase):
+    def setUp(self):
+        self.server = DeviceTestServer('', 0)
+        start_thread_with_cleanup(self, self.server)
+
+        self.ioloop_manager = ioloop_manager.IOLoopManager(managed_default=True)
+        self.io_loop = self.ioloop_manager.get_ioloop()
+        self.host, self.port = self.server.bind_address
+        self.default_resource_spec = dict(
+            name='thething',
+            address=self.server.bind_address,
+            controlled=True)
+        self.client_resource = resource_client.KATCPClientResource(
+            self.default_resource_spec)
+        self.client_resource.set_ioloop(self.io_loop)
+        self.io_loop.add_callback(self.client_resource.start)
+
+        self.ioloop_thread_wrapper = resource_client.IOLoopThreadWrapper(self.io_loop)
+        start_thread_with_cleanup(self, self.ioloop_manager, start_timeout=1)
+        self.ioloop_thread_wrapper.default_timeout = 1
+
+        self.DUT = resource_client.ThreadSafeKATCPClientResourceWrapper(
+            self.client_resource, self.ioloop_thread_wrapper)
+        self.DUT.until_synced()
+
+    def test_wrapped_timeout(self):
+        self.assertEqual(self.client_resource.state, 'synced')
+        # Test timeout
+        self.ioloop_thread_wrapper.default_timeout = 0.001
+        t0 = time.time()
+        with self.assertRaises(TimeoutError):
+            self.DUT.until_state('disconnected')
+        self.assertLess(time.time() - t0, 0.2)
+        # Now make sure we can actualy still wait on the state
+        self.ioloop_thread_wrapper.default_timeout = 1
+        self.server.stop()
+        self.server.join()
+        self.DUT.until_state('disconnected')
+        self.assertEqual(self.client_resource.state, 'disconnected')
+        self.server.start()
+        self.DUT.until_state('synced')
+        self.assertEqual(self.client_resource.state, 'synced')
+
+    def test_request(self):
+        reply = self.DUT.req.sensor_value('an.int')
+        last_server_msg = self.server.messages[-1]
+        self.assertTrue(reply.succeeded)
+        self.assertEqual(str(last_server_msg),
+                         '?sensor-value[{}] an.int'.format(reply.reply.mid))
+
+    def test_sensor(self):
+        server_sensor = self.server.get_sensor('an.int')
+        reading = self.DUT.sensor.an_int.get_reading()
+        self.assertEqual(reading.value, server_sensor.read().value)
+        server_sensor.set_value(server_sensor.read().value + 5)
+        reading = self.DUT.sensor.an_int.get_reading()
+        self.assertEqual(reading.value, server_sensor.read().value)
+
+
+class test_ThreadSafeKATCPClientResourceWrapper_container(unittest.TestCase):
+
+    def setUp(self):
+        self.ioloop_manager = ioloop_manager.IOLoopManager(managed_default=True)
+        self.io_loop = self.ioloop_manager.get_ioloop()
+
+        self.ioloop_thread_wrapper = resource_client.IOLoopThreadWrapper(self.io_loop)
+        start_thread_with_cleanup(self, self.ioloop_manager, start_timeout=1)
+        self.ioloop_thread_wrapper.default_timeout = 1
+
+        self.default_spec = dict(clients={
+            'resource1' : dict(controlled=True),
+            'resource2' : dict(controlled=True)},
+                                 name='wraptest')
+        self.resource_names = self.default_spec['clients'].keys()
+        self.servers = {rn: DeviceTestServer('', 0) for rn in self.resource_names}
+        for i, (s_name, s) in enumerate(sorted(self.servers.items())):
+            start_thread_with_cleanup(self, s)
+            self.default_spec['clients'][s_name]['address'] = s.bind_address
+            # Add a unique sensor to each server
+            sensor = DeviceTestSensor(DeviceTestSensor.INTEGER, "int."+s_name,
+                                      "An Integer.",
+                                      "count", [-50, 50], timestamp=self.io_loop.time(),
+                                      status=DeviceTestSensor.NOMINAL, value=i)
+            s.add_sensor(sensor)
+            # Add a unique request to each server
+            def handler(self, req, msg):
+                """A new command."""
+                return Message.reply(msg.name, "ok", "bling1", "bling2")
+            s._request_handlers['sparkling-new-'+s_name] = handler
+
+        self.resource_container = resource_client.KATCPClientResourceContainer(
+            self.default_spec)
+        self.DUT = resource_client.ThreadSafeKATCPClientResourceWrapper(
+            self.resource_container, self.ioloop_thread_wrapper)
+        self.DUT.start()
+        self.DUT.until_synced()
+
+    def test_sensor(self):
+        self.assertEqual(self.DUT.sensor.resource1_int_resource1,
+                         self.DUT.children['resource1'].sensor.int_resource1)
+        self.assertIs(self.DUT.sensor.resource1_int_resource1.reading,
+                      self.resource_container.sensor.resource1_int_resource1.reading)
+        self.servers['resource2'].get_sensor('int.resource2').set_value(17)
+        reading = self.DUT.sensor.resource2_int_resource2.get_reading()
+        self.assertEqual(reading.value, 17)
+        reading = self.DUT.children['resource2'].sensor.int_resource2.get_reading()
+        self.assertEqual(reading.value, 17)
+
+    def test_children(self):
+        self.assertIs(type(self.DUT.children['resource1']),
+                      resource_client.ThreadSafeKATCPClientResourceWrapper)
+        self.assertIs(self.DUT.children['resource1'].__subject__,
+                      self.resource_container.children['resource1'])
+
+        self.assertIs(type(self.DUT.children['resource2']),
+                      resource_client.ThreadSafeKATCPClientResourceWrapper)
+        self.assertIs(self.DUT.children['resource2'].__subject__,
+                      self.resource_container.children['resource2'])
 

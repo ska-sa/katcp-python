@@ -50,8 +50,8 @@ def setup_inspecting_client():
     except Exception:
         log.exception('whups')
 
-ioloop.add_callback(setup_inspecting_client)
-#ioloop.add_callback(setup_resource_client)
+#ioloop.add_callback(setup_inspecting_client)
+ioloop.add_callback(setup_resource_client)
 
 stop = threading.Event()
 
@@ -69,6 +69,10 @@ def doreq(req, *args, **kwargs):
 
 def run_ipy():
     try:
+        iotw = resource_client.IOLoopThreadWrapper(ioloop)
+        time.sleep(0.24)
+        s = rc.sensor.an_int
+        ws = resource_client.ThreadsafeKATCPSensorWrapper(s, iotw)
         IPython.embed()
         # stop.wait(10000)
     finally:
