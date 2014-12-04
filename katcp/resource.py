@@ -8,6 +8,7 @@ import logging
 import tornado
 
 from tornado.gen import Return
+
 from katcp import Message, Sensor
 from katcp.core import hashable_identity
 from katcp.sampling import SampleStrategy
@@ -610,4 +611,3 @@ class KATCPReply(_KATCPReplyTuple):
     def succeeded(self):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
-

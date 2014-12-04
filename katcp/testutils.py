@@ -984,6 +984,7 @@ class DeviceTestServer(DeviceServer):
         self._check_cnt_futures()
         return super(DeviceTestServer, self).handle_message(req, msg)
 
+    @property
     def messages(self):
         return self.__msgs
 

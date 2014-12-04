@@ -4,13 +4,18 @@
 import logging
 import sys
 import re
+import collections
+import textwrap
 
 import tornado
 
-from functools import wraps
+from functools import wraps, partial
+from thread import get_ident as get_thread_ident
 
+from concurrent.futures import Future, TimeoutError
 from tornado.concurrent import Future as tornado_Future
-from tornado.gen import Return
+from tornado.gen import Return, maybe_future, chain_future
+from peak.util.proxies import ObjectWrapper
 
 from katcp import resource, inspecting_client, Message
 from katcp.resource import KATCPReply, KATCPSensorError
@@ -648,9 +653,9 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         self._logger = logger
         self._name = resources_spec['name']
         self._description = resources_spec.get('description', '')
-        self.init_resources()
+        self._init_resources()
 
-    def init_resources(self):
+    def _init_resources(self):
         resources = self._resources_spec['clients']
         children = {}
         for res_name, res_spec in resources.items():
@@ -684,6 +689,8 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True):
         return list_sensors(
+            # TODO This won't work because it is using _sensor_items. Perhaps just use
+            # dict.items on the computed attributed?
             self._sensor_items(), filter, strategy, status, use_python_identifiers)
 
     def _create_attrdict_from_children(self, attr):
@@ -711,4 +718,157 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             except Exception:
                 self._logger.exception('Exception stopping child {!r}'
                                        .format(child_name))
+
+class IOLoopThreadWrapper(object):
+    default_timeout = None
+
+    def __init__(self, ioloop=None):
+        self.ioloop = ioloop = ioloop or tornado.ioloop.IOLoop.current()
+        self._thread_id = None
+        ioloop.add_callback(self._install)
+
+    def call_in_ioloop(self, fn, args, kwargs, timeout=None):
+        timeout = timeout or self.default_timeout
+        if get_thread_ident() == self._thread_id:
+            raise RuntimeError("Cannot call a thread-wrapped object from the ioloop")
+        future, tornado_future = Future(), tornado_Future()
+        self.ioloop.add_callback(
+            self._ioloop_call, future, tornado_future, fn, args, kwargs)
+        try:
+            # Use the threadsafe future to block
+            return future.result(timeout)
+        except TimeoutError:
+            raise
+        except Exception:
+            # If we have an exception use the tornad future instead since it will print a
+            # nicer traceback.
+            tornado_future.result()
+            # Should never get here since the tornado future should raise
+            assert False, 'Tornado Future should have raised'
+
+    def decorate_callable(self, callable_, timeout=None):
+        """Decorate a callable to use call_in_ioloop"""
+        timeout = timeout or self.default_timeout
+
+        @wraps(callable_)
+        def decorated(*args, **kwargs):
+            return self.call_in_ioloop(callable_, args, kwargs, timeout)
+
+        decorated.__doc__ = '\n\n'.join((
+"""Wrapped async call. Will call in ioloop.
+
+This call will block until the original callable has finished running on the ioloop, and
+will pass on the return value. If the original callable returns a future, this call will
+wait for the future to resolve and return the value or raise the exception that the future
+resolves with.
+
+Original Callable Docstring
+---------------------------
+""",
+            textwrap.dedent(decorated.__doc__ or '')))
+
+        return decorated
+
+    def _install(self):
+        self._thread_id = get_thread_ident()
+
+    def _ioloop_call(self, future, tornado_future, fn, args, kwargs):
+        chain_future(tornado_future, future)
+        try:
+            result_future = maybe_future(fn(*args, **kwargs))
+            chain_future(result_future, tornado_future)
+        except Exception:
+            tornado_future.set_exc_info(sys.exc_info())
+
+class ThreadSafeMethodAttrWrapper(ObjectWrapper):
+    # Attributes must be in the class definition, or else they will be
+    # proxied to __subject__
+    _ioloop_wrapper = None
+
+    def __init__(self, subject, ioloop_wrapper):
+        self._ioloop_wrapper = ioloop_wrapper
+        super(ThreadSafeMethodAttrWrapper, self).__init__(subject)
+
+    def __getattr__(self, attr):
+        val = super(ThreadSafeMethodAttrWrapper, self).__getattr__(attr)
+        if callable(val):
+            return self._ioloop_wrapper.decorate_callable(val)
+        else:
+            return val
+
+    def _getattr(self, attr):
+        return self._ioloop_wrapper.call_in_ioloop(getattr, (self.__subject__, attr), {})
+
+
+class ThreadSafeKATCPSensorWrapper(ThreadSafeMethodAttrWrapper):
+
+    @property
+    def sampling_strategy(self):
+        return self._getattr('sampling_strategy')
+
+class ThreadSafeKATCPClientResourceRequestWrapper(ThreadSafeMethodAttrWrapper):
+    @property
+    def __call__(self):
+        return self._ioloop_wrapper.decorate_callable(self.__subject__.__call__)
+
+class MappingProxy(collections.Mapping):
+
+    def __init__(self, mapping, wrapper):
+        self._mapping = mapping
+        self._wrapper = wrapper
+
+    def __iter__(self):
+        return iter(self._mapping)
+
+    def __len__(self):
+        return len(self._mapping)
+
+    def __contains__(self, x):
+        return x in self._mapping
+
+    def __getitem__(self, key):
+        return self._wrapper(self._mapping[key])
+
+class AttrMappingProxy(MappingProxy):
+
+    def __getattr__(self, attr):
+        return self._wrapper(getattr(self._mapping, attr))
+
+    def __dir__(self):
+        return self.keys()
+
+class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
+    """Should work with both KATCPClientResource or KATCPClientResourceContainer"""
+
+    __slots__ = ['ResourceWrapper', 'SensorWrapper', 'RequestWrapper']
+
+    def __init__(self, subject, ioloop_wrapper):
+        self.ResourceWrapper = partial(ThreadSafeKATCPClientResourceWrapper,
+                                       ioloop_wrapper=ioloop_wrapper)
+        self.SensorWrapper = partial(ThreadSafeKATCPSensorWrapper,
+                                     ioloop_wrapper=ioloop_wrapper)
+        self.RequestWrapper = partial(ThreadSafeKATCPClientResourceRequestWrapper,
+                                      ioloop_wrapper=ioloop_wrapper)
+        super(ThreadSafeKATCPClientResourceWrapper, self).__init__(
+            subject, ioloop_wrapper)
+
+    @property
+    def sensor(self):
+        return AttrMappingProxy(self.__subject__.sensor, self.SensorWrapper)
+
+    @property
+    def req(self):
+        return AttrMappingProxy(self.__subject__.req, self.RequestWrapper)
+
+    @property
+    def children(self):
+        if self.__subject__.children:
+            return MappingProxy(self.__subject__.children, self.ResourceWrapper)
+
+    @property
+    def parent(self):
+        if self.__subject__.parent:
+            return self.ResourceWrapper(self.__subject__.parent)
+
+
 
