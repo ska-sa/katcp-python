@@ -27,46 +27,12 @@ log = logging.getLogger(__name__)
 def _normalise_request_name_set(reqs):
     return set(resource.escape_name(r) for r in reqs)
 
-# TODO (NM) Update exception logging to use instance loggers
-
-def log_coroutine_exceptions(coro):
-    """Coroutine (or any function that returns a future) decorator to log exceptions
-
-    Using the module logger
-
-    Example
-    -------
-
-    ::
-
-    @log_coroutine_exceptions
-    @tornado.gen.coroutine
-    def raiser(self, arg):
-        yield tornado.gen.moment
-        raise Exception(arg)
-
-    """
+def log_future_exceptions(logger, f):
     def log_cb(f):
         try:
             f.result()
         except Exception:
-            log.exception('Unhandled exception calling coroutine {0!r}'
-                               .format(coro))
-
-    @wraps(coro)
-    def wrapped_coro(*args, **kwargs):
-        f = coro(*args, **kwargs)
-        f.add_done_callback(log_cb)
-        return f
-
-    return wrapped_coro
-
-def log_future_exceptions(f):
-    def log_cb(f):
-        try:
-            f.result()
-        except Exception:
-            log.exception('Unhandled exception returned by future')
+            logger.exception('Unhandled exception returned by future')
     f.add_done_callback(log_cb)
 
 def transform_future(transformation, future):
@@ -338,7 +304,7 @@ class KATCPClientResource(resource.KATCPResource):
 
         # Steal some methods from _sensor_manager
         self.reapply_sampling_strategies = self._sensor_manager.reapply_sampling_strategies
-        log_future_exceptions(ic.connect())
+        log_future_exceptions(self._logger, ic.connect())
 
     def until_state(self, state):
         """Return a tornado Future that will resolve when the requested state is set
@@ -465,7 +431,7 @@ class KATCPClientResourceSensorsManager(object):
         sensor_name = sensor_description['name']
         cached_strategy = self._strategy_cache.get(sensor_name)
         if cached_strategy:
-            log_future_exceptions(self.set_sampling_strategy(
+            log_future_exceptions(self._logger, self.set_sampling_strategy(
                 sensor_name, cached_strategy))
         return sens
 
@@ -527,16 +493,16 @@ class KATCPClientResourceSensorsManager(object):
             try:
                 sensor_exists = yield check_sensor(sensor_name)
                 if not sensor_exists:
-                    log.warn('Did not set strategy for no-longer-existant sensor {}'
+                    self._logger.warn('Did not set strategy for no-longer-existant sensor {}'
                              .format(sensor_name))
                     continue
                 result = yield self.set_sampling_strategy(sensor_name, strategy)
             except KATCPSensorError, e:
-                log.error('Error reapplying strategy for sensor {0}: {1!s}'
-                          .format(sensor_name, e))
+                self._logger.error('Error reapplying strategy for sensor {0}: {1!s}'
+                                   .format(sensor_name, e))
             except Exception:
-                log.exception('Unhandled exception reapplying strategy for '
-                              'sensor {}'.format(sensor_name), exc_info=True)
+                self._logger.exception('Unhandled exception reapplying strategy for '
+                                       'sensor {}'.format(sensor_name), exc_info=True)
 
     @tornado.gen.coroutine
     @steal_docstring_from(resource.KATCPSensorsManager.poll_sensor)
