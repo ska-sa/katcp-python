@@ -284,7 +284,7 @@ class KATCPRequest(object):
 class KATCPSensorReading(collections.namedtuple(
         'KATCPSensorReading', 'received_timestamp timestamp status value')):
 
-    """Sensor reading as a (received_timestamp, status, value) tuple.
+    """Sensor reading as a (received_timestamp, timestamp, status, value) tuple.
 
     Attributes
     ----------
