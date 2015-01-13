@@ -1372,6 +1372,7 @@ def wait_sensor(sensor, value, status=None, timeout=5):
     Temporarily attaches to the sensor to get sensor updates.
     It is assumed that the sensor is getting updated by another thread.
 
+    Returns True if the value is attained matched within the timeout, else False
     """
     test_val = value if status is None else (status, value)
     tests = (lambda x: True, test_val)

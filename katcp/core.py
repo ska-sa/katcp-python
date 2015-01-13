@@ -755,6 +755,10 @@ class Sensor(object):
     default : object
         An initial value for the sensor. By default this is
         determined by the sensor type.
+    initial_status : int enum or None
+        An initial status for the sensor. If None, defaults to
+        Sensor.UNKNOWN. `initial_status` must be one of the keys in
+        Sensor.STATUSES
 
     """
     # Sensor needs the instance attributes it has and
@@ -849,9 +853,12 @@ class Sensor(object):
     #        interpretation are specific to the sensor type)
 
     def __init__(self, sensor_type, name, description=None, units='',
-                 params=None, default=None):
+                 params=None, default=None, initial_status=None):
         if params is None:
             params = []
+
+        if initial_status is None:
+            initial_status = Sensor.UNKNOWN
 
         sensor_type = self.SENSOR_SHORTCUTS.get(sensor_type, sensor_type)
 
@@ -888,7 +895,7 @@ class Sensor(object):
         # and the value and/or status from a different update.
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-        self._current_reading = Reading(time.time(), Sensor.UNKNOWN,
+        self._current_reading = Reading(time.time(), initial_status,
                                         default_value)
         self._formatter = self._kattype.pack
         self._parser = self._kattype.unpack
@@ -897,10 +904,10 @@ class Sensor(object):
 
         self.name = name
         if description is None:
-            description = '%(type)s sensor %(name)r %(unit_description)s' % \
+            description = '%(type)s sensor %(name)r %(unit_description)s' % (
                           dict(type=self.stype.capitalize(), name=self.name,
                                unit_description=('in unit '+units if units else
-                                                 'with no unit'))
+                                                 'with no unit')) )
 
         self.description = description
         self.units = units
@@ -926,12 +933,12 @@ class Sensor(object):
 
     def __repr__(self):
         cls = self.__class__
-        return "<%s.%s object name=%r at 0x%x>" % \
-               (cls.__module__, cls.__name__, self.name, id(self))
+        return "<%s.%s object name=%r at 0x%x>" % (
+            cls.__module__, cls.__name__, self.name, id(self))
 
     @classmethod
     def integer(cls, name, description=None, unit='', params=None,
-                default=None):
+                default=None, initial_status=None):
         """Instantiate a new integer sensor object.
 
         Parameters
@@ -947,13 +954,18 @@ class Sensor(object):
             [min, max] -- miniumum and maximum values of the sensor
         default : int
             An initial value for the sensor. Defaults to 0.
+        initial_status : int enum or None
+            An initial status for the sensor. If None, defaults to
+            Sensor.UNKNOWN. `initial_status` must be one of the keys in
+            Sensor.STATUSES
 
         """
-        return cls(cls.INTEGER, name, description, unit, params, default)
+        return cls(cls.INTEGER, name, description, unit, params,
+                   default, initial_status)
 
     @classmethod
     def float(cls, name, description=None, unit='', params=None,
-              default=None):
+              default=None, initial_status=None):
         """Instantiate a new float sensor object.
 
         Parameters
@@ -969,12 +981,18 @@ class Sensor(object):
             [min, max] -- miniumum and maximum values of the sensor
         default : float
             An initial value for the sensor. Defaults to 0.0.
+        initial_status : int enum or None
+            An initial status for the sensor. If None, defaults to
+            Sensor.UNKNOWN. `initial_status` must be one of the keys in
+            Sensor.STATUSES
 
         """
-        return cls(cls.FLOAT, name, description, unit, params, default)
+        return cls(cls.FLOAT, name, description, unit, params,
+                   default, initial_status)
 
     @classmethod
-    def boolean(cls, name, description=None, unit='', default=None):
+    def boolean(cls, name, description=None, unit='',
+                default=None, initial_status=None):
         """Instantiate a new boolean sensor object.
 
         Parameters
@@ -988,12 +1006,18 @@ class Sensor(object):
             if there are no applicable units.
         default : bool
             An initial value for the sensor. Defaults to False.
+        initial_status : int enum or None
+            An initial status for the sensor. If None, defaults to
+            Sensor.UNKNOWN. `initial_status` must be one of the keys in
+            Sensor.STATUSES
 
         """
-        return cls(cls.BOOLEAN, name, description, unit, None, default)
+        return cls(cls.BOOLEAN, name, description, unit, None,
+                   default, initial_status)
 
     @classmethod
-    def lru(cls, name, description=None, unit='', default=None):
+    def lru(cls, name, description=None, unit='',
+            default=None, initial_status=None):
         """Instantiate a new lru sensor object.
 
         Parameters
@@ -1007,12 +1031,18 @@ class Sensor(object):
             if there are no applicable units.
         default : enum, Sensor.LRU_*
             An initial value for the sensor. Defaults to self.LRU_NOMINAL
+        initial_status : int enum or None
+            An initial status for the sensor. If None, defaults to
+            Sensor.UNKNOWN. `initial_status` must be one of the keys in
+            Sensor.STATUSES
 
         """
-        return cls(cls.LRU, name, description, unit, None, default)
+        return cls(cls.LRU, name, description, unit, None,
+                   default, initial_status)
 
     @classmethod
-    def string(cls, name, description=None, unit='', default=None):
+    def string(cls, name, description=None, unit='',
+               default=None, initial_status=None):
         """Instantiate a new string sensor object.
 
         Parameters
@@ -1026,13 +1056,18 @@ class Sensor(object):
             if there are no applicable units.
         default : string
             An initial value for the sensor. Defaults to the empty string.
+        initial_status : int enum or None
+            An initial status for the sensor. If None, defaults to
+            Sensor.UNKNOWN. `initial_status` must be one of the keys in
+            Sensor.STATUSES
 
         """
-        return cls(cls.STRING, name, description, unit, None, default)
+        return cls(cls.STRING, name, description, unit, None,
+                   default, initial_status)
 
     @classmethod
     def discrete(cls, name, description=None, unit='', params=None,
-                 default=None):
+                 default=None, initial_status=None):
         """Instantiate a new discrete sensor object.
 
         Parameters
@@ -1049,12 +1084,18 @@ class Sensor(object):
         default : str
             An initial value for the sensor. Defaults to the first item
             of params
+        initial_status : int enum or None
+            An initial status for the sensor. If None, defaults to
+            Sensor.UNKNOWN. `initial_status` must be one of the keys in
+            Sensor.STATUSES
 
         """
-        return cls(cls.DISCRETE, name, description, unit, params, default)
+        return cls(cls.DISCRETE, name, description, unit, params,
+                   default, initial_status)
 
     @classmethod
-    def timestamp(cls, name, description=None, unit='', default=None):
+    def timestamp(cls, name, description=None, unit='',
+                  default=None, initial_status=None):
         """Instantiate a new timestamp sensor object.
 
         Parameters
@@ -1069,12 +1110,18 @@ class Sensor(object):
         default : string
             An initial value for the sensor in seconds since the Unix Epoch.
             Defaults to 0.
+        initial_status : int enum or None
+            An initial status for the sensor. If None, defaults to
+            Sensor.UNKNOWN. `initial_status` must be one of the keys in
+            Sensor.STATUSES
 
         """
-        return cls(cls.TIMESTAMP, name, description, unit, None, default)
+        return cls(cls.TIMESTAMP, name, description, unit, None,
+                   default, initial_status)
 
     @classmethod
-    def address(cls, name, description=None, unit='', default=None):
+    def address(cls, name, description=None, unit='',
+                default=None, initial_status=None):
         """Instantiate a new IP address sensor object.
 
         Parameters
@@ -1089,9 +1136,15 @@ class Sensor(object):
         default : (string, int)
             An initial value for the sensor. Tuple contaning (host, port).
             default is ("0.0.0.0", None)
+        initial_status : int enum or None
+            An initial status for the sensor. If None, defaults to
+            Sensor.UNKNOWN. `initial_status` must be one of the keys in
+            Sensor.STATUSES
 
         """
-        return cls(cls.ADDRESS, name, description, unit, None, default)
+        return cls(cls.ADDRESS, name, description, unit, None,
+                   default, initial_status)
+
 
     def attach(self, observer):
         """Attach an observer to this sensor.
@@ -1286,6 +1339,17 @@ class Sensor(object):
 
         """
         return self.read().value
+
+    def status(self):
+        """Read the current sensor status.
+
+        Returns
+        -------
+        status : enum (int)
+            The status of the sensor, one of the keys in Sensor.STATUSES
+
+        """
+        return self.read().status
 
     @classmethod
     def parse_type(cls, type_string):

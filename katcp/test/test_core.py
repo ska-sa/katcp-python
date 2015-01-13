@@ -209,6 +209,10 @@ class TestSensor(unittest.TestCase):
         self.assertEquals(s.value(), 2)
         s = Sensor.integer("an.int", "An integer.", "count", [2, 20], default=5)
         self.assertEquals(s.value(), 5)
+        self.assertEquals(s.status(), Sensor.UNKNOWN)
+        s = Sensor.integer("an.int", "An integer.", "count", [2, 20],
+                           initial_status=Sensor.NOMINAL)
+        self.assertEquals(s.status(), Sensor.NOMINAL)
 
     def test_float_sensor(self):
         """Test float sensor."""
@@ -229,6 +233,11 @@ class TestSensor(unittest.TestCase):
         self.assertEquals(s.value(), 2.0)
         s = Sensor.float("a.float", "A float.", "", [2.0, 20.0], default=5.0)
         self.assertEquals(s.value(), 5.0)
+        self.assertEquals(s.status(), Sensor.UNKNOWN)
+        s = Sensor.float("a.float", "A float.", "", [2.0, 20.0],
+                         initial_status=Sensor.WARN)
+        self.assertEquals(s.status(), Sensor.WARN)
+
 
     def test_boolean_sensor(self):
         """Test boolean sensor."""
@@ -245,6 +254,9 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s._value, True)
         s = Sensor.boolean("a.boolean", "A boolean.", "on/off", default=False)
         self.assertEqual(s._value, False)
+        s = Sensor.boolean("a.boolean", "A boolean.", "on/off",
+                           initial_status=Sensor.ERROR)
+        self.assertEquals(s.status(), Sensor.ERROR)
 
     def test_discrete_sensor(self):
         """Test discrete sensor."""
@@ -263,6 +275,9 @@ class TestSensor(unittest.TestCase):
         s = Sensor.discrete("a.discrete", "A discrete sensor.", "state",
                              ["on", "off"], default='off')
         self.assertEqual(s._value, 'off')
+        s = Sensor.discrete("a.discrete", "A discrete sensor.", "state",
+                             ["on", "off"], initial_status=Sensor.UNREACHABLE)
+        self.assertEquals(s.status(), Sensor.UNREACHABLE)
 
     def test_lru_sensor(self):
         """Test LRU sensor."""
@@ -280,6 +295,9 @@ class TestSensor(unittest.TestCase):
         s = Sensor.lru(
             "an.lru", "An LRU sensor.", "state", default=Sensor.LRU_NOMINAL)
         self.assertEqual(s._value, Sensor.LRU_NOMINAL)
+        s = Sensor.lru(
+            "an.lru", "An LRU sensor.", "state", initial_status=Sensor.FAILURE)
+        self.assertEquals(s.status(), Sensor.FAILURE)
 
     def test_string_sensor(self):
         """Test string sensor."""
@@ -293,6 +311,9 @@ class TestSensor(unittest.TestCase):
         s = Sensor.string(
             "a.string", "A string sensor.", "filename", default='baz')
         self.assertEqual(s._value, 'baz')
+        s = Sensor.string("a.string", "A string sensor.", "filename",
+                          initial_status=Sensor.WARN)
+        self.assertEquals(s.status(), Sensor.WARN)
 
     def test_timestamp_sensor(self):
         """Test timestamp sensor."""
@@ -322,6 +343,10 @@ class TestSensor(unittest.TestCase):
         s.set_formatted('12347100', 'nominal', '12247100', major=4)
         self.assertEqual(s.read(), (12347.1, katcp.Sensor.NOMINAL, 12247.1))
 
+        s = Sensor.timestamp("a.timestamp", "A timestamp sensor.", "",
+                             initial_status=Sensor.NOMINAL)
+        self.assertEquals(s.status(), Sensor.NOMINAL)
+
     def test_address_sensor(self):
         """Test address sensor."""
         s = Sensor.address("a.address", "An address sensor.", "", None)
@@ -337,6 +362,9 @@ class TestSensor(unittest.TestCase):
         s = Sensor.address("a.address", "An address sensor.", "",
                            default=('192.168.101.1', 81))
         self.assertEqual(s._value, ('192.168.101.1', 81))
+        s = Sensor.address("a.address", "An address sensor.", "",
+                           initial_status=Sensor.NOMINAL)
+        self.assertEquals(s.status(), Sensor.NOMINAL)
 
     def test_set_and_get_value(self):
         """Test getting and setting a sensor value."""
