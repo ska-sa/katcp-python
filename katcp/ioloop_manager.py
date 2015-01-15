@@ -27,6 +27,7 @@ class IOLoopManager(object):
         # Event that indicates that the ioloop is running.
         self._running = threading.Event()
         self._start_lock = threading.Lock()
+        self._daemonize = False
 
     @property
     def managed(self):
@@ -66,6 +67,7 @@ class IOLoopManager(object):
 
         with self._start_lock:
             t = threading.Thread(target=run_ioloop)
+            t.setDaemon(self._daemonize)
             try:
                 if self._ioloop_thread.isAlive():
                     raise RuntimeError('Seems that managed ioloop has already been '
@@ -74,6 +76,14 @@ class IOLoopManager(object):
                 pass
             self._ioloop_thread = t
             self._ioloop_thread.start()
+
+    def setDaemon(self, daemonic):
+        """Set daemonic state of the managed ioloop thread to True / False
+
+        Calling this method for a non-managed ioloop has no effect. Must be called before
+        start(), or it will also have no effect
+        """
+        self._daemonize = bool(daemonic)
 
     def start(self, timeout=None):
         """Start managed ioloop thread, or do nothing if not managed.
@@ -89,7 +99,7 @@ class IOLoopManager(object):
 
         if self._ioloop_managed:
             self._run_managed_ioloop()
-        else:
+        else:            #  TODO this seems inconsistent with what the docstring describes
             self._running.set()
 
         if timeout:
