@@ -332,6 +332,14 @@ class KATCPServer(object):
         """The (host, port) where the server is listening for connections."""
         return self._bindaddr
 
+    def setDaemon(self, daemonic):
+        """Set daemonic state of the managed ioloop thread to True / False
+
+        Calling this method for a non-managed ioloop has no effect. Must be called before
+        start(), or it will also have no effect
+        """
+        self._ioloop_manager.setDaemon(daemonic)
+
     def set_ioloop(self, ioloop=None):
         """Set the tornado IOLoop to use.
 
@@ -934,6 +942,15 @@ class DeviceServerBase(object):
     @property
     def bind_address(self):
         return self._server.bind_address
+
+    def setDaemon(self, daemonic):
+        """Set daemonic state of the managed ioloop thread to True / False
+
+        Calling this method for a non-managed ioloop has no effect. Must be called before
+        start(), or it will also have no effect
+        """
+        self._server.setDaemon(daemonic)
+
 
     def create_log_inform(self, level_name, msg, name, timestamp=None):
         """Create a katcp logging inform message.

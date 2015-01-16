@@ -210,7 +210,7 @@ class KATCPClientResource(resource.KATCPResource):
               will be treated equivalently.
           controlled : bool, default: False
               True if control over the device (i.e. KATCP requests) is to be exposed.
-          auto_reconnect : bool
+          auto_reconnect : bool, default: True
               If True, auto-reconnect should the network connection be closed.
           auto_reconnect_delay : float seconds. Default : 0.5s
               Delay between reconnection retries.
@@ -714,8 +714,6 @@ class IOLoopThreadWrapper(object):
 
     def decorate_callable(self, callable_, timeout=None):
         """Decorate a callable to use call_in_ioloop"""
-        timeout = timeout or self.default_timeout
-
         @wraps(callable_)
         def decorated(*args, **kwargs):
             return self.call_in_ioloop(callable_, args, kwargs, timeout)
