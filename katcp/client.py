@@ -722,8 +722,8 @@ class DeviceClient(object):
         """Set the tornado.ioloop.IOLoop instance to use.
 
         This defaults to IOLoop.current(). If set_ioloop() is never called the
-        IOLoop is started in a new thread, and will be stopped if self.stop()
-        is called.
+        IOLoop is managed: started in a new thread, and will be stopped if
+        self.stop() is called.
 
         Notes
         -----
@@ -1488,6 +1488,13 @@ class CallbackClient(AsyncClient):
                                              auto_reconnect=auto_reconnect)
         self.enable_thread_safety()
 
+    def setDaemon(self, daemonic):
+        """Set daemonic state of the managed ioloop thread to True / False
+
+        Calling this method for a non-managed ioloop has no effect. Must be called before
+        start(), or it will also have no effect
+        """
+        self._ioloop_manager.setDaemon(daemonic)
 
 class BlockingClient(CallbackClient):
     pass
