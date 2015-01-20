@@ -638,6 +638,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         Defaults to tornado.ioloop.IOLoop.current() if set_ioloop() is not called or if
         ioloop=None. Must be called before start()
         """
+        ioloop = ioloop or tornado.ioloop.IOLoop.current()
         for res in self.children.values():
             res.set_ioloop(ioloop)
 
