@@ -11,6 +11,7 @@ import unittest2 as unittest
 import logging
 import copy
 import time
+import threading
 
 import tornado
 import mock
@@ -378,15 +379,63 @@ class test_KATCPClientresource_IntegratedTimewarp(TimewarpAsyncTestCase):
     # * Request through request object, also with timeouts
     # * Sensor callbacks (probably in test_resource.py, no need for full integrated test)
 
-class test_KATCPClientResourceContainer(unittest.TestCase):
+class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
     def setUp(self):
         self.default_spec_orig = dict(clients={
-            'client1' : dict(address=('client1-addr', 1234)),
-            'client-2' : dict(address=('client2-addr', 1235))},
+            'client1': dict(address=('client1-addr', 1234), controlled=True),
+            'client-2': dict(address=('client2-addr', 1235), controlled=True),
+            'another-client': dict(address=('another-addr', 1231), controlled=True)},
                                       name='test-container',
                                       description='container for testing')
         # make a copy in case the test or DUT messes up any of the original dicts.
         self.default_spec = copy.deepcopy(self.default_spec_orig)
+        super(test_KATCPClientResourceContainer, self).setUp()
+
+    @tornado.testing.gen_test(timeout=1000000)
+    def test_groups(self):
+        spec = self.default_spec
+        spec['groups'] = dict(group1=['client1', 'another-client'],
+                              group2=['client1', 'client-2'],
+                              group3=['client1', 'client-2', 'another-client'])
+        DUT = resource_client.KATCPClientResourceContainer(copy.deepcopy(spec))
+        self.assertEqual(sorted(DUT.groups), ['group1', 'group2', 'group3'])
+        # Smoke test that no errors are raised
+        for group in DUT.groups.values():
+            group.req
+
+        # now some surgery, mocking _inspecting_client and calling _add_requests manually
+        mock_client1 = mock.Mock()
+        mock_client2 = mock.Mock()
+        mock_client_another = mock.Mock()
+        make_fake_requests = lambda mock_client: {
+            req: resource_client.KATCPClientResourceRequest(
+                req, 'Description for {}'.format(req), mock_client)
+            for req in ['req-1', 'req-2', 'req-3']}
+
+        def make_future_get_request(mock_client):
+            fake_requests = make_fake_requests(mock_client)
+            def future_get_request(key):
+                f = tornado.concurrent.Future()
+                f.set_result(fake_requests[key])
+                return f
+            return future_get_request
+        mock_client1.future_get_request = make_future_get_request(mock_client1)
+        mock_client2.future_get_request = make_future_get_request(mock_client2)
+        mock_client_another.future_get_request = make_future_get_request(
+            mock_client_another)
+
+        c1 = DUT.children.client1
+        c1._inspecting_client = mock_client1
+        yield c1._add_requests(['req-1'])
+        # ipython_done = Future()
+        # def run_ipython(locals_):
+        #     l = AttrDict(locals_)
+        #     import IPython ; IPython.embed()
+        #     ipython_done.set_result(True)
+
+        # t = threading.Thread(target=run_ipython, args=(locals(),))
+        # t.start()
+        # yield ipython_done
 
     def test_init(self):
         m_logger = mock.Mock()
@@ -395,9 +444,10 @@ class test_KATCPClientResourceContainer(unittest.TestCase):
         self.assertEqual(DUT.name, 'test-container')
         self.assertEqual(DUT.description, 'container for testing')
         child_specs = self.default_spec_orig['clients']
-        self.assertEqual(sorted(DUT.children), sorted(child_specs))
+        self.assertEqual(sorted(DUT.children),
+                         sorted(resource.escape_name(n) for n in child_specs))
         for child_name, child_spec in child_specs.items():
-            child = DUT.children[child_name]
+            child = DUT.children[resource.escape_name(child_name)]
             self.assertEqual(child.name, child_name)
             self.assertEqual(child.parent, DUT)
             self.assertEqual(child.address, child_spec['address'])
@@ -416,7 +466,8 @@ class test_KATCPClientResourceContainer(unittest.TestCase):
         DUT.set_ioloop(our_ioloop)
         DUT.start()
         for child_name in self.default_spec_orig['clients']:
-            self.assertIs(DUT.children[child_name].ioloop, our_ioloop)
+            self.assertIs(DUT.children[resource.escape_name(child_name)].ioloop,
+                          our_ioloop)
 
 class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase):
     def setUp(self):
