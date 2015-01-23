@@ -654,7 +654,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             group_clients = tuple(self.children[resource.escape_name(cn)]
                                   for cn in group_client_names)
             group = resource.ClientGroup(group_name, group_clients)
-            groups[group_name] = group
+            groups[resource.escape_name(group_name)] = group
 
         self._groups = groups
 
@@ -906,7 +906,7 @@ class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
     @property
     def children(self):
         if self.__subject__.children:
-            return MappingProxy(self.__subject__.children, self.ResourceWrapper)
+            return AttrMappingProxy(self.__subject__.children, self.ResourceWrapper)
         else:
             return AttrDict()
 
