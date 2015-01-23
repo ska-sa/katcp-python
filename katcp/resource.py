@@ -712,7 +712,7 @@ class GroupRequest(object):
         none_future.set_result(None)
         for client in self.group.clients:
             request_method = getattr(client.req, self.name, None)
-            if method:
+            if request_method:
                 result_futures[client.name] = request_method(*args, **kwargs)
             else:
                 result_futures[client.name] = none_future

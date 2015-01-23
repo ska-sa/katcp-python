@@ -732,8 +732,10 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         self._children_dirty = True
 
     def _dirty_groups(self, child):
-        for group_name in self.groups:
-            self.groups[group_name].client_updated(child)
+        groups_spec = self._resources_spec.get('groups', {})
+        for group_name, group in dict.items(self.groups):
+            if child.name in groups_spec[group_name]:
+                group.client_updated(child)
 
     def __repr__(self):
         return '<{module}.{classname}(name={name}) at 0x{id:x}>'.format(
@@ -896,6 +898,10 @@ class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
     @property
     def req(self):
         return AttrMappingProxy(self.__subject__.req, self.RequestWrapper)
+
+    @property
+    def groups(self):
+        return AttrMappingProxy(self.__subject__.groups, self.GroupWrapper)
 
     @property
     def children(self):
