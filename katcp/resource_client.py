@@ -288,8 +288,8 @@ class KATCPClientResource(resource.KATCPResource):
     def start(self):
         """Start the client and connect"""
         host, port = self.address
-        ic = self._inspecting_client = ReplyWrappedInspectingClientAsync(
-            host, port, ioloop=self._ioloop_set_to, auto_reconnect=self.auto_reconnect)
+        ic = self._inspecting_client = self.get_inspecting_client(
+            host, port, self._ioloop_set_to)
         self.ioloop = ic.ioloop
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
         ic.set_state_callback(self._inspecting_client_state_callback)
@@ -302,7 +302,19 @@ class KATCPClientResource(resource.KATCPResource):
         self.reapply_sampling_strategies = self._sensor_manager.reapply_sampling_strategies
         log_future_exceptions(self._logger, ic.connect())
 
+    def get_inspecting_client(self, host, port, ioloop_set_to):
+        """Return an instance of :class:`ReplyWrappedInspectingClientAsync` or similar
+
+        Provided to ease testing. Dynamically overriding this method after instantiation
+        but before start() is called allows for deep brain surgery. See
+        :class:`katcp.fake_clients.TBD`
+
+        """
+        return ReplyWrappedInspectingClientAsync(
+            host, port, ioloop=ioloop_set_to, auto_reconnect=self.auto_reconnect)
+
     def until_state(self, state):
+
         """Return a tornado Future that will resolve when the requested state is set
 
         State can be one of ("disconnected", "syncing", "synced")

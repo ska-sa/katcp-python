@@ -126,7 +126,7 @@ class InspectingClientAsync(object):
         self._running = False
 
         # Setup KATCP device.
-        self.katcp_client = _InformHookDeviceClient(
+        self.katcp_client = self.get_inform_hook_client(
             host, port, auto_reconnect=auto_reconnect, logger=logger)
         self.ioloop = ioloop or tornado.ioloop.IOLoop.current()
         self.katcp_client.set_ioloop(ioloop)
@@ -164,9 +164,19 @@ class InspectingClientAsync(object):
     def __del__(self):
         self.close()
 
+    def get_inform_hook_client(self, host, port, *args, **kwargs):
+        """Return an instance of :class:`_InformHookDeviceClient` or similar
+
+        Provided to ease testing. Dynamically overriding this method after instantiation
+        but before start() is called allows for deep brain surgery. See
+        :class:`katcp.fake_clients.TBD`
+
+        """
+        return _InformHookDeviceClient(host, port, *args, **kwargs)
+
     @property
     def state(self):
-        """Current client state"""
+        """Current client state."""
         return self._state.state
 
     @property
@@ -202,14 +212,18 @@ class InspectingClientAsync(object):
         # happened yet. Also, won't match is_connected()
         return self.katcp_client.until_protocol()
 
-    @tornado.gen.coroutine
     def until_synced(self):
-        yield self._state.until_state(InspectingClientStateType(
+        return self._state.until_state(InspectingClientStateType(
             connected=True, synced=True, model_changed=False, data_synced=True))
 
-    @tornado.gen.coroutine
+    def until_not_synced(self):
+        unsynced_states = tuple(state for state in self.valid_states
+                               if not state.synced)
+        return self._state.until_state_in(*unsynced_states)
+
+
     def until_data_synced(self):
-        yield self._state.until_state_in(InspectingClientStateType(
+       return self._state.until_state_in(InspectingClientStateType(
             connected=True, synced=False, model_changed=True, data_synced=True),
                   InspectingClientStateType(
             connected=True, synced=True, model_changed=False, data_synced=True))
@@ -284,6 +298,7 @@ class InspectingClientAsync(object):
                                        model_changed=False, data_synced=True)
                 yield until_any(self._interface_changed.until_set(),
                                 self._disconnected.until_set())
+                print ('interface changed or disconnected')
                 self._interface_changed.clear()
                 continue
                 # Next loop through should cause re-inspection and handle state updates
@@ -316,6 +331,9 @@ class InspectingClientAsync(object):
 
         if self._state_cb:
             yield maybe_future(self._state_cb(state, model_changes))
+        # Make sure other callbacks in response to state change get to run before we
+        # change state again
+        yield tornado.gen.moment
 
     def set_state_callback(self, cb):
         """Set user callback for state changes
@@ -334,8 +352,6 @@ class InspectingClientAsync(object):
         self.join()
 
     def start(self, timeout=None):
-        # Specific connect methods are defined in both the Async and
-        # Blocking Inspect Client classes.
         return self.connect(timeout)
 
     def stop(self, timeout=None):
@@ -698,5 +714,3 @@ class InspectingClientAsync(object):
                 added_keys.add(key)
 
         return added_keys, removed_keys
-
-

@@ -357,9 +357,11 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self.assertEqual(state, inspecting_client.InspectingClientStateType(
             connected=True, synced=False, model_changed=False, data_synced=False))
         self.assertIs(model_changes, None)
-        # Due to the structure of the state loop the initial state is sent twice, hence +
-        # 2. If the implmentation changes having + 1 would also be OK.
-        yield self._check_no_cb(num_calls_before + 2)
+        # Due to the structure of the state loop the initial state may be sent twice
+        # before we get her, and was the case for the initial implementation. Changes made
+        # on 2015-01-26 caused it to happy only once, hence + 1. If the implementation
+        # changes having + 2 would also be OK.
+        yield self._check_no_cb(num_calls_before + 1)
 
         # Now let the server send #version-connect informs
         num_calls_before = len(self.done_state_cb_futures)
