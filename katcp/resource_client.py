@@ -250,10 +250,6 @@ class KATCPClientResource(resource.KATCPResource):
         self._req = AttrDict()
         # Save the pop() / items() methods in case a sensor/request with the same name is
         # added
-        self._sensor_pop = self.sensor.pop
-        self._sensor_items = self.sensor.items
-        self._req_pop = self.req.pop
-        self._req_items = self.req.items
         self._state = AsyncState(("disconnected", "syncing", "synced"))
         self._connected = AsyncCallbackEvent(self._update_state)
         self._sensors_synced = AsyncCallbackEvent(self._update_state)
@@ -317,11 +313,15 @@ class KATCPClientResource(resource.KATCPResource):
         """Convenience method to wait (with Future) until client is synced"""
         return self._state.until_state('synced')
 
+    @steal_docstring_from(resource.KATCPResource.wait)
+    def wait(self, sensor_name, condition, timeout=5):
+        raise NotImplementedError
+
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True):
         return list_sensors(
-            self._sensor_items(), filter, strategy, status, use_python_identifiers)
+            dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
 
     def _request_factory(self, name, description):
         return KATCPClientResourceRequest(name, description, self._inspecting_client)
@@ -370,21 +370,31 @@ class KATCPClientResource(resource.KATCPResource):
         # Instantiate KATCPRequest instances and store on self.req
         request_instances = yield {key: self._inspecting_client.future_get_request(key)
                                    for key in request_keys}
+        added_names = []
         for r_name, r_obj in request_instances.items():
             r_name_escaped = resource.escape_name(r_name)
             if r_name_escaped in self.always_excluded_requests:
                 continue
             if self.controlled or r_name_escaped in self.always_allowed_requests:
                 self._req[r_name_escaped] = r_obj
+                added_names.append(r_name_escaped)
+
+        if self.parent and added_names:
+            self.parent._child_add_requests(self, added_names)
 
     @tornado.gen.coroutine
     def _remove_requests(self, request_keys):
         # Remove KATCPRequest instances from self.req
+        removed_names = []
         for r_name in request_keys:
             r_name_escaped = resource.escape_name(r_name)
             # Must not raise exception when popping a non-existing request, since it may
             # never have been added due to request exclusion rules.
-            self._req_pop(r_name_escaped, None)
+            if dict.pop(self.req, r_name_escaped, None):
+                removed_names.append(r_name_escaped)
+
+        if self.parent and removed_names:
+            self.parent._child_remove_requests(self, removed_names)
 
     @tornado.gen.coroutine
     def _add_sensors(self, sensor_keys):
@@ -392,24 +402,35 @@ class KATCPClientResource(resource.KATCPResource):
         sensor_instances = yield {key: self._inspecting_client.future_get_sensor(key)
                                   for key in sensor_keys}
         # Store KATCPSensor instances in self.sensor
+        added_names = []
         for s_name, s_obj in sensor_instances.items():
             s_name_escaped = resource.escape_name(s_name)
             self._sensor[s_name_escaped] = s_obj
+            added_names.append(s_name_escaped)
 
-        # TODO Notify parent that sensors were added? Or have a dynamic parent sensor
-        # object that inspects all children?
+        if self.parent:
+            self.parent._child_add_sensors(self, added_names)
 
     @tornado.gen.coroutine
     def _remove_sensors(self, sensor_keys):
         # Remove KATCPSensor instances from self.sensor
+        removed_names = []
         for s_name in sensor_keys:
             s_name_escaped = resource.escape_name(s_name)
-            self._sensor_pop(s_name_escaped)
-        # TODO Notify parent that sensors were removed? Or have a dynamic parent sensor
-        # object that inspects all children? Or perhaps just watch chiled synced state
+            dict.pop(self.sensor, s_name_escaped)
+            removed_names.append(s_name_escaped)
+
+        if self.parent:
+            self.parent._child_remove_sensors(self, removed_names)
 
     def stop(self):
         self._inspecting_client.stop()
+
+    def __repr__(self):
+        return '<{module}.{classname}(name={name}) at 0x{id:x}>'.format(
+            module=self.__class__.__module__,
+            classname=self.__class__.__name__,
+            name=self.name, id=id(self))
 
 resource.KATCPResource.register(KATCPClientResource)
 
@@ -517,16 +538,6 @@ resource.KATCPSensorsManager.register(KATCPClientResourceSensorsManager)
 
 class KATCPClientResourceRequest(resource.KATCPRequest):
 
-    @property
-    @steal_docstring_from(resource.KATCPRequest.name)
-    def name(self):
-        return self._name
-
-    @property
-    @steal_docstring_from(resource.KATCPRequest.description)
-    def description(self):
-        return self._description
-
     def __init__(self, name, description, client):
         """Initialize request with given description and network client
 
@@ -541,9 +552,8 @@ class KATCPClientResourceRequest(resource.KATCPRequest):
             method like :meth:`ReplyWrappedInspectingClientAsync.wrapped_request`.
 
         """
-        self._name = name
-        self._description = description
         self._client = client
+        super(KATCPClientResourceRequest, self).__init__(name, description)
 
     def __call__(self, *args, **kwargs):
         return self._client.wrapped_request(self.name, *args, **kwargs)
@@ -558,17 +568,19 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     """
     @property
     def req(self):
-        # Inefficient, since whole dict is recreated each time this attribute is
-        # accessed. Could be sped up by e.g. having the children calling back when
-        # requests are added/removed to maintain a dirty flag for a cached copy, or
-        # otherwise think of some more efficent way of proxying the children.  Lets leave
-        # it as simple as possible until it turns out to be problem.
-        return self._create_attrdict_from_children('req')
+        if self._children_dirty:
+            self._req = self._create_attrdict_from_children('req')
+            self._children_dirty = False
+
+        return self._req
 
     @property
     def sensor(self):
-        # See performance comment in req above.
-        return self._create_attrdict_from_children('sensor')
+        if self._children_dirty:
+            self._sensor = self._create_attrdict_from_children('sensor')
+            self._children_dirty = False
+
+        return self._sensor
 
     @property
     def address(self):
@@ -590,6 +602,10 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def children(self):
         return self._children
 
+    @property
+    def groups(self):
+        return self._groups
+
     def __init__(self, resources_spec, logger=log):
         """Initialise Container with specifications for all the child resources
 
@@ -604,10 +620,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                      is the name of the resource. Note that the `name` key in the
                      individual resource spec dicts should not be specified, and will
                      automatically be filled using the <name> key above.
-
-        # TODO (NM)
-
-          "groups" : dict of resource groupings with keys: <group-name> : seq of
+          "groups" : optional dict of resource groupings with keys: <group-name> : seq of
             <group-member>* where <group-name> is the name of the group and
             <group-member>* is a subset of clients' names as in the "clients" dict
             above. Also, the <group-name> set must be disjoint from the <name> set above.
@@ -619,18 +632,31 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         self._logger = logger
         self._name = resources_spec['name']
         self._description = resources_spec.get('description', '')
+        self._children_dirty = True   # Are we out of sync with the children?
         self._init_resources()
+        self._init_groups()
 
     def _init_resources(self):
         resources = self._resources_spec['clients']
-        children = {}
+        children = AttrDict()
         for res_name, res_spec in resources.items():
             # Make a copy since we'll be modifying the dict
             res_spec = dict(res_spec)
             res_spec['name'] = res_name
             res = KATCPClientResource(res_spec, parent=self, logger=self._logger)
-            children[res_name] = res
+            children[resource.escape_name(res_name)] = res
         self._children = children
+
+    def _init_groups(self):
+        group_configs = self._resources_spec.get('groups', {})
+        groups = AttrDict()
+        for group_name, group_client_names in group_configs.items():
+            group_clients = tuple(self.children[resource.escape_name(cn)]
+                                  for cn in group_client_names)
+            group = resource.ClientGroup(group_name, group_clients)
+            groups[resource.escape_name(group_name)] = group
+
+        self._groups = groups
 
     def set_ioloop(self, ioloop=None):
         """Set the tornado ioloop to use
@@ -639,45 +665,42 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         ioloop=None. Must be called before start()
         """
         ioloop = ioloop or tornado.ioloop.IOLoop.current()
-        for res in self.children.values():
+        for res in dict.values(self.children):
             res.set_ioloop(ioloop)
 
     def start(self):
         """Start and connect all the subordinate clients"""
-        for res in self.children.values():
+        for res in dict.values(self.children):
             res.start()
 
     @tornado.gen.coroutine
     def until_synced(self):
         """Return a tornado Future; resolves when all subordinate clients are synced"""
-        yield [r.until_synced() for r in self.children.values()]
+        yield [r.until_synced() for r in dict.values(self.children)]
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True):
         return list_sensors(
-            # TODO This won't work because it is using _sensor_items. Perhaps just use
-            # dict.items on the computed attributed?
-            self._sensor_items(), filter, strategy, status, use_python_identifiers)
+            dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
 
     def _create_attrdict_from_children(self, attr):
         attrdict = AttrDict()
-        for child_name, child_resource in self.children.items():
+        for child_name, child_resource in dict.items(self.children):
             prefix = resource.escape_name(child_name) + '_'
-            items_attr = '_' + attr + '_items'
-            for item_name, item in getattr(child_resource, items_attr)():
+            for item_name, item in dict.items(getattr(child_resource, attr)):
                 full_item_name = prefix + item_name
                 attrdict[full_item_name] = item
         return attrdict
 
     def start(self):
         """Start all child resources"""
-        for child in self.children.values():
+        for child in dict.values(self.children):
             child.start()
 
     def stop(self):
         """Stop all child resources"""
-        for child_name, child in self.children.items():
+        for child_name, child in dict.items(self.children):
             # Catch child exceptions when stopping so we make sure to stop all children
             # that want to listen.
             try:
@@ -685,6 +708,40 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             except Exception:
                 self._logger.exception('Exception stopping child {!r}'
                                        .format(child_name))
+
+    @steal_docstring_from(resource.KATCPResource.wait)
+    def wait(self, sensor_name, condition, timeout=5):
+        raise NotImplementedError
+
+    def _child_add_requests(self, child, sensor_keys):
+        assert resource.escape_name(child.name) in self.children
+        self._children_dirty = True
+        self._dirty_groups(child)
+
+    def _child_remove_requests(self, child, sensor_keys):
+        assert resource.escape_name(child.name) in self.children
+        self._children_dirty = True
+        self._dirty_groups(child)
+
+    def _child_add_sensors(self, child, sensor_keys):
+        assert resource.escape_name(child.name) in self.children
+        self._children_dirty = True
+
+    def _child_remove_sensors(self, child, sensor_keys):
+        assert resource.escape_name(child.name) in self.children
+        self._children_dirty = True
+
+    def _dirty_groups(self, child):
+        groups_spec = self._resources_spec.get('groups', {})
+        for group_name, group in dict.items(self.groups):
+            if child.name in groups_spec[group_name]:
+                group.client_updated(child)
+
+    def __repr__(self):
+        return '<{module}.{classname}(name={name}) at 0x{id:x}>'.format(
+            module=self.__class__.__module__,
+            classname=self.__class__.__name__,
+            name=self.name, id=id(self))
 
 class IOLoopThreadWrapper(object):
     default_timeout = None
@@ -707,7 +764,7 @@ class IOLoopThreadWrapper(object):
         except TimeoutError:
             raise
         except Exception:
-            # If we have an exception use the tornad future instead since it will print a
+            # If we have an exception use the tornado future instead since it will print a
             # nicer traceback.
             tornado_future.result()
             # Should never get here since the tornado future should raise
@@ -802,10 +859,25 @@ class AttrMappingProxy(MappingProxy):
     def __dir__(self):
         return self.keys()
 
+class ThreadSafeKATCPClientGroupWrapper(ThreadSafeMethodAttrWrapper):
+    """Thread safe wrapper for :class:`resource.ClientGroup`"""
+
+    __slots__ = ['RequestWrapper']
+
+    def __init__(self, subject, ioloop_wrapper):
+        self.RequestWrapper = partial(ThreadSafeKATCPClientResourceRequestWrapper,
+                                      ioloop_wrapper=ioloop_wrapper)
+        super(ThreadSafeKATCPClientGroupWrapper, self).__init__(
+            subject, ioloop_wrapper)
+
+    @property
+    def req(self):
+        return AttrMappingProxy(self.__subject__.req, self.RequestWrapper)
+
 class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
     """Should work with both KATCPClientResource or KATCPClientResourceContainer"""
 
-    __slots__ = ['ResourceWrapper', 'SensorWrapper', 'RequestWrapper']
+    __slots__ = ['ResourceWrapper', 'SensorWrapper', 'RequestWrapper', 'GroupWrapper']
 
     def __init__(self, subject, ioloop_wrapper):
         self.ResourceWrapper = partial(ThreadSafeKATCPClientResourceWrapper,
@@ -814,6 +886,8 @@ class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
                                      ioloop_wrapper=ioloop_wrapper)
         self.RequestWrapper = partial(ThreadSafeKATCPClientResourceRequestWrapper,
                                       ioloop_wrapper=ioloop_wrapper)
+        self.GroupWrapper = partial(ThreadSafeKATCPClientGroupWrapper,
+                                       ioloop_wrapper=ioloop_wrapper)
         super(ThreadSafeKATCPClientResourceWrapper, self).__init__(
             subject, ioloop_wrapper)
 
@@ -826,9 +900,15 @@ class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
         return AttrMappingProxy(self.__subject__.req, self.RequestWrapper)
 
     @property
+    def groups(self):
+        return AttrMappingProxy(self.__subject__.groups, self.GroupWrapper)
+
+    @property
     def children(self):
         if self.__subject__.children:
-            return MappingProxy(self.__subject__.children, self.ResourceWrapper)
+            return AttrMappingProxy(self.__subject__.children, self.ResourceWrapper)
+        else:
+            return AttrDict()
 
     @property
     def parent(self):

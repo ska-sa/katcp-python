@@ -8,9 +8,10 @@ import logging
 import tornado
 
 from tornado.gen import Return
+from tornado.concurrent import Future
 
 from katcp import Message, Sensor
-from katcp.core import hashable_identity
+from katcp.core import hashable_identity, AttrDict
 from katcp.sampling import SampleStrategy
 
 logger = logging.getLogger(__name__)
@@ -157,9 +158,36 @@ class KATCPResource(object):
 
     @abc.abstractproperty
     def children(self):
-        """Dict of subordinate KATCPResource objects keyed by their names."""
+        """AttrDict of subordinate KATCPResource objects keyed by their names."""
 
-    @abc.abstractproperty
+    @abc.abstractmethod
+    def wait(self, sensor_name, condition, timeout=5):
+        """Wait for a sensor in this resource to satisfy a condition.
+
+        Parameters
+        ----------
+        sensor_name : string
+            The name of the sensor to check
+        condition : object or callable or seq
+            Conditions to be evaluated TODO, use SensorTranstionWaiter thingum
+        timeout : float
+            The timeout in seconds
+
+        Returns
+        -------
+        This command returns a tornado Future that resolves with True if the sensor values
+        satisifed the condition with the timeout, else resolves with False.
+
+        Raises
+        ------
+        Resolves with a :class:`KATCPSensorError` exception if the sensors does not
+        have a strategy set.
+
+        """
+        # TODO, consider putting implementation on KATCPSensor, so just calling
+        # KATCPSensor.wait
+
+    @abc.abstractmethod
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True):
         """List sensors available on this resource matching certain criteria.
@@ -247,13 +275,25 @@ class KATCPRequest(object):
     """
     __metaclass__ = abc.ABCMeta
 
-    @abc.abstractproperty
+    def __init__(self, name, description):
+        self._name = name
+        self._description = description
+        self.__doc__ = '\n'.join(('KATCP Documentation',
+                                  '===================',
+                                  description,
+                                  'KATCPRequest Documentation',
+                                  '==========================',
+                                  self.__doc__ or ''))
+
+    @property
     def name(self):
         """Name of the KATCP request."""
+        return self._name
 
-    @abc.abstractproperty
+    @property
     def description(self):
         """Description of KATCP request as obtained from the ?help request."""
+        return self._description
 
     @abc.abstractmethod
     def __call__(self, *args, **kwargs):
@@ -456,6 +496,14 @@ class KATCPSensor(object):
         return self._reading
 
     @property
+    def value(self):
+        return self._reading.value
+
+    @property
+    def status(self):
+        return self._reading.status
+
+    @property
     def sampling_strategy(self):
         """Current sampling strategy"""
         return self._manager.get_sampling_strategy(self.name)
@@ -611,3 +659,162 @@ class KATCPReply(_KATCPReplyTuple):
     def succeeded(self):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
+
+class GroupRequest(object):
+    """Couroutine wrapper around a specific KATCP request for a group of clients.
+
+    Each available KATCP request supported by group has an associated
+    :class:`GroupRequest` object in the hierarchy. This wrapper is mainly for
+    interactive convenience. It provides the KATCP request help string as a
+    docstring accessible via IPython's question mark operator.
+
+    Call Parameters
+    ---------------
+
+    Call parameters are all forwarded to the :class:`KATCPRequest` instance of each
+    client in the group.
+
+    Return Value
+    ------------
+    Returns a tornado future that resolves with a :class:`GroupResults` instance that
+    contains the replies of each client. If a particular client does not have the request,
+    its result is None.
+
+    """
+    def __init__(self, group, name, description):
+        """Initialise the GroupRequest
+
+        Parameters
+        ----------
+        group : :class:`ClientGroup` object
+            Client group to which requests will be sent
+        name : string
+            Name of the KATCP request
+        description : string
+            Help string associated with this KATCP request
+
+        """
+
+        self.group = group
+        self.name = name
+        self.description = description
+        self.__doc__ = '\n'.join(('KATCP Documentation',
+                                  '===================',
+                                  description,
+                                  'GroupRequest Documentation',
+                                  '==========================',
+                                  self.__doc__ or ''))
+
+    @tornado.gen.coroutine
+    def __call__(self, *args, **kwargs):
+        result_futures = {}
+        none_future = Future()
+        none_future.set_result(None)
+        for client in self.group.clients:
+            request_method = getattr(client.req, self.name, None)
+            if request_method:
+                result_futures[client.name] = request_method(*args, **kwargs)
+            else:
+                result_futures[client.name] = none_future
+
+        results = yield result_futures
+        raise Return(GroupResults(results))
+
+class GroupResults(dict):
+    """The result of a group request.
+
+    This has a dictionary interface, with the client names as keys and the
+    corresponding replies from each client as values. The replies are stored as
+    :class:`KATCPReply` objects, or are None for clients
+    that did not support the request.
+
+    The result will evalue to a truthy value if all the requests succeeded, i.e.
+    ::
+
+        if result:
+            handle_success()
+        else:
+            handle_failure()
+
+    should work as expected.
+
+    """
+    def __nonzero__(self):
+        """True if katcp request succeeded on all clients."""
+        return all(self.itervalues())
+
+    @property
+    def succeeded(self):
+        """True if katcp request succeeded on all clients."""
+        return bool(self)
+
+
+
+class ClientGroup(object):
+    """Create a group of similar clients.
+
+    Parameters
+    ----------
+    name : str
+        Name of the group of clients.
+    clients : list of :class:`KATCPResource` objects
+        Clients to put into the group.
+    """
+    def __init__(self, name, clients):
+        self.name = name
+        self._clients_dirty = True
+        self.clients = tuple(clients)
+
+    def __iter__(self):
+        """Iterate over client members of group."""
+        return iter(self.clients)
+
+    def __len__(self):
+        """Number of client members in group."""
+        return len(self.clients)
+
+
+    @property
+    def req(self):
+        if self._clients_dirty:
+            self._req = AttrDict()
+            for client in self.clients:
+                for name, request in dict.iteritems(client.req):
+                    if not name in self._req:
+                        self._req[name] = GroupRequest(self, name, request.description)
+            self._clients_dirty = False
+
+        return self._req
+
+
+    def client_updated(self, client):
+        """Called to notify this array that the client has been updated."""
+        assert client in self.clients
+        self._clients_dirty = True
+
+    @abc.abstractmethod
+    def wait(self, sensor_name, condition, timeout=5):
+        """Wait for a sensor present on all clients in the group to satisfy a condition.
+
+        Parameters
+        ----------
+        sensor_name : string
+            The name of the sensor to check
+        condition : object or callable or seq
+            Conditions to be evaluated TODO, use SensorTranstionWaiter thingum
+        timeout : float
+            The timeout in seconds
+
+        Returns
+        -------
+        This command returns a tornado Future that resolves with True if the sensor values
+        satisifed the condition with the timeout, else resolves with False.
+
+        Raises
+        ------
+        Resolves with a :class:`KATCPSensorError` exception if any of the sensors do not
+        have a strategy set, or if the named sensor is not present
+
+        """
+        # TODO, consider putting implementation on KATCPSensor, so just calling
+        # KATCPSensor.wait

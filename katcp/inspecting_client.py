@@ -430,7 +430,7 @@ class InspectingClientAsync(object):
             sen = {'description': msg.arguments[1],
                    'unit': msg.arguments[2],
                    'sensor_type': msg.arguments[3],
-                   'params':msg.arguments[4:]}
+                   'params': msg.arguments[4:]}
             self._update_index(self._sensors_index, sen_name, sen)
 
         added, removed = self._difference(
