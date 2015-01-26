@@ -1532,19 +1532,23 @@ class AsyncState(object):
     def valid_states(self):
         return self._valid_states
 
-    def __init__(self, valid_states):
+    def __init__(self, valid_states, initial_state=None):
         """Init with a seq of valid states
 
         Parameters
         ----------
         valid_states : ordered seq of hashable types
             Valid states, will be turned into a frozen set
-
-        The initial state will be the first state in the seq
+        initial_state: member of `valid_states`, or None
+            If None, the initial state will be the first state in the seq
         """
         valid_states = tuple(valid_states)
         self._valid_states = frozenset(valid_states)
-        self._state = valid_states[0]
+        if initial_state is None:
+            self._state = valid_states[0]
+        else:
+            self._state = initial_state
+        assert(self._state in valid_states)
         self._waiting_futures = {state: tornado_Future() for state in valid_states}
 
     def set_state(self, state):
