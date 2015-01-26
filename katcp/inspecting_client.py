@@ -155,10 +155,19 @@ class InspectingClientAsync(object):
                 connected=True, synced=False, model_changed=False, data_synced=True),
             InspectingClientStateType(
                 connected=True, synced=True, model_changed=False, data_synced=True)))
-        self._state = katcp.core.AsyncState(self.valid_states)
+        self._state = katcp.core.AsyncState(
+            self.valid_states,
+            InspectingClientStateType(
+                connected=False, synced=False, model_changed=False, data_synced=False)
+        )
 
     def __del__(self):
         self.close()
+
+    @property
+    def state(self):
+        """Current client state"""
+        return self._state.state
 
     @property
     def sensors(self):
