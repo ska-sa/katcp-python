@@ -1009,6 +1009,154 @@ class DeviceTestServer(DeviceServer):
         super(DeviceTestServer, self).stop(*args, **kwargs)
 
 
+class SensorComparisonMixin(object):
+    """Mixin to test that katcp.Sensor objects match specified criteria.
+
+    Should be mixed in with unittest.TestCase subclasses.
+
+    """
+
+    # Mapping of description keys to functions that extract the
+    # value of the appropriate key from a sensor
+    key_fns = dict(
+        name=lambda s: s.name,
+        status=lambda s: s._status,
+        type=lambda s: s.SENSOR_TYPE_LOOKUP[s.stype],
+        value=lambda s: s.value(),
+        timestamp=lambda s: s.read()[0],
+        description=lambda s: s.description,
+        units=lambda s: s.units,
+        params=lambda s: s.params,)
+
+    def _get_sensor_description(self, sensor, desired_keys=None, ignore_keys=()):
+        """Return a dict description of a sensor and its values"""
+
+        key_fns = self.key_fns
+        if desired_keys == None:
+            desired_keys = set(key_fns.keys())
+        else:
+            desired_keys = set(desired_keys)
+        desired_keys = desired_keys - set(ignore_keys)
+
+        def get_sensor_key(sensor, key):
+            try: key_fn = key_fns[key]
+            except KeyError, e: raise KeyError('Unknown sensor key: ' + e.message)
+            return key_fn(sensor)
+
+        sensor_description = {}
+        for key in desired_keys:
+            sensor_description[key] = get_sensor_key(sensor, key)
+        return sensor_description
+
+    def assert_sensor_equal(self, actual_sensor, desired_sensor, ignore_attributes=()):
+        """Test that two sensor objects are equal, optionally ignoring some attributes
+
+        Parameters
+        ==========
+
+        actual_sensor : katcp.Sensor
+            The actual sensor to be checked
+        desired_sensor : katcp.Sensor
+            The model sensor
+        ignore_attributes : seq of str, defaults to empty tuple
+            Sensor attributes that should not taken into account for the
+            comparison. Matches the keys as defined in assert_sensor_equal_description()'s
+            docstring.
+        """
+        actual_description = self._get_sensor_description(
+            actual_sensor, ignore_keys=ignore_attributes)
+        desired_description = self._get_sensor_description(
+            desired_sensor, ignore_keys=ignore_attributes)
+        self.assertEqual(actual_description, desired_description)
+
+    def assert_sensor_equal_description(self, actual_sensor, desired_description):
+        """Test that a Sensor object (actual) matches a description (desired)
+
+        The desired sensor is a dict with the parameters that should be
+        tested
+
+        Parameters
+        ==========
+
+        actual_sensor : katcp.Sensor
+        desired_description : dict
+           The following keys are tested:
+
+            name : str (sensor name)
+            status : int (sensor status enumeration, e.g. Sensor.NOMINAL)
+            type : int (sensor type enumeration, e.g. Sensor.INTEGER)
+            value : obj (sensor value)
+            timestamp : float (value timestamp)
+            description : str (sensor description)
+            units : str (sensor units)
+            params : list (sensor parameters as passsed to the constructor)
+
+            If a key is left out of the description it is ignored, except for `name` which
+            is required.
+        """
+        if 'name' not in desired_description:
+            # The assert_sensors_equal_description() call doesn't work without a
+            # 'name' key
+            desired_description = desired_description.copy()
+            desired_description['name'] = actual_sensor.name
+        self.assert_sensors_equal_description(
+            [actual_sensor], [desired_description])
+
+    def assert_sensors_equal_description(self, actual_sensors, desired_description):
+        """Test that a list of Sensor objects (actual) match a description (desired)
+
+        Each desired sensor is a dict with the parameters that should be
+        tested
+
+        Parameters
+        ==========
+
+        actual sensors : seq of katcp.Sensor objects
+        desired_description : seq of dict
+            Each dict should have the format as described in
+            assert_sensor_equal_description()
+
+        The order of the actual or desired sensor sequence is not important, sensors are
+        matched up on the basis of name.
+        """
+        actual_sensor_dict = dict((s.name, s) for s in actual_sensors)
+        desired_description_dict = dict(
+            (s['name'], s) for s in desired_description)
+        # Check that the sensor names match
+        self.assertEqual(sorted(actual_sensor_dict.keys()),
+                         sorted(desired_description_dict.keys()))
+
+        # Build description of the actual sensors in the same format
+        # as desired_description
+        actual_description_dict = {}
+        for name, desired_info in desired_description_dict.items():
+            actual_description_dict[name] = self._get_sensor_description(
+                actual_sensor_dict[name], desired_info.keys())
+
+        self.maxDiff = None     # Make unittest print differences even
+                                # if they are large
+        self.assertEqual(actual_description_dict, desired_description_dict)
+
+    def assert_sensors_value_conditions(self, actual_sensors, value_tests):
+        """Test that a list of Sensor objects (actual) match value_tests
+
+        Parameters
+        ----------
+        actual_sensors -- List of sensor objects
+        value_tests -- dict with
+           value_tests['sensor_name'] : Callable value test. Sould raise
+               AssertionError if the test fails
+        """
+
+        actual_sensor_dict = dict((s.name, s) for s in actual_sensors)
+        # Check that all the requested sensors are present
+        self.assertTrue(all(name in actual_sensor_dict
+                             for name in value_tests.keys()))
+
+        for name, test in value_tests.items():
+            test(actual_sensor_dict[name].value())
+
+
 class TestUtilMixin(object):
     """Mixin class for making assertions about lists of KATCP messages."""
     def _assert_msgs_length(self, actual_msgs, expected_number):
