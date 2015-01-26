@@ -27,6 +27,11 @@ class TestICAClass(tornado.testing.AsyncTestCase):
 
         self.client.set_state_callback(self._cb_state)
 
+    def test_initial_state(self):
+        self.assertEqual(self.client.state,
+                         inspecting_client.InspectingClientStateType(
+            connected=False, synced=False, model_changed=False, data_synced=False))
+
     def _cb_state(self, state, model_changes):
         """A callback used in the test."""
         self.stop((state, model_changes))

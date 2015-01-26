@@ -165,6 +165,11 @@ class InspectingClientAsync(object):
         self.close()
 
     @property
+    def state(self):
+        """Current client state"""
+        return self._state.state
+
+    @property
     def sensors(self):
         """A list of known sensors."""
         return self._sensors_index.keys()
