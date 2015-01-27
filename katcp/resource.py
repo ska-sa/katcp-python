@@ -220,7 +220,7 @@ class KATCPResource(object):
         """
 
     @tornado.gen.coroutine
-    def set_sensor_strategies(self, filter, strategy_and_params, **list_sensors_args):
+    def set_sensor_strategies(self, filter, strategy_and_params, **list_sensor_args):
         """Set a sampling strategy for all sensors that match the specified filter.
 
         Parameters
@@ -256,7 +256,7 @@ class KATCPResource(object):
             try:
                 yield sensor_res.object.set_sampling_strategy(strategy_and_params)
                 sensors_strategies[sensor_res.python_identifier] = (
-                    True, sensor_obj.get_sampling_strategy())
+                    True, sensor_res.object.sampling_strategy)
             except Exception:
                 sensors_strategies[sensor_res.python_identifier] = (
                     False, sys.exc_info())
