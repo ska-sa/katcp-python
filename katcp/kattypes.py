@@ -668,35 +668,19 @@ def request(*types, **options):
             # We must be on the inside. Introspect the parameter names.
             all_argnames = inspect.getargspec(handler)[0]
 
-        # Slightly hacky way of determining whether there is a req
-        # For backward-compatibility also check for 'sock' and handle it the
-        # same as 'req'
-        has_req = (check_req and len(all_argnames) > 1 and
-                   all_argnames[1] in ("req", "sock"))
-
-        params_start = 1
-        if has_req:
-            params_start += 1
+        params_start = 2        # Skip 'self' and 'req' parameters
         if include_msg:
             params_start += 1
         # Get other parameter names
         argnames = all_argnames[params_start:]
 
         def raw_handler(self, *args):
-            if has_req:
-                (req, msg) = args
-                new_args = unpack_types(types, msg.arguments, argnames, major)
-                if include_msg:
-                    return handler(self, req, msg, *new_args)
-                else:
-                    return handler(self, req, *new_args)
+            (req, msg) = args
+            new_args = unpack_types(types, msg.arguments, argnames, major)
+            if include_msg:
+                return handler(self, req, msg, *new_args)
             else:
-                (msg,) = args
-                new_args = unpack_types(types, msg.arguments, argnames, major)
-                if include_msg:
-                    return handler(self, msg, *new_args)
-                else:
-                    return handler(self, *new_args)
+                return handler(self, req, *new_args)
 
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__

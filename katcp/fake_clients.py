@@ -5,28 +5,12 @@ import tornado.concurrent
 from thread import get_ident as get_thread_ident
 
 from tornado.gen import Return
+from tornado.concurrent import Future
 
-from katcp import client
-from katcp.core import AttrDict, ProtocolFlags, Message
+from katcp import client, server, kattypes
+from katcp.core import AttrDict, ProtocolFlags, Message, convert_method_name
 
 def get_fake_inspecting_client_instance(InspectingClass, host, port, *args, **kwargs):
-    # katcp methods used:
-    #
-    #  set_ioloop()
-    #  hook_inform(): sensor-status, interface-changed, device-changed
-    #  is_connected()
-    #  until_protocol()
-    #  until_connected()
-    #  disconnect()
-    #  start()
-    #  stop()
-    #  join()
-    #  future_request()
-    #
-    # attributes:
-    #
-    #  protocol_flags
-
     # Note, that this mechanism makes many assumptions about the internals of
     # InspectingClientAsync and DeviceClient, so it may well break if substantial changes
     # are made to the implementation of either
@@ -46,26 +30,26 @@ class FakeInspectingClientManager(object):
     def __init__(self, fake_inspecting_client):
         self._fic = fake_inspecting_client
         self._fkc = fake_inspecting_client.katcp_client
-        self._fkc.request_handlers['sensor-list'] = self.handle_sensor_list
+        self._fkc.request_handlers['sensor-list'] = self.request_sensor_list
         self._sensor_infos = {}
 
-    @tornado.gen.coroutine
-    def handle_sensor_list(self, msg):
+    @kattypes.return_reply(kattypes.Int())
+    def request_sensor_list(self, req, msg):
         if msg.arguments:
             name = (msg.arguments[0],)
             keys = (name, )
             if name not in self._sensor_infos:
-                raise Return((Message.reply(msg.name, 'fail', 'Sensor not found'), []))
+                return ("fail", "Unknown sensor name.")
         else:
             keys = self._sensor_infos.keys()
 
-        informs = []
+        num_informs = 0
         for sensor_name in keys:
             infos = self._sensor_infos[sensor_name]
-            informs.append(Message.inform(msg.name, sensor_name, *infos, mid=msg.mid))
+            num_informs += 1
+            req.inform(sensor_name, *infos)
 
-        raise Return((Message.reply(msg.name, 'ok', len(informs), mid=msg.mid),
-                      informs))
+        return ('ok', num_informs)
 
     def add_sensors(self, sensor_infos):
         """Add fake sensors
@@ -81,6 +65,47 @@ class FakeInspectingClientManager(object):
         self._sensor_infos.update(sensor_infos)
         self._fic._interface_changed.set()
 
+    def add_request_handlers_object(self, rh_obj):
+        for name in dir(rh_obj):
+            if not callable(getattr(rh_obj, name)):
+                continue
+            if name.startswith("request_"):
+                request_name = convert_method_name("request_", name)
+                self._fkc.request_handlers[request_name] = getattr(rh_obj, name)
+
+    def add_request_handlers_dict(self, rh_dict):
+        self._fkc.request_handlers.update(rh_dict)
+
+class FakeKATCPServerError(Exception):
+    """Raised if a FakeKATCPServer is used in an unsupported way"""
+
+class FakeKATCPServer(object):
+    """Fake the parts of a KATCP server used by katcp.server.ClientConnection"""
+    def get_address(self, conn_id):
+        return '<fake-client-connection: {!r}>'.format(conn_id)
+
+    def send_message(self, conn_id, msg):
+        raise FakeKATCPServerError(
+            'Cannot send messages via fake request/conection object')
+
+    def mass_send_message(self, msg):
+        raise FakeKATCPServerError(
+            'Cannot send messages via fake request/conection object')
+
+    def flush_on_close(self):
+        f = Future()
+        f.set_result(None)
+        return f
+
+class FakeClientRequestConnection(server.ClientRequestConnection):
+    def __init__(self, *args, **kwargs):
+        super(FakeClientRequestConnection, self).__init__(*args, **kwargs)
+        self.informs_sent = []
+
+    def inform(self, *args):
+        inf_msg = Message.reply_inform(self.msg, *args)
+        self.informs_sent.append(inf_msg)
+
 class FakeAsyncClient(client.AsyncClient):
     """Fake version of :class:`katcp.client.AsyncClient`
 
@@ -92,6 +117,9 @@ class FakeAsyncClient(client.AsyncClient):
 
     def __init__(self, *args, **kwargs):
         self.request_handlers = {}
+        self.fake_server = FakeKATCPServer()
+        self.client_connection = server.ClientConnection(
+            self.fake_server, 'fake-async-client')
         super(FakeAsyncClient, self).__init__(*args, **kwargs)
 
     @tornado.gen.coroutine
@@ -140,8 +168,10 @@ class FakeAsyncClient(client.AsyncClient):
         mid = self._get_mid_and_update_msg(msg, use_mid)
 
         if msg.name in self.request_handlers:
-            reply_msg, reply_informs = yield tornado.gen.maybe_future(
-                self.request_handlers[msg.name](msg))
+            req = FakeClientRequestConnection(self.client_connection, msg)
+            reply_msg = yield tornado.gen.maybe_future(
+                self.request_handlers[msg.name](req, msg))
+            reply_informs = req.informs_sent
         else:
             reply_msg = Message.reply(msg.name, 'ok')
             reply_informs = []

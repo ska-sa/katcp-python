@@ -517,11 +517,6 @@ class TestDevice(object):
     def inform_one(self, req, i, d, b):
         pass
 
-    @request(Int(min=1, max=3), Discrete(("on", "off")), Bool())
-    @return_reply(Int(min=1, max=3), Discrete(("on", "off")), Bool())
-    def request_five(self, i, d, b):
-        return ("ok", i, d, b)
-
     @request(Timestamp(), Timestamp(optional=True), major=4)
     @return_reply(Timestamp(), Timestamp(default=321), major=4)
     def request_katcpv4_time(self, req, timestamp1, timestamp2):
@@ -537,16 +532,6 @@ class TestDevice(object):
     def request_katcpv4_time_multi(self, req, *timestamps):
         self.katcpv4_time_multi = timestamps
         return ('ok',) + timestamps
-
-    @return_reply(Int(min=1, max=3), Discrete(("on", "off")), Bool())
-    @request(Int(min=1, max=3), Discrete(("on", "off")), Bool())
-    def request_six(self, i, d, b):
-        return ("ok", i, d, b)
-
-    @return_reply(Int(), Str())
-    @request(Int(), include_msg=True)
-    def request_seven(self, msg, i):
-        return ("ok", i, msg.name)
 
     @return_reply(Int(), Str())
     @request(Int(), include_msg=True)
@@ -684,41 +669,6 @@ class TestDecorator(unittest.TestCase):
         req = ""
         self.assertEqual(self.device.inform_one(req, Message.inform(
                          "one", "2", "on", "0")), None)
-
-    def test_request_five(self):
-        """Test client request with no req."""
-        self.assertEqual(str(self.device.request_five(Message.request(
-                         "five", "2", "on", "0"))), "!five ok 2 on 0")
-        self.assertRaises(FailReply, self.device.request_five,
-                          Message.request("five", "14", "on", "0"))
-        self.assertRaises(FailReply, self.device.request_five,
-                          Message.request("five", "2", "dsfg", "0"))
-        self.assertRaises(FailReply, self.device.request_five,
-                          Message.request("five", "2", "on", "3"))
-        self.assertRaises(FailReply, self.device.request_five,
-                          Message.request("five", "2", "on", "0", "3"))
-
-        self.assertRaises(FailReply, self.device.request_five,
-                          Message.request("five", "2", "on"))
-
-    def test_request_six(self):
-        """Test client request with no req and decorators in reverse order."""
-        self.assertEqual(str(self.device.request_six(Message.request(
-                         "six", "2", "on", "0"))), "!six ok 2 on 0")
-        self.assertRaises(FailReply, self.device.request_six,
-                          Message.request("six", "4", "on", "0"))
-        self.assertRaises(FailReply, self.device.request_six,
-                          Message.request("six", "2", "dsfg", "0"))
-        self.assertRaises(FailReply, self.device.request_six,
-                          Message.request("six", "2", "on", "3"))
-
-        self.assertRaises(FailReply, self.device.request_six,
-                          Message.request("six", "2", "on"))
-
-    def test_request_seven(self):
-        """Test client request with no req but with a message."""
-        self.assertEqual(str(self.device.request_seven(Message.request(
-                         "seven", "7"))), "!seven ok 7 seven")
 
     def test_request_eight(self):
         """Test server request with a message argument."""
