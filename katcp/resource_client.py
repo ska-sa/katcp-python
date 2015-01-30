@@ -20,7 +20,7 @@ from peak.util.proxies import ObjectWrapper
 from katcp import resource, inspecting_client, Message
 from katcp.resource import KATCPReply, KATCPSensorError
 from katcp.core import (AttrDict, AsyncCallbackEvent, steal_docstring_from,
-                        AsyncState)
+                        AsyncState, until_any)
 
 log = logging.getLogger(__name__)
 
@@ -140,7 +140,8 @@ class ReplyWrappedInspectingClientAsync(inspecting_client.InspectingClientAsync)
         try:
             use_mid = kwargs.get('use_mid')
             timeout = kwargs.get('timeout')
-            msg = Message.request(request, *args)
+            mid = kwargs.get('mid')
+            msg = Message.request(request, *args, mid=mid)
         except Exception:
             f.set_exc_info(sys.exc_info())
             return f
@@ -288,8 +289,8 @@ class KATCPClientResource(resource.KATCPResource):
     def start(self):
         """Start the client and connect"""
         host, port = self.address
-        ic = self._inspecting_client = ReplyWrappedInspectingClientAsync(
-            host, port, ioloop=self._ioloop_set_to, auto_reconnect=self.auto_reconnect)
+        ic = self._inspecting_client = self.inspecting_client_factory(
+            host, port, self._ioloop_set_to)
         self.ioloop = ic.ioloop
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
         ic.set_state_callback(self._inspecting_client_state_callback)
@@ -302,7 +303,19 @@ class KATCPClientResource(resource.KATCPResource):
         self.reapply_sampling_strategies = self._sensor_manager.reapply_sampling_strategies
         log_future_exceptions(self._logger, ic.connect())
 
+    def inspecting_client_factory(self, host, port, ioloop_set_to):
+        """Return an instance of :class:`ReplyWrappedInspectingClientAsync` or similar
+
+        Provided to ease testing. Dynamically overriding this method after instantiation
+        but before start() is called allows for deep brain surgery. See
+        :class:`katcp.fake_clients.fake_inspecting_client_factory`
+
+        """
+        return ReplyWrappedInspectingClientAsync(
+            host, port, ioloop=ioloop_set_to, auto_reconnect=self.auto_reconnect)
+
     def until_state(self, state):
+
         """Return a tornado Future that will resolve when the requested state is set
 
         State can be one of ("disconnected", "syncing", "synced")
@@ -643,9 +656,19 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             # Make a copy since we'll be modifying the dict
             res_spec = dict(res_spec)
             res_spec['name'] = res_name
-            res = KATCPClientResource(res_spec, parent=self, logger=self._logger)
+            res = self.client_resource_factory(
+                res_spec, parent=self, logger=self._logger)
             children[resource.escape_name(res_name)] = res
         self._children = children
+
+    def client_resource_factory(self, res_spec, parent, logger):
+        """Return an instance of :class:`KATCPClientResource` or similar
+
+        Provided to ease testing. Overriding this method allows deep brain surgery. See
+        :func:`katcp.fake_clients.fake_KATCP_client_resource_factory`
+
+        """
+        return KATCPClientResource(res_spec, parent=self, logger=logger)
 
     def _init_groups(self):
         group_configs = self._resources_spec.get('groups', {})
@@ -677,6 +700,15 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def until_synced(self):
         """Return a tornado Future; resolves when all subordinate clients are synced"""
         yield [r.until_synced() for r in dict.values(self.children)]
+
+    def until_any_child_in_state(self, state):
+        """Return a tornado Future; resolves when any client is in specified state"""
+        return until_any(*[r.until_state(state) for r in dict.values(self.children)])
+
+    @tornado.gen.coroutine
+    def until_all_children_in_state(self, state):
+        """Return a tornado Future; resolves when all clients are in specified state"""
+        yield [r.until_state(state) for r in dict.values(self.children)]
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",

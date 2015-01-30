@@ -351,6 +351,7 @@ class Message(object):
         -----------------
         mid : str or None
             Message ID to use or None (default) for no Message ID
+
         """
         mid = kwargs.pop('mid', None)
         if len(kwargs) > 0:
@@ -367,6 +368,11 @@ class Message(object):
             The name of the message.
         args : list of strings
             The message arguments.
+
+        Keyword Arguments
+        -----------------
+        mid : str or None
+            Message ID to use or None (default) for no Message ID
 
         """
         mid = kwargs.pop('mid', None)
