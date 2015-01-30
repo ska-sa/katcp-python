@@ -126,7 +126,7 @@ class InspectingClientAsync(object):
         self._running = False
 
         # Setup KATCP device.
-        self.katcp_client = self.get_inform_hook_client(
+        self.katcp_client = self.inform_hook_client_factory(
             host, port, auto_reconnect=auto_reconnect, logger=logger)
         self.ioloop = ioloop or tornado.ioloop.IOLoop.current()
         self.katcp_client.set_ioloop(ioloop)
@@ -164,7 +164,7 @@ class InspectingClientAsync(object):
     def __del__(self):
         self.close()
 
-    def get_inform_hook_client(self, host, port, *args, **kwargs):
+    def inform_hook_client_factory(self, host, port, *args, **kwargs):
         """Return an instance of :class:`_InformHookDeviceClient` or similar
 
         Provided to ease testing. Dynamically overriding this method after instantiation
@@ -298,7 +298,6 @@ class InspectingClientAsync(object):
                                        model_changed=False, data_synced=True)
                 yield until_any(self._interface_changed.until_set(),
                                 self._disconnected.until_set())
-                print ('interface changed or disconnected')
                 self._interface_changed.clear()
                 continue
                 # Next loop through should cause re-inspection and handle state updates

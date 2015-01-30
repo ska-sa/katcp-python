@@ -81,7 +81,7 @@ class test_KATCPClientresourceRequest(unittest.TestCase):
             'the-request', 'parm1', 2)
         self.assertIs(reply, self.mock_client.wrapped_request.return_value)
 
-class test_KATCPClientresource(tornado.testing.AsyncTestCase):
+class test_KATCPClientResource(tornado.testing.AsyncTestCase):
     def test_init(self):
         resource_spec = dict(
             name='testdev',
@@ -391,7 +391,7 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         self.default_spec = copy.deepcopy(self.default_spec_orig)
         super(test_KATCPClientResourceContainer, self).setUp()
 
-    @tornado.testing.gen_test(timeout=1000000)
+    @tornado.testing.gen_test
     def test_groups(self):
         spec = self.default_spec
         spec['groups'] = dict(group1=['client1', 'another-client'],
