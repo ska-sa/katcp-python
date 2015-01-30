@@ -186,7 +186,7 @@ class FakeKATCPClientResourceContainerManager(object):
         """
         return self.child_managers[child_name].add_request_handlers_object(rh_obj)
 
-    def add_request_handlers_dict(self, rh_dict):
+    def add_request_handlers_dict(self, child_name, rh_dict):
         """Add fake request handlers from a dict keyed by request name
 
         See :class:`FakeInspectingClientManager` for detail
@@ -280,8 +280,6 @@ class FakeInspectingClientManager(object):
             if name.startswith("request_"):
                 request_name = convert_method_name("request_", name)
                 req_meth = getattr(rh_obj, name)
-                # Check that all the handlers have docstrings as strings
-                assert req_meth.__doc__, "Even fake request handlers must have docstrings"
                 rh_dict[request_name] = req_meth
 
         self.add_request_handlers_dict(rh_dict)
