@@ -606,6 +606,43 @@ class KATCPSensor(object):
         # By now the sensor manager should have set the reading
         raise Return(self._reading)
 
+    @tornado.gen.coroutine
+    def get_value(self):
+        """Get a fresh sensor value from the KATCP resource
+
+        Returns
+        -------
+        reply : tornado Future resolving with  :class:`KATCPSensorReading` object
+
+        Note
+        ----
+
+        As a side-effect this will update the reading stored in this object, and result in
+        registered listeners being called.
+        """
+        yield self._manager.poll_sensor(self._name)
+        # By now the sensor manager should have set the reading
+        raise Return(self._reading.value)
+
+    @tornado.gen.coroutine
+    def get_status(self):
+        """Get a fresh sensor status from the KATCP resource
+
+        Returns
+        -------
+        reply : tornado Future resolving with  :class:`KATCPSensorReading` object
+
+        Note
+        ----
+
+        As a side-effect this will update the reading stored in this object, and result in
+        registered listeners being called.
+        """
+        yield self._manager.poll_sensor(self._name)
+        # By now the sensor manager should have set the reading
+        raise Return(self._reading.status)
+
+
 _KATCPReplyTuple = collections.namedtuple('_KATCPReplyTuple', 'reply informs')
 
 
