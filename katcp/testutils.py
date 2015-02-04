@@ -16,6 +16,7 @@ import functools
 
 import mock
 import tornado.testing
+import tornado.ioloop
 
 from thread import get_ident
 
@@ -24,7 +25,7 @@ from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
 from peak.util.proxies import ObjectWrapper
 
-from .core import Sensor, Message, AsyncReply, AsyncEvent
+from .core import Sensor, Message, AsyncReply, AsyncEvent, AttrDict
 from .server import DeviceServer, FailReply, ClientConnection
 
 
@@ -1530,6 +1531,27 @@ def wait_sensor(sensor, value, status=None, timeout=5):
         waiter = SensorTransitionStatusWaiter(sensor, tests)
     return waiter.wait(timeout=timeout)
 
+
+def wait_sensor_async(sensor, value, status=None, ioloop=None):
+    """Stop-gap async sensor-wait until SensorTransitionWaiter can be made async compatible
+
+    Returns a tornado future that resolves when the value is matched
+
+    """
+    ioloop = ioloop or tornado.ioloop.IOLoop.current()
+    f = tornado_Future()
+    class Observer(object):
+        def update(self, sensor, reading):
+            val_matched = reading.value == value
+            status_matched = reading.status == status or status is None
+            if val_matched and status_matched:
+                sensor.detach(self)
+                ioloop.add_callback(f.set_result, True)
+
+    observer = Observer()
+    sensor.attach(observer)
+    ioloop.add_callback(observer.update, sensor, sensor.read())
+    return f
 
 def start_thread_with_cleanup(test_instance, thread_object, timeout=1,
                               start_timeout=None):
