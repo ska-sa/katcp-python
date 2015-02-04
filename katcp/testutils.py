@@ -1687,6 +1687,8 @@ def mock_req(req_name, *args, **kwargs):
     req.msg = Message.request(req_name, *args)
     req.make_reply.side_effect = lambda *args: Message.reply_to_request(
         req.msg, *args)
+    req.async_reply_future = tornado_Future()
+    req.reply.side_effect = lambda *x : req.async_reply_future.set_result(x)
     return req
 
 
@@ -1707,6 +1709,12 @@ def handle_mock_req(dev, req):
     handle_mock_req(dev, req)
     # All replies / informs can now be asserted on the mock request
     req.reply.assert_called_once_with('ok')
+
+    # If using an async device from a tornado.test.gen_test test (or any other tornado
+    # coroutine)
+
+    reply_args = yield req.async_reply_future
+    self.assertEqual(reply_args, ('ok', ))
 
     """
     client_connection = req.client_connection
