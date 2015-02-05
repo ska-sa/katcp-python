@@ -16,6 +16,7 @@ import functools
 
 import mock
 import tornado.testing
+import tornado.ioloop
 
 from thread import get_ident
 
@@ -24,7 +25,7 @@ from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
 from peak.util.proxies import ObjectWrapper
 
-from .core import Sensor, Message, AsyncReply, AsyncEvent
+from .core import Sensor, Message, AsyncReply, AsyncEvent, AttrDict
 from .server import DeviceServer, FailReply, ClientConnection
 
 
@@ -1531,6 +1532,27 @@ def wait_sensor(sensor, value, status=None, timeout=5):
     return waiter.wait(timeout=timeout)
 
 
+def wait_sensor_async(sensor, value, status=None, ioloop=None):
+    """Stop-gap async sensor-wait until SensorTransitionWaiter can be made async compatible
+
+    Returns a tornado future that resolves when the value is matched
+
+    """
+    ioloop = ioloop or tornado.ioloop.IOLoop.current()
+    f = tornado_Future()
+    class Observer(object):
+        def update(self, sensor, reading):
+            val_matched = reading.value == value
+            status_matched = reading.status == status or status is None
+            if val_matched and status_matched:
+                sensor.detach(self)
+                ioloop.add_callback(f.set_result, True)
+
+    observer = Observer()
+    sensor.attach(observer)
+    ioloop.add_callback(observer.update, sensor, sensor.read())
+    return f
+
 def start_thread_with_cleanup(test_instance, thread_object, timeout=1,
                               start_timeout=None):
     """Start thread_object and add cleanup functions to test_instance.
@@ -1687,6 +1709,8 @@ def mock_req(req_name, *args, **kwargs):
     req.msg = Message.request(req_name, *args)
     req.make_reply.side_effect = lambda *args: Message.reply_to_request(
         req.msg, *args)
+    req.async_reply_future = tornado_Future()
+    req.reply.side_effect = lambda *x : req.async_reply_future.set_result(x)
     return req
 
 
@@ -1707,6 +1731,12 @@ def handle_mock_req(dev, req):
     handle_mock_req(dev, req)
     # All replies / informs can now be asserted on the mock request
     req.reply.assert_called_once_with('ok')
+
+    # If using an async device from a tornado.test.gen_test test (or any other tornado
+    # coroutine)
+
+    reply_args = yield req.async_reply_future
+    self.assertEqual(reply_args, ('ok', ))
 
     """
     client_connection = req.client_connection

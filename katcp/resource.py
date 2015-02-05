@@ -418,6 +418,8 @@ class KATCPSensorsManager(object):
         done_future : tornado Future
             Resolves when the poll is complete, or raises KATCPSensorError
         """
+        # TODO NM 2015-02-03 Might want to add a timeout parameter here, and to all the
+        # other code that calls this
 
     @abc.abstractmethod
     def reapply_sampling_strategies(self):
