@@ -478,6 +478,11 @@ class InspectingClientAsync(object):
             If a katcp request to the server should be made to check if the
             sensor is on the server now.
 
+        Notes
+        -----
+        Ensure that self.state.data_synced == True if yielding to future_check_sensor from
+        a state-change callback, or a deadlock will occur.
+
         """
         exist = False
         yield self.until_data_synced()
@@ -508,6 +513,11 @@ class InspectingClientAsync(object):
         Returns
         -------
         Sensor created by :meth:`sensor_factory` or None if sensor not found.
+
+        Notes
+        -----
+        Ensure that self.state.data_synced == True if yielding to future_get_sensor from
+        a state-change callback, or a deadlock will occur.
 
         """
         obj = None
@@ -547,6 +557,11 @@ class InspectingClientAsync(object):
             sensor is on the server. True = Allow, False do not Allow, None
             use the class default.
 
+        Notes
+        -----
+        Ensure that self.state.data_synced == True if yielding to future_check_request
+        from a state-change callback, or a deadlock will occur.
+
         """
         exist = False
         yield self.until_data_synced()
@@ -576,6 +591,11 @@ class InspectingClientAsync(object):
         Returns
         -------
         Request created by :meth:`request_factory` or None if request not found.
+
+        Notes
+        -----
+        Ensure that self.state.data_synced == True if yielding to future_get_request
+        from a state-change callback, or a deadlock will occur.
 
         """
         obj = None

@@ -262,6 +262,23 @@ class KATCPResource(object):
                     False, sys.exc_info())
         raise tornado.gen.Return(sensors_strategies)
 
+    @tornado.gen.coroutine
+    @abc.abstractmethod
+    def preset_sensor_strategy(self, sensor_name, strategy_and_params):
+        """Preset a strategy for a sensor even if it is not yet known
+
+        sensor_name : str
+            Name of the sensor
+        strategy_and_params : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+
+        Returns
+        -------
+        done : tornado Future
+            Resolves when done
+        """
 
 class KATCPRequest(object):
     """Abstract Base class to serve as the definition of the KATCPRequest API.
@@ -404,7 +421,10 @@ class KATCPSensorsManager(object):
 
         This method should arrange for the strategy to be set on the underlying network
         device or whatever other implementation is used. This strategy should also be
-        automatically re-set if the device is reconnected, etc.
+        automatically re-set if the device is reconnected, etc. If a strategy is set for a
+        non-existing sensor, it should still cache the strategy and ensure that is applied
+        whenever said sensor comes into existance. This allows an applications to pre-set
+        strategies for sensors before synced / connected to a device.
 
         """
 
@@ -532,6 +552,11 @@ class KATCPSensor(object):
             As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
             names and parameters are as defined by the KATCP spec. As str contains the
             same elements in space-separated form.
+
+        Returns
+        -------
+        done : tornado Future that resolves when done or raises KATCPSensorError
+
         """
         return self._manager.set_sampling_strategy(self.name, strategy)
 

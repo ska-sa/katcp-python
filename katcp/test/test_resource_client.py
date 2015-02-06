@@ -21,13 +21,16 @@ from thread import get_ident as get_thread_ident
 from concurrent.futures import Future, TimeoutError
 
 from katcp.testutils import (DeviceTestServer, DeviceTestSensor,
-                             start_thread_with_cleanup, TimewarpAsyncTestCase)
+                             start_thread_with_cleanup, TimewarpAsyncTestCase,
+                             TimewarpAsyncTestCaseTimeAdvancer)
 
 from katcp import resource, inspecting_client, ioloop_manager, Message, Sensor
 from katcp.core import AttrDict
 
 # module under test
 from katcp import resource_client
+
+logger = logging.getLogger(__name__)
 
 class test_transform_future(tornado.testing.AsyncTestCase):
     def test_transform(self):
@@ -373,11 +376,38 @@ class test_KATCPClientresource_IntegratedTimewarp(TimewarpAsyncTestCase):
         self.assertEqual(set(DUT.req), initial_reqs | set(['sparkling_new']))
         self.assertEqual(set(DUT.sensor), initial_sensors | set([escaped_new_sensor]))
 
+    @tornado.testing.gen_test(timeout=1e10)
+    def test_preset_sensor_sampling(self):
+        self.server.stop()
+        self.server.join()
+        DUT = resource_client.KATCPClientResource(self.default_resource_spec)
+        DUT.start()
+        yield tornado.gen.moment
+        test_strategy = ('period', '2.5')
+        yield DUT.preset_sensor_strategy('an_int', test_strategy)
+        # Double-check that the sensor does not yet exist
+        self.assertNotIn('an_int', DUT.sensor)
+        self.server.start()
+        self.server.wait_running(timeout=1)
+        advancer = TimewarpAsyncTestCaseTimeAdvancer(self, quantum=0.55)
+        advancer.start()
+        yield DUT.until_synced()
+        self.assertEqual(DUT.sensor.an_int.sampling_strategy, test_strategy)
+
+        # Now call preset_sensor_strategy with a different strategy and check that it is
+        # applied to the real sensor
+        new_test_strategy = ('event',)
+        yield DUT.preset_sensor_strategy('an_int', new_test_strategy)
+        self.assertEqual(DUT.sensor.an_int.sampling_strategy, new_test_strategy)
+
     # TODO tests
     #
     # * Sensor strategy re-application
     # * Request through request object, also with timeouts
     # * Sensor callbacks (probably in test_resource.py, no need for full integrated test)
+
+
+# TODO XXX test for preset_sensor_strategy in KATCPClientResourceContainer
 
 class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
     def setUp(self):

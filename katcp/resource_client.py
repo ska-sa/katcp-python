@@ -27,10 +27,12 @@ log = logging.getLogger(__name__)
 def _normalise_request_name_set(reqs):
     return set(resource.escape_name(r) for r in reqs)
 
-def log_future_exceptions(logger, f):
+def log_future_exceptions(logger, f, ignore=()):
     def log_cb(f):
         try:
             f.result()
+        except ignore:
+            pass
         except Exception:
             logger.exception('Unhandled exception returned by future')
     f.add_done_callback(log_cb)
@@ -244,6 +246,7 @@ class KATCPClientResource(resource.KATCPResource):
         self._controlled = resource_spec.get('controlled', False)
         self.auto_reconnect = resource_spec.get('auto_reconnect', True)
         self.auto_reconnect_delay = resource_spec.get('auto_reconnect_delay', 0.5)
+        self._sensor_strategy_presets = {}
         self._logger = logger
         self._parent = parent
         self._ioloop_set_to = None
@@ -336,6 +339,25 @@ class KATCPClientResource(resource.KATCPResource):
         return list_sensors(
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
 
+    @tornado.gen.coroutine
+    @steal_docstring_from(resource.KATCPResource.preset_sensor_strategy)
+    def preset_sensor_strategy(self, sensor_name, strategy_and_parms):
+        sensor_name = resource.escape_name(sensor_name)
+        sensor_obj = dict.get(self._sensor, sensor_name)
+        if sensor_obj:
+            # The sensor exists, so let's just set the strategy and continue. Log errors,
+            # but don't raise anything
+            try:
+                yield sensor_obj.set_sampling_strategy(strategy_and_parms)
+            except Exception:
+                self._logger.exception(
+                    'Uhandled exception trying to set sensor strategy {!r} for sensor {}'
+                    .format(sensor_name))
+        else:
+            # Otherwise, set for future reference, and depend on self._add_sensors() to
+            # handle it when the sensor appears
+            self._sensor_strategy_presets[sensor_name] = strategy_and_parms
+
     def _request_factory(self, name, description):
         return KATCPClientResourceRequest(name, description, self._inspecting_client)
 
@@ -350,8 +372,13 @@ class KATCPClientResource(resource.KATCPResource):
                     log.debug('handling model updates')
                     yield self._update_model(model_changes)
                     log.debug('finished handling model updates')
-                # Reapply cached sensor strategies
-                yield self._sensor_manager.reapply_sampling_strategies()
+                if state.data_synced:
+                    # Reapply cached sensor strategies. Can only be done if
+                    # data_synced==True, or else the
+                    # self._inspecting_client.future_check_sensor() will deadlock
+                    log.debug('Reapplying sampling strategies')
+                    yield self._sensor_manager.reapply_sampling_strategies()
+                    log.debug('Done Reapplying sampling strategies')
             else:
                 log.debug('Setting state to "synced"')
                 self._state.set_state('synced')
@@ -419,6 +446,17 @@ class KATCPClientResource(resource.KATCPResource):
         for s_name, s_obj in sensor_instances.items():
             s_name_escaped = resource.escape_name(s_name)
             self._sensor[s_name_escaped] = s_obj
+            preset_strategy = self._sensor_strategy_presets.pop(s_name_escaped, None)
+            if preset_strategy:
+                self._logger.debug('Setting preset strategy for sensor {} to {!r}'
+                                   .format(s_name, preset_strategy))
+                try:
+                    yield s_obj.set_sampling_strategy(preset_strategy)
+                except Exception:
+                    self._logger.exception(
+                        'Exception trying to pre-set sensor strategy for sensor {}'
+                        .format(sens_name))
+
             added_names.append(s_name_escaped)
 
         if self.parent:
@@ -527,9 +565,10 @@ class KATCPClientResourceSensorsManager(object):
             try:
                 sensor_exists = yield check_sensor(sensor_name)
                 if not sensor_exists:
-                    self._logger.warn('Did not set strategy for no-longer-existant sensor {}'
+                    self._logger.warn('Did not set strategy for non-existing sensor {}'
                              .format(sensor_name))
                     continue
+
                 result = yield self.set_sampling_strategy(sensor_name, strategy)
             except KATCPSensorError, e:
                 self._logger.error('Error reapplying strategy for sensor {0}: {1!s}'
@@ -715,6 +754,16 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                      use_python_identifiers=True):
         return list_sensors(
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
+
+    @tornado.gen.coroutine
+    @steal_docstring_from(resource.KATCPResource.preset_sensor_strategy)
+    def preset_sensor_strategy(self, sensor_name, strategy_and_parms):
+        for child_name in dict.keys(self.children):
+            prefix = child_name + '_'
+            if sensor_name.startswith(prefix):
+                child = self.children[child_name]
+                child_sensor_name = sensor_name[len(prefix):]
+                yield child.preset_sensor_strategy(child_sensor_name, strategy_and_parms)
 
     def _create_attrdict_from_children(self, attr):
         attrdict = AttrDict()
