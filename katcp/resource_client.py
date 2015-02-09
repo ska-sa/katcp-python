@@ -247,6 +247,7 @@ class KATCPClientResource(resource.KATCPResource):
         self.auto_reconnect = resource_spec.get('auto_reconnect', True)
         self.auto_reconnect_delay = resource_spec.get('auto_reconnect_delay', 0.5)
         self._sensor_strategy_presets = {}
+        self._sensor_listener_presets = collections.defaultdict(list)
         self._logger = logger
         self._parent = parent
         self._ioloop_set_to = None
@@ -358,6 +359,16 @@ class KATCPClientResource(resource.KATCPResource):
             # handle it when the sensor appears
             self._sensor_strategy_presets[sensor_name] = strategy_and_parms
 
+    @steal_docstring_from(resource.KATCPResource.preset_sensor_listener)
+    def preset_sensor_listener(self, sensor_name, listener):
+        sensor_name = resource.escape_name(sensor_name)
+        sensor_obj = dict.get(self._sensor, sensor_name)
+        if sensor_obj:
+            # The sensor exists, so let's just register the listener and continue.
+            sensor_obj.register_listener(listener)
+        else:
+            self._sensor_listener_presets[sensor_name].append(listener)
+
     def _request_factory(self, name, description):
         return KATCPClientResourceRequest(name, description, self._inspecting_client)
 
@@ -455,6 +466,15 @@ class KATCPClientResource(resource.KATCPResource):
                 except Exception:
                     self._logger.exception(
                         'Exception trying to pre-set sensor strategy for sensor {}'
+                        .format(sens_name))
+            preset_listeners = self._sensor_listener_presets.pop(s_name_escaped, None)
+            if preset_listeners:
+                try:
+                    for listener in preset_listeners:
+                        s_obj.register_listener(listener)
+                except Exception:
+                    self._logger.exception(
+                        'Exception trying to pre-set sensor listeners for sensor {}'
                         .format(sens_name))
 
             added_names.append(s_name_escaped)
@@ -765,6 +785,16 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 child = self.children[child_name]
                 child_sensor_name = sensor_name[len(prefix):]
                 yield child.preset_sensor_strategy(child_sensor_name, strategy_and_parms)
+
+    @steal_docstring_from(resource.KATCPResource.preset_sensor_listener)
+    def preset_sensor_listener(self, sensor_name, listener):
+        sensor_name = resource.escape_name(sensor_name)
+        for child_name in dict.keys(self.children):
+            prefix = child_name + '_'
+            if sensor_name.startswith(prefix):
+                child = self.children[child_name]
+                child_sensor_name = sensor_name[len(prefix):]
+                child.preset_sensor_listener(child_sensor_name, listener)
 
     def _create_attrdict_from_children(self, attr):
         attrdict = AttrDict()

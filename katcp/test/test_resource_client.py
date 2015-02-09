@@ -400,6 +400,30 @@ class test_KATCPClientresource_IntegratedTimewarp(TimewarpAsyncTestCase):
         yield DUT.preset_sensor_strategy('an_int', new_test_strategy)
         self.assertEqual(DUT.sensor.an_int.sampling_strategy, new_test_strategy)
 
+    @tornado.testing.gen_test(timeout=1000)
+    def test_preset_sensor_listener(self):
+        self.server.stop()
+        self.server.join()
+        DUT = resource_client.KATCPClientResource(self.default_resource_spec)
+        DUT.start()
+        yield tornado.gen.moment
+        test_listener1 = lambda *x : None
+        test_listener2 = lambda *y : None
+        DUT.preset_sensor_listener('an_int', test_listener1)
+        # Double-check that the sensor does not yet exist
+        self.assertNotIn('an_int', DUT.sensor)
+        self.server.start()
+        self.server.wait_running(timeout=1)
+        advancer = TimewarpAsyncTestCaseTimeAdvancer(self, quantum=0.55)
+        advancer.start()
+        yield DUT.until_synced()
+        self.assertTrue(DUT.sensor.an_int.is_listener, test_listener1)
+
+        # Now call preset_sensor_lister with a different listener and check that it is
+        # also subscribed
+        DUT.preset_sensor_listener('an_int', test_listener2)
+        self.assertTrue(DUT.sensor.an_int.is_listener, test_listener2)
+
     # TODO tests
     #
     # * Sensor strategy re-application
@@ -514,21 +538,47 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
     @tornado.testing.gen_test(timeout=1000)
     def test_preset_sensor_sampling(self):
         DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
-        mock_children = {n: mock.Mock(spec_set=c) for n, c in dict.items(DUT.children)}
+        def side_effect(*args, **kwargs):
+            f = tornado.concurrent.futures.Future()
+            f.set_result(None)
+            return f
+
+        mock_children = {}
+        for n, c in dict.items(DUT.children):
+            mchild = mock_children[n] = mock.Mock(spec_set=c)
+            mchild.preset_sensor_strategy.side_effect = side_effect
         dict.update(DUT.children, mock_children)
 
         strat1 = ('period', '2.1')
         strat2 = ('event',)
         strat3 = ('event-rate', '2', '3')
-        DUT.preset_sensor_strategy('another.client-sensor_1', strat1)
-        DUT.preset_sensor_strategy('client-2-sensor_1', strat2)
-        DUT.preset_sensor_strategy('client1-sensor_3', strat3)
+        yield DUT.preset_sensor_strategy('another.client-sensor_1', strat1)
+        yield DUT.preset_sensor_strategy('client-2-sensor_1', strat2)
+        yield DUT.preset_sensor_strategy('client1-sensor_3', strat3)
         DUT.children.another_client.preset_sensor_strategy.assert_called_once_with(
             'sensor_1', strat1)
         DUT.children.client_2.preset_sensor_strategy.assert_called_once_with(
             'sensor_1', strat2)
         DUT.children.client1.preset_sensor_strategy.assert_called_once_with(
             'sensor_3', strat3)
+
+    def test_preset_sensor_listener(self):
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        mock_children = {n: mock.Mock(spec_set=c) for n, c in dict.items(DUT.children)}
+        dict.update(DUT.children, mock_children)
+
+        listener1 = lambda *x : None
+        listener2 = lambda *y : None
+        listener3 = lambda *z : None
+        DUT.preset_sensor_listener('another.client-sensor_1', listener1)
+        DUT.preset_sensor_listener('client-2-sensor_1', listener2)
+        DUT.preset_sensor_listener('client1-sensor_3', listener3)
+        DUT.children.another_client.preset_sensor_listener.assert_called_once_with(
+            'sensor_1', listener1)
+        DUT.children.client_2.preset_sensor_listener.assert_called_once_with(
+            'sensor_1', listener2)
+        DUT.children.client1.preset_sensor_listener.assert_called_once_with(
+            'sensor_3', listener3)
 
     def test_set_ioloop(self):
         # Make two tornado IOLoop instances, one that is installed as the current thread

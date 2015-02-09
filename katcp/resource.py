@@ -262,7 +262,6 @@ class KATCPResource(object):
                     False, sys.exc_info())
         raise tornado.gen.Return(sensors_strategies)
 
-    @tornado.gen.coroutine
     @abc.abstractmethod
     def preset_sensor_strategy(self, sensor_name, strategy_and_params):
         """Preset a strategy for a sensor even if it is not yet known
@@ -278,6 +277,18 @@ class KATCPResource(object):
         -------
         done : tornado Future
             Resolves when done
+        """
+
+    @abc.abstractmethod
+    def preset_sensor_listener(self, sensor_name, strategy_and_params):
+        """Preset a sensor listener for a sensor even if it is not yet known
+
+        sensor_name : str
+            Name of the sensor
+        listener : callable
+            Listening callble that will be registered on the named sensor when it becomes
+            available. Callable as for :meth:`KATCPSensor.register_listener`
+
         """
 
 class KATCPRequest(object):
@@ -585,6 +596,10 @@ class KATCPSensor(object):
         """
         listener_id = hashable_identity(listener)
         self._listeners.pop(listener_id, None)
+
+    def is_listener(self, listener):
+        listener_id = hashable_identity(listener)
+        return listener_id in self._listeners
 
     def clear_listeners(self):
         """Clear any registered listeners to updates from this sensor."""
