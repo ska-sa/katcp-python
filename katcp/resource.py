@@ -621,6 +621,12 @@ class KATCPSensor(object):
         self._reading = reading
         self.call_listeners(reading)
 
+    def set_value(self, value, status=Sensor.NOMINAL, timestamp=None):
+        """Set sensor value with optinal specification of status and timestamp"""
+        if timestamp is None:
+            timestamp = self._manager.time()
+        self.set(timestamp, status, value)
+
     def set_formatted(self, raw_timestamp, raw_status, raw_value, major):
         """Set sensor using KATCP string formatted inputs
 
