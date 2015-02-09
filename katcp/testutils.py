@@ -1804,3 +1804,41 @@ class TimewarpAsyncTestCase(tornado.testing.AsyncTestCase):
         self.ioloop_time = new_time
         if wake_ioloop:
             return self.wake_ioloop()
+
+class TimewarpAsyncTestCaseTimeAdvancer(threading.Thread):
+    def __init__(self, test_instance, quantum=0.05, rate=1000.):
+        self.test_instance = test_instance
+        self.quantum = quantum
+        self.rate = rate
+        self._running = threading.Event()
+        super(TimewarpAsyncTestCaseTimeAdvancer, self).__init__()
+
+    def start(self):
+        self.test_instance.addCleanup(self.stop)
+        super(TimewarpAsyncTestCaseTimeAdvancer, self).start()
+
+    def stop(self, timeout=None):
+        if timeout:
+            self._running.wait(timeout)
+        self._running.clear()
+        self._f.set_result(None)
+
+    def run(self):
+        self._f = f = Future()
+        self._running.set()
+        while self._running.is_set():
+            try:
+                self.test_instance.io_loop.add_callback(self._advance, f)
+            except RuntimeError:
+                # Probably means that the ioloop is closed, so let's just quit
+                break
+            f.result()
+            self._f = f = Future()
+            time.sleep(1./self.rate)
+
+    @gen.coroutine
+    def _advance(self, future):
+        yield self.test_instance.set_ioloop_time(
+            self.test_instance.ioloop_time + self.quantum)
+        future.set_result(None)
+
