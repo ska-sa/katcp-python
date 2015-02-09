@@ -758,6 +758,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     @tornado.gen.coroutine
     @steal_docstring_from(resource.KATCPResource.preset_sensor_strategy)
     def preset_sensor_strategy(self, sensor_name, strategy_and_parms):
+        sensor_name = resource.escape_name(sensor_name)
         for child_name in dict.keys(self.children):
             prefix = child_name + '_'
             if sensor_name.startswith(prefix):

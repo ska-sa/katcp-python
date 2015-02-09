@@ -376,7 +376,7 @@ class test_KATCPClientresource_IntegratedTimewarp(TimewarpAsyncTestCase):
         self.assertEqual(set(DUT.req), initial_reqs | set(['sparkling_new']))
         self.assertEqual(set(DUT.sensor), initial_sensors | set([escaped_new_sensor]))
 
-    @tornado.testing.gen_test(timeout=1e10)
+    @tornado.testing.gen_test(timeout=1000)
     def test_preset_sensor_sampling(self):
         self.server.stop()
         self.server.join()
@@ -406,8 +406,6 @@ class test_KATCPClientresource_IntegratedTimewarp(TimewarpAsyncTestCase):
     # * Request through request object, also with timeouts
     # * Sensor callbacks (probably in test_resource.py, no need for full integrated test)
 
-
-# TODO XXX test for preset_sensor_strategy in KATCPClientResourceContainer
 
 class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
     def setUp(self):
@@ -512,6 +510,25 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
             self.assertEqual(child.parent, DUT)
             self.assertEqual(child.address, child_spec['address'])
             self.assertIs(child._logger, m_logger)
+
+    @tornado.testing.gen_test(timeout=1000)
+    def test_preset_sensor_sampling(self):
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        mock_children = {n: mock.Mock(spec_set=c) for n, c in dict.items(DUT.children)}
+        dict.update(DUT.children, mock_children)
+
+        strat1 = ('period', '2.1')
+        strat2 = ('event',)
+        strat3 = ('event-rate', '2', '3')
+        DUT.preset_sensor_strategy('another.client-sensor_1', strat1)
+        DUT.preset_sensor_strategy('client-2-sensor_1', strat2)
+        DUT.preset_sensor_strategy('client1-sensor_3', strat3)
+        DUT.children.another_client.preset_sensor_strategy.assert_called_once_with(
+            'sensor_1', strat1)
+        DUT.children.client_2.preset_sensor_strategy.assert_called_once_with(
+            'sensor_1', strat2)
+        DUT.children.client1.preset_sensor_strategy.assert_called_once_with(
+            'sensor_3', strat3)
 
     def test_set_ioloop(self):
         # Make two tornado IOLoop instances, one that is installed as the current thread
