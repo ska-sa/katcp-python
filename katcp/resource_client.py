@@ -352,7 +352,7 @@ class KATCPClientResource(resource.KATCPResource):
                 yield sensor_obj.set_sampling_strategy(strategy_and_parms)
             except Exception:
                 self._logger.exception(
-                    'Uhandled exception trying to set sensor strategy {!r} for sensor {}'
+                    'Unhandled exception trying to set sensor strategy {!r} for sensor {}'
                     .format(sensor_name))
         else:
             # Otherwise, set for future reference, and depend on self._add_sensors() to
