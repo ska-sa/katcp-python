@@ -1705,12 +1705,19 @@ def mock_req(req_name, *args, **kwargs):
     # May make certain kinds of test comparisons easier.
 
     req = WaitingMock()
+    req.reply_msg = None
+    req.inform_msgs = []
     req.client_connection = client_conn
     req.msg = Message.request(req_name, *args)
     req.make_reply.side_effect = lambda *args: Message.reply_to_request(
         req.msg, *args)
-    req.async_reply_future = tornado_Future()
-    req.reply.side_effect = lambda *x : req.async_reply_future.set_result(x)
+    f = req.reply_and_inform_msgs_future = tornado_Future()
+    def reply_side_effect(*args):
+        req.reply_msg = Message.reply_to_request(req.msg, *args)
+        req.reply_and_inform_msgs_future.set_result((req.reply_msg, req.inform_msgs))
+    req.reply.side_effect = reply_side_effect
+    req.inform.side_effect = lambda *args : req.inform_msgs.append(
+        Message.reply_inform(req.msg, *args))
     return req
 
 
@@ -1724,6 +1731,12 @@ def handle_mock_req(dev, req):
     req : :class:`WaitingMock` object
         A mock request created with katcp.testutils.mock_req()
 
+    Return Value
+    ------------
+
+    reply_and_inform_msgs_future : tornado Future instance
+        Resolves with (reply_msg, inform_msgs)
+
     Example
     -------
     dev = katcp.server.DeviceServer(...)
@@ -1735,8 +1748,8 @@ def handle_mock_req(dev, req):
     # If using an async device from a tornado.test.gen_test test (or any other tornado
     # coroutine)
 
-    reply_args = yield req.async_reply_future
-    self.assertEqual(reply_args, ('ok', ))
+    reply_msg, inform_msgs = yield handle_mock_req(dev, req)
+    self.assertTrue(reply_msg.reply_ok())
 
     """
     client_connection = req.client_connection
@@ -1746,6 +1759,7 @@ def handle_mock_req(dev, req):
     with mock.patch('katcp.server.ClientRequestConnection') as CRC:
         CRC.return_value = req
         dev.handle_request(req.client_connection, req.msg)
+    return req.reply_and_inform_msgs_future
 
 
 def call_in_ioloop(ioloop, fn, *args, **kwargs):
