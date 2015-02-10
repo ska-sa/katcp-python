@@ -786,7 +786,7 @@ def return_reply(*types, **options):
         if not handler.__name__.startswith("request_"):
             raise ValueError("This decorator can only be used on a katcp"
                              " request handler (method name should start"
-                             " with 'request_'")
+                             " with 'request_').")
         msgname = convert_method_name('request_', handler.__name__)
 
         def raw_handler(self, *args):
