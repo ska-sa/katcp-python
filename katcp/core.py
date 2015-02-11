@@ -96,6 +96,17 @@ def log_coroutine_exceptions(coro):
 
     return wrapped_coro
 
+def log_future_exceptions(logger, f, ignore=()):
+    def log_cb(f):
+        try:
+            f.result()
+        except ignore:
+            pass
+        except Exception:
+            logger.exception('Unhandled exception returned by future')
+    f.add_done_callback(log_cb)
+
+
 def convert_method_name(prefix, name):
     """Convert a method name to the corresponding command name."""
     return name[len(prefix):].replace("_", "-")
