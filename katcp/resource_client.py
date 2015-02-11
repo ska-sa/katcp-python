@@ -770,8 +770,9 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def until_not_synced(self):
-        """Return a tornado Future; resolves when all subordinate clients are synced"""
-        yield [r.until_not_synced() for r in dict.values(self.children)]
+        """Return a tornado Future; resolves when any subordinate client is not synced"""
+        yield until_any(*[
+            r.until_not_synced() for r in dict.values(self.children)])
 
 
     def until_any_child_in_state(self, state):

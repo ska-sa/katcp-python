@@ -625,13 +625,22 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
 
         # Set only _one_ of the children to not-synced, should be the same as if all of
         # them are disconnected
-        for child in DUT.children.values():
-            f = tornado.concurrent.Future()
-            f.set_result(None)
-            # Need to use partial since the closure is shared between all
-            # loop iterations
-            child.until_not_synced = partial(lambda x : x, f)
-            child.until_synced = tornado.concurrent.Future
+        for i, child in enumerate(DUT.children.values()):
+            if i == 1:
+                # Set child to not synced
+                f = tornado.concurrent.Future()
+                f.set_result(None)
+                # Need to use partial since the closure is shared between all
+                # loop iterations
+                child.until_not_synced = partial(lambda x : x, f)
+                child.until_synced = tornado.concurrent.Future
+            else:
+                f = tornado.concurrent.Future()
+                f.set_result(None)
+                # Need to use partial since the closure is shared between all
+                # loop iterations
+                child.until_synced = partial(lambda x : x, f)
+                child.until_not_synced = tornado.concurrent.Future
 
         self.assertFalse(DUT.until_synced().done())
         self.assertTrue(DUT.until_not_synced().done())
