@@ -223,10 +223,9 @@ class InspectingClientAsync(object):
 
 
     def until_data_synced(self):
-       return self._state.until_state_in(InspectingClientStateType(
-            connected=True, synced=False, model_changed=True, data_synced=True),
-                  InspectingClientStateType(
-            connected=True, synced=True, model_changed=False, data_synced=True))
+        data_synced_states = tuple(state for state in self.valid_states
+                                   if state.data_synced)
+        return self._state.until_state_in(*data_synced_states)
 
 
     @tornado.gen.coroutine
