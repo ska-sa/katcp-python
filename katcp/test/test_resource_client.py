@@ -17,6 +17,7 @@ import tornado
 import mock
 
 from thread import get_ident as get_thread_ident
+from functools import partial
 
 from concurrent.futures import Future, TimeoutError
 
@@ -25,7 +26,7 @@ from katcp.testutils import (DeviceTestServer, DeviceTestSensor,
                              TimewarpAsyncTestCaseTimeAdvancer)
 
 from katcp import resource, inspecting_client, ioloop_manager, Message, Sensor
-from katcp.core import AttrDict
+from katcp.core import AttrDict, AsyncEvent
 
 # module under test
 from katcp import resource_client
@@ -221,6 +222,28 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         # Now test with strategy filter
         result = DUT.list_sensors('', strategy=True)
         self.assertEqual(len(result), len(sensor_strategies))
+
+    def test_until_sync_states(self):
+        resource_spec = dict(
+            name='testdev',
+            address=('testhost', 12345))
+        DUT = resource_client.KATCPClientResource(resource_spec)
+
+        # We expect the initial state to be 'disconnected', which means until_synced()
+        # should return an unresolved future and until_not_synced() a resolved future
+        self.assertEqual(DUT.state, 'disconnected')
+        self.assertFalse(DUT.until_synced().done())
+        self.assertTrue(DUT.until_not_synced().done())
+
+        # Force state to 'syncing', same expectation as for 'disconnected'
+        DUT._state.set_state('syncing')
+        self.assertFalse(DUT.until_synced().done())
+        self.assertTrue(DUT.until_not_synced().done())
+
+        # Force state to 'synced', opposite expectation as for 'disconnected'
+        DUT._state.set_state('synced')
+        self.assertTrue(DUT.until_synced().done())
+        self.assertFalse(DUT.until_not_synced().done())
 
 class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
     def setUp(self):
@@ -580,6 +603,49 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         DUT.children.client1.preset_sensor_listener.assert_called_once_with(
             'sensor_3', listener3)
 
+    def test_until_sync_states(self):
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        # All children should be in 'disconnected' state, so until_synced() should return
+        # an unresolved future and until_not_synced() a resolved future
+        self.assertFalse(DUT.until_synced().done())
+        self.assertTrue(DUT.until_not_synced().done())
+
+        # Set all child states sync functions to resolved at not-synced to unresolved
+        for child in DUT.children.values():
+            f = tornado.concurrent.Future()
+            f.set_result(None)
+            # Need to use partial since the closure is shared between all
+            # loop iterations
+            child.until_synced = partial(lambda x : x, f)
+            child.until_not_synced = tornado.concurrent.Future
+
+        # Now until_synced() should be resolved and until_not_synced() unresolved
+        self.assertTrue(DUT.until_synced().done())
+        self.assertFalse(DUT.until_not_synced().done())
+
+        # Set only _one_ of the children to not-synced, should be the same as if all of
+        # them are disconnected
+        for i, child in enumerate(DUT.children.values()):
+            if i == 1:
+                # Set child to not synced
+                f = tornado.concurrent.Future()
+                f.set_result(None)
+                # Need to use partial since the closure is shared between all
+                # loop iterations
+                child.until_not_synced = partial(lambda x : x, f)
+                child.until_synced = tornado.concurrent.Future
+            else:
+                f = tornado.concurrent.Future()
+                f.set_result(None)
+                # Need to use partial since the closure is shared between all
+                # loop iterations
+                child.until_synced = partial(lambda x : x, f)
+                child.until_not_synced = tornado.concurrent.Future
+
+        self.assertFalse(DUT.until_synced().done())
+        self.assertTrue(DUT.until_not_synced().done())
+
+
     def test_set_ioloop(self):
         # Make two tornado IOLoop instances, one that is installed as the current thread
         # IOLoop, and one that we will explicity pass to set_ioloop. If set_ioloop is not
@@ -673,6 +739,7 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
                       DUT.children['resource2'].req.sparkling_new_resource2)
         self.assertIs(DUT.req.resource3_halt,
                       DUT.children['resource3'].req.halt)
+
 
 class test_ThreadsafeMethodAttrWrapper(unittest.TestCase):
     def setUp(self):
@@ -874,3 +941,56 @@ class test_ThreadSafeKATCPClientResourceWrapper_container(unittest.TestCase):
                       resource_client.ThreadSafeKATCPClientResourceWrapper)
         self.assertIs(self.DUT.children['resource2'].__subject__,
                       self.resource_container.children['resource2'])
+
+class test_monitor_resource_sync_state(tornado.testing.AsyncTestCase):
+    @tornado.testing.gen_test
+    def test_monitor_resource_sync_state(self):
+        m_res = mock.Mock()
+        callback = mock.Mock()
+        exit_event = AsyncEvent()
+        synced = AsyncEvent()
+        not_synced = AsyncEvent()
+        m_res.until_synced = synced.until_set
+        m_res.until_not_synced = not_synced.until_set
+        def set_synced(sync):
+            if sync:
+                not_synced.clear()
+                synced.set()
+            else:
+                synced.clear()
+                not_synced.set()
+        loop_done_future = resource_client.monitor_resource_sync_state(
+            m_res, callback, exit_event)
+        yield tornado.gen.moment
+        self.assertEqual(callback.call_args_list, [mock.call(False)])
+        callback.reset_mock()
+        # Check that it exits if exit_event is set
+        exit_event.set()
+        yield tornado.gen.moment
+        self.assertFalse(callback.called,
+                         'No callback should be made when exit_event is set')
+        self.assertTrue(loop_done_future.done(),
+                        'Monitor loop should terminate when exit_event is set')
+        exit_event.clear()
+        loop_done_future = resource_client.monitor_resource_sync_state(
+            m_res, callback, exit_event)
+        set_synced(True)
+        yield tornado.gen.moment
+        self.assertEqual(callback.call_args_list, [mock.call(False), mock.call(True)])
+        callback.reset_mock()
+        set_synced(False)
+        yield tornado.gen.moment
+        self.assertEqual(callback.call_args_list, [mock.call(False)])
+        callback.reset_mock()
+        # Now check exit_event when synced is set
+        set_synced(True)
+        yield tornado.gen.moment
+        self.assertEqual(callback.call_args_list, [mock.call(True)])
+        callback.reset_mock()
+        self.assertFalse(loop_done_future.done(),
+                        'Monitor loop should only terminate is exit_event is set')
+        exit_event.set()
+        yield tornado.gen.moment
+        self.assertFalse(callback.called)
+        self.assertTrue(loop_done_future.done(),
+                        'Monitor loop should terminate when exit_event is set')

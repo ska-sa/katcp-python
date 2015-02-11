@@ -14,13 +14,13 @@ from thread import get_ident as get_thread_ident
 
 from concurrent.futures import Future, TimeoutError
 from tornado.concurrent import Future as tornado_Future
-from tornado.gen import Return, maybe_future, chain_future
+from tornado.gen import Return, maybe_future, chain_future, with_timeout
 from peak.util.proxies import ObjectWrapper
 
 from katcp import resource, inspecting_client, Message
 from katcp.resource import KATCPReply, KATCPSensorError
 from katcp.core import (AttrDict, AsyncCallbackEvent, steal_docstring_from,
-                        AsyncState, until_any, log_future_exceptions)
+                        AsyncState, AsyncEvent, until_any, log_future_exceptions)
 
 log = logging.getLogger(__name__)
 
@@ -319,6 +319,14 @@ class KATCPClientResource(resource.KATCPResource):
     def until_synced(self):
         """Convenience method to wait (with Future) until client is synced"""
         return self._state.until_state('synced')
+
+    def until_not_synced(self):
+        """Convenience method to wait (with Future) until client is not synced"""
+        not_synced_states = [state for state in self._state.valid_states
+                             if state != 'synced']
+        not_synced_futures = [self._state.until_state(state)
+                              for state in not_synced_states]
+        return until_any(*not_synced_futures)
 
     @steal_docstring_from(resource.KATCPResource.wait)
     def wait(self, sensor_name, condition, timeout=5):
@@ -750,6 +758,13 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         """Return a tornado Future; resolves when all subordinate clients are synced"""
         yield [r.until_synced() for r in dict.values(self.children)]
 
+    @tornado.gen.coroutine
+    def until_not_synced(self):
+        """Return a tornado Future; resolves when any subordinate client is not synced"""
+        yield until_any(*[
+            r.until_not_synced() for r in dict.values(self.children)])
+
+
     def until_any_child_in_state(self, state):
         """Return a tornado Future; resolves when any client is in specified state"""
         return until_any(*[r.until_state(state) for r in dict.values(self.children)])
@@ -1018,4 +1033,29 @@ class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
             return self.ResourceWrapper(self.__subject__.parent)
 
 
+@tornado.gen.coroutine
+def monitor_resource_sync_state(resource, callback, exit_event=None):
+    """Coroutine that monitors a KATCPResource's sync state.
+
+    Calls callback(True/False) whenever the resource becomes synced or unsynced. Will
+    always do an initial callback(False) call. Exits without calling callback() if
+    exit_event is set
+    """
+    exit_event = exit_event or AsyncEvent()
+    callback(False)        # Initial condition, assume resource is not connected
+
+    while not exit_event.is_set():
+        # Wait for resource to be synced
+        yield until_any(resource.until_synced(), exit_event.until_set())
+        if exit_event.is_set():
+            break       # If exit event is set we stop without calling callback
+        else:
+            callback(True)
+
+        # Wait for resource to be un-synced
+        yield until_any(resource.until_not_synced(), exit_event.until_set())
+        if exit_event.is_set():
+            break       # If exit event is set we stop without calling callback
+        else:
+            callback(False)
 
