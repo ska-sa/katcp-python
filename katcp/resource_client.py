@@ -20,22 +20,12 @@ from peak.util.proxies import ObjectWrapper
 from katcp import resource, inspecting_client, Message
 from katcp.resource import KATCPReply, KATCPSensorError
 from katcp.core import (AttrDict, AsyncCallbackEvent, steal_docstring_from,
-                        AsyncState, AsyncEvent, until_any)
+                        AsyncState, AsyncEvent, until_any, log_future_exceptions)
 
 log = logging.getLogger(__name__)
 
 def _normalise_request_name_set(reqs):
     return set(resource.escape_name(r) for r in reqs)
-
-def log_future_exceptions(logger, f, ignore=()):
-    def log_cb(f):
-        try:
-            f.result()
-        except ignore:
-            pass
-        except Exception:
-            logger.exception('Unhandled exception returned by future')
-    f.add_done_callback(log_cb)
 
 def transform_future(transformation, future):
     """Returns a new future that will resolve with a transformed value
