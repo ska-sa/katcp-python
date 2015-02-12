@@ -97,6 +97,24 @@ def log_coroutine_exceptions(coro):
     return wrapped_coro
 
 def log_future_exceptions(logger, f, ignore=()):
+    """Log any exceptions set to a future
+
+    Parameters
+    ----------
+    logger : logging.Logger instance
+        logger.exception(...) is called if the future resolves with an exception
+    f : Future object
+        Future to be monitored for exceptions
+    ignore : Exception or tuple of Exception
+        Exptected exception(s) to igore, i.e. they will not be logged.
+
+    Notes
+    -----
+    This is useful when an async task is started for its side effects without waiting for
+    the result. The problem is that if the future's resolution is not checked for
+    exceptions, unhandled exceptions in the async task will be silently ignored.
+
+    """
     def log_cb(f):
         try:
             f.result()
@@ -108,7 +126,7 @@ def log_future_exceptions(logger, f, ignore=()):
 
 
 def convert_method_name(prefix, name):
-    """Convert a method name to the corresponding command name."""
+    """Convert a method name to the corresponding KATCP message name."""
     return name[len(prefix):].replace("_", "-")
 
 
