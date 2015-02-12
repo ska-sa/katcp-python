@@ -106,7 +106,7 @@ def log_future_exceptions(logger, f, ignore=()):
     f : Future object
         Future to be monitored for exceptions
     ignore : Exception or tuple of Exception
-        Exptected exception(s) to igore, i.e. they will not be logged.
+        Exptected exception(s) to ignore, i.e. they will not be logged.
 
     Notes
     -----
