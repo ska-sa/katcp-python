@@ -514,7 +514,7 @@ class TestDevice(object):
         return ["ok"]
 
     @inform(Int(min=1, max=3), Discrete(("on", "off")), Bool())
-    def inform_one(self, req, i, d, b):
+    def inform_one(self, i, d, b):
         pass
 
     @request(Timestamp(), Timestamp(optional=True), major=4)
@@ -667,7 +667,7 @@ class TestDecorator(unittest.TestCase):
     def test_inform_one(self):
         """Test inform with no defaults."""
         req = ""
-        self.assertEqual(self.device.inform_one(req, Message.inform(
+        self.assertEqual(self.device.inform_one(Message.inform(
                          "one", "2", "on", "0")), None)
 
     def test_request_eight(self):

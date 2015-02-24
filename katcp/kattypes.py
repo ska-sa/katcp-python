@@ -633,18 +633,20 @@ def request(*types, **options):
     ...     @request(Int(), Float(), Bool())
     ...     @return_reply(Int(), Float())
     ...     def request_myreq(self, req, my_int, my_float, my_bool):
+    ...         '''?myreq my_int my_float my_bool'''
     ...         return ("ok", my_int + 1, my_float / 2.0)
     ...
     ...     @request(Int(), include_msg=True)
     ...     @return_reply(Bool())
     ...     def request_is_odd(self, req, msg, my_int):
-    ...         self.inform(req, Message.reply_inform(
-    ...             msg, 'Checking oddity of %d' % my_int))
+                '''?is-odd <my_int>, reply '1' if <my_int> is odd, else 0'''
+    ...         req.inform('Checking oddity of %d' % my_int)
     ...         return ("ok", my_int % 2)
     ...
 
     """
     include_msg = options.pop('include_msg', False)
+    has_req = options.pop('has_req', True)
     major = options.pop('major', DEFAULT_KATCP_MAJOR)
     check_req = options.pop('_check_req', True)
     if len(options) > 0:
@@ -668,19 +670,33 @@ def request(*types, **options):
             # We must be on the inside. Introspect the parameter names.
             all_argnames = inspect.getargspec(handler)[0]
 
-        params_start = 2        # Skip 'self' and 'req' parameters
+        params_start = 1        # Skip 'self' parameter
+        if has_req:         # Skip 'req' parameter
+            params_start += 1
         if include_msg:
             params_start += 1
         # Get other parameter names
         argnames = all_argnames[params_start:]
 
-        def raw_handler(self, *args):
-            (req, msg) = args
-            new_args = unpack_types(types, msg.arguments, argnames, major)
-            if include_msg:
+        if has_req and include_msg:
+            def raw_handler(self, req, msg):
+                new_args = unpack_types(types, msg.arguments, argnames, major)
                 return handler(self, req, msg, *new_args)
-            else:
+
+        elif has_req and not include_msg:
+            def raw_handler(self, req, msg):
+                new_args = unpack_types(types, msg.arguments, argnames, major)
                 return handler(self, req, *new_args)
+
+        elif not has_req and include_msg:
+            def raw_handler(self, msg):
+                new_args = unpack_types(types, msg.arguments, argnames, major)
+                return handler(self, msg, *new_args)
+
+        elif not has_req and not include_msg:
+            def raw_handler(self, msg):
+                new_args = unpack_types(types, msg.arguments, argnames, major)
+                return handler(self, *new_args)
 
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
@@ -693,15 +709,39 @@ def request(*types, **options):
 
 # Using partial with no extra parameters lets us 'copy' the function so that we
 # can change the docstring without affecting the original function's docstring
-inform = partial(request)
+inform = partial(request, has_req=False)
 inform.__doc__ = """Decorator for inform handler methods.
 
-       This is currently identical to the request decorator, and is
-       thus an alias.
+The method being decorated should take arguments matching the list of types.
+The decorator will unpack the request message into the arguments.
 
-       """
+Parameters
+----------
+types : list of kattypes
+    The types of the request message parameters (in order). A type
+    with multiple=True has to be the last type.
 
-unpack_message = partial(request, _check_req=False)
+Keyword Arguments
+-----------------
+include_msg : bool, optional
+    Pass the request message as the third parameter to the decorated
+    request handler function (default is False).
+major : int, optional
+    Major version of KATCP to use when interpreting types.
+    Defaults to latest implemented KATCP version.
+
+
+Examples
+--------
+>>> class MyDeviceClient(katcp.client.AsyncClient):
+...     @inform(Int(), Float())
+...     def inform_myinf(self, req, my_int, my_float):
+...         '''Handle #myinf <y_int> <my_float> inform received from server'''
+...         # Call some code here that reacts to my_inf and my_float
+
+"""
+
+unpack_message = partial(request, has_req=False)
 unpack_message.__doc__ = (
 """Decorator that unpacks katcp.Messages to function arguments.
 
