@@ -709,7 +709,6 @@ def request(*types, **options):
 
 # partial calls below 'copy' the function, letting us change the docstring without
 # affecting the original function's docstring
-
 inform = partial(request, has_req=False)
 inform.__doc__ = """Decorator for inform handler methods.
 
