@@ -707,8 +707,6 @@ def request(*types, **options):
 
     return decorator
 
-# Using partial with no extra parameters lets us 'copy' the function so that we
-# can change the docstring without affecting the original function's docstring
 inform = partial(request, has_req=False)
 inform.__doc__ = """Decorator for inform handler methods.
 
@@ -735,8 +733,8 @@ Examples
 --------
 >>> class MyDeviceClient(katcp.client.AsyncClient):
 ...     @inform(Int(), Float())
-...     def inform_myinf(self, req, my_int, my_float):
-...         '''Handle #myinf <y_int> <my_float> inform received from server'''
+...     def inform_myinf(self, my_int, my_float):
+...         '''Handle #myinf <my_int> <my_float> inform received from server'''
 ...         # Call some code here that reacts to my_inf and my_float
 
 """
