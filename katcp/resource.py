@@ -716,7 +716,12 @@ class KATCPSensor(object):
                 status_matched = reading.status == status or status is None
                 if val_matched and status_matched:
                     self.unregister_listener(handle_update)
-                    ioloop.add_callback(f.set_result, True)
+                    # Try and be idempotent if called multiple times after the
+                    # condition is matched. This should not happen unless the
+                    # sensor object is being updated in a thread outside of the
+                    # ioloop.
+                    if not f.done():
+                        ioloop.add_callback(f.set_result, True)
             except Exception:
                 f.set_exc_info(sys.exc_info())
                 self.unregister_listener(handle_update)
@@ -725,7 +730,7 @@ class KATCPSensor(object):
         ioloop.add_callback(handle_update, self, self._reading)
 
         if timeout:
-            to = ioloop.time()+timeout
+            to = ioloop.time() + timeout
             timeout_f = with_timeout(to, f)
             # Make sure we stop listening if the wait times out to prevent a
             # buildup of listeners
