@@ -710,6 +710,7 @@ class KATCPSensor(object):
                 'Cannot wait on a sensor that does not have a strategy set')
 
         def handle_update(sensor, reading):
+            # This handler is called whenever a sensor update is received
             try:
                 assert sensor is self
                 val_matched = reading.value == condition_or_value
@@ -727,6 +728,7 @@ class KATCPSensor(object):
                 self.unregister_listener(handle_update)
 
         self.register_listener(handle_update)
+        # Handle case where sensor is already at the desired value
         ioloop.add_callback(handle_update, self, self._reading)
 
         if timeout:
