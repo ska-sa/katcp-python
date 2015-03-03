@@ -7,7 +7,7 @@ import logging
 
 import tornado
 
-from tornado.gen import Return
+from tornado.gen import Return, with_timeout
 from tornado.concurrent import Future
 
 from katcp import Message, Sensor
@@ -160,15 +160,14 @@ class KATCPResource(object):
     def children(self):
         """AttrDict of subordinate KATCPResource objects keyed by their names."""
 
-    @abc.abstractmethod
-    def wait(self, sensor_name, condition, timeout=5):
+    def wait(self, sensor_name, condition_or_value, timeout=5):
         """Wait for a sensor in this resource to satisfy a condition.
 
         Parameters
         ----------
         sensor_name : string
             The name of the sensor to check
-        condition : object or callable or seq
+        condition_or_value : value, object or callable or seq
             Conditions to be evaluated TODO, use SensorTranstionWaiter thingum
         timeout : float
             The timeout in seconds
@@ -184,8 +183,9 @@ class KATCPResource(object):
         have a strategy set.
 
         """
-        # TODO, consider putting implementation on KATCPSensor, so just calling
-        # KATCPSensor.wait
+        sensor_name = escape_name(sensor_name)
+        sensor = self.sensor[sensor_name]
+        return sensor.wait(condition_or_value)
 
     @abc.abstractmethod
     def list_sensors(self, filter="", strategy=False, status="",
@@ -462,34 +462,13 @@ class KATCPSensorsManager(object):
         """
 
 class KATCPSensor(object):
-    """Abstract Base class to serve as the definition of the KATCPSensor API.
-
-    Wrapper around a specific KATCP sensor on a given KATCP device.
+    """Wrapper around a specific KATCP sensor on a given KATCP device.
 
     Each available KATCP sensor for a particular device has an associated
     :class:`KATCPSensor` object in the object hierarchy. This wrapper is mainly
     for interactive convenience. It provides the KATCP request help string as a
     docstring and registers listeners. Subclasses need to call the base class
     version of __init__().
-
-    Implementors of KATCPSensor should include the following attributes:
-
-    Attributes
-    ----------
-    name : str
-        KATCP name of the sensor
-    description : str
-        KATCP description of the sensor
-    units: str
-        KATCP units of the sensor
-    type: str
-        KATCP type of the sensor
-
-    Notes
-    -----
-
-    All the methods of this
-
     """
     __metaclass__ = abc.ABCMeta
 
@@ -689,6 +668,79 @@ class KATCPSensor(object):
         yield self._manager.poll_sensor(self._name)
         # By now the sensor manager should have set the reading
         raise Return(self._reading.status)
+
+    def wait(self, condition_or_value, status=None, timeout=None):
+        """Wait for sensor to satisfy a condition.
+
+        Parameters
+        ----------
+        condition_or_value : value, object or callable or seq
+            Conditions to be evaluated TODO, use SensorTranstionWaiter thingum
+        status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
+            Wait for this status, at the same time as value above, to be
+            obtained. Ignore status if None
+        timeout : float or None
+            The timeout in seconds
+
+        Returns
+        -------
+        This command returns a tornado Future that resolves with True if the sensor values
+        satisifed the condition with the timeout, else resolves with False.
+
+        Raises
+        ------
+        Resolves with a :class:`KATCPSensorError` exception if the sensors does not
+        have a strategy set.
+
+        Resolves with :class:`tornado.gen.TimeoutError` if timeout is not None
+        and the sensor does not attain the requested value within the timeout.
+
+        """
+
+        if callable(condition_or_value) or (
+                isinstance(condition_or_value, collections.Sequence) and not
+                isinstance(condition_or_value, basestring)):
+            raise NotImplementedError(
+                'Currently only simple value-waits are supported')
+
+        ioloop = tornado.ioloop.IOLoop.current()
+        f = Future()
+        if self.sampling_strategy == ('none', ):
+            raise KATCPSensorError(
+                'Cannot wait on a sensor that does not have a strategy set')
+
+        def handle_update(sensor, reading):
+            # This handler is called whenever a sensor update is received
+            try:
+                assert sensor is self
+                val_matched = reading.value == condition_or_value
+                status_matched = reading.status == status or status is None
+                if val_matched and status_matched:
+                    self.unregister_listener(handle_update)
+                    # Try and be idempotent if called multiple times after the
+                    # condition is matched. This should not happen unless the
+                    # sensor object is being updated in a thread outside of the
+                    # ioloop.
+                    if not f.done():
+                        ioloop.add_callback(f.set_result, True)
+            except Exception:
+                f.set_exc_info(sys.exc_info())
+                self.unregister_listener(handle_update)
+
+        self.register_listener(handle_update)
+        # Handle case where sensor is already at the desired value
+        ioloop.add_callback(handle_update, self, self._reading)
+
+        if timeout:
+            to = ioloop.time() + timeout
+            timeout_f = with_timeout(to, f)
+            # Make sure we stop listening if the wait times out to prevent a
+            # buildup of listeners
+            timeout_f.add_done_callback(
+                lambda f: self.unregister_listener(handle_update))
+            return timeout_f
+        else:
+            return f
 
 
 _KATCPReplyTuple = collections.namedtuple('_KATCPReplyTuple', 'reply informs')
