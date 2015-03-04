@@ -265,8 +265,7 @@ class Message(object):
         if arguments is None:
             self.arguments = []
         else:
-            self.arguments = [type(x) is float and repr(x) or str(x)
-                              for x in arguments]
+            self.arguments = [self.format_argument(x) for x in arguments]
 
         # check message type
 
@@ -290,6 +289,14 @@ class Message(object):
             raise KatcpSyntaxError("Command name should start with an "
                                    "alphabetic character (got %r)."
                                    % (name,))
+
+    def format_argument(self, arg):
+        if isinstance(arg, float):
+            return repr(arg)
+        elif isinstance(arg, bool):
+            return str(int(arg))
+        else:
+            return str(arg)
 
     def copy(self):
         """Return a shallow copy of the message object and its arguments.

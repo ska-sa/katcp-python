@@ -154,6 +154,12 @@ class TestMessageParser(unittest.TestCase):
         self.assertEqual(m.arguments, ["a", "b", "c"])
         self.assertEqual(m.mid, "1234")
 
+    def test_message_argument_formatting(self):
+        float_val = 2.35532342334233294e17
+        m = katcp.Message.request(
+            'req-name', 1, float_val, True, False, 'string')
+        self.assertEqual(m.arguments,
+                         ['1', repr(float_val), '1', '0', 'string'])
 
 class TestProtocolFlags(unittest.TestCase):
     def test_parse_version(self):
