@@ -291,6 +291,7 @@ class Message(object):
                                    % (name,))
 
     def format_argument(self, arg):
+        """Format a Message argument to a string"""
         if isinstance(arg, float):
             return repr(arg)
         elif isinstance(arg, bool):
