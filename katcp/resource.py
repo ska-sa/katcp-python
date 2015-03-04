@@ -167,8 +167,11 @@ class KATCPResource(object):
         ----------
         sensor_name : string
             The name of the sensor to check
-        condition_or_value : value, object or callable or seq
-            Conditions to be evaluated TODO, use SensorTranstionWaiter thingum
+        condition_or_value : obj or callable, or seq of objs or callables
+            If obj, sensor.value is compared with obj. If callable,
+            condition_or_value(reading) is called, and must return True if its condition is
+            satisfied. Since the reading is passed in, the value, status, timestamp
+            or received_timestamp attributes can all be used in the check.
         timeout : float
             The timeout in seconds
 
@@ -674,8 +677,13 @@ class KATCPSensor(object):
 
         Parameters
         ----------
-        condition_or_value : value, object or callable or seq
-            Conditions to be evaluated TODO, use SensorTranstionWaiter thingum
+        condition_or_value : obj or callable, or seq of objs or callables
+            If obj, sensor.value is compared with obj. If callable,
+            condition_or_value(reading) is called, and must return True if its condition is
+            satisfied. Since the reading is passed in, the value, status, timestamp
+            or received_timestamp attributes can all be used in the check.
+
+            Sequences of conditions are TODO, use SensorTranstionWaiter thingum?
         status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
             Wait for this status, at the same time as value above, to be
             obtained. Ignore status if None
@@ -697,11 +705,12 @@ class KATCPSensor(object):
 
         """
 
-        if callable(condition_or_value) or (
-                isinstance(condition_or_value, collections.Sequence) and not
-                isinstance(condition_or_value, basestring)):
+        if (isinstance(condition_or_value, collections.Sequence) and not
+            isinstance(condition_or_value, basestring)):
             raise NotImplementedError(
-                'Currently only simple value-waits are supported')
+                'Currently only single conditions are supported')
+        condition_test = (condition_or_value if callable(condition_or_value)
+                          else lambda s: s.value == condition_or_value)
 
         ioloop = tornado.ioloop.IOLoop.current()
         f = Future()
@@ -713,9 +722,9 @@ class KATCPSensor(object):
             # This handler is called whenever a sensor update is received
             try:
                 assert sensor is self
-                val_matched = reading.value == condition_or_value
+                cond_matched = condition_test(reading)
                 status_matched = reading.status == status or status is None
-                if val_matched and status_matched:
+                if cond_matched and status_matched:
                     self.unregister_listener(handle_update)
                     # Try and be idempotent if called multiple times after the
                     # condition is matched. This should not happen unless the

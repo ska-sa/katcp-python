@@ -50,7 +50,7 @@ class test_KATCPSensor(TimewarpAsyncTestCase):
         sensor_manager.get_sampling_strategy.return_value = (
             resource.normalize_strategy_parameters('event'))
         # Add an ioloop callback to timewarp so that we don't get stuck
-        timeout = 1
+        timeout = 0.25
         self.io_loop.add_callback(
             self.set_ioloop_time, self.io_loop.time() + timeout + 0.1)
         # Check that the timout error is raised
@@ -65,6 +65,28 @@ class test_KATCPSensor(TimewarpAsyncTestCase):
         waiting_value = 2
         self.io_loop.add_callback(DUT.set_value, waiting_value)
         yield DUT.wait(waiting_value, timeout=timeout)
+        self.assertEqual(DUT.value, waiting_value)
+        # Check that no stray listeners are left behind
+        self.assertFalse(DUT._listeners)
+
+        # Wait using a callable, comparison times out
+        self.io_loop.add_callback(
+            self.set_ioloop_time, self.io_loop.time() + timeout + 0.1)
+        waiting_value = 11
+        waiting_condition = lambda reading: reading.value == waiting_value
+        # Check that the timout error is raised
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield DUT.wait(waiting_value, timeout=timeout)
+        # Check that no stray listeners are left behind
+        self.assertFalse(DUT._listeners)
+
+        # Wait for a callable condition that is reached within the timeout
+        self.io_loop.add_callback(
+            self.set_ioloop_time, self.io_loop.time() + timeout - 0.1)
+        waiting_value = 12
+        waiting_condition = lambda reading: reading.value == waiting_value
+        self.io_loop.add_callback(DUT.set_value, waiting_value)
+        yield DUT.wait(waiting_condition, timeout=timeout)
         self.assertEqual(DUT.value, waiting_value)
         # Check that no stray listeners are left behind
         self.assertFalse(DUT._listeners)
