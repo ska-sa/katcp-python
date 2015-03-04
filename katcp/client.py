@@ -433,6 +433,11 @@ class DeviceClient(object):
         except Exception, e:
             if self._connect_failures % 5 == 0:
                 # warn on every fifth failure
+
+                # TODO (NM 2015-03-04) This can get a bit verbose, and typically we have
+                # other mechanisms for tracking failed connections. Consider doing some
+                # kind of exponential backoff starting at 5 times the reconnect time up to
+                # once per 5 minutes
                 self._logger.warn("Failed to connect to {0!r}: {1}"
                                   .format(self._bindaddr, e))
             self._connect_failures += 1
