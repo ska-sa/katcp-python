@@ -226,6 +226,7 @@ class KATCPClientResource(resource.KATCPResource):
            Python Logger object to log to. Default is the module logger
 
         """
+        super(KATCPClientResource, self).__init__()
         self._address = resource_spec['address']
         self._name = resource_spec['name']
         self._description = resource_spec.get('description', '')
@@ -368,7 +369,8 @@ class KATCPClientResource(resource.KATCPResource):
             self._sensor_listener_presets[sensor_name].append(listener)
 
     def _request_factory(self, name, description):
-        return KATCPClientResourceRequest(name, description, self._inspecting_client)
+        return KATCPClientResourceRequest(
+            name, description, self._inspecting_client, self.is_active)
 
     @tornado.gen.coroutine
     def _inspecting_client_state_callback(self, state, model_changes):
@@ -501,8 +503,6 @@ class KATCPClientResource(resource.KATCPResource):
             classname=self.__class__.__name__,
             name=self.name, id=id(self))
 
-resource.KATCPResource.register(KATCPClientResource)
-
 class KATCPClientResourceSensorsManager(object):
     """Implementation of KATSensorsManager ABC for a directly-connected client
 
@@ -607,8 +607,10 @@ class KATCPClientResourceSensorsManager(object):
 resource.KATCPSensorsManager.register(KATCPClientResourceSensorsManager)
 
 class KATCPClientResourceRequest(resource.KATCPRequest):
+    """Callable wrapper around a KATCP request
 
-    def __init__(self, name, description, client):
+    """
+    def __init__(self, name, description, client, is_active=lambda : True):
         """Initialize request with given description and network client
 
         Parameters
@@ -620,12 +622,39 @@ class KATCPClientResourceRequest(resource.KATCPRequest):
         client : client obj
             KATCP client connected to the KATCP resource that exposes a wrapped_request()
             method like :meth:`ReplyWrappedInspectingClientAsync.wrapped_request`.
+        is_active : callable, optional
+            Returns True if this request is active, else False
 
         """
         self._client = client
-        super(KATCPClientResourceRequest, self).__init__(name, description)
+        super(KATCPClientResourceRequest, self).__init__(name, description, is_active)
 
-    def __call__(self, *args, **kwargs):
+    def issue_request(self, *args, **kwargs):
+        """Issue the wrapped request to the server.
+
+        Parameters
+        ----------
+        *args : list of objects
+            Arguments to pass on to the request.
+
+        Keyword Arguments
+        -----------------
+        timeout : float or None, optional
+            Timeout after this amount of seconds (keyword argument).
+        mid : None or int, optional
+            Message identifier to use for the request message. If None, use either
+            auto-incrementing value or no mid depending on the KATCP protocol version
+            (mid's were only introduced with KATCP v5) and the value of the `use_mid`
+            argument. Defaults to None.
+        use_mid : bool
+            Use a mid for the request if True.
+
+        Returns
+        -------
+        future object that resolves with an :class:`katcp.resource.KATCPReply`
+        instance
+
+        """
         return self._client.wrapped_request(self.name, *args, **kwargs)
 
 class KATCPClientResourceContainer(resource.KATCPResource):
@@ -698,6 +727,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         logger : object, optional
            Python Logger object to log to. Default is the module logger
         """
+        super(KATCPClientResourceContainer, self).__init__()
         self._resources_spec = resources_spec
         self._logger = logger
         self._name = resources_spec['name']

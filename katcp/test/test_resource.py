@@ -7,7 +7,7 @@
 # WRITTEN PERMISSION OF SKA SA.                                               #
 ###############################################################################
 
-import unittest2 as unittest
+import unittest
 import logging
 import mock
 
@@ -100,3 +100,34 @@ class test_KATCPSensor(TimewarpAsyncTestCase):
         self.assertEqual(DUT.status, waiting_status)
         # Check that no stray listeners are left behind
         self.assertFalse(DUT._listeners)
+
+class ConcreteKATCPRequest(resource.KATCPRequest):
+    def issue_request(self, *args, **kwargs):
+        pass
+
+class test_KATCPRequest(unittest.TestCase):
+    def test_active(self):
+        active = False
+        is_active = lambda: active
+        req_name = 'test-request'
+        req_description = '?test-request description'
+        DUT = ConcreteKATCPRequest(
+            req_name, req_description, is_active=is_active)
+        DUT.issue_request = mock.Mock()
+
+        req_args = ('arg1', 'arg2')
+        req_kwargs = dict(timeout=123, mid=456)
+
+        # Do a test request when active = False, should raise
+        with self.assertRaises(resource.KATCPResourceInactive):
+            DUT(*req_args, **req_kwargs)
+        self.assertEqual(
+            DUT.issue_request.call_count, 0,
+            'issue_request should not have been called when request is inactive')
+
+        # now set active to True, and check that the request is made
+        active = True
+        rv = DUT(*req_args, **req_kwargs)
+        self.assertEqual(rv, DUT.issue_request.return_value)
+        DUT.issue_request.assert_called_once_with(*req_args, **req_kwargs)
+

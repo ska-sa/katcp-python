@@ -272,6 +272,25 @@ class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
                                 for n in self.server.request_names))
 
     @tornado.testing.gen_test(timeout=1)
+    def test_active(self):
+        DUT = yield self._get_DUT_and_sync(self.default_resource_spec)
+        self.assertTrue(DUT.is_active(), 'Expect DUT to be active initialy')
+        reply = yield DUT.req.new_command()
+        self.assertTrue(reply.succeeded, 'Expect request to be succesful in active state')
+
+        # Set DUT to 'inactive'
+        DUT.set_active(False)
+        with self.assertRaises(resource.KATCPResourceInactive):
+            # Should raise if we attempt to do the request when inactive
+            yield DUT.req.new_command()
+
+        # Set DUT to back to 'active'
+        DUT.set_active(True)
+        reply = yield DUT.req.new_command()
+        self.assertTrue(reply.succeeded, 'Expect request to be succesful in active state')
+
+
+    @tornado.testing.gen_test(timeout=1)
     def test_sensors(self):
        DUT = yield self._get_DUT_and_sync(self.default_resource_spec)
        # Check that all the test-device sensors are listed
@@ -324,9 +343,9 @@ class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
         self.assertEqual(set(DUT.sensor), sensors_before)
         self.assertEqual(set(DUT.req), reqs_before)
 
-class test_KATCPClientresource_IntegratedTimewarp(TimewarpAsyncTestCase):
+class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
     def setUp(self):
-        super(test_KATCPClientresource_IntegratedTimewarp, self).setUp()
+        super(test_KATCPClientResource_IntegratedTimewarp, self).setUp()
         self.server = DeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server)
         self.host, self.port = self.server.bind_address
@@ -602,6 +621,34 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
             'sensor_1', listener2)
         DUT.children.client1.preset_sensor_listener.assert_called_once_with(
             'sensor_3', listener3)
+
+    def test_set_active(self):
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        mock_children = {n: mock.Mock(spec_set=c, wraps=c)
+                         for n, c in dict.items(DUT.children)}
+        dict.update(DUT.children, mock_children)
+
+        self.assertTrue(DUT.is_active(), "'active' should be True initially")
+        for child_name, child in DUT.children.items():
+            self.assertTrue(child.is_active(),
+                            "Child {} should be active".format(child_name))
+
+        # Now set active to false
+        DUT.set_active(False)
+        self.assertFalse(DUT.is_active(),
+                         "'active' should be False after set_active(False)")
+
+        for child_name, child in DUT.children.items():
+            self.assertFalse(child.is_active(),
+                            "Child {} should not be active".format(child_name))
+
+        # And now back to to active
+        DUT.set_active(True)
+        self.assertTrue(DUT.is_active(),
+                        "'active' should be True after set_active(True)")
+        for child_name, child in DUT.children.items():
+            self.assertTrue(child.is_active(),
+                            "Child {} should be active".format(child_name))
 
     def test_until_sync_states(self):
         DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
