@@ -16,7 +16,13 @@ from katcp.sampling import SampleStrategy
 
 logger = logging.getLogger(__name__)
 
-class KATCPSensorError(Exception):
+class KATCPResourceError(Exception):
+    """Error raised for resource-related errors"""
+
+class KATCPResourceInactive(KATCPResourceError):
+    """Raised when a request is made to an inactive resource"""
+
+class KATCPSensorError(KATCPResourceError):
     """Raised if a problem occured dealing with as KATCPSensor operation"""
 
 class SensorResultTuple(collections.namedtuple(
@@ -91,6 +97,9 @@ class KATCPResource(object):
 
     """
     __metaclass__ = abc.ABCMeta
+
+    def __init__(self):
+        self._active = True
 
     @abc.abstractproperty
     def name(self):
@@ -294,6 +303,15 @@ class KATCPResource(object):
 
         """
 
+    def set_active(self, active):
+        self._active = bool(active)
+        for child in dict.values(self.children):
+            child.set_active(active)
+
+    def is_active(self):
+        return self._active
+
+
 class KATCPRequest(object):
     """Abstract Base class to serve as the definition of the KATCPRequest API.
 
@@ -306,7 +324,22 @@ class KATCPRequest(object):
     """
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, name, description):
+    def __init__(self, name, description, is_active=lambda : True):
+        """Initialize request with given description and network client
+
+        Parameters
+        ----------
+        name : str
+            KATCP name of the request
+        description : str
+            KATCP request description (as returned by ?help <name>)
+        client : client obj
+            KATCP client connected to the KATCP resource that exposes a wrapped_request()
+            method like :meth:`ReplyWrappedInspectingClientAsync.wrapped_request`.
+        is_active : callable, optional
+            Returns True if this request is active, else False
+
+        """
         self._name = name
         self._description = description
         self.__doc__ = '\n'.join(('KATCP Documentation',
@@ -315,6 +348,7 @@ class KATCPRequest(object):
                                   'KATCPRequest Documentation',
                                   '==========================',
                                   self.__doc__ or ''))
+        self._is_active = is_active
 
     @property
     def name(self):
@@ -326,7 +360,6 @@ class KATCPRequest(object):
         """Description of KATCP request as obtained from the ?help request."""
         return self._description
 
-    @abc.abstractmethod
     def __call__(self, *args, **kwargs):
         """Execute the KATCP request described by this object.
 
@@ -350,7 +383,26 @@ class KATCPRequest(object):
         reply : tornado future resolving with :class:`KATCPReply` object
             KATCP request reply wrapped in KATCPReply object
 
+        Raises
+        ------
+        :class:`ResourceInactive` if the resource is inactive when the request is made.
         """
+        if self.is_active():
+            return self.issue_request(*args, **kwargs)
+        else:
+            raise KATCPResourceInactive(
+                "Can't make ?{} request; resource is inactive".format(self.name))
+
+    @abc.abstractmethod
+    def issue_request(self, *args, **kwargs):
+        """Signature as for __call__
+
+        Do the request immediately without checking active state.
+        """
+
+    def is_active(self):
+        """True if resource for this request is active"""
+        return self._is_active()
 
 class KATCPSensorReading(collections.namedtuple(
         'KATCPSensorReading', 'received_timestamp timestamp status value')):
