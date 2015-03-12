@@ -735,6 +735,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         self._children_dirty = True   # Are we out of sync with the children?
         self._init_resources()
         self._init_groups()
+        self.set_ioloop()
 
     def _init_resources(self):
         resources = self._resources_spec['clients']
@@ -775,6 +776,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         ioloop=None. Must be called before start()
         """
         ioloop = ioloop or tornado.ioloop.IOLoop.current()
+        self.ioloop = ioloop
         for res in dict.values(self.children):
             res.set_ioloop(ioloop)
 

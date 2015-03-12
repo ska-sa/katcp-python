@@ -928,6 +928,7 @@ class test_ThreadSafeKATCPClientResourceWrapper_container(unittest.TestCase):
     def setUp(self):
         self.ioloop_manager = ioloop_manager.IOLoopManager(managed_default=True)
         self.io_loop = self.ioloop_manager.get_ioloop()
+        self.io_loop.make_current()
 
         self.ioloop_thread_wrapper = resource_client.IOLoopThreadWrapper(self.io_loop)
         start_thread_with_cleanup(self, self.ioloop_manager, start_timeout=1)
