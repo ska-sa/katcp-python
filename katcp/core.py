@@ -1681,7 +1681,8 @@ def future_timeout_manager(timeout=None, ioloop=None):
         Accepts a future, and wraps it in :func:tornado.gen.with_timeout. maybe_timeout
         raises :class:`tornado.gen.TimeoutError` if the timeout expires
 
-        Has method attribute `remaining()` that returns the remaining timeout
+        Has a function attribute `remaining()` that returns the remaining timeout or None
+        if timeout == None
 
     Example
     -------
@@ -1708,7 +1709,8 @@ def future_timeout_manager(timeout=None, ioloop=None):
             return f
         else:
             remaining = _remaining()
-            return with_timeout(remaining, f, ioloop)
+            deadline = ioloop.time() + remaining
+            return with_timeout(deadline, f, ioloop)
 
     maybe_timeout.remaining = _remaining
 

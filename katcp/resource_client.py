@@ -283,6 +283,7 @@ class KATCPClientResource(resource.KATCPResource):
 
     def start(self):
         """Start the client and connect"""
+        # TODO (NM 2015-03-12) Some checking to prevent multiple calls to start()
         host, port = self.address
         ic = self._inspecting_client = self.inspecting_client_factory(
             host, port, self._ioloop_set_to)
