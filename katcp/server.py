@@ -119,6 +119,10 @@ class ClientConnection(object):
     def client_disconnect_called(self):
         return self._disconnect_called
 
+    def disconnect(self, reason):
+        """Disconnect this client connection for specified reason"""
+        self._server._disconnect_client(self._conn_key, self, reason)
+
     def inform(self, msg):
         """Send an inform message to a particular client.
 
@@ -1464,7 +1468,7 @@ class DeviceServer(DeviceServerBase):
         self._sensors = {}  # map names to sensor objects
         # map client sockets to map of sensors -> sampling strategies
         self._strategies = {}
-        # For holding ClientCoClientConnection* instances of active connections
+        # For holding ClientConnection* instances of active connections
         self._client_conns = set()
 
         self.setup_sensors()
