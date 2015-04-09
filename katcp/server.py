@@ -2264,7 +2264,7 @@ class DeviceLogger(object):
         WARN: logging.WARN,
         ERROR: logging.ERROR,
         FATAL: logging.FATAL,
-        OFF: logging.CRITICAL + 10 # OFF is the highest possible logging level
+        OFF: logging.FATAL + 10 # OFF is the highest possible logging level
     }
 
     def __init__(self, device_server, root_logger="root", python_logger=None):
@@ -2326,7 +2326,10 @@ class DeviceLogger(object):
         """
         self._log_level = level
         if self._python_logger:
-            level = self.PYTHON_LEVEL.get(level)
+            try:
+                level = self.PYTHON_LEVEL.get(level)
+            except ValueError as err:
+                raise FailReply("Unknown logging level '%s'" % (level))
             self._python_logger.setLevel(level)
 
     def set_log_level_by_name(self, level_name):
