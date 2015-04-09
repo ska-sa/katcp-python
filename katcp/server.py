@@ -2264,7 +2264,7 @@ class DeviceLogger(object):
         WARN: logging.WARN,
         ERROR: logging.ERROR,
         FATAL: logging.FATAL,
-        OFF: logging.FATAL,
+        OFF: logging.FATAL + 10,
     }
 
     def __init__(self, device_server, root_logger="root", python_logger=None):
