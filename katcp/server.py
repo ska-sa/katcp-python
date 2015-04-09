@@ -2264,7 +2264,6 @@ class DeviceLogger(object):
         WARN: logging.WARN,
         ERROR: logging.ERROR,
         FATAL: logging.FATAL,
-        OFF: logging.FATAL,
     }
 
     def __init__(self, device_server, root_logger="root", python_logger=None):
@@ -2326,7 +2325,7 @@ class DeviceLogger(object):
         """
         self._log_level = level
         if self._python_logger:
-            level = self.PYTHON_LEVEL.get(level)
+            level = PYTHON_LEVEL.get(level)
             self._python_logger.setLevel(level)
 
     def set_log_level_by_name(self, level_name):
