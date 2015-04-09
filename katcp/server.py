@@ -2264,7 +2264,7 @@ class DeviceLogger(object):
         WARN: logging.WARN,
         ERROR: logging.ERROR,
         FATAL: logging.FATAL,
-        OFF: logging.FATAL + 10,
+        OFF: logging.CRITICAL + 10, # OFF is the highest possible logging level
     }
 
     def __init__(self, device_server, root_logger="root", python_logger=None):
