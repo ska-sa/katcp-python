@@ -969,7 +969,8 @@ class ThreadSafeMethodAttrWrapper(ObjectWrapper):
             return val
 
     def _getattr(self, attr):
-        return self._ioloop_wrapper.call_in_ioloop(getattr, (self.__subject__, attr), {})
+        return self._ioloop_wrapper.call_in_ioloop(getattr, (self.__subject__,
+            attr), {})
 
 
 class ThreadSafeKATCPSensorWrapper(ThreadSafeMethodAttrWrapper):
@@ -1027,7 +1028,8 @@ class ThreadSafeKATCPClientGroupWrapper(ThreadSafeMethodAttrWrapper):
 class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
     """Should work with both KATCPClientResource or KATCPClientResourceContainer"""
 
-    __slots__ = ['ResourceWrapper', 'SensorWrapper', 'RequestWrapper', 'GroupWrapper']
+    __slots__ = ['ResourceWrapper', 'SensorWrapper', 'RequestWrapper',
+                 'GroupWrapper']
 
     def __init__(self, subject, ioloop_wrapper):
         self.ResourceWrapper = partial(ThreadSafeKATCPClientResourceWrapper,
@@ -1040,6 +1042,13 @@ class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
                                        ioloop_wrapper=ioloop_wrapper)
         super(ThreadSafeKATCPClientResourceWrapper, self).__init__(
             subject, ioloop_wrapper)
+
+    def __getattr__(self, attr):
+        val = super(ThreadSafeKATCPClientResourceWrapper, self).__getattr__(attr)
+        if isinstance(val, resource.KATCPResource):
+            return self.ResourceWrapper(val)
+        else:
+            return val
 
     @property
     def sensor(self):
