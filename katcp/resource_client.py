@@ -262,6 +262,12 @@ class KATCPClientResource(resource.KATCPResource):
         """
         return self._state.until_state(state)
 
+    def wait_connected(self, timeout=None):
+        """Future that resolves when the state is not 'disconnected'
+        TODO: implement timeout
+        """
+        return self._state.until_state_in('syncing', 'synced')
+
     def _update_state(self, _flag=None):
         # Update self._state, optional _flag parameter is ignored to be compatible with
         # AsyncCallbackEvent
