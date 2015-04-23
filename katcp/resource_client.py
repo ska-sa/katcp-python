@@ -168,6 +168,14 @@ class KATCPClientResource(resource.KATCPResource):
         return self._address
 
     @property
+    def host(self):
+        return self._address[0]
+
+    @property
+    def port(self):
+        return self._address[1]
+
+    @property
     def name(self):
         return self._name
 
