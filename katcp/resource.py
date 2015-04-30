@@ -275,8 +275,9 @@ class KATCPResource(object):
         raise tornado.gen.Return(sensors_strategies)
 
     @abc.abstractmethod
-    def preset_sensor_strategy(self, sensor_name, strategy_and_params):
-        """Preset a strategy for a sensor even if it is not yet known
+    def set_sensor_strategy(self, sensor_name, strategy_and_params):
+        """Set a strategy for a sensor even if it is not yet known.
+        The strategy should persist across sensor disconnect/reconnect.
 
         sensor_name : str
             Name of the sensor
@@ -292,13 +293,14 @@ class KATCPResource(object):
         """
 
     @abc.abstractmethod
-    def preset_sensor_listener(self, sensor_name, strategy_and_params):
-        """Preset a sensor listener for a sensor even if it is not yet known
+    def set_sensor_listener(self, sensor_name, strategy_and_params):
+        """Set a sensor listener for a sensor even if it is not yet known
+        The listener registration should persist across sensor disconnect/reconnect.
 
         sensor_name : str
             Name of the sensor
         listener : callable
-            Listening callble that will be registered on the named sensor when it becomes
+            Listening callable that will be registered on the named sensor when it becomes
             available. Callable as for :meth:`KATCPSensor.register_listener`
 
         """

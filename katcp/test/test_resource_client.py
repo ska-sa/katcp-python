@@ -419,14 +419,14 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         self.assertEqual(set(DUT.sensor), initial_sensors | set([escaped_new_sensor]))
 
     @tornado.testing.gen_test(timeout=1000)
-    def test_preset_sensor_sampling(self):
+    def test_set_sensor_sampling(self):
         self.server.stop()
         self.server.join()
         DUT = resource_client.KATCPClientResource(self.default_resource_spec)
         DUT.start()
         yield tornado.gen.moment
         test_strategy = ('period', '2.5')
-        yield DUT.preset_sensor_strategy('an_int', test_strategy)
+        yield DUT.set_sensor_strategy('an_int', test_strategy)
         # Double-check that the sensor does not yet exist
         self.assertNotIn('an_int', DUT.sensor)
         self.server.start()
@@ -436,14 +436,14 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         yield DUT.until_synced()
         self.assertEqual(DUT.sensor.an_int.sampling_strategy, test_strategy)
 
-        # Now call preset_sensor_strategy with a different strategy and check that it is
+        # Now call set_sensor_strategy with a different strategy and check that it is
         # applied to the real sensor
         new_test_strategy = ('event',)
-        yield DUT.preset_sensor_strategy('an_int', new_test_strategy)
+        yield DUT.set_sensor_strategy('an_int', new_test_strategy)
         self.assertEqual(DUT.sensor.an_int.sampling_strategy, new_test_strategy)
 
     @tornado.testing.gen_test(timeout=1000)
-    def test_preset_sensor_listener(self):
+    def test_set_sensor_listener(self):
         self.server.stop()
         self.server.join()
         DUT = resource_client.KATCPClientResource(self.default_resource_spec)
@@ -451,7 +451,7 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         yield tornado.gen.moment
         test_listener1 = lambda *x : None
         test_listener2 = lambda *y : None
-        DUT.preset_sensor_listener('an_int', test_listener1)
+        DUT.set_sensor_listener('an_int', test_listener1)
         # Double-check that the sensor does not yet exist
         self.assertNotIn('an_int', DUT.sensor)
         self.server.start()
@@ -461,9 +461,9 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         yield DUT.until_synced()
         self.assertTrue(DUT.sensor.an_int.is_listener, test_listener1)
 
-        # Now call preset_sensor_lister with a different listener and check that it is
+        # Now call set_sensor_lister with a different listener and check that it is
         # also subscribed
-        DUT.preset_sensor_listener('an_int', test_listener2)
+        DUT.set_sensor_listener('an_int', test_listener2)
         self.assertTrue(DUT.sensor.an_int.is_listener, test_listener2)
 
     # TODO tests
@@ -578,7 +578,7 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
             self.assertIs(child._logger, m_logger)
 
     @tornado.testing.gen_test(timeout=1000)
-    def test_preset_sensor_sampling(self):
+    def test_set_sensor_sampling(self):
         DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
         def side_effect(*args, **kwargs):
             f = tornado.concurrent.futures.Future()
@@ -588,23 +588,23 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         mock_children = {}
         for n, c in dict.items(DUT.children):
             mchild = mock_children[n] = mock.Mock(spec_set=c)
-            mchild.preset_sensor_strategy.side_effect = side_effect
+            mchild.set_sensor_strategy.side_effect = side_effect
         dict.update(DUT.children, mock_children)
 
         strat1 = ('period', '2.1')
         strat2 = ('event',)
         strat3 = ('event-rate', '2', '3')
-        yield DUT.preset_sensor_strategy('another.client-sensor_1', strat1)
-        yield DUT.preset_sensor_strategy('client-2-sensor_1', strat2)
-        yield DUT.preset_sensor_strategy('client1-sensor_3', strat3)
-        DUT.children.another_client.preset_sensor_strategy.assert_called_once_with(
+        yield DUT.set_sensor_strategy('another.client-sensor_1', strat1)
+        yield DUT.set_sensor_strategy('client-2-sensor_1', strat2)
+        yield DUT.set_sensor_strategy('client1-sensor_3', strat3)
+        DUT.children.another_client.set_sensor_strategy.assert_called_once_with(
             'sensor_1', strat1)
-        DUT.children.client_2.preset_sensor_strategy.assert_called_once_with(
+        DUT.children.client_2.set_sensor_strategy.assert_called_once_with(
             'sensor_1', strat2)
-        DUT.children.client1.preset_sensor_strategy.assert_called_once_with(
+        DUT.children.client1.set_sensor_strategy.assert_called_once_with(
             'sensor_3', strat3)
 
-    def test_preset_sensor_listener(self):
+    def test_set_sensor_listener(self):
         DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
         mock_children = {n: mock.Mock(spec_set=c) for n, c in dict.items(DUT.children)}
         dict.update(DUT.children, mock_children)
@@ -612,14 +612,14 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         listener1 = lambda *x : None
         listener2 = lambda *y : None
         listener3 = lambda *z : None
-        DUT.preset_sensor_listener('another.client-sensor_1', listener1)
-        DUT.preset_sensor_listener('client-2-sensor_1', listener2)
-        DUT.preset_sensor_listener('client1-sensor_3', listener3)
-        DUT.children.another_client.preset_sensor_listener.assert_called_once_with(
+        DUT.set_sensor_listener('another.client-sensor_1', listener1)
+        DUT.set_sensor_listener('client-2-sensor_1', listener2)
+        DUT.set_sensor_listener('client1-sensor_3', listener3)
+        DUT.children.another_client.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener1)
-        DUT.children.client_2.preset_sensor_listener.assert_called_once_with(
+        DUT.children.client_2.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener2)
-        DUT.children.client1.preset_sensor_listener.assert_called_once_with(
+        DUT.children.client1.set_sensor_listener.assert_called_once_with(
             'sensor_3', listener3)
 
     def test_set_active(self):
