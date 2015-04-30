@@ -262,7 +262,7 @@ class KATCPClientResource(resource.KATCPResource):
     def is_connected(self):
         """Indication of the connection state
 
-        Returns True is state is not "disconnected", i.e "syncing" or "synced"
+        Returns True if state is not "disconnected", i.e "syncing" or "synced"
         """
         return not self.state == 'disconnected'
 
