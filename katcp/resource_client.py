@@ -259,6 +259,13 @@ class KATCPClientResource(resource.KATCPResource):
         self._sensors_synced = AsyncCallbackEvent(self._update_state)
         self._requests_synced = AsyncCallbackEvent(self._update_state)
 
+    def is_connected(self):
+        """Indication of the connection state
+
+            Desired state, one of ("disconnected", "syncing", "synced")
+        """
+        return not self.state == 'disconnected'
+
     def until_state(self, state):
         """Future that resolves when a certain client state is attained
 
