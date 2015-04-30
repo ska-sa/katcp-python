@@ -245,8 +245,8 @@ class KATCPClientResource(resource.KATCPResource):
         self._controlled = resource_spec.get('controlled', False)
         self.auto_reconnect = resource_spec.get('auto_reconnect', True)
         self.auto_reconnect_delay = resource_spec.get('auto_reconnect_delay', 0.5)
-        self._sensor_strategy_presets = {}
-        self._sensor_listener_presets = collections.defaultdict(list)
+        self._sensor_strategy_cache = {}
+        self._sensor_listener_cache = collections.defaultdict(list)
         self._logger = logger
         self._parent = parent
         self._ioloop_set_to = None
@@ -280,12 +280,12 @@ class KATCPClientResource(resource.KATCPResource):
         # Update self._state, optional _flag parameter is ignored to be compatible with
         # AsyncCallbackEvent
         if not self._connected.isSet():
-            self._state.set('disconnected')
+            self._state.set_state('disconnected')
         else:
             if self._sensors_synced.isSet() and self._requests_synced.isSet():
-                self._state.set('synced')
+                self._state.set_state('synced')
             else:
-                self._state.set('syncing')
+                self._state.set_state('syncing')
 
     def set_ioloop(self, ioloop=None):
         """Set the tornado ioloop to use
@@ -324,14 +324,6 @@ class KATCPClientResource(resource.KATCPResource):
         return ReplyWrappedInspectingClientAsync(
             host, port, ioloop=ioloop_set_to, auto_reconnect=self.auto_reconnect)
 
-    def until_state(self, state):
-
-        """Return a tornado Future that will resolve when the requested state is set
-
-        State can be one of ("disconnected", "syncing", "synced")
-        """
-        return self._state.until_state(state)
-
     def until_synced(self):
         """Convenience method to wait (with Future) until client is synced"""
         return self._state.until_state('synced')
@@ -355,33 +347,32 @@ class KATCPClientResource(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
 
     @tornado.gen.coroutine
-    @steal_docstring_from(resource.KATCPResource.preset_sensor_strategy)
-    def preset_sensor_strategy(self, sensor_name, strategy_and_parms):
+    @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
+    def set_sensor_strategy(self, sensor_name, strategy_and_parms):
         sensor_name = resource.escape_name(sensor_name)
         sensor_obj = dict.get(self._sensor, sensor_name)
+        self._sensor_strategy_cache[sensor_name] = strategy_and_parms
         if sensor_obj:
-            # The sensor exists, so let's just set the strategy and continue. Log errors,
+            # The sensor exists, so set the strategy and continue. Log errors,
             # but don't raise anything
             try:
                 yield sensor_obj.set_sampling_strategy(strategy_and_parms)
             except Exception:
                 self._logger.exception(
                     'Unhandled exception trying to set sensor strategy {!r} for sensor {}'
-                    .format(sensor_name))
-        else:
-            # Otherwise, set for future reference, and depend on self._add_sensors() to
-            # handle it when the sensor appears
-            self._sensor_strategy_presets[sensor_name] = strategy_and_parms
+                    .format(strategy_and_parms, sensor_name))
+        # Otherwise, depend on self._add_sensors() to handle it when the sensor appears
 
-    @steal_docstring_from(resource.KATCPResource.preset_sensor_listener)
-    def preset_sensor_listener(self, sensor_name, listener):
+    @steal_docstring_from(resource.KATCPResource.set_sensor_listener)
+    def set_sensor_listener(self, sensor_name, listener):
         sensor_name = resource.escape_name(sensor_name)
         sensor_obj = dict.get(self._sensor, sensor_name)
+        self._sensor_listener_cache[sensor_name].append(listener)
         if sensor_obj:
-            # The sensor exists, so let's just register the listener and continue.
+            # The sensor exists, so register the listener and continue.
             sensor_obj.register_listener(listener)
-        else:
-            self._sensor_listener_presets[sensor_name].append(listener)
+        # Otherwise, depend on self._add_sensors() to handle it when the sensor appears
+
 
     def _request_factory(self, name, description):
         return KATCPClientResourceRequest(
@@ -472,7 +463,7 @@ class KATCPClientResource(resource.KATCPResource):
         for s_name, s_obj in sensor_instances.items():
             s_name_escaped = resource.escape_name(s_name)
             self._sensor[s_name_escaped] = s_obj
-            preset_strategy = self._sensor_strategy_presets.pop(s_name_escaped, None)
+            preset_strategy = self._sensor_strategy_cache.get(s_name_escaped)
             if preset_strategy:
                 self._logger.debug('Setting preset strategy for sensor {} to {!r}'
                                    .format(s_name, preset_strategy))
@@ -481,8 +472,8 @@ class KATCPClientResource(resource.KATCPResource):
                 except Exception:
                     self._logger.exception(
                         'Exception trying to pre-set sensor strategy for sensor {}'
-                        .format(sens_name))
-            preset_listeners = self._sensor_listener_presets.pop(s_name_escaped, None)
+                        .format(s_name))
+            preset_listeners = self._sensor_listener_cache.get(s_name_escaped)
             if preset_listeners:
                 try:
                     for listener in preset_listeners:
@@ -490,7 +481,7 @@ class KATCPClientResource(resource.KATCPResource):
                 except Exception:
                     self._logger.exception(
                         'Exception trying to pre-set sensor listeners for sensor {}'
-                        .format(sens_name))
+                        .format(s_name))
 
             added_names.append(s_name_escaped)
 
@@ -828,25 +819,25 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
 
     @tornado.gen.coroutine
-    @steal_docstring_from(resource.KATCPResource.preset_sensor_strategy)
-    def preset_sensor_strategy(self, sensor_name, strategy_and_parms):
+    @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
+    def set_sensor_strategy(self, sensor_name, strategy_and_parms):
         sensor_name = resource.escape_name(sensor_name)
         for child_name in dict.keys(self.children):
             prefix = child_name + '_'
             if sensor_name.startswith(prefix):
                 child = self.children[child_name]
                 child_sensor_name = sensor_name[len(prefix):]
-                yield child.preset_sensor_strategy(child_sensor_name, strategy_and_parms)
+                yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
 
-    @steal_docstring_from(resource.KATCPResource.preset_sensor_listener)
-    def preset_sensor_listener(self, sensor_name, listener):
+    @steal_docstring_from(resource.KATCPResource.set_sensor_listener)
+    def set_sensor_listener(self, sensor_name, listener):
         sensor_name = resource.escape_name(sensor_name)
         for child_name in dict.keys(self.children):
             prefix = child_name + '_'
             if sensor_name.startswith(prefix):
                 child = self.children[child_name]
                 child_sensor_name = sensor_name[len(prefix):]
-                child.preset_sensor_listener(child_sensor_name, listener)
+                child.set_sensor_listener(child_sensor_name, listener)
 
     def _create_attrdict_from_children(self, attr):
         attrdict = AttrDict()
@@ -856,11 +847,6 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 full_item_name = prefix + item_name
                 attrdict[full_item_name] = item
         return attrdict
-
-    def start(self):
-        """Start all child resources"""
-        for child in dict.values(self.children):
-            child.start()
 
     def stop(self):
         """Stop all child resources"""
