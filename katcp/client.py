@@ -438,7 +438,7 @@ class DeviceClient(object):
                 # other mechanisms for tracking failed connections. Consider doing some
                 # kind of exponential backoff starting at 5 times the reconnect time up to
                 # once per 5 minutes
-                self._logger.warn("Failed to connect to {0!r}: {1}"
+                self._logger.debug("Failed to connect to {0!r}: {1}"
                                   .format(self._bindaddr, e))
             self._connect_failures += 1
             stream = None
