@@ -608,7 +608,9 @@ class KATCPSensor(object):
         done : tornado Future that resolves when done or raises KATCPSensorError
 
         """
-        if isinstance(params, basestring):
+        if not params:
+            param_args = []
+        elif isinstance(params, basestring):
             param_args = [str(p) for p in params.split(' ')]
         else:
             if not isinstance(params, collections.Iterable):
