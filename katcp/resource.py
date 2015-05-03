@@ -589,6 +589,34 @@ class KATCPSensor(object):
     def type(self):
         return self._sensor.type
 
+    def set_strategy(self, strategy, params=None):
+        """Set current sampling strategy for sensor.
+        Add this footprint for backwards compatibility.
+
+        Parameters
+        ----------
+
+        strategy : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+        params : seq of str or str
+            (<strat_name>, [<strat_parm1>, ...])
+
+        Returns
+        -------
+        done : tornado Future that resolves when done or raises KATCPSensorError
+
+        """
+        if isinstance(params, basestring):
+            param_args = [str(p) for p in params.split(' ')]
+        else:
+            if not isinstance(params, collections.Iterable):
+                params = (params,)
+            param_args = [str(p) for p in params]
+        samp_strategy = " ".join([strategy] + param_args)
+        return self._manager.set_sampling_strategy(self.name, samp_strategy)
+
     def set_sampling_strategy(self, strategy):
         """Set current sampling strategy for sensor
 
