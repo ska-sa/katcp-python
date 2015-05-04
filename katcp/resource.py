@@ -637,19 +637,22 @@ class KATCPSensor(object):
         """
         return self._manager.set_sampling_strategy(self.name, strategy)
 
-    def register_listener(self, listener):
+    def register_listener(self, listener, reading=False):
         """Add a callback function that is called when sensor value is updated.
-
+        The callback footprint is received_timestamp, timestamp, status, value.
+        
         Parameters
         ----------
         listener : function
-            Callback signature:
+            Callback signature: if reading
             listener(katcp_sensor, reading) where
                 `katcp_sensor` is this KATCPSensor instance
                 `reading` is an instance of :class:`KATCPSensorReading`
+            Callback signature: default, if not reading
+                listener(katcp_sensor, received_timestamp, timestamp, status, value)
         """
         listener_id = hashable_identity(listener)
-        self._listeners[listener_id] = listener
+        self._listeners[listener_id] = (listener, reading)
 
     def unregister_listener(self, listener):
         """Remove a listener callback added with register_listener().
@@ -672,9 +675,12 @@ class KATCPSensor(object):
         self._listeners = {}
 
     def call_listeners(self, reading):
-        for listener in self._listeners.values():
+        for listener,use_reading in self._listeners.values():
             try:
-                listener(self, reading)
+                if use_reading:
+                    listener(self, reading)
+                else:
+                    listener(self, reading.received_timestamp, reading.timestamp, reading.status, reading.value)
             except Exception:
                 logger.exception(
                     'Unhandled exception calling KATCPSensor callback {0!r}'
