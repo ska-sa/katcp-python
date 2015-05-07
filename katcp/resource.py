@@ -14,16 +14,21 @@ from katcp import Message, Sensor
 from katcp.core import hashable_identity, AttrDict
 from katcp.sampling import SampleStrategy
 
+
 logger = logging.getLogger(__name__)
+
 
 class KATCPResourceError(Exception):
     """Error raised for resource-related errors"""
 
+
 class KATCPResourceInactive(KATCPResourceError):
     """Raised when a request is made to an inactive resource"""
 
+
 class KATCPSensorError(KATCPResourceError):
     """Raised if a problem occured dealing with as KATCPSensor operation"""
+
 
 class SensorResultTuple(collections.namedtuple(
         'SensorResultTuple',
@@ -47,6 +52,7 @@ class SensorResultTuple(collections.namedtuple(
         Most recently received sensor reading
     """
     __slots__ = []              # Prevent dynamic attributes from being possible
+
 
 def normalize_strategy_parameters(params):
     """Normalize strategy parameters to be a list of strings.
@@ -74,6 +80,7 @@ def normalize_strategy_parameters(params):
         params = params.split(' ')
     # No number
     return tuple(fixup_numbers(p) for p in params)
+
 
 def escape_name(name):
     """Escape sensor and request names to be valid Python identifiers."""
@@ -406,6 +413,7 @@ class KATCPRequest(object):
         """True if resource for this request is active"""
         return self._is_active()
 
+
 class KATCPSensorReading(collections.namedtuple(
         'KATCPSensorReading', 'received_timestamp timestamp status value')):
 
@@ -424,6 +432,7 @@ class KATCPSensorReading(collections.namedtuple(
         sensor's type).
     """
     __slots__ = []              # Prevent dynamic attributes from being possible
+
 
 class KATCPSensorsManager(object):
     """Sensor management class used by KATCPSensor. Abstracts communications details.
@@ -517,6 +526,7 @@ class KATCPSensorsManager(object):
         not raise errors when resetting stratgies for sensors that no longer
         exist on the KATCP resource.
         """
+
 
 class KATCPSensor(object):
     """Wrapper around a specific KATCP sensor on a given KATCP device.
@@ -640,7 +650,7 @@ class KATCPSensor(object):
     def register_listener(self, listener, reading=False):
         """Add a callback function that is called when sensor value is updated.
         The callback footprint is received_timestamp, timestamp, status, value.
-        
+
         Parameters
         ----------
         listener : function
@@ -896,6 +906,7 @@ class KATCPReply(_KATCPReplyTuple):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
 
+
 class GroupRequest(object):
     """Couroutine wrapper around a specific KATCP request for a group of clients.
 
@@ -956,6 +967,7 @@ class GroupRequest(object):
         results = yield result_futures
         raise Return(GroupResults(results))
 
+
 class GroupResults(dict):
     """The result of a group request.
 
@@ -985,7 +997,6 @@ class GroupResults(dict):
         return bool(self)
 
 
-
 class ClientGroup(object):
     """Create a group of similar clients.
 
@@ -1009,7 +1020,6 @@ class ClientGroup(object):
         """Number of client members in group."""
         return len(self.clients)
 
-
     @property
     def req(self):
         if self._clients_dirty:
@@ -1022,11 +1032,20 @@ class ClientGroup(object):
 
         return self._req
 
-
     def client_updated(self, client):
-        """Called to notify this array that the client has been updated."""
+        """Called to notify this group that a client has been updated."""
         assert client in self.clients
         self._clients_dirty = True
+
+    def set_sensor_strategies(self, filter, strategy_and_params, **list_sensor_args):
+        """Set sampling strategy for the sensors of all the group's clients.
+
+        Only sensors that match the specified filter are considered. See the
+        `KATCPResource.set_sensor_strategies` docstring for more info.
+        """
+        for client in self.clients:
+            client.set_sensor_strategies(filter, strategy_and_params,
+                                         list_sensor_args)
 
     @abc.abstractmethod
     def wait(self, sensor_name, condition, timeout=5):
