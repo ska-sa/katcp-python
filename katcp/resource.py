@@ -129,6 +129,14 @@ class KATCPResource(object):
         """
 
     @abc.abstractproperty
+    def is_connected(self):
+        """Indicate whether the underlying client/device is connected or not."""
+
+    @abc.abstractproperty
+    def name(self):
+        """Name of this KATCP resource."""
+
+    @abc.abstractproperty
     def req(self):
         """Attribute root/container for all KATCP request wrappers.
 
@@ -1036,6 +1044,10 @@ class ClientGroup(object):
         """Called to notify this group that a client has been updated."""
         assert client in self.clients
         self._clients_dirty = True
+
+    def is_connected(self):
+        """Indication of the connection state of all clients in the group"""
+        return all([c.is_connected() for c in self.clients])
 
     def set_sensor_strategies(self, filter, strategy_and_params, **list_sensor_args):
         """Set sampling strategy for the sensors of all the group's clients.
