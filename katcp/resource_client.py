@@ -66,7 +66,9 @@ def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers)
     filter_re = re.compile(filter)
     found_sensors = []
     none_strat = resource.normalize_strategy_parameters('none')
-    for sensor_identifier, sensor_obj in sensor_items:
+    sensor_dict = dict(sensor_items)
+    for sensor_identifier in sorted(sensor_dict.keys()):
+        sensor_obj = sensor_dict[sensor_identifier]
         search_name = (sensor_identifier if use_python_identifiers
                        else sensor_obj.name)
         name_match = filter_re.search(search_name)
