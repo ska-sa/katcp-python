@@ -986,10 +986,12 @@ class ThreadSafeKATCPSensorWrapper(ThreadSafeMethodAttrWrapper):
     def sampling_strategy(self):
         return self._getattr('sampling_strategy')
 
+
 class ThreadSafeKATCPClientResourceRequestWrapper(ThreadSafeMethodAttrWrapper):
     @property
     def __call__(self):
         return self._ioloop_wrapper.decorate_callable(self.__subject__.__call__)
+
 
 class MappingProxy(collections.Mapping):
 
@@ -1009,6 +1011,7 @@ class MappingProxy(collections.Mapping):
     def __getitem__(self, key):
         return self._wrapper(self._mapping[key])
 
+
 class AttrMappingProxy(MappingProxy):
 
     def __getattr__(self, attr):
@@ -1016,6 +1019,7 @@ class AttrMappingProxy(MappingProxy):
 
     def __dir__(self):
         return self.keys()
+
 
 class ThreadSafeKATCPClientGroupWrapper(ThreadSafeMethodAttrWrapper):
     """Thread safe wrapper for :class:`resource.ClientGroup`"""
@@ -1031,6 +1035,7 @@ class ThreadSafeKATCPClientGroupWrapper(ThreadSafeMethodAttrWrapper):
     @property
     def req(self):
         return AttrMappingProxy(self.__subject__.req, self.RequestWrapper)
+
 
 class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
     """Should work with both KATCPClientResource or KATCPClientResourceContainer"""
@@ -1054,6 +1059,8 @@ class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
         val = super(ThreadSafeKATCPClientResourceWrapper, self).__getattr__(attr)
         if isinstance(val, resource.KATCPResource):
             return self.ResourceWrapper(val)
+        elif isinstance(val, resource.ClientGroup):
+            return self.GroupWrapper(val)
         else:
             return val
 
@@ -1107,4 +1114,3 @@ def monitor_resource_sync_state(resource, callback, exit_event=None):
             break       # If exit event is set we stop without calling callback
         else:
             callback(False)
-
