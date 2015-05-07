@@ -798,6 +798,10 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         for res in dict.values(self.children):
             res.start()
 
+    def is_connected(self):
+        """Indication of the connection state of all children"""
+        return all([r.is_connected() for r in dict.values(self.children)])
+
     @tornado.gen.coroutine
     def until_synced(self):
         """Return a tornado Future; resolves when all subordinate clients are synced"""
