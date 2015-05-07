@@ -1049,15 +1049,19 @@ class ClientGroup(object):
         """Indication of the connection state of all clients in the group"""
         return all([c.is_connected() for c in self.clients])
 
+    @tornado.gen.coroutine
     def set_sensor_strategies(self, filter, strategy_and_params, **list_sensor_args):
         """Set sampling strategy for the sensors of all the group's clients.
 
         Only sensors that match the specified filter are considered. See the
         `KATCPResource.set_sensor_strategies` docstring for more info.
         """
+        futures_dict = {}
         for client in self.clients:
-            client.set_sensor_strategies(filter, strategy_and_params,
-                                         list_sensor_args)
+            futures_dict[client.name] = client.set_sensor_strategies(
+                filter, strategy_and_params, **list_sensor_args)
+        sensors_strategies = yield futures_dict
+        raise tornado.gen.Return(sensors_strategies)
 
     @abc.abstractmethod
     def wait(self, sensor_name, condition, timeout=5):
