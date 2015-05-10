@@ -697,10 +697,6 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         return self._sensor
 
     @property
-    def sensors(self):
-        return self.sensor
-
-    @property
     def address(self):
         return None
 
