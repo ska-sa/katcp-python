@@ -697,6 +697,10 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         return self._sensor
 
     @property
+    def sensors(self):
+        return self.sensor
+
+    @property
     def address(self):
         return None
 
@@ -831,6 +835,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         return list_sensors(
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
 
+    # TODO: Seems like aggregates "agg_xxxx" are not managed here as previously
     @tornado.gen.coroutine
     @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
     def set_sensor_strategy(self, sensor_name, strategy_and_parms):
@@ -842,6 +847,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 child_sensor_name = sensor_name[len(prefix):]
                 yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
 
+    # TODO: Seems like aggregates "agg_xxxx" are not managed here as previously
     @steal_docstring_from(resource.KATCPResource.set_sensor_listener)
     def set_sensor_listener(self, sensor_name, listener):
         sensor_name = resource.escape_name(sensor_name)
@@ -1073,6 +1079,10 @@ class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
     @property
     def sensor(self):
         return AttrMappingProxy(self.__subject__.sensor, self.SensorWrapper)
+
+    @property
+    def sensors(self):
+        return self.sensor
 
     @property
     def req(self):
