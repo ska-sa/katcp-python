@@ -800,6 +800,10 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         for res in dict.values(self.children):
             res.set_ioloop(ioloop)
 
+    def is_connected(self):
+        """Indication of the connection state of all children"""
+        return all([r.is_connected() for r in dict.values(self.children)])
+
     def start(self):
         """Start and connect all the subordinate clients"""
         for res in dict.values(self.children):
