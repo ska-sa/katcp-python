@@ -52,7 +52,7 @@ def transform_future(transformation, future):
     future.add_done_callback(_transform)
     return new_future
 
-def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers):
+def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers, tuple=False):
     """Helper for implementing :meth:`katcp.resource.KATCPResource.list_sensors`
 
     Parameters
@@ -74,14 +74,27 @@ def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers)
         name_match = filter_re.search(search_name)
         strat_match = not strategy or sensor_obj.sampling_strategy != none_strat
         if filter_re.search(search_name) and strat_match:
-            found_sensors.append(resource.SensorResultTuple(
-                object=sensor_obj,
-                name=sensor_obj.name,
-                python_identifier=sensor_identifier,
-                description=sensor_obj.description,
-                units=sensor_obj.units,
-                type=sensor_obj.type,
-                reading=sensor_obj.reading))
+            if tuple:
+                # (sensor.name, sensor.value, sensor.value_seconds, sensor.type, sensor.units, sensor.update_seconds, sensor.status, strategy_and_params)
+                found_sensors.append((
+                    sensor_obj.name,
+                    sensor_obj.reading.value,
+                    sensor_obj.reading.timestamp,
+                    sensor_obj.type,
+                    sensor_obj.units,
+                    sensor_obj.reading.received_timestamp,
+                    sensor_obj.reading.status
+                    #Not strategy_and_params returned
+                    ))
+            else:
+                found_sensors.append(resource.SensorResultTuple(
+                    object=sensor_obj,
+                    name=sensor_obj.name,
+                    python_identifier=sensor_identifier,
+                    description=sensor_obj.description,
+                    units=sensor_obj.units,
+                    type=sensor_obj.type,
+                    reading=sensor_obj.reading))
     return found_sensors
 
 
@@ -188,6 +201,10 @@ class KATCPClientResource(resource.KATCPResource):
     @property
     def parent(self):
         return self._parent
+
+    @property
+    def parent_name(self):
+        return self._parent.name
 
     @property
     def children(self):
@@ -314,7 +331,7 @@ class KATCPClientResource(resource.KATCPResource):
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
         ic.set_state_callback(self._inspecting_client_state_callback)
         ic.request_factory = self._request_factory
-        self._sensor_manager = KATCPClientResourceSensorsManager(ic, logger=self._logger)
+        self._sensor_manager = KATCPClientResourceSensorsManager(ic, self.name, logger=self._logger)
         ic.handle_sensor_value()
         ic.sensor_factory = self._sensor_manager.sensor_factory
 
@@ -351,9 +368,9 @@ class KATCPClientResource(resource.KATCPResource):
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
-                     use_python_identifiers=True):
+                     use_python_identifiers=True, tuple=False):
         return list_sensors(
-            dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
+            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple=tuple)
 
     @tornado.gen.coroutine
     @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
@@ -524,11 +541,16 @@ class KATCPClientResourceSensorsManager(object):
     Assumes that all methods are called from the same ioloop context
     """
 
-    def __init__(self, inspecting_client, logger=log):
+    def __init__(self, inspecting_client, resource_name, logger=log):
         self._inspecting_client = inspecting_client
         self.time = inspecting_client.ioloop.time
         self._strategy_cache = {}
+        self._resource_name = resource_name
         self._logger = logger
+
+    @property
+    def resource_name(self):
+        return self._resource_name
 
     def sensor_factory(self, **sensor_description):
         # kwargs as for inspecting_client.InspectingClientAsync.sensor_factory
@@ -677,7 +699,8 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     Provides aggregate `sensor` and `req` attributes containing the union of all the
     sensors in requests in the contained resources. Names are prefixed with <resname>_,
-    where <resname> is the name of the resource to which the sensor / request belongs.
+    where <resname> is the name of the resource to which the sensor / request belongs
+    except for aggregate sensors that starts with 'agg_'.
 
     """
     @property
@@ -695,6 +718,10 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             self._children_dirty = False
 
         return self._sensor
+
+    @property
+    def sensors(self):
+        return self.sensor
 
     @property
     def address(self):
@@ -795,14 +822,14 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         for res in dict.values(self.children):
             res.set_ioloop(ioloop)
 
+    def is_connected(self):
+        """Indication of the connection state of all children"""
+        return all([r.is_connected() for r in dict.values(self.children)])
+
     def start(self):
         """Start and connect all the subordinate clients"""
         for res in dict.values(self.children):
             res.start()
-
-    def is_connected(self):
-        """Indication of the connection state of all children"""
-        return all([r.is_connected() for r in dict.values(self.children)])
 
     @tornado.gen.coroutine
     def until_synced(self):
@@ -827,39 +854,53 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
-                     use_python_identifiers=True):
+                     use_python_identifiers=True, tuple=False):
         return list_sensors(
-            dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
+            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple=tuple)
 
-    # TODO: Seems like aggregates "agg_xxxx" are not managed here as previously
     @tornado.gen.coroutine
     @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
     def set_sensor_strategy(self, sensor_name, strategy_and_parms):
         sensor_name = resource.escape_name(sensor_name)
+        sensor_obj = getattr(self.sensor, sensor_name)
         for child_name in dict.keys(self.children):
-            prefix = child_name + '_'
-            if sensor_name.startswith(prefix):
+            if child.name == sensor_obj.parent_name:
                 child = self.children[child_name]
-                child_sensor_name = sensor_name[len(prefix):]
-                yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
+                if sensor_name.startswith("agg_"):
+                    # Handle aggregate sensors that are not prefixed with "parent_name_"
+                    yield child.set_sensor_strategy(sensor_name, strategy_and_parms)
+                else:
+                    # Get the child_sensor_name without the parent_name prefix
+                    prefix = child_name + '_'
+                    child_sensor_name = sensor_name[len(prefix):]
+                    yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
 
-    # TODO: Seems like aggregates "agg_xxxx" are not managed here as previously
     @steal_docstring_from(resource.KATCPResource.set_sensor_listener)
     def set_sensor_listener(self, sensor_name, listener):
         sensor_name = resource.escape_name(sensor_name)
+        sensor_obj = getattr(self.sensor, sensor_name)
         for child_name in dict.keys(self.children):
-            prefix = child_name + '_'
-            if sensor_name.startswith(prefix):
+            if child.name == sensor_obj.parent_name:
                 child = self.children[child_name]
-                child_sensor_name = sensor_name[len(prefix):]
-                child.set_sensor_listener(child_sensor_name, listener)
+                if sensor_name.startswith("agg_"):
+                    # Handle aggregate sensors that are not prefixed with "parent_name_"
+                    child.set_sensor_listener(sensor_name, listener)
+                else:
+                    # Get the child_sensor_name without the parent_name prefix
+                    prefix = child_name + '_'
+                    child_sensor_name = sensor_name[len(prefix):]
+                    child.set_sensor_listener(child_sensor_name, listener)
 
     def _create_attrdict_from_children(self, attr):
         attrdict = AttrDict()
         for child_name, child_resource in dict.items(self.children):
             prefix = resource.escape_name(child_name) + '_'
             for item_name, item in dict.items(getattr(child_resource, attr)):
-                full_item_name = prefix + item_name
+                # Do not prefix aggregate sensors with "parent_name_"
+                if item_name.startswith("agg_"):
+                    full_item_name = item_name
+                else:
+                    full_item_name = prefix + item_name
                 attrdict[full_item_name] = item
         return attrdict
 
