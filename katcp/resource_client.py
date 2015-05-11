@@ -537,7 +537,7 @@ class KATCPClientResourceSensorsManager(object):
 
     @property
     def resource_name(self):
-        return self.resource_name
+        return self._resource_name
 
     def sensor_factory(self, **sensor_description):
         # kwargs as for inspecting_client.InspectingClientAsync.sensor_factory
@@ -884,7 +884,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             prefix = resource.escape_name(child_name) + '_'
             for item_name, item in dict.items(getattr(child_resource, attr)):
                 # Do not prefix aggregate sensors with "parent_name_"
-                if child_name.startswith("agg_"):
+                if item_name.startswith("agg_"):
                     full_item_name = item_name
                 else:
                     full_item_name = prefix + item_name
