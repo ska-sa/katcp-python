@@ -52,7 +52,7 @@ def transform_future(transformation, future):
     future.add_done_callback(_transform)
     return new_future
 
-def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers):
+def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers, tuple=False):
     """Helper for implementing :meth:`katcp.resource.KATCPResource.list_sensors`
 
     Parameters
@@ -74,14 +74,27 @@ def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers)
         name_match = filter_re.search(search_name)
         strat_match = not strategy or sensor_obj.sampling_strategy != none_strat
         if filter_re.search(search_name) and strat_match:
-            found_sensors.append(resource.SensorResultTuple(
-                object=sensor_obj,
-                name=sensor_obj.name,
-                python_identifier=sensor_identifier,
-                description=sensor_obj.description,
-                units=sensor_obj.units,
-                type=sensor_obj.type,
-                reading=sensor_obj.reading))
+            if tuple:
+                # (sensor.name, sensor.value, sensor.value_seconds, sensor.type, sensor.units, sensor.update_seconds, sensor.status, strategy_and_params)
+                found_sensors.append((
+                    sensor_obj.name,
+                    sensor_obj.reading.value,
+                    sensor_obj.reading.timestamp,
+                    sensor_obj.type,
+                    sensor_obj.units,
+                    sensor_obj.reading.received_timestamp,
+                    sensor_obj.reading.status
+                    #Not strategy_and_params returned
+                    ))
+            else:
+                found_sensors.append(resource.SensorResultTuple(
+                    object=sensor_obj,
+                    name=sensor_obj.name,
+                    python_identifier=sensor_identifier,
+                    description=sensor_obj.description,
+                    units=sensor_obj.units,
+                    type=sensor_obj.type,
+                    reading=sensor_obj.reading))
     return found_sensors
 
 
@@ -355,9 +368,9 @@ class KATCPClientResource(resource.KATCPResource):
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
-                     use_python_identifiers=True):
+                     use_python_identifiers=True, tuple=False):
         return list_sensors(
-            dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
+            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple=tuple)
 
     @tornado.gen.coroutine
     @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
@@ -841,9 +854,9 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
-                     use_python_identifiers=True):
+                     use_python_identifiers=True, tuple=False):
         return list_sensors(
-            dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
+            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple=tuple)
 
     @tornado.gen.coroutine
     @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)

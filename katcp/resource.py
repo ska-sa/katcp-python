@@ -216,7 +216,7 @@ class KATCPResource(object):
 
     @abc.abstractmethod
     def list_sensors(self, filter="", strategy=False, status="",
-                     use_python_identifiers=True):
+                     use_python_identifiers=True, tuple=False):
         """List sensors available on this resource matching certain criteria.
 
         Parameters
@@ -236,10 +236,12 @@ class KATCPResource(object):
             Filter each returned sensor's status against this regexp if given
         use_python_identifiers : {True, False}, optional
             Match on python identfiers even the the KATCP name is available.
+        tuple : {True, False}, optional
+            Return backwards compatible tuple instead of SensorResultTuples
 
         Returns
         -------
-        sensors : list of SensorResultTuples
+        sensors : list of SensorResultTuples, or list of tuples
             List of matching sensors presented as named tuples. The `object`
             field is the :class:`KATCPSensor` object associated with the sensor.
             Note that the name of the object may not match `name` if it
