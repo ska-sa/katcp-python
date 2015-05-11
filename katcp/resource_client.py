@@ -190,6 +190,10 @@ class KATCPClientResource(resource.KATCPResource):
         return self._parent
 
     @property
+    def parent_name(self):
+        return self._parent.name
+
+    @property
     def children(self):
         return {}
 
@@ -677,7 +681,8 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     Provides aggregate `sensor` and `req` attributes containing the union of all the
     sensors in requests in the contained resources. Names are prefixed with <resname>_,
-    where <resname> is the name of the resource to which the sensor / request belongs.
+    where <resname> is the name of the resource to which the sensor / request belongs
+    except for aggregate sensors that starts with 'agg_'.
 
     """
     @property
@@ -800,10 +805,6 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         for res in dict.values(self.children):
             res.start()
 
-    def is_connected(self):
-        """Indication of the connection state of all children"""
-        return all([r.is_connected() for r in dict.values(self.children)])
-
     @tornado.gen.coroutine
     def until_synced(self):
         """Return a tornado Future; resolves when all subordinate clients are synced"""
@@ -831,35 +832,49 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         return list_sensors(
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers)
 
-    # TODO: Seems like aggregates "agg_xxxx" are not managed here as previously
     @tornado.gen.coroutine
     @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
     def set_sensor_strategy(self, sensor_name, strategy_and_parms):
         sensor_name = resource.escape_name(sensor_name)
+        sensor_obj = getattr(self.sensor, sensor_name)
         for child_name in dict.keys(self.children):
-            prefix = child_name + '_'
-            if sensor_name.startswith(prefix):
+            if child.name == sensor_obj.parent_name:
                 child = self.children[child_name]
-                child_sensor_name = sensor_name[len(prefix):]
-                yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
+                if sensor_name.startswith("agg_"):
+                    # Handle aggregate sensors that are not prefixed with "parent_name_"
+                    yield child.set_sensor_strategy(sensor_name, strategy_and_parms)
+                else:
+                    # Get the child_sensor_name without the parent_name prefix
+                    prefix = child_name + '_'
+                    child_sensor_name = sensor_name[len(prefix):]
+                    yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
 
-    # TODO: Seems like aggregates "agg_xxxx" are not managed here as previously
     @steal_docstring_from(resource.KATCPResource.set_sensor_listener)
     def set_sensor_listener(self, sensor_name, listener):
         sensor_name = resource.escape_name(sensor_name)
+        sensor_obj = getattr(self.sensor, sensor_name)
         for child_name in dict.keys(self.children):
-            prefix = child_name + '_'
-            if sensor_name.startswith(prefix):
+            if child.name == sensor_obj.parent_name:
                 child = self.children[child_name]
-                child_sensor_name = sensor_name[len(prefix):]
-                child.set_sensor_listener(child_sensor_name, listener)
+                if sensor_name.startswith("agg_"):
+                    # Handle aggregate sensors that are not prefixed with "parent_name_"
+                    child.set_sensor_listener(sensor_name, listener)
+                else:
+                    # Get the child_sensor_name without the parent_name prefix
+                    prefix = child_name + '_'
+                    child_sensor_name = sensor_name[len(prefix):]
+                    child.set_sensor_listener(child_sensor_name, listener)
 
     def _create_attrdict_from_children(self, attr):
         attrdict = AttrDict()
         for child_name, child_resource in dict.items(self.children):
             prefix = resource.escape_name(child_name) + '_'
             for item_name, item in dict.items(getattr(child_resource, attr)):
-                full_item_name = prefix + item_name
+                # Do not prefix aggregate sensors with "parent_name_"
+                if child_name.startswith("agg_"):
+                    full_item_name = item_name
+                else:
+                    full_item_name = prefix + item_name
                 attrdict[full_item_name] = item
         return attrdict
 
@@ -1075,10 +1090,6 @@ class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
     @property
     def sensor(self):
         return AttrMappingProxy(self.__subject__.sensor, self.SensorWrapper)
-
-    @property
-    def sensors(self):
-        return self.sensor
 
     @property
     def req(self):
