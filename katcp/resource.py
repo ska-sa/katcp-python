@@ -712,9 +712,9 @@ class KATCPSensor(object):
         for listener,use_reading in self._listeners.values():
             try:
                 if use_reading:
-                    listener(self, reading)
+                    listener(reading)
                 else:
-                    listener(self, reading.received_timestamp, reading.timestamp, reading.status, reading.value)
+                    listener(reading.received_timestamp, reading.timestamp, reading.status, reading.value)
             except Exception:
                 logger.exception(
                     'Unhandled exception calling KATCPSensor callback {0!r}'

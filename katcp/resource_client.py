@@ -210,6 +210,10 @@ class KATCPClientResource(resource.KATCPResource):
     def children(self):
         return {}
 
+    @property
+    def synced(self):
+        return self.state == 'synced'
+
     def __init__(self, resource_spec, parent=None, logger=log):
         """Initialise resource with given specification
 
