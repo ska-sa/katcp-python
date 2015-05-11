@@ -1032,17 +1032,25 @@ class AttrMappingProxy(MappingProxy):
 class ThreadSafeKATCPClientGroupWrapper(ThreadSafeMethodAttrWrapper):
     """Thread safe wrapper for :class:`resource.ClientGroup`"""
 
-    __slots__ = ['RequestWrapper']
+    __slots__ = ['RequestWrapper', 'ResourceWrapper']
 
     def __init__(self, subject, ioloop_wrapper):
         self.RequestWrapper = partial(ThreadSafeKATCPClientResourceRequestWrapper,
                                       ioloop_wrapper=ioloop_wrapper)
+        self.ResourceWrapper = partial(ThreadSafeKATCPClientResourceWrapper,
+                                       ioloop_wrapper=ioloop_wrapper)
         super(ThreadSafeKATCPClientGroupWrapper, self).__init__(
             subject, ioloop_wrapper)
 
     @property
     def req(self):
         return AttrMappingProxy(self.__subject__.req, self.RequestWrapper)
+
+    @property
+    def clients(self):
+        async_clients = self.__subject__.clients
+        blocking_clients = [self.ResourceWrapper(ac) for ac in async_clients]
+        return blocking_clients
 
 
 class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):

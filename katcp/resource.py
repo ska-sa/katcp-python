@@ -423,9 +423,9 @@ class KATCPRequest(object):
 
 
 class KATCPSensorReading(collections.namedtuple(
-        'KATCPSensorReading', 'received_timestamp timestamp status value')):
+        'KATCPSensorReading', 'received_timestamp timestamp istatus value')):
 
-    """Sensor reading as a (received_timestamp, timestamp, status, value) tuple.
+    """Sensor reading as a (received_timestamp, timestamp, istatus, value) tuple.
 
     Attributes
     ----------
@@ -433,13 +433,22 @@ class KATCPSensorReading(collections.namedtuple(
        Time (in seconds since UTC epoch) at which the sensor value was received.
     timestamp : float
        Time (in seconds since UTC epoch) at which the sensor value was determined.
-    status : Sensor status constant
+    istatus : int Sensor status constant
        Whether the value represents an error condition or not, as in class:`katcp.Sensor`
+       The status is stored as an int, but output as a string, eg 'nominal'.
     value : object
         The value of the sensor (the type will be appropriate to the
         sensor's type).
     """
-    __slots__ = []              # Prevent dynamic attributes from being possible
+    __slots__ = []              # Prevent dynamic attributes 
+    @property
+    def status(self): 
+        " Returns the string representation of sensor status, eg 'nominal'"
+        try:
+            return Sensor.STATUSES[int(self.istatus)]
+        except TypeError:
+            return 'unknown'
+
 
 
 class KATCPSensorsManager(object):
@@ -560,7 +569,7 @@ class KATCPSensor(object):
         """
         self._manager = sensor_manager
         self.clear_listeners()
-        self._reading = KATCPSensorReading(0, 0, None, Sensor.UNKNOWN)
+        self._reading = KATCPSensorReading(0, 0, Sensor.UNKNOWN, None)
         # We'll be abusing a katcp.Sensor object slightly to make use of its parsing and
         # formatting functionality
         self._sensor = Sensor(**sensor_description)
