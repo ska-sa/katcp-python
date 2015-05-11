@@ -318,7 +318,7 @@ class KATCPClientResource(resource.KATCPResource):
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
         ic.set_state_callback(self._inspecting_client_state_callback)
         ic.request_factory = self._request_factory
-        self._sensor_manager = KATCPClientResourceSensorsManager(ic, logger=self._logger)
+        self._sensor_manager = KATCPClientResourceSensorsManager(ic, self.name, logger=self._logger)
         ic.handle_sensor_value()
         ic.sensor_factory = self._sensor_manager.sensor_factory
 
@@ -528,11 +528,16 @@ class KATCPClientResourceSensorsManager(object):
     Assumes that all methods are called from the same ioloop context
     """
 
-    def __init__(self, inspecting_client, logger=log):
+    def __init__(self, inspecting_client, resource_name, logger=log):
         self._inspecting_client = inspecting_client
         self.time = inspecting_client.ioloop.time
         self._strategy_cache = {}
+        self._resource_name = resource_name
         self._logger = logger
+
+    @property
+    def resource_name(self):
+        return self.resource_name
 
     def sensor_factory(self, **sensor_description):
         # kwargs as for inspecting_client.InspectingClientAsync.sensor_factory

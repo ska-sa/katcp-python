@@ -573,6 +573,11 @@ class KATCPSensor(object):
         self.set_formatted = self._sensor.set_formatted
 
     @property
+    def parent_name(self):
+        """Name of the parent of this KATCPSensor"""
+        return self._manager.resource_name
+
+    @property
     def name(self):
         """Name of this KATCP resource"""
         return self._name
