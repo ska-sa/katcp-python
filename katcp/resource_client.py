@@ -862,34 +862,34 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
     def set_sensor_strategy(self, sensor_name, strategy_and_parms):
         sensor_name = resource.escape_name(sensor_name)
-        sensor_obj = getattr(self.sensor, sensor_name)
+        sensor_obj = getattr(self.sensor, sensor_name, None)
         for child_name in dict.keys(self.children):
-            if child.name == sensor_obj.parent_name:
-                child = self.children[child_name]
-                if sensor_name.startswith("agg_"):
+            child = self.children[child_name]
+            if sensor_name.startswith("agg_"):
+                if sensor_obj and (child.name == sensor_obj.parent_name):
                     # Handle aggregate sensors that are not prefixed with "parent_name_"
                     yield child.set_sensor_strategy(sensor_name, strategy_and_parms)
-                else:
-                    # Get the child_sensor_name without the parent_name prefix
-                    prefix = child_name + '_'
-                    child_sensor_name = sensor_name[len(prefix):]
-                    yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
+            else:
+                # Get the child_sensor_name without the parent_name prefix
+                prefix = child_name + '_'
+                child_sensor_name = sensor_name[len(prefix):]
+                yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
 
     @steal_docstring_from(resource.KATCPResource.set_sensor_listener)
     def set_sensor_listener(self, sensor_name, listener):
         sensor_name = resource.escape_name(sensor_name)
-        sensor_obj = getattr(self.sensor, sensor_name)
+        sensor_obj = getattr(self.sensor, sensor_name, None)
         for child_name in dict.keys(self.children):
-            if child.name == sensor_obj.parent_name:
-                child = self.children[child_name]
-                if sensor_name.startswith("agg_"):
+            child = self.children[child_name]
+            if sensor_name.startswith("agg_"):
+                if sensor_obj and (child.name == sensor_obj.parent_name):
                     # Handle aggregate sensors that are not prefixed with "parent_name_"
                     child.set_sensor_listener(sensor_name, listener)
-                else:
-                    # Get the child_sensor_name without the parent_name prefix
-                    prefix = child_name + '_'
-                    child_sensor_name = sensor_name[len(prefix):]
-                    child.set_sensor_listener(child_sensor_name, listener)
+            else:
+                # Get the child_sensor_name without the parent_name prefix
+                prefix = child_name + '_'
+                child_sensor_name = sensor_name[len(prefix):]
+                child.set_sensor_listener(child_sensor_name, listener)
 
     def _create_attrdict_from_children(self, attr):
         attrdict = AttrDict()
