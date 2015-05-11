@@ -1108,6 +1108,10 @@ class ThreadSafeKATCPClientResourceWrapper(ThreadSafeMethodAttrWrapper):
         return AttrMappingProxy(self.__subject__.sensor, self.SensorWrapper)
 
     @property
+    def sensors(self):
+        return self.sensor
+
+    @property
     def req(self):
         return AttrMappingProxy(self.__subject__.req, self.RequestWrapper)
 
