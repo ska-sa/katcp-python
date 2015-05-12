@@ -216,7 +216,7 @@ class KATCPResource(object):
 
     @abc.abstractmethod
     def list_sensors(self, filter="", strategy=False, status="",
-                     use_python_identifiers=True, tuple=False):
+                     use_python_identifiers=True, tuple=False, refresh=False):
         """List sensors available on this resource matching certain criteria.
 
         Parameters
@@ -236,8 +236,11 @@ class KATCPResource(object):
             Filter each returned sensor's status against this regexp if given
         use_python_identifiers : {True, False}, optional
             Match on python identfiers even the the KATCP name is available.
-        tuple : {True, False}, optional
+        tuple : {True, False}, optional, Default: False
             Return backwards compatible tuple instead of SensorResultTuples
+        refresh : {True, False}, optional, Default: False
+            If set the sensor values will be refreshed with get_value before
+            returning the results.
 
         Returns
         -------

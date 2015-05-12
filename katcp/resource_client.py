@@ -860,7 +860,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
-                     use_python_identifiers=True, tuple=False):
+                     use_python_identifiers=True, tuple=False, refresh=False):
         return list_sensors(
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
