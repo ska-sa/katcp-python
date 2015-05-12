@@ -686,7 +686,7 @@ class KATCPSensor(object):
                 `katcp_sensor` is this KATCPSensor instance
                 `reading` is an instance of :class:`KATCPSensorReading`
             Callback signature: default, if not reading
-                listener(katcp_sensor, received_timestamp, timestamp, status, value)
+                listener(received_timestamp, timestamp, status, value)
         """
         listener_id = hashable_identity(listener)
         self._listeners[listener_id] = (listener, reading)
@@ -715,7 +715,7 @@ class KATCPSensor(object):
         for listener,use_reading in self._listeners.values():
             try:
                 if use_reading:
-                    listener(reading)
+                    listener(self, reading)
                 else:
                     listener(reading.received_timestamp, reading.timestamp, reading.status, reading.value)
             except Exception:
