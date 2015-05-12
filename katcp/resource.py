@@ -283,7 +283,7 @@ class KATCPResource(object):
                else, sys.exc_info() tuple for the error that occured.
         """
         sensors_strategies = {}
-        sensor_results = self.list_sensors(filter, **list_sensor_args)
+        sensor_results = yield self.list_sensors(filter, **list_sensor_args)
         for sensor_res in sensor_results:
             try:
                 yield sensor_res.object.set_sampling_strategy(strategy_and_params)
