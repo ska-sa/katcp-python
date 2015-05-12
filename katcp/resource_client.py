@@ -53,6 +53,7 @@ def transform_future(transformation, future):
     future.add_done_callback(_transform)
     return new_future
 
+@tornado.gen.coroutine
 def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers, tuple, refresh):
     """Helper for implementing :meth:`katcp.resource.KATCPResource.list_sensors`
 
@@ -76,8 +77,7 @@ def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers,
         strat_match = not strategy or sensor_obj.sampling_strategy != none_strat
         if filter_re.search(search_name) and strat_match:
             if refresh:
-                sensor_obj.get_value()
-                time.sleep(0.1)
+                yield sensor_obj.get_value()
             if tuple:
                 # (sensor.name, sensor.value, sensor.value_seconds, sensor.type, sensor.units, sensor.update_seconds, sensor.status, strategy_and_params)
                 found_sensors.append((
@@ -99,7 +99,7 @@ def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers,
                     units=sensor_obj.units,
                     type=sensor_obj.type,
                     reading=sensor_obj.reading))
-    return found_sensors
+    raise tornado.gen.Return(found_sensors)
 
 
 class ReplyWrappedInspectingClientAsync(inspecting_client.InspectingClientAsync):
