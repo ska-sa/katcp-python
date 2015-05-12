@@ -52,7 +52,7 @@ def transform_future(transformation, future):
     future.add_done_callback(_transform)
     return new_future
 
-def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers, tuple=False):
+def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers, tuple, refresh):
     """Helper for implementing :meth:`katcp.resource.KATCPResource.list_sensors`
 
     Parameters
@@ -74,6 +74,8 @@ def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers,
         name_match = filter_re.search(search_name)
         strat_match = not strategy or sensor_obj.sampling_strategy != none_strat
         if filter_re.search(search_name) and strat_match:
+            if refresh:
+                sensor_obj.get_value()
             if tuple:
                 # (sensor.name, sensor.value, sensor.value_seconds, sensor.type, sensor.units, sensor.update_seconds, sensor.status, strategy_and_params)
                 found_sensors.append((
@@ -372,9 +374,9 @@ class KATCPClientResource(resource.KATCPResource):
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
-                     use_python_identifiers=True, tuple=False):
+                     use_python_identifiers=True, tuple=False, refresh=False):
         return list_sensors(
-            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple=tuple)
+            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
     @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
@@ -860,7 +862,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True, tuple=False):
         return list_sensors(
-            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple=tuple)
+            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
     @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
