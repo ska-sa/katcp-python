@@ -6,6 +6,7 @@ import sys
 import re
 import collections
 import textwrap
+import time
 
 import tornado
 
@@ -76,6 +77,7 @@ def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers,
         if filter_re.search(search_name) and strat_match:
             if refresh:
                 sensor_obj.get_value()
+                time.sleep(0.1)
             if tuple:
                 # (sensor.name, sensor.value, sensor.value_seconds, sensor.type, sensor.units, sensor.update_seconds, sensor.status, strategy_and_params)
                 found_sensors.append((
