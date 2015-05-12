@@ -1043,6 +1043,10 @@ class ClientGroup(object):
         """Iterate over client members of group."""
         return iter(self.clients)
 
+    def __getitem__(self, index):
+        """Get the client at specific index of group."""
+        return self.clients[index]
+
     def __len__(self):
         """Number of client members in group."""
         return len(self.clients)
