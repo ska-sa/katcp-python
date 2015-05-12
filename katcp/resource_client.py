@@ -1091,6 +1091,14 @@ class ThreadSafeKATCPClientGroupWrapper(ThreadSafeMethodAttrWrapper):
         super(ThreadSafeKATCPClientGroupWrapper, self).__init__(
             subject, ioloop_wrapper)
 
+    def __iter__(self):
+        """Iterate over client members of group."""
+        return iter(self.clients)
+
+    def __getitem__(self, index):
+        """Get the client at specific index of group."""
+        return self.clients[index]
+
     @property
     def req(self):
         return AttrMappingProxy(self.__subject__.req, self.RequestWrapper)
