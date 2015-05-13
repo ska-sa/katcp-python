@@ -86,7 +86,7 @@ def list_sensors(parent_class, sensor_items, filter, strategy, status, use_pytho
             # parent_name. except for aggs when in KATCPClientResourceContinaer
             prefix = ""
             if isinstance(parent_class, KATCPClientResourceContainer):
-                if  resource sensor_obj.name.startswith("agg_"):
+                if sensor_obj.name.startswith("agg_"):
                     prefix = ""
                 else:
                     prefix = sensor_obj.parent_name + "."
