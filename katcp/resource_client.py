@@ -54,7 +54,7 @@ def transform_future(transformation, future):
     return new_future
 
 @tornado.gen.coroutine
-def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers, tuple, refresh):
+def list_sensors(parent_class, sensor_items, filter, strategy, status, use_python_identifiers, tuple, refresh):
     """Helper for implementing :meth:`katcp.resource.KATCPResource.list_sensors`
 
     Parameters
@@ -63,6 +63,8 @@ def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers,
     sensor_items : tuple of sensor-item tuples
         As would be returned the items() method of a dict containing KATCPSensor objects
         keyed by Python-identifiers.
+    parent_class: KATCPClientResource or KATCPClientResourceContainer
+        Is used for prefix calculation
     Rest of parameters as for :meth:`katcp.resource.KATCPResource.list_sensors`
     """
     filter_re = re.compile(filter)
@@ -80,11 +82,14 @@ def list_sensors(sensor_items, filter, strategy, status, use_python_identifiers,
             if refresh:
                 # First refresh the sensor reading
                 yield sensor_obj.get_value()
-            # Determine the sensorname prefix - parent_name. except for aggs
-            if sensor_obj.name.startswith("agg_"):
-                prefix = ""
-            else:
-                prefix = sensor_obj.parent_name + "."
+            # Determine the sensorname prefix:
+            # parent_name. except for aggs when in KATCPClientResourceContinaer
+            prefix = ""
+            if isinstance(parent_class, KATCPClientResourceContainer):
+                if  resource sensor_obj.name.startswith("agg_"):
+                    prefix = ""
+                else:
+                    prefix = sensor_obj.parent_name + "."
             if status and sensor_obj.reading.status in status:
                 # Only include sensors of the given status
                 if tuple:
@@ -386,7 +391,7 @@ class KATCPClientResource(resource.KATCPResource):
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True, tuple=False, refresh=False):
-        return list_sensors(
+        return list_sensors(self,
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
@@ -872,7 +877,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True, tuple=False, refresh=False):
-        return list_sensors(
+        return list_sensors(self,
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
