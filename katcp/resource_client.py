@@ -78,7 +78,7 @@ def list_sensors(parent_class, sensor_items, filter, strategy, status, use_pytho
         name_match = filter_re.search(search_name)
         # Only include sensors with strategies
         strat_match = not strategy or sensor_obj.sampling_strategy != none_strat
-        if name_math and strat_match:
+        if name_match and strat_match:
             if refresh:
                 # First refresh the sensor reading
                 yield sensor_obj.get_value()
@@ -90,7 +90,7 @@ def list_sensors(parent_class, sensor_items, filter, strategy, status, use_pytho
                     prefix = ""
                 else:
                     prefix = sensor_obj.parent_name + "."
-            if status and sensor_obj.reading.status in status:
+            if not status or (sensor_obj.reading.status in status):
                 # Only include sensors of the given status
                 if tuple:
                     # (sensor.name, sensor.value, sensor.value_seconds, sensor.type, sensor.units, sensor.update_seconds, sensor.status, strategy_and_params)
