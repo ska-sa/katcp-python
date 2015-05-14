@@ -101,8 +101,8 @@ def list_sensors(parent_class, sensor_items, filter, strategy, status, use_pytho
                         sensor_obj.type,
                         sensor_obj.units,
                         sensor_obj.reading.received_timestamp,
-                        sensor_obj.reading.status
-                        #Not strategy_and_params returned
+                        sensor_obj.reading.status,
+                        sensor_obj.sampling_strategy
                         ))
                 else:
                     found_sensors.append(resource.SensorResultTuple(
