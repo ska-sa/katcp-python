@@ -913,6 +913,18 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 child_sensor_name = sensor_name[len(prefix):]
                 child.set_sensor_listener(child_sensor_name, listener)
 
+    def add_child_resource_client(self, res_name, res_spec):
+        """Add a resource client to the container and start the resource connection"""
+        res_spec = dict(res_spec)
+        res_spec['name'] = res_name
+        res = self.client_resource_factory(
+                res_spec, parent=self, logger=self._logger)
+        self.children[resource.escape_name(res_name)] = res;
+        self._children_dirty = True
+        res.set_ioloop(self.ioloop)
+        res.start()
+        return res
+
     def _create_attrdict_from_children(self, attr):
         attrdict = AttrDict()
         for child_name, child_resource in dict.items(self.children):
