@@ -133,10 +133,6 @@ class KATCPResource(object):
         """Indicate whether the underlying client/device is connected or not."""
 
     @abc.abstractproperty
-    def name(self):
-        """Name of this KATCP resource."""
-
-    @abc.abstractproperty
     def req(self):
         """Attribute root/container for all KATCP request wrappers.
 
@@ -351,7 +347,7 @@ class KATCPRequest(object):
     """
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, name, description, is_active=lambda : True):
+    def __init__(self, name, description, is_active=lambda: True):
         """Initialize request with given description and network client
 
         Parameters
@@ -450,15 +446,16 @@ class KATCPSensorReading(collections.namedtuple(
         The value of the sensor (the type will be appropriate to the
         sensor's type).
     """
-    __slots__ = []              # Prevent dynamic attributes 
+
+    __slots__ = []              # Prevent dynamic attributes
+
     @property
-    def status(self): 
+    def status(self):
         " Returns the string representation of sensor status, eg 'nominal'"
         try:
             return Sensor.STATUSES[int(self.istatus)]
         except TypeError:
             return 'unknown'
-
 
 
 class KATCPSensorsManager(object):
@@ -580,15 +577,15 @@ class KATCPSensor(object):
         self._manager = sensor_manager
         self.clear_listeners()
         self._reading = KATCPSensorReading(0, 0, Sensor.UNKNOWN, None)
-        # We'll be abusing a katcp.Sensor object slightly to make use of its parsing and
-        # formatting functionality
+        # We'll be abusing a katcp.Sensor object slightly to make use of its
+        # parsing and formatting functionality
         self._sensor = Sensor(**sensor_description)
-        name = self._name = self._sensor.name
+        self._name = self._sensor.name
         # Overide the katpc.Sensor's set method with ours
         self._sensor.set = self.set
-        # Steal the the katcp.Sensor's set_formatted method. Since we overrode its set()
-        # method with ours, calling set_formatted will result in this KATCPSensor object's
-        # value being set.
+        # Steal the the katcp.Sensor's set_formatted method. Since we overrode
+        # its set() method with ours, calling set_formatted will result in this
+        # KATCPSensor object's value being set.
         self.set_formatted = self._sensor.set_formatted
 
     @property
@@ -717,12 +714,13 @@ class KATCPSensor(object):
         self._listeners = {}
 
     def call_listeners(self, reading):
-        for listener,use_reading in self._listeners.values():
+        for listener, use_reading in self._listeners.values():
             try:
                 if use_reading:
                     listener(self, reading)
                 else:
-                    listener(reading.received_timestamp, reading.timestamp, reading.status, reading.value)
+                    listener(reading.received_timestamp, reading.timestamp,
+                             reading.status, reading.value)
             except Exception:
                 logger.exception(
                     'Unhandled exception calling KATCPSensor callback {0!r}'
@@ -840,7 +838,7 @@ class KATCPSensor(object):
         """
 
         if (isinstance(condition_or_value, collections.Sequence) and not
-            isinstance(condition_or_value, basestring)):
+                isinstance(condition_or_value, basestring)):
             raise NotImplementedError(
                 'Currently only single conditions are supported')
         condition_test = (condition_or_value if callable(condition_or_value)
@@ -914,13 +912,14 @@ class KATCPReply(_KATCPReplyTuple):
     The instance evaluates to nonzero (i.e. truthy) if the request succeeded.
 
     """
-    __slots__ = []              # Prevent dynamic attributes from being possible
+    __slots__ = []  # Prevent dynamic attributes from being possible
 
     def __repr__(self):
         """String representation for pretty-printing in IPython."""
-        return '\n'.join("%s%s %s" % (Message.TYPE_SYMBOLS[m.mtype], m.name,
-                                       ' '.join(m.arguments))
-                          for m in self.messages)
+        return '\n'.join(
+            "%s%s %s" %
+            (Message.TYPE_SYMBOLS[m.mtype], m.name, ' '.join(m.arguments))
+            for m in self.messages)
 
     def __str__(self):
         """String representation using KATCP wire format"""
@@ -1064,8 +1063,9 @@ class ClientGroup(object):
             self._req = AttrDict()
             for client in self.clients:
                 for name, request in dict.iteritems(client.req):
-                    if not name in self._req:
-                        self._req[name] = GroupRequest(self, name, request.description)
+                    if name not in self._req:
+                        self._req[name] = GroupRequest(self, name,
+                                                       request.description)
             self._clients_dirty = False
 
         return self._req
