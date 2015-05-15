@@ -868,7 +868,7 @@ class KATCPSensor(object):
                 f.set_exc_info(sys.exc_info())
                 self.unregister_listener(handle_update)
 
-        self.register_listener(handle_update)
+        self.register_listener(handle_update, reading=True)
         # Handle case where sensor is already at the desired value
         ioloop.add_callback(handle_update, self, self._reading)
 
