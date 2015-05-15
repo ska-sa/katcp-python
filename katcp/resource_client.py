@@ -384,10 +384,6 @@ class KATCPClientResource(resource.KATCPResource):
                               for state in not_synced_states]
         return until_any(*not_synced_futures)
 
-    @steal_docstring_from(resource.KATCPResource.wait)
-    def wait(self, sensor_name, condition, timeout=5):
-        raise NotImplementedError
-
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True, tuple=False, refresh=False):
