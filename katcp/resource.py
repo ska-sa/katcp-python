@@ -133,10 +133,6 @@ class KATCPResource(object):
         """Indicate whether the underlying client/device is connected or not."""
 
     @abc.abstractproperty
-    def name(self):
-        """Name of this KATCP resource."""
-
-    @abc.abstractproperty
     def req(self):
         """Attribute root/container for all KATCP request wrappers.
 
@@ -184,7 +180,7 @@ class KATCPResource(object):
     def children(self):
         """AttrDict of subordinate KATCPResource objects keyed by their names."""
 
-    def wait(self, sensor_name, condition_or_value, timeout=5):
+    def wait(self, sensor_name, condition_or_value, status=None, timeout=5):
         """Wait for a sensor in this resource to satisfy a condition.
 
         Parameters
@@ -193,26 +189,31 @@ class KATCPResource(object):
             The name of the sensor to check
         condition_or_value : obj or callable, or seq of objs or callables
             If obj, sensor.value is compared with obj. If callable,
-            condition_or_value(reading) is called, and must return True if its condition is
-            satisfied. Since the reading is passed in, the value, status, timestamp
-            or received_timestamp attributes can all be used in the check.
-        timeout : float
+            condition_or_value(reading) is called, and must return True if its
+            condition is satisfied. Since the reading is passed in, the value,
+            status, timestamp or received_timestamp attributes can all be used
+            in the check.
+        status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
+            Wait for this status, at the same time as value above, to be
+            obtained. Ignore status if None
+        timeout : float or None
             The timeout in seconds
 
         Returns
         -------
-        This command returns a tornado Future that resolves with True if the sensor values
-        satisifed the condition with the timeout, else resolves with False.
+        This command returns a tornado Future that resolves with True if the
+        sensor values satisifed the condition with the timeout, else resolves
+        with False.
 
         Raises
         ------
-        Resolves with a :class:`KATCPSensorError` exception if the sensors does not
-        have a strategy set.
+        Resolves with a :class:`KATCPSensorError` exception if the sensors does
+        not have a strategy set.
 
         """
         sensor_name = escape_name(sensor_name)
         sensor = self.sensor[sensor_name]
-        return sensor.wait(condition_or_value)
+        return sensor.wait(condition_or_value, status, timeout)
 
     @abc.abstractmethod
     def list_sensors(self, filter="", strategy=False, status="",
@@ -346,7 +347,7 @@ class KATCPRequest(object):
     """
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, name, description, is_active=lambda : True):
+    def __init__(self, name, description, is_active=lambda: True):
         """Initialize request with given description and network client
 
         Parameters
@@ -445,15 +446,16 @@ class KATCPSensorReading(collections.namedtuple(
         The value of the sensor (the type will be appropriate to the
         sensor's type).
     """
-    __slots__ = []              # Prevent dynamic attributes 
+
+    __slots__ = []              # Prevent dynamic attributes
+
     @property
-    def status(self): 
+    def status(self):
         " Returns the string representation of sensor status, eg 'nominal'"
         try:
             return Sensor.STATUSES[int(self.istatus)]
         except TypeError:
             return 'unknown'
-
 
 
 class KATCPSensorsManager(object):
@@ -575,15 +577,15 @@ class KATCPSensor(object):
         self._manager = sensor_manager
         self.clear_listeners()
         self._reading = KATCPSensorReading(0, 0, Sensor.UNKNOWN, None)
-        # We'll be abusing a katcp.Sensor object slightly to make use of its parsing and
-        # formatting functionality
+        # We'll be abusing a katcp.Sensor object slightly to make use of its
+        # parsing and formatting functionality
         self._sensor = Sensor(**sensor_description)
-        name = self._name = self._sensor.name
+        self._name = self._sensor.name
         # Overide the katpc.Sensor's set method with ours
         self._sensor.set = self.set
-        # Steal the the katcp.Sensor's set_formatted method. Since we overrode its set()
-        # method with ours, calling set_formatted will result in this KATCPSensor object's
-        # value being set.
+        # Steal the the katcp.Sensor's set_formatted method. Since we overrode
+        # its set() method with ours, calling set_formatted will result in this
+        # KATCPSensor object's value being set.
         self.set_formatted = self._sensor.set_formatted
 
     @property
@@ -712,12 +714,13 @@ class KATCPSensor(object):
         self._listeners = {}
 
     def call_listeners(self, reading):
-        for listener,use_reading in self._listeners.values():
+        for listener, use_reading in self._listeners.values():
             try:
                 if use_reading:
                     listener(self, reading)
                 else:
-                    listener(reading.received_timestamp, reading.timestamp, reading.status, reading.value)
+                    listener(reading.received_timestamp, reading.timestamp,
+                             reading.status, reading.value)
             except Exception:
                 logger.exception(
                     'Unhandled exception calling KATCPSensor callback {0!r}'
@@ -806,9 +809,10 @@ class KATCPSensor(object):
         ----------
         condition_or_value : obj or callable, or seq of objs or callables
             If obj, sensor.value is compared with obj. If callable,
-            condition_or_value(reading) is called, and must return True if its condition is
-            satisfied. Since the reading is passed in, the value, status, timestamp
-            or received_timestamp attributes can all be used in the check.
+            condition_or_value(reading) is called, and must return True if its
+            condition is satisfied. Since the reading is passed in, the value,
+            status, timestamp or received_timestamp attributes can all be used
+            in the check.
 
             Sequences of conditions are TODO, use SensorTranstionWaiter thingum?
         status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
@@ -819,13 +823,14 @@ class KATCPSensor(object):
 
         Returns
         -------
-        This command returns a tornado Future that resolves with True if the sensor values
-        satisifed the condition with the timeout, else resolves with False.
+        This command returns a tornado Future that resolves with True if the
+        sensor values satisifed the condition with the timeout, else resolves
+        with False.
 
         Raises
         ------
-        Resolves with a :class:`KATCPSensorError` exception if the sensors does not
-        have a strategy set.
+        Resolves with a :class:`KATCPSensorError` exception if the sensors does
+        not have a strategy set.
 
         Resolves with :class:`tornado.gen.TimeoutError` if timeout is not None
         and the sensor does not attain the requested value within the timeout.
@@ -833,7 +838,7 @@ class KATCPSensor(object):
         """
 
         if (isinstance(condition_or_value, collections.Sequence) and not
-            isinstance(condition_or_value, basestring)):
+                isinstance(condition_or_value, basestring)):
             raise NotImplementedError(
                 'Currently only single conditions are supported')
         condition_test = (condition_or_value if callable(condition_or_value)
@@ -863,7 +868,7 @@ class KATCPSensor(object):
                 f.set_exc_info(sys.exc_info())
                 self.unregister_listener(handle_update)
 
-        self.register_listener(handle_update)
+        self.register_listener(handle_update, reading=True)
         # Handle case where sensor is already at the desired value
         ioloop.add_callback(handle_update, self, self._reading)
 
@@ -907,13 +912,14 @@ class KATCPReply(_KATCPReplyTuple):
     The instance evaluates to nonzero (i.e. truthy) if the request succeeded.
 
     """
-    __slots__ = []              # Prevent dynamic attributes from being possible
+    __slots__ = []  # Prevent dynamic attributes from being possible
 
     def __repr__(self):
         """String representation for pretty-printing in IPython."""
-        return '\n'.join("%s%s %s" % (Message.TYPE_SYMBOLS[m.mtype], m.name,
-                                       ' '.join(m.arguments))
-                          for m in self.messages)
+        return '\n'.join(
+            "%s%s %s" %
+            (Message.TYPE_SYMBOLS[m.mtype], m.name, ' '.join(m.arguments))
+            for m in self.messages)
 
     def __str__(self):
         """String representation using KATCP wire format"""
@@ -1057,8 +1063,9 @@ class ClientGroup(object):
             self._req = AttrDict()
             for client in self.clients:
                 for name, request in dict.iteritems(client.req):
-                    if not name in self._req:
-                        self._req[name] = GroupRequest(self, name, request.description)
+                    if name not in self._req:
+                        self._req[name] = GroupRequest(self, name,
+                                                       request.description)
             self._clients_dirty = False
 
         return self._req
@@ -1094,29 +1101,43 @@ class ClientGroup(object):
         sensors_strategies = yield futures_dict
         raise tornado.gen.Return(sensors_strategies)
 
-    @abc.abstractmethod
-    def wait(self, sensor_name, condition, timeout=5):
-        """Wait for a sensor present on all clients in the group to satisfy a condition.
+    @tornado.gen.coroutine
+    def wait(self, sensor_name, condition_or_value, status=None, timeout=5):
+        """Wait for a sensor present on all clients in the group to satisfy a
+        condition.
 
         Parameters
         ----------
         sensor_name : string
             The name of the sensor to check
-        condition : object or callable or seq
-            Conditions to be evaluated TODO, use SensorTranstionWaiter thingum
-        timeout : float
+        condition_or_value : obj or callable, or seq of objs or callables
+            If obj, sensor.value is compared with obj. If callable,
+            condition_or_value(reading) is called, and must return True if its
+            condition is satisfied. Since the reading is passed in, the value,
+            status, timestamp or received_timestamp attributes can all be used
+            in the check.
+        status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
+            Wait for this status, at the same time as value above, to be
+            obtained. Ignore status if None
+        timeout : float or None
             The timeout in seconds
 
         Returns
         -------
-        This command returns a tornado Future that resolves with True if the sensor values
-        satisifed the condition with the timeout, else resolves with False.
+        This command returns a tornado Future that resolves with True if the
+        sensor values satisifed the condition with the timeout, else resolves
+        with False.
 
         Raises
         ------
-        Resolves with a :class:`KATCPSensorError` exception if any of the sensors do not
-        have a strategy set, or if the named sensor is not present
+        Resolves with a :class:`KATCPSensorError` exception if any of the
+        sensors do not have a strategy set, or if the named sensor is not
+        present
 
         """
-        # TODO, consider putting implementation on KATCPSensor, so just calling
-        # KATCPSensor.wait
+        wait_result_futures = {}
+        for client in self.clients:
+            wait_result_futures[client.name] = client.wait(
+                sensor_name, condition_or_value, status, timeout)
+        wait_results = yield wait_result_futures
+        raise tornado.gen.Return(all(wait_results.values()))
