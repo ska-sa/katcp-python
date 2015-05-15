@@ -521,7 +521,7 @@ class KATCPClientResource(resource.KATCPResource):
             if preset_listeners:
                 try:
                     for listener in preset_listeners:
-                        s_obj.register_listener(listener)
+                        s_obj.register_listener(listener, reading=True)
                 except Exception:
                     self._logger.exception(
                         'Exception trying to pre-set sensor listeners for sensor {}'
