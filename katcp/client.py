@@ -1477,9 +1477,9 @@ def request_check(client, exception, *msg_parms, **kwargs):
         reply, informs = client.blocking_request(req_msg)
 
     if not reply.reply_ok():
-        raise exception('Unexpected failure reply "{2}"\n with device at {0}, '
-                        'request \n"{1}"'.format(client.bind_address_string),
-                        req_msg, reply)
+        raise exception('Unexpected failure reply "{2}"\n'
+                        ' with device at {0}, request \n"{1}"'
+                        .format(client.bind_address_string, req_msg, reply))
     return reply, informs
 
 
