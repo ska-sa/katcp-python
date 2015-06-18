@@ -244,8 +244,9 @@ class SampleStrategy(object):
         try:
             self._inform_callback(self._sensor, reading)
         except Exception:
-            log.exception('Unhandled exception trying to send a sensor update '
-                          'for sensor {!r}'.format(self._sensor.name))
+            log.exception('Unhandled exception trying to send {!r} '
+                          'for sensor {!r} of type {!r}'
+                          .format(reading, self._sensor.name, self._sensor.type))
 
     def cancel_timeouts(self):
         """Override this method to cancel any outstanding ioloop timeouts."""
