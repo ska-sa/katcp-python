@@ -606,10 +606,6 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         yield DUT.set_sensor_strategy('client-2.sensor_1', strat2)
         yield DUT.set_sensor_strategy('client1.sensor_3', strat3)
 
-        self.assertEqual(DUT._sensor_strategy_cache['another_client_sensor_1'], strat1)
-        self.assertEqual(DUT._sensor_strategy_cache['client_2_sensor_1'], strat1)
-        self.assertEqual(DUT._sensor_strategy_cache['client1_sensor_1'], strat1)
-
         DUT.children.another_client.set_sensor_strategy.assert_called_once_with(
             'sensor_1', strat1)
         DUT.children.client_2.set_sensor_strategy.assert_called_once_with(
