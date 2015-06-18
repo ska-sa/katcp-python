@@ -33,6 +33,7 @@ from katcp import resource_client
 
 logger = logging.getLogger(__name__)
 
+
 class test_transform_future(tornado.testing.AsyncTestCase):
     def test_transform(self):
         orig_f = tornado.concurrent.Future()
@@ -66,6 +67,7 @@ class test_transform_future(tornado.testing.AsyncTestCase):
         transform.assert_called_once_with(retval)
         with self.assertRaises(AnException):
             trans_f.result()
+
 
 class test_KATCPClientresourceRequest(unittest.TestCase):
     def setUp(self):
@@ -246,6 +248,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         self.assertTrue(DUT.until_synced().done())
         self.assertFalse(DUT.until_not_synced().done())
 
+
 class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
     def setUp(self):
         super(test_KATCPClientResource_Integrated, self).setUp()
@@ -344,6 +347,7 @@ class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
         self.assertEqual(set(DUT.sensor), sensors_before)
         self.assertEqual(set(DUT.req), reqs_before)
 
+
 class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
     def setUp(self):
         super(test_KATCPClientResource_IntegratedTimewarp, self).setUp()
@@ -418,6 +422,21 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         # check that sensors / requests are correctly updated
         self.assertEqual(set(DUT.req), initial_reqs | set(['sparkling_new']))
         self.assertEqual(set(DUT.sensor), initial_sensors | set([escaped_new_sensor]))
+
+
+    def xxxx_create_attrdict_from_children(self, attr):
+        attrdict = AttrDict()
+        for child_name, child_resource in dict.items(self.children):
+            prefix = resource.escape_name(child_name) + '_'
+            for item_name, item in dict.items(getattr(child_resource, attr)):
+                # Do not prefix aggregate sensors with "parent_name_"
+                if item_name.startswith("agg_"):
+                    full_item_name = item_name
+                else:
+                    full_item_name = prefix + item_name
+                attrdict[full_item_name] = item
+        return attrdict
+
 
     @tornado.testing.gen_test(timeout=1000)
     def test_set_sensor_sampling(self):
@@ -710,6 +729,7 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
             self.assertIs(DUT.children[resource.escape_name(child_name)].ioloop,
                           our_ioloop)
 
+
 class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase):
     def setUp(self):
         super(test_KATCPClientResourceContainerIntegrated, self).setUp()
@@ -838,6 +858,7 @@ class test_ThreadsafeMethodAttrWrapper(unittest.TestCase):
         self.assertEqual(wrapped.only_in_ioloop, 'only_in')
         self.assertEqual(wrapped.not_in_ioloop, 'not_in')
 
+
 class test_AttrMappingProxy(unittest.TestCase):
     def test_wrapping(self):
         test_dict = AttrDict(a=2, b=1)
@@ -861,8 +882,6 @@ class test_AttrMappingProxy(unittest.TestCase):
         # Test whole dict comparison
         self.assertEqual(wrapped_dict,
                          {k : TestWrapper(v) for k, v in test_dict.items()})
-
-
 
 
 class test_ThreadSafeKATCPClientResourceWrapper(unittest.TestCase):
@@ -990,6 +1009,7 @@ class test_ThreadSafeKATCPClientResourceWrapper_container(unittest.TestCase):
                       resource_client.ThreadSafeKATCPClientResourceWrapper)
         self.assertIs(self.DUT.children['resource2'].__subject__,
                       self.resource_container.children['resource2'])
+
 
 class test_monitor_resource_sync_state(tornado.testing.AsyncTestCase):
     @tornado.testing.gen_test
