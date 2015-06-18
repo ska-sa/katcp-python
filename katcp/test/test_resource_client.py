@@ -150,6 +150,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         yield DUT._add_requests(dev_requests)
         self.assertEqual(sorted(DUT.req), sorted(['req_one', 'req_two']))
 
+    @tornado.testing.gen_test
     def test_list_sensors(self):
         resource_spec = dict(
             name='testdev',
@@ -188,7 +189,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         DUT.sensor.update(test_sensors)
 
         # Simple search based on python identifier
-        result = DUT.list_sensors('sens_one')
+        result = yield DUT.list_sensors('sens_one')
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0], resource.SensorResultTuple(
             test_sensors.sens_one, test_sensors_info.sens_one.name,
@@ -196,7 +197,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
             test_sensors.sens_one.reading))
 
         # Now get all the sensors
-        result = DUT.list_sensors('')
+        result = yield DUT.list_sensors('')
         expected_result = sorted(resource.SensorResultTuple(
             test_sensors[s_id], test_sensors_info[s_id].name,
             s_id, test_sensors_info[s_id].description, 'integer', '',
@@ -205,22 +206,22 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         self.assertEqual(sorted(result), expected_result)
 
         # Test that all sensors are found using their Python identifiers
-        result = DUT.list_sensors('sens_two')
+        result = yield DUT.list_sensors('sens_two')
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].object, test_sensors.sens_two)
-        result = DUT.list_sensors('sens_three')
+        result = yield DUT.list_sensors('sens_three')
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].object, test_sensors.sens_three)
 
         # Test using actual sensor name
-        result = DUT.list_sensors('sens_one', use_python_identifiers=False)
+        result = yield DUT.list_sensors('sens_one', use_python_identifiers=False)
         self.assertEqual(len(result), 0)
-        result = DUT.list_sensors('sens-one', use_python_identifiers=False)
+        result = yield DUT.list_sensors('sens-one', use_python_identifiers=False)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].name, 'sens-one')
 
         # Now test with strategy filter
-        result = DUT.list_sensors('', strategy=True)
+        result = yield DUT.list_sensors('', strategy=True)
         self.assertEqual(len(result), len(sensor_strategies))
 
     def test_until_sync_states(self):
