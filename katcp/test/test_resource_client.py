@@ -423,21 +423,6 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         self.assertEqual(set(DUT.req), initial_reqs | set(['sparkling_new']))
         self.assertEqual(set(DUT.sensor), initial_sensors | set([escaped_new_sensor]))
 
-
-    def xxxx_create_attrdict_from_children(self, attr):
-        attrdict = AttrDict()
-        for child_name, child_resource in dict.items(self.children):
-            prefix = resource.escape_name(child_name) + '_'
-            for item_name, item in dict.items(getattr(child_resource, attr)):
-                # Do not prefix aggregate sensors with "parent_name_"
-                if item_name.startswith("agg_"):
-                    full_item_name = item_name
-                else:
-                    full_item_name = prefix + item_name
-                attrdict[full_item_name] = item
-        return attrdict
-
-
     @tornado.testing.gen_test(timeout=1000)
     def test_set_sensor_sampling(self):
         self.server.stop()
@@ -466,7 +451,8 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
     def test_set_sensor_listener(self):
         self.server.stop()
         self.server.join()
-        DUT = resource_client.KATCPClientResource(self.default_resource_spec)
+        resource_spec = self.default_resource_spec
+        DUT = resource_client.KATCPClientResource(resource_spec)
         DUT.start()
         yield tornado.gen.moment
         test_listener1 = lambda *x : None
@@ -609,14 +595,21 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         for n, c in dict.items(DUT.children):
             mchild = mock_children[n] = mock.Mock(spec_set=c)
             mchild.set_sensor_strategy.side_effect = side_effect
+            mchild.req = dict()    # Needed for _create_attrdict_from_children('req')
+            mchild.sensor = dict() # Needed for _create_attrdict_from_children('sensor')
         dict.update(DUT.children, mock_children)
 
         strat1 = ('period', '2.1')
         strat2 = ('event',)
         strat3 = ('event-rate', '2', '3')
-        yield DUT.set_sensor_strategy('another.client-sensor_1', strat1)
-        yield DUT.set_sensor_strategy('client-2-sensor_1', strat2)
-        yield DUT.set_sensor_strategy('client1-sensor_3', strat3)
+        yield DUT.set_sensor_strategy('another-client.sensor_1', strat1)
+        yield DUT.set_sensor_strategy('client-2.sensor_1', strat2)
+        yield DUT.set_sensor_strategy('client1.sensor_3', strat3)
+
+        self.assertEqual(DUT._sensor_strategy_cache['another_client_sensor_1'], strat1)
+        self.assertEqual(DUT._sensor_strategy_cache['client_2_sensor_1'], strat1)
+        self.assertEqual(DUT._sensor_strategy_cache['client1_sensor_1'], strat1)
+
         DUT.children.another_client.set_sensor_strategy.assert_called_once_with(
             'sensor_1', strat1)
         DUT.children.client_2.set_sensor_strategy.assert_called_once_with(
@@ -625,8 +618,21 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
             'sensor_3', strat3)
 
     def test_set_sensor_listener(self):
-        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
-        mock_children = {n: mock.Mock(spec_set=c) for n, c in dict.items(DUT.children)}
+        default_spec = copy.deepcopy(self.default_spec)
+        def side_effect(*args, **kwargs):
+            f = tornado.concurrent.futures.Future()
+            f.set_result(None)
+            return f
+
+        DUT = resource_client.KATCPClientResourceContainer(default_spec)
+        ##mock_children = {n: mock.Mock(spec_set=c) for n, c in dict.items(DUT.children)}
+        ##dict.update(DUT.children, mock_children)
+        mock_children = {}
+        for n, c in dict.items(DUT.children):
+            mchild = mock_children[n] = mock.Mock(spec_set=c)
+            mchild.set_sensor_listener.side_effect = side_effect
+            mchild.req = dict()    # Needed for _create_attrdict_from_children('req')
+            mchild.sensor = dict() # Needed for _create_attrdict_from_children('sensor')
         dict.update(DUT.children, mock_children)
 
         listener1 = lambda *x : None
