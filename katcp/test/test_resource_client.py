@@ -150,13 +150,14 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         yield DUT._add_requests(dev_requests)
         self.assertEqual(sorted(DUT.req), sorted(['req_one', 'req_two']))
 
+    @tornado.testing.gen_test
     def test_list_sensors(self):
         resource_spec = dict(
             name='testdev',
             address=('testhost', 12345))
         DUT = resource_client.KATCPClientResource(resource_spec)
         sens_manager = mock.create_autospec(
-            resource_client.KATCPClientResourceSensorsManager(mock.Mock()))
+            resource_client.KATCPClientResourceSensorsManager(mock.Mock(), "test"))
         test_sensors_info = AttrDict(
             sens_one=AttrDict(name='sens-one', description='sensor one', value=1),
             sens_two=AttrDict(name='sens.two', description='sensor one', value=2),
@@ -188,7 +189,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         DUT.sensor.update(test_sensors)
 
         # Simple search based on python identifier
-        result = DUT.list_sensors('sens_one')
+        result = yield DUT.list_sensors('sens_one')
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0], resource.SensorResultTuple(
             test_sensors.sens_one, test_sensors_info.sens_one.name,
@@ -196,7 +197,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
             test_sensors.sens_one.reading))
 
         # Now get all the sensors
-        result = DUT.list_sensors('')
+        result = yield DUT.list_sensors('')
         expected_result = sorted(resource.SensorResultTuple(
             test_sensors[s_id], test_sensors_info[s_id].name,
             s_id, test_sensors_info[s_id].description, 'integer', '',
@@ -205,22 +206,22 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         self.assertEqual(sorted(result), expected_result)
 
         # Test that all sensors are found using their Python identifiers
-        result = DUT.list_sensors('sens_two')
+        result = yield DUT.list_sensors('sens_two')
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].object, test_sensors.sens_two)
-        result = DUT.list_sensors('sens_three')
+        result = yield DUT.list_sensors('sens_three')
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].object, test_sensors.sens_three)
 
         # Test using actual sensor name
-        result = DUT.list_sensors('sens_one', use_python_identifiers=False)
+        result = yield DUT.list_sensors('sens_one', use_python_identifiers=False)
         self.assertEqual(len(result), 0)
-        result = DUT.list_sensors('sens-one', use_python_identifiers=False)
+        result = yield DUT.list_sensors('sens-one', use_python_identifiers=False)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].name, 'sens-one')
 
         # Now test with strategy filter
-        result = DUT.list_sensors('', strategy=True)
+        result = yield DUT.list_sensors('', strategy=True)
         self.assertEqual(len(result), len(sensor_strategies))
 
     def test_until_sync_states(self):
@@ -970,13 +971,13 @@ class test_ThreadSafeKATCPClientResourceWrapper_container(unittest.TestCase):
         self.servers['resource2'].get_sensor('int.resource2').set_value(17)
         reading = self.DUT.sensor.resource2_int_resource2.get_reading()
         self.assertEqual(reading.value, 17)
-        self.assertEqual(reading.status, Sensor.NOMINAL)
+        self.assertEqual(reading.status, Sensor.STATUSES[Sensor.NOMINAL])
         self.servers['resource2'].get_sensor('int.resource2').set_value(14)
         self.assertEqual(self.DUT.sensor.resource2_int_resource2.get_value(), 14)
         self.servers['resource2'].get_sensor('int.resource2').set_value(
             10, Sensor.WARN)
         self.assertEqual(self.DUT.sensor.resource2_int_resource2.get_status(),
-                         Sensor.WARN)
+                         Sensor.STATUSES[Sensor.WARN])
         self.assertEqual(self.DUT.sensor.resource2_int_resource2.value, 10)
 
     def test_children(self):
