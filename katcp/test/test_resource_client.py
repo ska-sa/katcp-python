@@ -156,7 +156,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
             address=('testhost', 12345))
         DUT = resource_client.KATCPClientResource(resource_spec)
         sens_manager = mock.create_autospec(
-            resource_client.KATCPClientResourceSensorsManager(mock.Mock()))
+            resource_client.KATCPClientResourceSensorsManager(mock.Mock(), "test"))
         test_sensors_info = AttrDict(
             sens_one=AttrDict(name='sens-one', description='sensor one', value=1),
             sens_two=AttrDict(name='sens.two', description='sensor one', value=2),
