@@ -93,7 +93,7 @@ class test_KATCPSensor(TimewarpAsyncTestCase):
 
         # wait for value and status
         waiting_value = 3
-        waiting_status = Sensor.WARN
+        waiting_status = 'warn'
         self.io_loop.add_callback(DUT.set_value, 3, Sensor.WARN)
         yield DUT.wait(waiting_value, waiting_status)
         self.assertEqual(DUT.value, waiting_value)
