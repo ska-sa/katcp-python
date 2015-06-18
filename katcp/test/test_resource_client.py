@@ -971,13 +971,13 @@ class test_ThreadSafeKATCPClientResourceWrapper_container(unittest.TestCase):
         self.servers['resource2'].get_sensor('int.resource2').set_value(17)
         reading = self.DUT.sensor.resource2_int_resource2.get_reading()
         self.assertEqual(reading.value, 17)
-        self.assertEqual(reading.status, Sensor.NOMINAL)
+        self.assertEqual(reading.status, Sensor.STATUSES[Sensor.NOMINAL])
         self.servers['resource2'].get_sensor('int.resource2').set_value(14)
         self.assertEqual(self.DUT.sensor.resource2_int_resource2.get_value(), 14)
         self.servers['resource2'].get_sensor('int.resource2').set_value(
             10, Sensor.WARN)
         self.assertEqual(self.DUT.sensor.resource2_int_resource2.get_status(),
-                         Sensor.WARN)
+                         Sensor.STATUSES[Sensor.WARN])
         self.assertEqual(self.DUT.sensor.resource2_int_resource2.value, 10)
 
     def test_children(self):
