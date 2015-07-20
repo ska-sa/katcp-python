@@ -393,10 +393,15 @@ class KATCPServer(object):
         timeout : float or None, optional
             Seconds to wait for server to have *started*.
 
+        Returns
+        -------
+        stopped : thread-safe Future
+            Resolves when the server is stopped
+
         """
         if timeout:
             self._running.wait(timeout)
-        self._ioloop_manager.stop(callback=self._uninstall)
+        return self._ioloop_manager.stop(callback=self._uninstall)
 
     def join(self, timeout=None):
         """Rejoin the server thread.
@@ -1296,10 +1301,17 @@ class DeviceServerBase(object):
         timeout : float, optional
             Seconds to wait for server to have *started*.
 
+        Returns
+        -------
+        stopped : thread-safe Future
+            Resolves when the server is stopped
+
         """
-        self._server.stop(timeout)
+        stopped = self._server.stop(timeout)
         if self._handler_thread:
             self._handler_thread.stop(timeout)
+
+        return stopped
 
     def running(self):
         """Whether the server is running."""

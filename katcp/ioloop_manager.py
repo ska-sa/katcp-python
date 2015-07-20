@@ -4,6 +4,7 @@ import threading
 
 import tornado.ioloop
 
+from concurrent.futures import Future
 from tornado import gen
 
 
@@ -113,9 +114,16 @@ class IOLoopManager(object):
         timeout : float or None
             Seconds to wait for ioloop to have *started*.
 
+        Returns
+        -------
+        stopped : thread-safe Future
+            Resolves when the callback() is done
+
         """
         if timeout:
             self._running.wait(timeout)
+
+        stopped_future = Future()
 
         @gen.coroutine
         def _stop():
@@ -133,7 +141,8 @@ class IOLoopManager(object):
             self._running.clear()
 
         try:
-            self._ioloop.add_callback(_stop)
+            self._ioloop.add_callback(
+                lambda: gen.chain_future(_stop(), stopped_future))
         except AttributeError:
             # Probably we have been shut-down already
             pass
