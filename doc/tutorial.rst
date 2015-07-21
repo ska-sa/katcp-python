@@ -205,13 +205,13 @@ sub-class in order to function.
 
 A very simple server example looks like::
 
-  from katcp import DeviceServer, Sensor, ProtocolFlags, AsyncReply
-  from katcp.kattypes import (Str, Float, Timestamp, Discrete,
-                              request, return_reply)
-
   import threading
   import time
   import random
+
+  from katcp import DeviceServer, Sensor, ProtocolFlags, AsyncReply
+  from katcp.kattypes import (Str, Float, Timestamp, Discrete,
+                              request, return_reply)
 
   server_host = ""
   server_port = 5000
@@ -358,6 +358,39 @@ Message dispatch is handled in much the same way as described in the client
 example, with the exception that there are not :meth:`unhandled_request`,
 :meth:`unhandled_reply` or :meth:`unhandled_request` methods. Instead, the
 server will log an exception.
+
+Writing your own Async Server
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To write a server in the typical tornado async style, modify the example above by
+adding the following imports ::
+
+  import signal
+  import tornado
+
+and replace the `if __name__ == "__main__":` block with ::
+
+  @tornado.gen.coroutine
+  def on_shutdown(ioloop, server):
+      print('Shutting down')
+      yield server.stop()
+      ioloop.stop()
+
+  if __name__ == "__main__":
+      ioloop = tornado.ioloop.IOLoop.current()
+      server = MyServer(server_host, server_port)
+      server.set_concurrency_options(thread_safe=False, handler_thread=False)
+      server.set_ioloop(ioloop)
+      # Hook up to SIGINT so that ctrl-C results in a clean shutdown
+      signal.signal(signal.SIGINT, lambda sig, frame: ioloop.add_callback_from_signal(
+	  on_shutdown, ioloop, server))
+      ioloop.add_callback(server.start)
+      ioloop.start()
+
+If multiple servers are started in a single ioloop, :func:`on_shutdown` should
+be modified to call :meth:`stop` on each server. This is needed to allow a clean
+shutdown that adheres to the KATCP spec requirement that a `#disconnect` inform
+is sent when a server shuts down.
 
 Event Loops and Thread Safety
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
