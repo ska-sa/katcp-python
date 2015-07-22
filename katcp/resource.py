@@ -599,6 +599,11 @@ class KATCPSensor(object):
         return self._name
 
     @property
+    def python_id(self):
+        """Python identifer name of this KATCP resource"""
+        return escape_name(self._name)
+
+    @property
     def reading(self):
         """Most recently received sensor reading as KATCPSensorReading instance"""
         return self._reading
