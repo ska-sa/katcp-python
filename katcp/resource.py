@@ -595,12 +595,12 @@ class KATCPSensor(object):
 
     @property
     def name(self):
-        """Name of this KATCP resource"""
+        """Name of this KATCPSensor"""
         return self._name
 
     @property
     def python_id(self):
-        """Python identifer name of this KATCP resource"""
+        """Python identifer name of this KATCPSensor"""
         return escape_name(self._name)
 
     @property
