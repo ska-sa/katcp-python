@@ -395,6 +395,10 @@ is sent when a server shuts down.
 Event Loops and Thread Safety
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+TODO NB!!! Description below is outdated, since the whole katcp network backend
+has been replaced with a stack based on tornado. For now, read the code :)
+
+
 Each client and each server starts a network event-loop in a new thread,
 although this design may change in the future. In the case of a purely
 network-event driven server or client, all user code would execute in the thread
