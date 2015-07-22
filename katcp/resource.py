@@ -599,8 +599,8 @@ class KATCPSensor(object):
         return self._name
 
     @property
-    def python_id(self):
-        """Python identifer name of this KATCPSensor"""
+    def normalised_name(self):
+        """Normalised name of this KATCPSensor that can be used as a python identifier"""
         return escape_name(self._name)
 
     @property
