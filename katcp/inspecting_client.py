@@ -117,6 +117,7 @@ class InspectingClientAsync(object):
         self.initial_inspection = bool(initial_inspection)
         self._requests_index = {}
         self._sensors_index = {}
+        self._sensor_object_cache = {}
         self._connected = katcp.core.AsyncEvent()
         self._disconnected = katcp.core.AsyncEvent()
         self._interface_changed = katcp.core.AsyncEvent()
@@ -459,6 +460,9 @@ class InspectingClientAsync(object):
         added, removed = self._difference(
             sensors_old, sensors_updated, name, self._sensors_index)
 
+        for sensor_name in removed:
+            del self._sensor_object_cache[sensor_name]
+
         if added or removed:
             raise Return(AttrDict(added=added, removed=removed))
 
@@ -537,6 +541,7 @@ class InspectingClientAsync(object):
                     units=sensor_info.get('units'),
                     params=sensor_params)
                 self._sensors_index[name]['obj'] = obj
+                self._sensor_object_cache[name] = obj
 
         raise tornado.gen.Return(obj)
 
@@ -611,7 +616,9 @@ class InspectingClientAsync(object):
 
     @tornado.gen.coroutine
     def update_sensor(self, name, timestamp, status, value):
-        sensor = yield self.future_get_sensor(name)
+        sensor = self._sensor_object_cache.get(name)
+        if not sensor:
+            sensor = yield self.future_get_sensor(name)
         if sensor:
             katcp_major = self.katcp_client.protocol_flags.major
             sensor.set_formatted(timestamp, status, value, katcp_major)
