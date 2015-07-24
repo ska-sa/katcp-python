@@ -1648,16 +1648,35 @@ def until_later(delay, ioloop=None):
     return f
 
 def until_any(*futures):
+    """Return a future that resoves when any of the passed futures resolves.
+
+    Resolves with the value yielded by the first future to resolve.
+
+    Note, this will only work with tornado futures.
+
+    """
     any_future = tornado_Future()
-    def handle_done(f):
+    def handle_done(done_future):
         if not any_future.done():
             try:
-                any_future.set_result(f.result())
+                any_future.set_result(done_future.result())
             except Exception:
-                any_future.set_exc_info(f.exc_info())
+                any_future.set_exc_info(done_future.exc_info())
+            # (NM) Nasty hack to remove handle_done from the callback list to prevent a
+            # memory leak where one of the futures resolves quickly, particularly when
+            # used together with AsyncState.until_state(). Also addresses Jira issue
+            # CM-593
+            for f in futures:
+                if f._callbacks:
+                    try:
+                        f._callbacks.remove(handle_done)
+                    except ValueError:
+                        pass
 
     for f in futures:
         f.add_done_callback(handle_done)
+        if any_future.done():
+            break
 
     return any_future
 
