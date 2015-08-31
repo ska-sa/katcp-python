@@ -881,17 +881,23 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def set_sensor_strategy(self, sensor_name, strategy_and_parms):
         sensor_name = resource.escape_name(sensor_name)
         sensor_obj = getattr(self.sensor, sensor_name, None)
-        for child_name in dict.keys(self.children):
-            child = self.children[child_name]
-            if sensor_name.startswith("agg_"):
-                if sensor_obj and (child.name == sensor_obj.parent_name):
-                    # Handle aggregate sensors that are not prefixed with "parent_name_"
+        print "====",sensor_name,strategy_and_parms, sensor_obj
+        if not sensor_obj:
+            print self.sensor,sensor_name
+        child_name = sensor_obj.parent_name
+        child = self.children[child_name]
+        print "++++",sensor_obj,child_name ###,sensor_obj.parent_name
+        if sensor_obj:
+                # Handle aggregate sensors that are not prefixed with "parent_name_"
+                if sensor_name.startswith("agg_"):
+                    print "----A",sensor_name,strategy_and_parms
                     yield child.set_sensor_strategy(sensor_name, strategy_and_parms)
-            else:
-                # Get the child_sensor_name without the parent_name prefix
-                prefix = child_name + '_'
-                child_sensor_name = sensor_name[len(prefix):]
-                yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
+                else:
+                    # Get the child_sensor_name without the parent_name prefix
+                    prefix = child_name + '_'
+                    child_sensor_name = sensor_name[len(prefix):]
+                    print "----C",child_sensor_name,strategy_and_parms
+                    yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
 
     @steal_docstring_from(resource.KATCPResource.set_sensor_listener)
     def set_sensor_listener(self, sensor_name, listener):
