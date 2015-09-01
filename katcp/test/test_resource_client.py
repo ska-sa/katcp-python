@@ -583,76 +583,6 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
             self.assertEqual(child.address, child_spec['address'])
             self.assertIs(child._logger, m_logger)
 
-    @tornado.testing.gen_test(timeout=1000)
-    def OLD_test_set_sensor_sampling(self):
-        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
-        def side_effect(*args, **kwargs):
-            f = tornado.concurrent.futures.Future()
-            f.set_result(None)
-            return f
-
-        mock_children = {}
-        for n, c in dict.items(DUT.children):
-            mchild = mock_children[n] = mock.Mock(spec_set=c)
-            mchild.set_sensor_strategy.side_effect = side_effect
-            mchild.req = dict()    # Needed for _create_attrdict_from_children('req')
-            mchild.sensor = dict() # Needed for _create_attrdict_from_children('sensor')
-        dict.update(DUT.children, mock_children)
-
-        strat1 = ('period', '2.1')
-        strat2 = ('event',)
-        strat3 = ('event-rate', '2', '3')
-        yield DUT.set_sensor_strategy('another-client.sensor_1', strat1)
-        yield DUT.set_sensor_strategy('client-2.sensor_1', strat2)
-        yield DUT.set_sensor_strategy('client1.sensor_3', strat3)
-
-        print "DUT.children.another_client", DUT.children.another_client.mock_calls
-        print "DUT.children.another_client.set_sensor_strategy", DUT.children.another_client.set_sensor_strategy.mock_calls
-        print "DUT.children.client_2.set_sensor_strategy", DUT.children.client_2.set_sensor_strategy.mock_calls
-        print "DUT.children.client1.set_sensor_strategy", DUT.children.client1.set_sensor_strategy.mock_calls
-        DUT.children.another_client.set_sensor_strategy.assert_called_with(
-            'sensor_1', strat1)
-        DUT.children.client_2.set_sensor_strategy.assert_called_once_with(
-            'sensor_1', strat2)
-        DUT.children.client1.set_sensor_strategy.assert_called_once_with(
-            'sensor_3', strat3)
-
-    def test_set_sensor_listener(self):
-        default_spec = copy.deepcopy(self.default_spec)
-        def side_effect(*args, **kwargs):
-            f = tornado.concurrent.futures.Future()
-            f.set_result(None)
-            return f
-
-        DUT = resource_client.KATCPClientResourceContainer(default_spec)
-        ##mock_children = {n: mock.Mock(spec_set=c) for n, c in dict.items(DUT.children)}
-        ##dict.update(DUT.children, mock_children)
-        mock_children = {}
-        for n, c in dict.items(DUT.children):
-            mchild = mock_children[n] = mock.Mock(spec_set=c)
-            mchild.set_sensor_listener.side_effect = side_effect
-            mchild.req = dict()    # Needed for _create_attrdict_from_children('req')
-            mchild.sensor = dict() # Needed for _create_attrdict_from_children('sensor')
-        dict.update(DUT.children, mock_children)
-
-        listener1 = lambda *x : None
-        listener2 = lambda *y : None
-        listener3 = lambda *z : None
-        DUT.set_sensor_listener('another-client.sensor_1', listener1)
-        DUT.children.another_client.set_sensor_listener.assert_called_once_with(
-            'sensor_1', listener1)
-        DUT.children.another_client.reset_mock()
-
-        DUT.set_sensor_listener('client-2.sensor_1', listener2)
-        DUT.children.client_2.set_sensor_listener.assert_called_once_with(
-            'sensor_1', listener2)
-        DUT.children.client_2.reset_mock()
-
-        DUT.set_sensor_listener('client1.sensor_3', listener3)
-        DUT.children.client1.set_sensor_listener.assert_called_once_with(
-            'sensor_3', listener3)
-        DUT.children.client1.reset_mock()
-
     def test_set_active(self):
         DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
         mock_children = {n: mock.Mock(spec_set=c, wraps=c)
@@ -791,17 +721,9 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
 
         yield DUT.until_synced()
 
-        import ipdb; ipdb.set_trace();
         DUT.children.resource1.set_sensor_strategy = mock.Mock(side_effect=side_effect)
         DUT.children.resource2.set_sensor_strategy = mock.Mock(side_effect=side_effect)
         DUT.children.resource3.set_sensor_strategy = mock.Mock(side_effect=side_effect)
-               #mock_children = {}
-        #for n, c in dict.items(DUT.children):
-        #    mchild = mock_children[n] = mock.Mock(spec_set=c)
-        #    mchild.set_sensor_strategy.side_effect = side_effect
-        #    mchild.req = dict()    # Needed for _create_attrdict_from_children('req')
-        #    mchild.sensor = dict() # Needed for _create_attrdict_from_children('sensor')
-        #dict.update(DUT.children, mock_children)
 
         strat1 = ('period', '2.1')
         strat2 = ('event',)
@@ -810,17 +732,73 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         DUT.children.resource1.set_sensor_strategy.assert_called_once_with(
             'sensor_1', strat1)
 
-        yield DUT.set_sensor_strategy('resource2.sensor_1', strat2)
+        yield DUT.set_sensor_strategy('resource2_sensor_1', strat2)
         DUT.children.resource2.set_sensor_strategy.assert_called_once_with(
             'sensor_1', strat2)
+        DUT.children.resource2.set_sensor_strategy.reset_mock()
 
         yield DUT.set_sensor_strategy('agg_sensor', strat1)
         DUT.children.resource2.set_sensor_strategy.assert_called_once_with(
-            'agg_sensor', strat3)
+            'agg_sensor', strat1)
 
         yield DUT.set_sensor_strategy('resource3.sensor_3', strat3)
         DUT.children.resource3.set_sensor_strategy.assert_called_once_with(
             'sensor_3', strat3)
+
+    @tornado.testing.gen_test(timeout=1000)
+    def test_set_sensor_listener(self):
+
+        self.default_spec_orig = copy.deepcopy(self.default_spec)
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        DUT.start()
+
+        def side_effect(*args, **kwargs):
+            f = tornado.concurrent.futures.Future()
+            f.set_result(None)
+            return f
+
+        additional = {'resource1': 'sensor_1',
+                      'resource2': 'agg_sensor,sensor_1',
+                      'resource3': 'sensor_3'}
+        for x in additional:
+            s = self.servers[x]
+            for sens in additional[x].split(","):
+                sensor = DeviceTestSensor(DeviceTestSensor.INTEGER, sens,
+                                      "An Integer.",
+                                      "count", [-50, 50], timestamp=self.io_loop.time(),
+                                      status=DeviceTestSensor.NOMINAL, value=0)
+                s.add_sensor(sensor)
+
+        yield DUT.until_synced()
+
+        DUT.children.resource1.set_sensor_listener = mock.Mock(side_effect=side_effect)
+        DUT.children.resource2.set_sensor_listener = mock.Mock(side_effect=side_effect)
+        DUT.children.resource3.set_sensor_listener = mock.Mock(side_effect=side_effect)
+
+        listener1 = lambda *x : None
+        listener2 = lambda *y : None
+        listener3 = lambda *z : None
+        DUT.set_sensor_listener('resource1.sensor_1', listener1)
+        DUT.children.resource1.set_sensor_listener.assert_called_once_with(
+            'sensor_1', listener1)
+        DUT.children.resource1.set_sensor_listener.reset_mock()
+
+        DUT.set_sensor_listener('resource2_sensor_1', listener2)
+        DUT.children.resource2.set_sensor_listener.assert_called_once_with(
+            'sensor_1', listener2)
+        DUT.children.resource2.set_sensor_listener.reset_mock()
+
+        DUT.set_sensor_listener('agg_sensor', listener2)
+        DUT.children.resource2.set_sensor_listener.assert_called_once_with(
+            'agg_sensor', listener2)
+        DUT.children.resource2.set_sensor_listener.reset_mock()
+
+        DUT.set_sensor_listener('resource3.sensor_3', listener3)
+        DUT.children.resource3.set_sensor_listener.assert_called_once_with(
+            'sensor_3', listener3)
+        DUT.children.resource3.set_sensor_listener.reset_mock()
+
+        return
 
     def get_expected(self, testserv_attr):
         expected_items = []
