@@ -883,16 +883,16 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         sensor_obj = getattr(self.sensor, sensor_name, None)
         if sensor_obj:
             # The sensor exists, so set the strategy.
-            child_name = sensor_obj.parent_name
-            child = self.children[child_name]
+            resource_name = sensor_obj.parent_name
+            resource_obj = self.children[resource_name]
             # Handle aggregate sensors that are not prefixed with "parent_name_"
             if sensor_name.startswith("agg_"):
-                yield child.set_sensor_strategy(sensor_name, strategy_and_parms)
+                yield resource_obj.set_sensor_strategy(sensor_name, strategy_and_parms)
             else:
                 # Get the child_sensor_name without the parent_name prefix
-                prefix = child_name + '_'
-                child_sensor_name = sensor_name[len(prefix):]
-                yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
+                prefix = resource_name + '_'
+                resource_sensor_name = sensor_name[len(prefix):]
+                yield resource_obj.set_sensor_strategy(resource_sensor_name, strategy_and_parms)
         # Otherwise, depend on self._add_sensors() to handle it when the sensor appears
 
     @steal_docstring_from(resource.KATCPResource.set_sensor_listener)
@@ -901,16 +901,16 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         sensor_obj = getattr(self.sensor, sensor_name, None)
         if sensor_obj:
             # The sensor exists, so register the listener.
-            child_name = sensor_obj.parent_name
-            child = self.children[child_name]
+            resource_name = sensor_obj.parent_name
+            resource_obj = self.children[resource_name]
             # Handle aggregate sensors that are not prefixed with "parent_name_"
             if sensor_name.startswith("agg_"):
-                child.set_sensor_listener(sensor_name, listener)
+                resource_obj.set_sensor_listener(sensor_name, listener)
             else:
                 # Get the child_sensor_name without the parent_name prefix
-                prefix = child_name + '_'
-                child_sensor_name = sensor_name[len(prefix):]
-                child.set_sensor_listener(child_sensor_name, listener)
+                prefix = resource_name + '_'
+                resource_sensor_name = sensor_name[len(prefix):]
+                resource_obj.set_sensor_listener(resource_sensor_name, listener)
         # Otherwise, depend on self._add_sensors() to handle it when the sensor appears
 
     def add_child_resource_client(self, res_name, res_spec):
