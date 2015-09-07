@@ -881,6 +881,26 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def set_sensor_strategy(self, sensor_name, strategy_and_parms):
         sensor_name = resource.escape_name(sensor_name)
         sensor_obj = getattr(self.sensor, sensor_name, None)
+        for child_name in dict.keys(self.children):
+            child = self.children[child_name]
+            if sensor_name.startswith("agg_"):
+                if sensor_obj and (child.name == sensor_obj.parent_name):
+                    # Handle aggregate sensors that are not prefixed with "parent_name_"
+                    yield child.set_sensor_strategy(sensor_name, strategy_and_parms)
+                    break
+            else:
+                if sensor_obj and (child.name == sensor_obj.parent_name):
+                    # Get the child_sensor_name without the parent_name prefix
+                    prefix = child_name + '_'
+                    child_sensor_name = sensor_name[len(prefix):]
+                    yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
+                    break
+
+    @tornado.gen.coroutine
+    @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
+    def NEW_set_sensor_strategy(self, sensor_name, strategy_and_parms):
+        sensor_name = resource.escape_name(sensor_name)
+        sensor_obj = getattr(self.sensor, sensor_name, None)
         if sensor_obj:
             # The sensor exists, so set the strategy.
             resource_name = sensor_obj.parent_name
