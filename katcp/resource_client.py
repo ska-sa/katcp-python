@@ -906,7 +906,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         if not sensor_name.startswith("agg_"):
             # Set strategy on resource client - which will cache it if necessary
             resource_obj = self.children[resource_name]
-            yield resource_obj.set_sensor_strategy(sensor_name, strategy_and_parms)
+            yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
         else:
             # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
             # TODO: Handle aggregates better
@@ -914,7 +914,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             sensor_obj = getattr(self.sensor, sensor_name, None)
             if sensor_obj:
                 resource_obj = self.children[sensor_obj.parent_name]
-                yield resource_obj.set_sensor_strategy(sensor_name, strategy_and_parms)
+                yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
             else:
                 self._logger.warn(
                     'Cannot cache sensor strategy for %s %s'

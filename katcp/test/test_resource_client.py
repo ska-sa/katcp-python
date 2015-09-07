@@ -431,7 +431,7 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         DUT.start()
         yield tornado.gen.moment
         test_strategy = ('period', '2.5')
-        yield DUT.set_sensor_strategy('an_int', test_strategy)
+        yield DUT.set_sampling_strategy('an_int', test_strategy)
         # Double-check that the sensor does not yet exist
         self.assertNotIn('an_int', DUT.sensor)
         self.server.start()
@@ -441,10 +441,10 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         yield DUT.until_synced()
         self.assertEqual(DUT.sensor.an_int.sampling_strategy, test_strategy)
 
-        # Now call set_sensor_strategy with a different strategy and check that it is
+        # Now call set_sampling_strategy with a different strategy and check that it is
         # applied to the real sensor
         new_test_strategy = ('event',)
-        yield DUT.set_sensor_strategy('an_int', new_test_strategy)
+        yield DUT.set_sampling_strategy('an_int', new_test_strategy)
         self.assertEqual(DUT.sensor.an_int.sampling_strategy, new_test_strategy)
 
     @tornado.testing.gen_test(timeout=1000)
@@ -721,40 +721,40 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
 
         yield DUT.until_synced()
 
-        DUT.children.resource1.set_sensor_strategy = mock.Mock(side_effect=side_effect)
-        DUT.children.resource2.set_sensor_strategy = mock.Mock(side_effect=side_effect)
-        DUT.children.resource3.set_sensor_strategy = mock.Mock(side_effect=side_effect)
+        DUT.children.resource1.set_sampling_strategy = mock.Mock(side_effect=side_effect)
+        DUT.children.resource2.set_sampling_strategy = mock.Mock(side_effect=side_effect)
+        DUT.children.resource3.set_sampling_strategy = mock.Mock(side_effect=side_effect)
 
         strat1 = ('period', '2.1')
         strat2 = ('event',)
         strat3 = ('event-rate', '2', '3')
-        yield DUT.set_sensor_strategy('resource1', 'sensor_1', strat1)
-        DUT.children.resource1.set_sensor_strategy.assert_called_once_with(
+        yield DUT.set_sampling_strategy('resource1', 'sensor_1', strat1)
+        DUT.children.resource1.set_sampling_strategy.assert_called_once_with(
             'sensor_1', strat1)
-        DUT.children.resource2.set_sensor_strategy.assert_not_called()
-        DUT.children.resource3.set_sensor_strategy.assert_not_called()
-        DUT.children.resource1.set_sensor_strategy.reset_mock()
+        DUT.children.resource2.set_sampling_strategy.assert_not_called()
+        DUT.children.resource3.set_sampling_strategy.assert_not_called()
+        DUT.children.resource1.set_sampling_strategy.reset_mock()
 
-        yield DUT.set_sensor_strategy('resource2','sensor_1', strat2)
-        DUT.children.resource2.set_sensor_strategy.assert_called_once_with(
+        yield DUT.set_sampling_strategy('resource2','sensor_1', strat2)
+        DUT.children.resource2.set_sampling_strategy.assert_called_once_with(
             'sensor_1', strat2)
-        DUT.children.resource1.set_sensor_strategy.assert_not_called()
-        DUT.children.resource3.set_sensor_strategy.assert_not_called()
-        DUT.children.resource2.set_sensor_strategy.reset_mock()
+        DUT.children.resource1.set_sampling_strategy.assert_not_called()
+        DUT.children.resource3.set_sampling_strategy.assert_not_called()
+        DUT.children.resource2.set_sampling_strategy.reset_mock()
 
-        yield DUT.set_sensor_strategy('resource2', 'agg_sensor', strat1)
-        DUT.children.resource2.set_sensor_strategy.assert_called_once_with(
+        yield DUT.set_sampling_strategy('resource2', 'agg_sensor', strat1)
+        DUT.children.resource2.set_sampling_strategy.assert_called_once_with(
             'agg_sensor', strat1)
-        DUT.children.resource1.set_sensor_strategy.assert_not_called()
-        DUT.children.resource3.set_sensor_strategy.assert_not_called()
-        DUT.children.resource2.set_sensor_strategy.reset_mock()
+        DUT.children.resource1.set_sampling_strategy.assert_not_called()
+        DUT.children.resource3.set_sampling_strategy.assert_not_called()
+        DUT.children.resource2.set_sampling_strategy.reset_mock()
 
-        yield DUT.set_sensor_strategy('resource3','sensor_3', strat3)
-        DUT.children.resource3.set_sensor_strategy.assert_called_once_with(
+        yield DUT.set_sampling_strategy('resource3','sensor_3', strat3)
+        DUT.children.resource3.set_sampling_strategy.assert_called_once_with(
             'sensor_3', strat3)
-        DUT.children.resource1.set_sensor_strategy.assert_not_called()
-        DUT.children.resource2.set_sensor_strategy.assert_not_called()
-        DUT.children.resource3.set_sensor_strategy.reset_mock()
+        DUT.children.resource1.set_sampling_strategy.assert_not_called()
+        DUT.children.resource2.set_sampling_strategy.assert_not_called()
+        DUT.children.resource3.set_sampling_strategy.reset_mock()
 
     @tornado.testing.gen_test(timeout=1000)
     def test_set_sensor_listener(self):
