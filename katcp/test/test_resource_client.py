@@ -782,11 +782,15 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         DUT.children.resource1.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener1)
         DUT.children.resource1.set_sensor_listener.reset_mock()
+        DUT.children.resource2.set_sensor_listener.assert_not_called()
+        DUT.children.resource3.set_sensor_listener.assert_not_called()
 
         DUT.set_sensor_listener('resource2_sensor_1', listener2)
         DUT.children.resource2.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener2)
         DUT.children.resource2.set_sensor_listener.reset_mock()
+        DUT.children.resource1.set_sensor_listener.assert_not_called()
+        DUT.children.resource3.set_sensor_listener.assert_not_called()
 
         DUT.set_sensor_listener('agg_sensor', listener2)
         DUT.children.resource2.set_sensor_listener.assert_called_once_with(
@@ -797,6 +801,8 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         DUT.children.resource3.set_sensor_listener.assert_called_once_with(
             'sensor_3', listener3)
         DUT.children.resource3.set_sensor_listener.reset_mock()
+        DUT.children.resource1.set_sensor_listener.assert_not_called()
+        DUT.children.resource2.set_sensor_listener.assert_not_called()
 
         return
 
