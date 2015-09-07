@@ -731,19 +731,30 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         yield DUT.set_sensor_strategy('resource1.sensor_1', strat1)
         DUT.children.resource1.set_sensor_strategy.assert_called_once_with(
             'sensor_1', strat1)
+        DUT.children.resource2.set_sensor_strategy.assert_not_called()
+        DUT.children.resource3.set_sensor_strategy.assert_not_called()
+        DUT.children.resource1.set_sensor_strategy.reset_mock()
 
         yield DUT.set_sensor_strategy('resource2_sensor_1', strat2)
         DUT.children.resource2.set_sensor_strategy.assert_called_once_with(
             'sensor_1', strat2)
+        DUT.children.resource1.set_sensor_strategy.assert_not_called()
+        DUT.children.resource3.set_sensor_strategy.assert_not_called()
         DUT.children.resource2.set_sensor_strategy.reset_mock()
 
         yield DUT.set_sensor_strategy('agg_sensor', strat1)
         DUT.children.resource2.set_sensor_strategy.assert_called_once_with(
             'agg_sensor', strat1)
+        DUT.children.resource1.set_sensor_strategy.assert_not_called()
+        DUT.children.resource3.set_sensor_strategy.assert_not_called()
+        DUT.children.resource2.set_sensor_strategy.reset_mock()
 
         yield DUT.set_sensor_strategy('resource3.sensor_3', strat3)
         DUT.children.resource3.set_sensor_strategy.assert_called_once_with(
             'sensor_3', strat3)
+        DUT.children.resource1.set_sensor_strategy.assert_not_called()
+        DUT.children.resource2.set_sensor_strategy.assert_not_called()
+        DUT.children.resource3.set_sensor_strategy.reset_mock()
 
     @tornado.testing.gen_test(timeout=1000)
     def test_set_sensor_listener(self):
@@ -781,28 +792,30 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         DUT.set_sensor_listener('resource1.sensor_1', listener1)
         DUT.children.resource1.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener1)
-        DUT.children.resource1.set_sensor_listener.reset_mock()
         DUT.children.resource2.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
+        DUT.children.resource1.set_sensor_listener.reset_mock()
 
         DUT.set_sensor_listener('resource2_sensor_1', listener2)
         DUT.children.resource2.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener2)
-        DUT.children.resource2.set_sensor_listener.reset_mock()
         DUT.children.resource1.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
+        DUT.children.resource2.set_sensor_listener.reset_mock()
 
         DUT.set_sensor_listener('agg_sensor', listener2)
         DUT.children.resource2.set_sensor_listener.assert_called_once_with(
             'agg_sensor', listener2)
+        DUT.children.resource1.set_sensor_listener.assert_not_called()
+        DUT.children.resource3.set_sensor_listener.assert_not_called()
         DUT.children.resource2.set_sensor_listener.reset_mock()
 
         DUT.set_sensor_listener('resource3.sensor_3', listener3)
         DUT.children.resource3.set_sensor_listener.assert_called_once_with(
             'sensor_3', listener3)
-        DUT.children.resource3.set_sensor_listener.reset_mock()
         DUT.children.resource1.set_sensor_listener.assert_not_called()
         DUT.children.resource2.set_sensor_listener.assert_not_called()
+        DUT.children.resource3.set_sensor_listener.reset_mock()
 
         return
 
