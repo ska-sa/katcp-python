@@ -903,75 +903,42 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def set_sensor_strategy(self, resource_name, sensor_name, strategy_and_parms):
         sensor_name_in = sensor_name
         sensor_name = resource.escape_name(sensor_name)
-        if False:
-            sensor_obj = getattr(self.sensor, sensor_name, None)
-            for child_name in dict.keys(self.children):
-                child = self.children[child_name]
-                if sensor_name.startswith("agg_"):
-                    if sensor_obj and (child.name == sensor_obj.parent_name):
-                        # Handle aggregate sensors that are not prefixed with "parent_name_"
-                        yield child.set_sensor_strategy(sensor_name, strategy_and_parms)
-                else:
-                    #if sensor_obj and (child.name == sensor_obj.parent_name):
-                        # Get the child_sensor_name without the parent_name prefix
-                        prefix = child_name + '_'
-                        child_sensor_name = sensor_name[len(prefix):]
-                        yield child.set_sensor_strategy(child_sensor_name, strategy_and_parms)
+        if not sensor_name.startswith("agg_"):
+            # Set strategy on resource client - which will cache it if necessary
+            resource_obj = self.children[resource_name]
+            yield resource_obj.set_sensor_strategy(sensor_name, strategy_and_parms)
         else:
-            if not sensor_name.startswith("agg_"):
-                # Set strategy on resource client - which will cache it if necessary
-                resource_obj = self.children[resource_name]
+            # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
+            # TODO: Handle aggregates better
+            # (for now the aggregate sensor_obj must exist as you don't know on which resource to cache it)
+            sensor_obj = getattr(self.sensor, sensor_name, None)
+            if sensor_obj:
+                resource_obj = self.children[sensor_obj.parent_name]
                 yield resource_obj.set_sensor_strategy(sensor_name, strategy_and_parms)
             else:
-                # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
-                # TODO: Handle aggregates better
-                # (for now the aggregate sensor_obj must exist as you don't know on which resource to cache it)
-                sensor_obj = getattr(self.sensor, sensor_name, None)
-                if sensor_obj:
-                    resource_obj = self.children[sensor_obj.parent_name]
-                    yield resource_obj.set_sensor_strategy(sensor_name, strategy_and_parms)
-                else:
-                    self._logger.warn(
-                        'Cannot cache sensor strategy for %s %s'
-                        % (resource_name, sensor_name))
+                self._logger.warn(
+                    'Cannot cache sensor strategy for %s %s'
+                    % (resource_name, sensor_name))
 
     def set_sensor_listener(self, resource_name, sensor_name, listener):
         sensor_name_in = sensor_name
         sensor_name = resource.escape_name(sensor_name)
-        if False:
-            sensor_obj = getattr(self.sensor, sensor_name, None)
-            for child_name in dict.keys(self.children):
-                child = self.children[child_name]
-                if sensor_name.startswith("agg_"):
-                    if sensor_obj and (child.name == sensor_obj.parent_name):
-                        # Handle aggregate sensors that are not prefixed with "parent_name_"
-                        child.set_sensor_listener(sensor_name, listener)
-                else:
-                    #if sensor_obj and (child.name == sensor_obj.parent_name):
-                        # Get the child_sensor_name without the parent_name prefix
-                        prefix = child_name + '_'
-                        child_sensor_name = sensor_name[len(prefix):]
-                        self._logger.warn(
-                            '-3.2- set_sensor_listener for {} {} - on {}.{}'
-                            .format(sensor_name_in, listener, child, child_sensor_name))
-                        child.set_sensor_listener(child_sensor_name, listener)
+        if not sensor_name.startswith("agg_"):
+            # Set listener on resource client - which will cache it if necessary
+            resource_obj = self.children[resource_name]
+            resource_obj.set_sensor_listener(sensor_name, listener)
         else:
-            if not sensor_name.startswith("agg_"):
-                # Set listener on resource client - which will cache it if necessary
-                resource_obj = self.children[resource_name]
+            # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
+            # TODO: Handle aggregates better
+            # (for now the aggregate sensor_obj must exist as you don't know on which resource to cache it)
+            sensor_obj = getattr(self.sensor, sensor_name, None)
+            if sensor_obj:
+                resource_obj = self.children[sensor_obj.parent_name]
                 resource_obj.set_sensor_listener(sensor_name, listener)
             else:
-                # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
-                # TODO: Handle aggregates better
-                # (for now the aggregate sensor_obj must exist as you don't know on which resource to cache it)
-                sensor_obj = getattr(self.sensor, sensor_name, None)
-                if sensor_obj:
-                    resource_obj = self.children[sensor_obj.parent_name]
-                    resource_obj.set_sensor_listener(sensor_name, listener)
-                else:
-                    self._logger.warn(
-                        'Cannot cache sensor listener for %s %s'
-                        % (resource_name, sensor_name))
+                self._logger.warn(
+                    'Cannot cache sensor listener for %s %s'
+                    % (resource_name, sensor_name))
 
     def add_child_resource_client(self, res_name, res_spec):
         """Add a resource client to the container and start the resource connection"""
