@@ -391,8 +391,22 @@ class KATCPClientResource(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
-    @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
-    def set_sensor_strategy(self, sensor_name, strategy_and_parms):
+    def set_sampling_strategy(self, sensor_name, strategy_and_parms):
+        """Set a strategy for a sensor even if it is not yet known.
+        The strategy should persist across sensor disconnect/reconnect.
+
+        sensor_name : str
+            Name of the sensor
+        strategy_and_params : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+
+        Returns
+        -------
+        done : tornado Future
+            Resolves when done
+        """
         sensor_name = resource.escape_name(sensor_name)
         sensor_obj = dict.get(self._sensor, sensor_name)
         self._sensor_strategy_cache[sensor_name] = strategy_and_parms
@@ -405,18 +419,27 @@ class KATCPClientResource(resource.KATCPResource):
                 self._logger.exception(
                     'Unhandled exception trying to set sensor strategy {!r} for sensor {}'
                     .format(strategy_and_parms, sensor_name))
-        # Otherwise, depend on self._add_sensors() to handle it when the sensor appears
+        # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
 
-    @steal_docstring_from(resource.KATCPResource.set_sensor_listener)
     def set_sensor_listener(self, sensor_name, listener):
+        """Set a sensor listener for a sensor even if it is not yet known
+        The listener registration should persist across sensor disconnect/reconnect.
+
+        sensor_name : str
+            Name of the sensor
+        listener : callable
+            Listening callable that will be registered on the named sensor when it becomes
+            available. Callable as for :meth:`KATCPSensor.register_listener`
+
+        """
+
         sensor_name = resource.escape_name(sensor_name)
         sensor_obj = dict.get(self._sensor, sensor_name)
         self._sensor_listener_cache[sensor_name].append(listener)
         if sensor_obj:
             # The sensor exists, so register the listener and continue.
-            sensor_obj.register_listener(listener)
-        # Otherwise, depend on self._add_sensors() to handle it when the sensor appears
-
+            sensor_obj.register_listener(listener, reading=True)
+        # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
 
     def _request_factory(self, name, description):
         return KATCPClientResourceRequest(
@@ -877,41 +900,45 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
-    @steal_docstring_from(resource.KATCPResource.set_sensor_strategy)
-    def set_sensor_strategy(self, sensor_name, strategy_and_parms):
+    def set_sampling_strategy(self, resource_name, sensor_name, strategy_and_parms):
+        sensor_name_in = sensor_name
         sensor_name = resource.escape_name(sensor_name)
-        sensor_obj = getattr(self.sensor, sensor_name, None)
-        if sensor_obj:
-            # The sensor exists, so set the strategy.
-            resource_name = sensor_obj.parent_name
+        if not sensor_name.startswith("agg_"):
+            # Set strategy on resource client - which will cache it if necessary
             resource_obj = self.children[resource_name]
-            # Handle aggregate sensors that are not prefixed with "parent_name_"
-            if sensor_name.startswith("agg_"):
-                yield resource_obj.set_sensor_strategy(sensor_name, strategy_and_parms)
+            yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
+        else:
+            # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
+            # TODO: Handle aggregates better
+            # (for now the aggregate sensor_obj must exist as you don't know on which resource to cache it)
+            sensor_obj = getattr(self.sensor, sensor_name, None)
+            if sensor_obj:
+                resource_obj = self.children[sensor_obj.parent_name]
+                yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
             else:
-                # Get the child_sensor_name without the parent_name prefix
-                prefix = resource_name + '_'
-                resource_sensor_name = sensor_name[len(prefix):]
-                yield resource_obj.set_sensor_strategy(resource_sensor_name, strategy_and_parms)
-        # Otherwise, depend on self._add_sensors() to handle it when the sensor appears
+                self._logger.warn(
+                    'Cannot cache sensor strategy for %s %s'
+                    % (resource_name, sensor_name))
 
-    @steal_docstring_from(resource.KATCPResource.set_sensor_listener)
-    def set_sensor_listener(self, sensor_name, listener):
+    def set_sensor_listener(self, resource_name, sensor_name, listener):
+        sensor_name_in = sensor_name
         sensor_name = resource.escape_name(sensor_name)
-        sensor_obj = getattr(self.sensor, sensor_name, None)
-        if sensor_obj:
-            # The sensor exists, so register the listener.
-            resource_name = sensor_obj.parent_name
+        if not sensor_name.startswith("agg_"):
+            # Set listener on resource client - which will cache it if necessary
             resource_obj = self.children[resource_name]
-            # Handle aggregate sensors that are not prefixed with "parent_name_"
-            if sensor_name.startswith("agg_"):
+            resource_obj.set_sensor_listener(sensor_name, listener)
+        else:
+            # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
+            # TODO: Handle aggregates better
+            # (for now the aggregate sensor_obj must exist as you don't know on which resource to cache it)
+            sensor_obj = getattr(self.sensor, sensor_name, None)
+            if sensor_obj:
+                resource_obj = self.children[sensor_obj.parent_name]
                 resource_obj.set_sensor_listener(sensor_name, listener)
             else:
-                # Get the child_sensor_name without the parent_name prefix
-                prefix = resource_name + '_'
-                resource_sensor_name = sensor_name[len(prefix):]
-                resource_obj.set_sensor_listener(resource_sensor_name, listener)
-        # Otherwise, depend on self._add_sensors() to handle it when the sensor appears
+                self._logger.warn(
+                    'Cannot cache sensor listener for %s %s'
+                    % (resource_name, sensor_name))
 
     def add_child_resource_client(self, res_name, res_spec):
         """Add a resource client to the container and start the resource connection"""
