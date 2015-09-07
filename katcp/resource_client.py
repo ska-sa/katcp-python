@@ -391,7 +391,7 @@ class KATCPClientResource(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
-    def set_sensor_strategy(self, sensor_name, strategy_and_parms):
+    def set_sampling_strategy(self, sensor_name, strategy_and_parms):
         """Set a strategy for a sensor even if it is not yet known.
         The strategy should persist across sensor disconnect/reconnect.
 
@@ -900,7 +900,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
-    def set_sensor_strategy(self, resource_name, sensor_name, strategy_and_parms):
+    def set_sampling_strategy(self, resource_name, sensor_name, strategy_and_parms):
         sensor_name_in = sensor_name
         sensor_name = resource.escape_name(sensor_name)
         if not sensor_name.startswith("agg_"):
