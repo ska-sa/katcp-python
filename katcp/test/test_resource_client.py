@@ -728,28 +728,28 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         strat1 = ('period', '2.1')
         strat2 = ('event',)
         strat3 = ('event-rate', '2', '3')
-        yield DUT.set_sensor_strategy('resource1.sensor_1', strat1)
+        yield DUT.set_sensor_strategy('resource1', 'sensor_1', strat1)
         DUT.children.resource1.set_sensor_strategy.assert_called_once_with(
             'sensor_1', strat1)
         DUT.children.resource2.set_sensor_strategy.assert_not_called()
         DUT.children.resource3.set_sensor_strategy.assert_not_called()
         DUT.children.resource1.set_sensor_strategy.reset_mock()
 
-        yield DUT.set_sensor_strategy('resource2_sensor_1', strat2)
+        yield DUT.set_sensor_strategy('resource2','sensor_1', strat2)
         DUT.children.resource2.set_sensor_strategy.assert_called_once_with(
             'sensor_1', strat2)
         DUT.children.resource1.set_sensor_strategy.assert_not_called()
         DUT.children.resource3.set_sensor_strategy.assert_not_called()
         DUT.children.resource2.set_sensor_strategy.reset_mock()
 
-        yield DUT.set_sensor_strategy('agg_sensor', strat1)
+        yield DUT.set_sensor_strategy('resource2', 'agg_sensor', strat1)
         DUT.children.resource2.set_sensor_strategy.assert_called_once_with(
             'agg_sensor', strat1)
         DUT.children.resource1.set_sensor_strategy.assert_not_called()
         DUT.children.resource3.set_sensor_strategy.assert_not_called()
         DUT.children.resource2.set_sensor_strategy.reset_mock()
 
-        yield DUT.set_sensor_strategy('resource3.sensor_3', strat3)
+        yield DUT.set_sensor_strategy('resource3','sensor_3', strat3)
         DUT.children.resource3.set_sensor_strategy.assert_called_once_with(
             'sensor_3', strat3)
         DUT.children.resource1.set_sensor_strategy.assert_not_called()
@@ -789,28 +789,28 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         listener1 = lambda *x : None
         listener2 = lambda *y : None
         listener3 = lambda *z : None
-        DUT.set_sensor_listener('resource1.sensor_1', listener1)
+        DUT.set_sensor_listener('resource1', 'sensor_1', listener1)
         DUT.children.resource1.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener1)
         DUT.children.resource2.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
         DUT.children.resource1.set_sensor_listener.reset_mock()
 
-        DUT.set_sensor_listener('resource2_sensor_1', listener2)
+        DUT.set_sensor_listener('resource2', 'sensor_1', listener2)
         DUT.children.resource2.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener2)
         DUT.children.resource1.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
         DUT.children.resource2.set_sensor_listener.reset_mock()
 
-        DUT.set_sensor_listener('agg_sensor', listener2)
+        DUT.set_sensor_listener('resource2', 'agg_sensor', listener2)
         DUT.children.resource2.set_sensor_listener.assert_called_once_with(
             'agg_sensor', listener2)
         DUT.children.resource1.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
         DUT.children.resource2.set_sensor_listener.reset_mock()
 
-        DUT.set_sensor_listener('resource3.sensor_3', listener3)
+        DUT.set_sensor_listener('resource3', 'sensor_3', listener3)
         DUT.children.resource3.set_sensor_listener.assert_called_once_with(
             'sensor_3', listener3)
         DUT.children.resource1.set_sensor_listener.assert_not_called()

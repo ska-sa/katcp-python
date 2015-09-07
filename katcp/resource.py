@@ -295,37 +295,6 @@ class KATCPResource(object):
                     False, sys.exc_info())
         raise tornado.gen.Return(sensors_strategies)
 
-    @abc.abstractmethod
-    def set_sensor_strategy(self, sensor_name, strategy_and_params):
-        """Set a strategy for a sensor even if it is not yet known.
-        The strategy should persist across sensor disconnect/reconnect.
-
-        sensor_name : str
-            Name of the sensor
-        strategy_and_params : seq of str or str
-            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
-            names and parameters are as defined by the KATCP spec. As str contains the
-            same elements in space-separated form.
-
-        Returns
-        -------
-        done : tornado Future
-            Resolves when done
-        """
-
-    @abc.abstractmethod
-    def set_sensor_listener(self, sensor_name, strategy_and_params):
-        """Set a sensor listener for a sensor even if it is not yet known
-        The listener registration should persist across sensor disconnect/reconnect.
-
-        sensor_name : str
-            Name of the sensor
-        listener : callable
-            Listening callable that will be registered on the named sensor when it becomes
-            available. Callable as for :meth:`KATCPSensor.register_listener`
-
-        """
-
     def set_active(self, active):
         self._active = bool(active)
         for child in dict.values(self.children):
