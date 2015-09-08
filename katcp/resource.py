@@ -253,7 +253,7 @@ class KATCPResource(object):
         """
 
     @tornado.gen.coroutine
-    def set_sensor_strategies(self, filter, strategy_and_params, **list_sensor_args):
+    def set_sampling_strategies(self, filter, strategy_and_params):
         """Set a sampling strategy for all sensors that match the specified filter.
 
         Parameters
@@ -284,7 +284,7 @@ class KATCPResource(object):
                else, sys.exc_info() tuple for the error that occured.
         """
         sensors_strategies = {}
-        sensor_results = yield self.list_sensors(filter, **list_sensor_args)
+        sensor_results = yield self.list_sensors(filter)
         for sensor_res in sensor_results:
             try:
                 yield sensor_res.object.set_sampling_strategy(strategy_and_params)
@@ -292,6 +292,44 @@ class KATCPResource(object):
                     True, sensor_res.object.sampling_strategy)
             except Exception:
                 sensors_strategies[sensor_res.python_identifier] = (
+                    False, sys.exc_info())
+        raise tornado.gen.Return(sensors_strategies)
+
+    @tornado.gen.coroutine
+    def set_sampling_strategy(self, sensor_name, strategy_and_params):
+        """Set a sampling strategy for a specific sensor.
+
+        Parameters
+        ----------
+        sensor_name : string
+            The specific sensor.
+        strategy_and_params : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+
+        Returns
+        -------
+        sensors_strategies : tornado Future
+           resolves with a dict with the Python identifier names of the sensors
+           as keys and the value a tuple:
+
+           (success, info) with
+
+           sucess : bool
+              True if setting succeeded for this sensor, else False
+           info : tuple
+               normalised sensor strategy and parameters as tuple if success == True
+               else, sys.exc_info() tuple for the error that occured.
+        """
+        sensors_strategies = {}
+        try:
+            sensor_obj = self.sensor.get(sensor_name)
+            yield sensor_obj.set_sampling_strategy(strategy_and_params)
+            sensors_strategies[sensor_obj.normalised_name] = (
+                    True, sensor_obj.sampling_strategy)
+        except Exception:
+            sensors_strategies[sensor_obj.normalised_name] = (
                     False, sys.exc_info())
         raise tornado.gen.Return(sensors_strategies)
 
