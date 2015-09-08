@@ -447,6 +447,11 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         yield DUT.set_sampling_strategy('an_int', new_test_strategy)
         self.assertEqual(DUT.sensor.an_int.sampling_strategy, new_test_strategy)
 
+        # Also use set_sampling_strategies with a different strategy
+        new_test_strategy = ('period', '3.0')
+        yield DUT.set_sampling_strategies('int', new_test_strategy)
+        self.assertEqual(DUT.sensor.an_int.sampling_strategy, new_test_strategy)
+
     @tornado.testing.gen_test(timeout=1000)
     def test_set_sensor_listener(self):
         self.server.stop()

@@ -253,7 +253,7 @@ class KATCPResource(object):
         """
 
     @tornado.gen.coroutine
-    def set_sensor_strategies(self, filter, strategy_and_params, **list_sensor_args):
+    def set_sampling_strategies(self, filter, strategy_and_params):
         """Set a sampling strategy for all sensors that match the specified filter.
 
         Parameters
@@ -284,7 +284,7 @@ class KATCPResource(object):
                else, sys.exc_info() tuple for the error that occured.
         """
         sensors_strategies = {}
-        sensor_results = yield self.list_sensors(filter, **list_sensor_args)
+        sensor_results = yield self.list_sensors(filter)
         for sensor_res in sensor_results:
             try:
                 yield sensor_res.object.set_sampling_strategy(strategy_and_params)
@@ -292,6 +292,44 @@ class KATCPResource(object):
                     True, sensor_res.object.sampling_strategy)
             except Exception:
                 sensors_strategies[sensor_res.python_identifier] = (
+                    False, sys.exc_info())
+        raise tornado.gen.Return(sensors_strategies)
+
+    @tornado.gen.coroutine
+    def set_sampling_strategy(self, sensor_name, strategy_and_params):
+        """Set a sampling strategy for a specific sensor.
+
+        Parameters
+        ----------
+        sensor_name : string
+            The specific sensor.
+        strategy_and_params : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+
+        Returns
+        -------
+        sensors_strategies : tornado Future
+           resolves with a dict with the Python identifier names of the sensors
+           as keys and the value a tuple:
+
+           (success, info) with
+
+           sucess : bool
+              True if setting succeeded for this sensor, else False
+           info : tuple
+               normalised sensor strategy and parameters as tuple if success == True
+               else, sys.exc_info() tuple for the error that occured.
+        """
+        sensors_strategies = {}
+        try:
+            sensor_obj = self.sensor.get(sensor_name)
+            yield sensor_obj.set_sampling_strategy(strategy_and_params)
+            sensors_strategies[sensor_obj.normalised_name] = (
+                    True, sensor_obj.sampling_strategy)
+        except Exception:
+            sensors_strategies[sensor_obj.normalised_name] = (
                     False, sys.exc_info())
         raise tornado.gen.Return(sensors_strategies)
 
@@ -913,205 +951,3 @@ class KATCPReply(_KATCPReplyTuple):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
 
-
-class GroupRequest(object):
-    """Couroutine wrapper around a specific KATCP request for a group of clients.
-
-    Each available KATCP request supported by group has an associated
-    :class:`GroupRequest` object in the hierarchy. This wrapper is mainly for
-    interactive convenience. It provides the KATCP request help string as a
-    docstring accessible via IPython's question mark operator.
-
-    Call Parameters
-    ---------------
-
-    Call parameters are all forwarded to the :class:`KATCPRequest` instance of each
-    client in the group.
-
-    Return Value
-    ------------
-    Returns a tornado future that resolves with a :class:`GroupResults` instance that
-    contains the replies of each client. If a particular client does not have the request,
-    its result is None.
-
-    """
-    def __init__(self, group, name, description):
-        """Initialise the GroupRequest
-
-        Parameters
-        ----------
-        group : :class:`ClientGroup` object
-            Client group to which requests will be sent
-        name : string
-            Name of the KATCP request
-        description : string
-            Help string associated with this KATCP request
-
-        """
-
-        self.group = group
-        self.name = name
-        self.description = description
-        self.__doc__ = '\n'.join(('KATCP Documentation',
-                                  '===================',
-                                  description,
-                                  'GroupRequest Documentation',
-                                  '==========================',
-                                  self.__doc__ or ''))
-
-    @tornado.gen.coroutine
-    def __call__(self, *args, **kwargs):
-        result_futures = {}
-        none_future = Future()
-        none_future.set_result(None)
-        for client in self.group.clients:
-            request_method = getattr(client.req, self.name, None)
-            if request_method:
-                result_futures[client.name] = request_method(*args, **kwargs)
-            else:
-                result_futures[client.name] = none_future
-
-        results = yield result_futures
-        raise Return(GroupResults(results))
-
-
-class GroupResults(dict):
-    """The result of a group request.
-
-    This has a dictionary interface, with the client names as keys and the
-    corresponding replies from each client as values. The replies are stored as
-    :class:`KATCPReply` objects, or are None for clients
-    that did not support the request.
-
-    The result will evalue to a truthy value if all the requests succeeded, i.e.
-    ::
-
-        if result:
-            handle_success()
-        else:
-            handle_failure()
-
-    should work as expected.
-
-    """
-    def __nonzero__(self):
-        """True if katcp request succeeded on all clients."""
-        return all(self.itervalues())
-
-    @property
-    def succeeded(self):
-        """True if katcp request succeeded on all clients."""
-        return bool(self)
-
-
-class ClientGroup(object):
-    """Create a group of similar clients.
-
-    Parameters
-    ----------
-    name : str
-        Name of the group of clients.
-    clients : list of :class:`KATCPResource` objects
-        Clients to put into the group.
-    """
-    def __init__(self, name, clients):
-        self.name = name
-        self._clients_dirty = True
-        self.clients = tuple(clients)
-
-    def __iter__(self):
-        """Iterate over client members of group."""
-        return iter(self.clients)
-
-    def __getitem__(self, index):
-        """Get the client at specific index of group."""
-        return self.clients[index]
-
-    def __len__(self):
-        """Number of client members in group."""
-        return len(self.clients)
-
-    @property
-    def req(self):
-        if self._clients_dirty:
-            self._req = AttrDict()
-            for client in self.clients:
-                for name, request in dict.iteritems(client.req):
-                    if name not in self._req:
-                        self._req[name] = GroupRequest(self, name,
-                                                       request.description)
-            self._clients_dirty = False
-
-        return self._req
-
-    def client_updated(self, client):
-        """Called to notify this group that a client has been updated."""
-        assert client in self.clients
-        self._clients_dirty = True
-
-    def is_connected(self):
-        """Indication of the connection state of all clients in the group"""
-        return all([c.is_connected() for c in self.clients])
-
-    @tornado.gen.coroutine
-    def set_sampling_strategies(self, filter, strategy_and_params, **list_sensor_args):
-        """Set sampling strategy for the sensors of all the group's clients.
-
-        Only sensors that match the specified filter are considered. See the
-        `KATCPResource.set_sensor_strategies` docstring for parameter
-        definitions and more info.
-
-        Returns
-        -------
-        sensors_strategies : tornado Future
-           Resolves with a dict with client names as keys and with the value as
-           another dict. The value dict is similar to the return value
-           described in the `KATCPResource.set_sensor_strategies` docstring.
-        """
-        futures_dict = {}
-        for client in self.clients:
-            futures_dict[client.name] = client.set_sensor_strategies(
-                filter, strategy_and_params, **list_sensor_args)
-        sensors_strategies = yield futures_dict
-        raise tornado.gen.Return(sensors_strategies)
-
-    @tornado.gen.coroutine
-    def wait(self, sensor_name, condition_or_value, status=None, timeout=5):
-        """Wait for a sensor present on all clients in the group to satisfy a
-        condition.
-
-        Parameters
-        ----------
-        sensor_name : string
-            The name of the sensor to check
-        condition_or_value : obj or callable, or seq of objs or callables
-            If obj, sensor.value is compared with obj. If callable,
-            condition_or_value(reading) is called, and must return True if its
-            condition is satisfied. Since the reading is passed in, the value,
-            status, timestamp or received_timestamp attributes can all be used
-            in the check.
-        status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
-            Wait for this status, at the same time as value above, to be
-            obtained. Ignore status if None
-        timeout : float or None
-            The timeout in seconds
-
-        Returns
-        -------
-        This command returns a tornado Future that resolves with True if the
-        sensor values satisifed the condition with the timeout, else resolves
-        with False.
-
-        Raises
-        ------
-        Resolves with a :class:`KATCPSensorError` exception if any of the
-        sensors do not have a strategy set, or if the named sensor is not
-        present
-
-        """
-        wait_result_futures = {}
-        for client in self.clients:
-            wait_result_futures[client.name] = client.wait(
-                sensor_name, condition_or_value, status, timeout)
-        wait_results = yield wait_result_futures
-        raise tornado.gen.Return(all(wait_results.values()))
