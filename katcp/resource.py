@@ -1054,7 +1054,7 @@ class ClientGroup(object):
         return all([c.is_connected() for c in self.clients])
 
     @tornado.gen.coroutine
-    def set_sensor_strategies(self, filter, strategy_and_params, **list_sensor_args):
+    def set_sampling_strategies(self, filter, strategy_and_params, **list_sensor_args):
         """Set sampling strategy for the sensors of all the group's clients.
 
         Only sensors that match the specified filter are considered. See the
