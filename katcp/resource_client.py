@@ -879,7 +879,7 @@ class ClientGroup(object):
         """Set sampling strategy for the sensors of all the group's clients.
 
         Only sensors that match the specified filter are considered. See the
-        `KATCPResource.set_sensor_strategies` docstring for parameter
+        `KATCPResource.set_sampling_strategies` docstring for parameter
         definitions and more info.
 
         Returns
@@ -887,11 +887,11 @@ class ClientGroup(object):
         sensors_strategies : tornado Future
            Resolves with a dict with client names as keys and with the value as
            another dict. The value dict is similar to the return value
-           described in the `KATCPResource.set_sensor_strategies` docstring.
+           described in the `KATCPResource.set_sampling_strategies` docstring.
         """
         futures_dict = {}
         for client in self.clients:
-            futures_dict[client.name] = client.set_sensor_strategies(
+            futures_dict[client.name] = client.set_sampling_strategies(
                 filter, strategy_and_params, **list_sensor_args)
         sensors_strategies = yield futures_dict
         raise tornado.gen.Return(sensors_strategies)
