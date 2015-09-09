@@ -1605,13 +1605,18 @@ class AsyncState(object):
         self._waiting_futures[state] = tornado_Future()
         old_future.set_result(True)
 
-    def until_state(self, state):
+    def until_state(self, state, timeout=None):
         """Return a tornado Future that will resolve when the requested state is set"""
         if state not in self._valid_states:
             raise ValueError('State must be one of {0}, not {1}'
                              .format(self._valid_states, state))
         if state != self._state:
-            return self._waiting_futures[state]
+            if timeout:
+                ioloop = ioloop or tornado.ioloop.IOLoop.current()
+                return with_timeout(deadline = ioloop.time() + timeout,
+                                    self._waiting_futures[state], ioloop)
+            else:
+                return self._waiting_futures[state]
         else:
             f = tornado_Future()
             f.set_result(True)
