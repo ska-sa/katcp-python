@@ -391,6 +391,35 @@ class KATCPClientResource(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
+    def set_sampling_strategies(self, filter, strategy_and_parms):
+        """Set a strategy for all sensors matching the filter even if it is not yet known.
+        The strategy should persist across sensor disconnect/reconnect.
+
+        filter : str
+            Filter for sensor names
+        strategy_and_params : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+
+        Returns
+        -------
+        done : tornado Future
+            Resolves when done
+        """
+        sensor_list = yield self.list_sensors(filter=filter)
+        for sens in sensor_list:
+            # Set the strategy on each sensor
+            try:
+                sensor_name = sens.object.normalised_name
+                yield self.set_sampling_strategy(sensor_name, strategy_and_parms)
+            except Exception as exc:
+                self._logger.exception(
+                    'Unhandled exception trying to set sensor strategies {!r} for {} ({})'
+                    .format(strategy_and_parms, sens, exc))
+        # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
+
+    @tornado.gen.coroutine
     def set_sampling_strategy(self, sensor_name, strategy_and_parms):
         """Set a strategy for a sensor even if it is not yet known.
         The strategy should persist across sensor disconnect/reconnect.
