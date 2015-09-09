@@ -1154,8 +1154,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def set_sampling_strategies(self, resource_name, filter, strategy_and_parms):
-        result_list = self.list_sensors(filter=filter)
-        ok = True
+        result_list = yield self.list_sensors(filter=filter)
         for result in result_list:
             sensor_name = result.object.normalised_name
             try:
