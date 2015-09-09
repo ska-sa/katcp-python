@@ -904,7 +904,7 @@ class ClientGroup(object):
         return all([c.is_connected() for c in self.clients])
 
     @tornado.gen.coroutine
-    def set_sampling_strategies(self, filter, strategy_and_params, **list_sensor_args):
+    def set_sampling_strategies(self, filter, strategy_and_params):
         """Set sampling strategy for the sensors of all the group's clients.
 
         Only sensors that match the specified filter are considered. See the
@@ -919,9 +919,31 @@ class ClientGroup(object):
            described in the `KATCPResource.set_sampling_strategies` docstring.
         """
         futures_dict = {}
-        for client in self.clients:
-            futures_dict[client.name] = client.set_sampling_strategies(
-                filter, strategy_and_params, **list_sensor_args)
+        for res_obj in self.clients:
+            futures_dict[res_obj.name] = res_obj.set_sampling_strategies(
+                filter, strategy_and_params)
+        sensors_strategies = yield futures_dict
+        raise tornado.gen.Return(sensors_strategies)
+
+    @tornado.gen.coroutine
+    def set_sampling_strategy(self, sensor_name, strategy_and_params):
+        """Set sampling strategy for the sensors of all the group's clients.
+
+        Only sensors that match the specified filter are considered. See the
+        `KATCPResource.set_sampling_strategies` docstring for parameter
+        definitions and more info.
+
+        Returns
+        -------
+        sensors_strategies : tornado Future
+           Resolves with a dict with client names as keys and with the value as
+           another dict. The value dict is similar to the return value
+           described in the `KATCPResource.set_sampling_strategies` docstring.
+        """
+        futures_dict = {}
+        for res_obj in self.clients:
+            futures_dict[res_obj.name] = res_obj.set_sampling_strategy(
+                sensor_name, strategy_and_params)
         sensors_strategies = yield futures_dict
         raise tornado.gen.Return(sensors_strategies)
 
