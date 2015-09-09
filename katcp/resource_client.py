@@ -1186,14 +1186,14 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 sensor_dict[resource_name][sensor_name] = strategy_and_parms
             except:
                 self._logger.error(
-                    'Cannot set samplings strategies for %s %s'
+                    'Cannot cache samplings strategy for %s %s'
                     % (resource_name, sensor_name))
                 sensor_dict[resource_name][sensor_name] = None
         raise tornado.gen.Return(sensor_dict)
 
     @tornado.gen.coroutine
     def set_sampling_strategy(self, sensor_name, strategy_and_parms):
-        """Set sampling strategies for filtered sensors - these sensors have to exsist"""
+        """Set sampling strategies for the specific sensor - this sensor has to exsist"""
         result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
         sensor_dict = {}
         for result in result_list:
@@ -1207,30 +1207,31 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 sensor_dict[resource_name][sensor_name] = strategy_and_parms
             except:
                 self._logger.error(
-                    'Cannot set sampling strategy for %s %s'
+                    'Cannot cache sampling strategy for %s %s'
                     % (resource_name, sensor_name))
                 sensor_dict[resource_name][sensor_name] = None
         raise tornado.gen.Return(sensor_dict)
 
-    def set_sensor_listener(self, resource_name, sensor_name, listener):
-        sensor_name_in = sensor_name
-        sensor_name = resource.escape_name(sensor_name)
-        if not sensor_name.startswith("agg_"):
-            # Set listener on resource client - which will cache it if necessary
-            resource_obj = self.children[resource_name]
-            resource_obj.set_sensor_listener(sensor_name, listener)
-        else:
-            # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
-            # TODO: Handle aggregates better
-            # (for now the aggregate sensor_obj must exist as you don't know on which resource to cache it)
-            sensor_obj = getattr(self.sensor, sensor_name, None)
-            if sensor_obj:
-                resource_obj = self.children[sensor_obj.parent_name]
+    @tornado.gen.coroutine
+    def set_sensor_listener(self, sensor_name, listener):
+        """Set listener for the specific sensor - this sensor has to exsist"""
+        result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
+        sensor_dict = {}
+        for result in result_list:
+            sensor_name = result.object.normalised_name
+            resource_name = result.object.parent_name
+            if resource_name not in sensor_dict:
+                sensor_dict[resource_name] = {}
+            try:
+                resource_obj = self.children[resource_name]
                 resource_obj.set_sensor_listener(sensor_name, listener)
-            else:
-                self._logger.warn(
+                sensor_dict[resource_name][sensor_name] = strategy_and_parms
+            except:
+                self._logger.error(
                     'Cannot cache sensor listener for %s %s'
                     % (resource_name, sensor_name))
+                sensor_dict[resource_name][sensor_name] = None
+        raise tornado.gen.Return(sensor_dict)
 
     def add_child_resource_client(self, res_name, res_spec):
         """Add a resource client to the container and start the resource connection"""

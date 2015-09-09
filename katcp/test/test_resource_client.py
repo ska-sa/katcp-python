@@ -827,28 +827,29 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         listener1 = lambda *x : None
         listener2 = lambda *y : None
         listener3 = lambda *z : None
-        DUT.set_sensor_listener('resource1', 'sensor_1', listener1)
+
+        yield DUT.set_sensor_listener('resource1_sensor_1', listener1)
         DUT.children.resource1.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener1)
         DUT.children.resource2.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
         DUT.children.resource1.set_sensor_listener.reset_mock()
 
-        DUT.set_sensor_listener('resource2', 'sensor_1', listener2)
+        DUT.set_sensor_listener('resource2_sensor_1', listener2)
         DUT.children.resource2.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener2)
         DUT.children.resource1.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
         DUT.children.resource2.set_sensor_listener.reset_mock()
 
-        DUT.set_sensor_listener('resource2', 'agg_sensor', listener2)
+        DUT.set_sensor_listener('agg_sensor', listener2)
         DUT.children.resource2.set_sensor_listener.assert_called_once_with(
             'agg_sensor', listener2)
         DUT.children.resource1.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
         DUT.children.resource2.set_sensor_listener.reset_mock()
 
-        DUT.set_sensor_listener('resource3', 'sensor_3', listener3)
+        DUT.set_sensor_listener('resource3.sensor_3', listener3)
         DUT.children.resource3.set_sensor_listener.assert_called_once_with(
             'sensor_3', listener3)
         DUT.children.resource1.set_sensor_listener.assert_not_called()
