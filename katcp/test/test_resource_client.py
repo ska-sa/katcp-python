@@ -701,6 +701,17 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
                 return Message.reply(msg.name, "ok", "bling1", "bling2")
             s._request_handlers['sparkling-new-'+s_name] = handler
 
+    @tornado.testing.gen_test
+    def test_timeout_of_until_synced(self):
+        self.default_spec_orig = copy.deepcopy(self.default_spec)
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        DUT.start()
+        # Test for timing out
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield DUT.until_synced(timeout=0.001)
+        # Test for NOT timing out
+        yield DUT.until_synced(timeout=0.5)
+
     @tornado.testing.gen_test(timeout=1000)
     def test_set_sensor_sampling(self):
         self.default_spec_orig = copy.deepcopy(self.default_spec)

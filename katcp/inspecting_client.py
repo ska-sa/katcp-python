@@ -207,26 +207,28 @@ class InspectingClientAsync(object):
         """Connection status."""
         return self.katcp_client.is_connected()
 
-    def until_connected(self):
+    def until_connected(self, timeout=None):
         # TODO (NM) Perhaps misleading to say until_protocol here? For debugging it is
         # useful to know if the TCP connection is established even if nothing else has
         # happened yet. Also, won't match is_connected()
-        return self.katcp_client.until_protocol()
+        return self.katcp_client.until_protocol(timeout=timeout)
 
-    def until_synced(self):
-        return self._state.until_state(InspectingClientStateType(
-            connected=True, synced=True, model_changed=False, data_synced=True))
+    def until_synced(self, timeout=None):
+        return self._state.until_state(
+            InspectingClientStateType(connected=True, synced=True,
+                                      model_changed=False, data_synced=True),
+            timeout=timeout)
 
-    def until_not_synced(self):
+    def until_not_synced(self, timeout=None):
         unsynced_states = tuple(state for state in self.valid_states
-                               if not state.synced)
-        return self._state.until_state_in(*unsynced_states)
+                                if not state.synced)
+        return self._state.until_state_in(*unsynced_states, timeout=timeout)
 
 
-    def until_data_synced(self):
+    def until_data_synced(self, timeout=None):
         data_synced_states = tuple(state for state in self.valid_states
                                    if state.data_synced)
-        return self._state.until_state_in(*data_synced_states)
+        return self._state.until_state_in(*data_synced_states, timeout=timeout)
 
 
     @tornado.gen.coroutine

@@ -137,6 +137,13 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
                                             ioloop=self.io_loop)
         self.io_loop.add_callback(self.client.connect)
 
+    @tornado.testing.gen_test
+    def test_timeout_of_until_synced(self):
+        # Test for timing out
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield self.client.until_synced(timeout=0.001)
+        # Test for NOT timing out
+        yield self.client.until_synced(timeout=0.5)
 
     @tornado.testing.gen_test
     def test_simple_request(self):

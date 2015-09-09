@@ -1467,7 +1467,15 @@ class AsyncEvent(object):
     same thread/ioloop.
 
     """
-    def __init__(self):
+    def __init__(self, ioloop=None):
+        """Init of async event.
+
+        Parameters
+        ----------
+        ioloop : IOLoop instance or None
+            tornado IOloop instance to use, or None for IOLoop.current()
+        """
+        self._ioloop = ioloop or tornado.ioloop.IOLoop.current()
         self._flag = False
         self._waiting_future = tornado_Future()
 
@@ -1496,9 +1504,14 @@ class AsyncEvent(object):
     def clear(self):
         self._flag = False
 
-    def until_set(self):
+    def until_set(self, timeout=None):
         if not self._flag:
-            return self._waiting_future
+            if timeout:
+                return with_timeout(self._ioloop.time() + timeout,
+                                    self._waiting_future,
+                                    self._ioloop)
+            else:
+                return self._waiting_future
         else:
             f = tornado_Future()
             f.set_result(True)
@@ -1575,7 +1588,7 @@ class AsyncState(object):
     def valid_states(self):
         return self._valid_states
 
-    def __init__(self, valid_states, initial_state=None):
+    def __init__(self, valid_states, initial_state=None, ioloop=None):
         """Init with a seq of valid states
 
         Parameters
@@ -1584,7 +1597,10 @@ class AsyncState(object):
             Valid states, will be turned into a frozen set
         initial_state: member of `valid_states`, or None
             If None, the initial state will be the first state in the seq
+        ioloop : IOLoop instance or None
+            tornado IOloop instance to use, or None for IOLoop.current()
         """
+        self._ioloop = ioloop or tornado.ioloop.IOLoop.current()
         valid_states = tuple(valid_states)
         self._valid_states = frozenset(valid_states)
         if initial_state is None:
@@ -1612,9 +1628,9 @@ class AsyncState(object):
                              .format(self._valid_states, state))
         if state != self._state:
             if timeout:
-                ioloop = ioloop or tornado.ioloop.IOLoop.current()
-                return with_timeout(deadline = ioloop.time() + timeout,
-                                    self._waiting_futures[state], ioloop)
+                return with_timeout(self._ioloop.time() + timeout,
+                                    self._waiting_futures[state],
+                                    self._ioloop)
             else:
                 return self._waiting_futures[state]
         else:
@@ -1622,9 +1638,10 @@ class AsyncState(object):
             f.set_result(True)
             return f
 
-    def until_state_in(self, *states):
+    def until_state_in(self, *states, **kwargs):
         """Return a tornado Future, resolves when any of the requested states is set"""
-        state_futures = (self.until_state(s) for s in states)
+        timeout = kwargs.get('timeout', None)
+        state_futures = (self.until_state(s, timeout=timeout) for s in states)
         return until_any(*state_futures)
 
     # TODO Add until_not_state() ?
@@ -1652,7 +1669,7 @@ def until_later(delay, ioloop=None):
     ioloop.call_later(delay, _done)
     return f
 
-def until_any(*futures):
+def until_any(*futures, **kwargs):
     """Return a future that resoves when any of the passed futures resolves.
 
     Resolves with the value yielded by the first future to resolve.
@@ -1660,6 +1677,7 @@ def until_any(*futures):
     Note, this will only work with tornado futures.
 
     """
+    timeout = kwargs.get('timeout', None)
     any_future = tornado_Future()
     def handle_done(done_future):
         if not any_future.done():
@@ -1683,7 +1701,12 @@ def until_any(*futures):
         if any_future.done():
             break
 
-    return any_future
+    if timeout:
+        return with_timeout(self._ioloop.time() + timeout,
+                            any_future,
+                            self._ioloop)
+    else:
+        return any_future
 
 def future_timeout_manager(timeout=None, ioloop=None):
     """Create Helper function for yielding with a cumulative timeout if required
