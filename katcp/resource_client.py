@@ -1153,6 +1153,19 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
+    def set_sampling_strategies(self, resource_name, filter, strategy_and_parms):
+        result_list = self.list_sensors(filter=filter)
+        ok = True
+        for result in result_list:
+            sensor_name = result.object.normalised_name
+            try:
+                yield self.set_sampling_strategy(resource_name, sensor_name, strategy_and_parms)
+            except:
+                self._logger.error(
+                    'Cannot set sensor strategy for %s %s'
+                    % (resource_name, sensor_name))
+
+    @tornado.gen.coroutine
     def set_sampling_strategy(self, resource_name, sensor_name, strategy_and_parms):
         sensor_name_in = sensor_name
         sensor_name = resource.escape_name(sensor_name)
