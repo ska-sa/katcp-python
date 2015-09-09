@@ -1174,31 +1174,43 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def set_sampling_strategies(self, filter, strategy_and_parms):
         """Set sampling strategies for filtered sensors - these sensors have to exsist"""
         result_list = yield self.list_sensors(filter=filter)
+        sensor_dict = {}
         for result in result_list:
             sensor_name = result.object.normalised_name
             resource_name = result.object.parent_name
+            if resource_name not in sensor_dict:
+                sensor_dict[resource_name] = {}
             try:
                 resource_obj = self.children[resource_name]
                 yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
+                sensor_dict[resource_name][sensor_name] = strategy_and_parms
             except:
                 self._logger.error(
                     'Cannot set samplings strategies for %s %s'
                     % (resource_name, sensor_name))
+                sensor_dict[resource_name][sensor_name] = None
+        raise tornado.gen.Return(sensor_dict)
 
     @tornado.gen.coroutine
     def set_sampling_strategy(self, sensor_name, strategy_and_parms):
         """Set sampling strategies for filtered sensors - these sensors have to exsist"""
         result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
+        sensor_dict = {}
         for result in result_list:
             sensor_name = result.object.normalised_name
             resource_name = result.object.parent_name
+            if resource_name not in sensor_dict:
+                sensor_dict[resource_name] = {}
             try:
                 resource_obj = self.children[resource_name]
                 yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
+                sensor_dict[resource_name][sensor_name] = strategy_and_parms
             except:
                 self._logger.error(
                     'Cannot set sampling strategy for %s %s'
                     % (resource_name, sensor_name))
+                sensor_dict[resource_name][sensor_name] = None
+        raise tornado.gen.Return(sensor_dict)
 
     def set_sensor_listener(self, resource_name, sensor_name, listener):
         sensor_name_in = sensor_name
