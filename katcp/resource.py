@@ -285,13 +285,13 @@ class KATCPResource(object):
         """
         sensors_strategies = {}
         sensor_results = yield self.list_sensors(filter)
-        for sensor_res in sensor_results:
+        for sensor_reslt in sensor_results:
+            norm_name = sensor_reslt.object.normalised_name
             try:
-                yield sensor_res.object.set_sampling_strategy(strategy_and_params)
-                sensors_strategies[sensor_res.python_identifier] = (
-                    True, sensor_res.object.sampling_strategy)
+                sensor_strat = yield self.set_sampling_strategy(norm_name, strategy_and_params)
+                sensors_strategies[norm_name] = sensor_strat[norm_name]
             except Exception:
-                sensors_strategies[sensor_res.python_identifier] = (
+                sensors_strategies[norm_name] = (
                     False, sys.exc_info())
         raise tornado.gen.Return(sensors_strategies)
 
