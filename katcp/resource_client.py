@@ -1153,36 +1153,43 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
-    def set_sampling_strategies(self, resource_name, filter, strategy_and_parms):
+    def _resource_set_sampling_strategies(self, resource_name, sensor_name, strategy_and_parms):
+        resource_name = result.object.parent_name
+        try:
+            yield self.set_sampling_strategy(resource_name, sensor_name, strategy_and_parms)
+        except:
+            self._logger.error(
+                'Cannot set sensor strategy for %s %s'
+                % (resource_name, sensor_name))
+
+    @tornado.gen.coroutine
+    def set_sampling_strategies(self, filter, strategy_and_parms):
+        """Set sampling strategies for filtered sensors - these sensors have to exsist"""
         result_list = yield self.list_sensors(filter=filter)
         for result in result_list:
             sensor_name = result.object.normalised_name
+            resource_name = result.object.parent_name
             try:
-                yield self.set_sampling_strategy(resource_name, sensor_name, strategy_and_parms)
+                resource_obj = self.children[resource_name]
+                yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
             except:
                 self._logger.error(
-                    'Cannot set sensor strategy for %s %s'
+                    'Cannot set samplings strategies for %s %s'
                     % (resource_name, sensor_name))
 
     @tornado.gen.coroutine
-    def set_sampling_strategy(self, resource_name, sensor_name, strategy_and_parms):
-        sensor_name_in = sensor_name
-        sensor_name = resource.escape_name(sensor_name)
-        if not sensor_name.startswith("agg_"):
-            # Set strategy on resource client - which will cache it if necessary
-            resource_obj = self.children[resource_name]
-            yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
-        else:
-            # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
-            # TODO: Handle aggregates better
-            # (for now the aggregate sensor_obj must exist as you don't know on which resource to cache it)
-            sensor_obj = getattr(self.sensor, sensor_name, None)
-            if sensor_obj:
-                resource_obj = self.children[sensor_obj.parent_name]
+    def set_sampling_strategy(self, sensor_name, strategy_and_parms):
+        """Set sampling strategies for filtered sensors - these sensors have to exsist"""
+        result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
+        for result in result_list:
+            sensor_name = result.object.normalised_name
+            resource_name = result.object.parent_name
+            try:
+                resource_obj = self.children[resource_name]
                 yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
-            else:
-                self._logger.warn(
-                    'Cannot cache sensor strategy for %s %s'
+            except:
+                self._logger.error(
+                    'Cannot set sampling strategy for %s %s'
                     % (resource_name, sensor_name))
 
     def set_sensor_listener(self, resource_name, sensor_name, listener):
