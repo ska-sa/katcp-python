@@ -408,16 +408,20 @@ class KATCPClientResource(resource.KATCPResource):
             Resolves when done
         """
         sensor_list = yield self.list_sensors(filter=filter)
+        sensor_dict = {}
         for sens in sensor_list:
             # Set the strategy on each sensor
             try:
                 sensor_name = sens.object.normalised_name
                 yield self.set_sampling_strategy(sensor_name, strategy_and_parms)
+                sensor_dict[sensor_name] = strategy_and_parms
             except Exception as exc:
                 self._logger.exception(
                     'Unhandled exception trying to set sensor strategies {!r} for {} ({})'
                     .format(strategy_and_parms, sens, exc))
-        # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
+                sensor_dict[sensor_name] = None
+        # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears\
+        raise tornado.gen.Return(sensor_dict)
 
     @tornado.gen.coroutine
     def set_sampling_strategy(self, sensor_name, strategy_and_parms):
@@ -439,16 +443,20 @@ class KATCPClientResource(resource.KATCPResource):
         sensor_name = resource.escape_name(sensor_name)
         sensor_obj = dict.get(self._sensor, sensor_name)
         self._sensor_strategy_cache[sensor_name] = strategy_and_parms
+        sensor_dict = {}
         if sensor_obj:
             # The sensor exists, so set the strategy and continue. Log errors,
             # but don't raise anything
             try:
                 yield sensor_obj.set_sampling_strategy(strategy_and_parms)
+                sensor_dict[sensor_name] = strategy_and_parms
             except Exception:
                 self._logger.exception(
                     'Unhandled exception trying to set sensor strategy {!r} for sensor {}'
                     .format(strategy_and_parms, sensor_name))
+                sensor_dict[sensor_name] = None
         # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
+        raise tornado.gen.Return(sensor_dict)
 
     def set_sensor_listener(self, sensor_name, listener):
         """Set a sensor listener for a sensor even if it is not yet known
