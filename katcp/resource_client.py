@@ -391,6 +391,39 @@ class KATCPClientResource(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
+    def set_sampling_strategies(self, filter, strategy_and_parms):
+        """Set a strategy for all sensors matching the filter even if it is not yet known.
+        The strategy should persist across sensor disconnect/reconnect.
+
+        filter : str
+            Filter for sensor names
+        strategy_and_params : seq of str or str
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
+            names and parameters are as defined by the KATCP spec. As str contains the
+            same elements in space-separated form.
+
+        Returns
+        -------
+        done : tornado Future
+            Resolves when done
+        """
+        sensor_list = yield self.list_sensors(filter=filter)
+        sensor_dict = {}
+        for sens in sensor_list:
+            # Set the strategy on each sensor
+            try:
+                sensor_name = sens.object.normalised_name
+                yield self.set_sampling_strategy(sensor_name, strategy_and_parms)
+                sensor_dict[sensor_name] = strategy_and_parms
+            except Exception as exc:
+                self._logger.exception(
+                    'Unhandled exception trying to set sensor strategies {!r} for {} ({})'
+                    .format(strategy_and_parms, sens, exc))
+                sensor_dict[sensor_name] = None
+        # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears\
+        raise tornado.gen.Return(sensor_dict)
+
+    @tornado.gen.coroutine
     def set_sampling_strategy(self, sensor_name, strategy_and_parms):
         """Set a strategy for a sensor even if it is not yet known.
         The strategy should persist across sensor disconnect/reconnect.
@@ -410,16 +443,20 @@ class KATCPClientResource(resource.KATCPResource):
         sensor_name = resource.escape_name(sensor_name)
         sensor_obj = dict.get(self._sensor, sensor_name)
         self._sensor_strategy_cache[sensor_name] = strategy_and_parms
+        sensor_dict = {}
         if sensor_obj:
             # The sensor exists, so set the strategy and continue. Log errors,
             # but don't raise anything
             try:
                 yield sensor_obj.set_sampling_strategy(strategy_and_parms)
+                sensor_dict[sensor_name] = strategy_and_parms
             except Exception:
                 self._logger.exception(
                     'Unhandled exception trying to set sensor strategy {!r} for sensor {}'
                     .format(strategy_and_parms, sensor_name))
+                sensor_dict[sensor_name] = None
         # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
+        raise tornado.gen.Return(sensor_dict)
 
     def set_sensor_listener(self, sensor_name, listener):
         """Set a sensor listener for a sensor even if it is not yet known
@@ -875,7 +912,7 @@ class ClientGroup(object):
         return all([c.is_connected() for c in self.clients])
 
     @tornado.gen.coroutine
-    def set_sampling_strategies(self, filter, strategy_and_params, **list_sensor_args):
+    def set_sampling_strategies(self, filter, strategy_and_params):
         """Set sampling strategy for the sensors of all the group's clients.
 
         Only sensors that match the specified filter are considered. See the
@@ -890,9 +927,31 @@ class ClientGroup(object):
            described in the `KATCPResource.set_sampling_strategies` docstring.
         """
         futures_dict = {}
-        for client in self.clients:
-            futures_dict[client.name] = client.set_sampling_strategies(
-                filter, strategy_and_params, **list_sensor_args)
+        for res_obj in self.clients:
+            futures_dict[res_obj.name] = res_obj.set_sampling_strategies(
+                filter, strategy_and_params)
+        sensors_strategies = yield futures_dict
+        raise tornado.gen.Return(sensors_strategies)
+
+    @tornado.gen.coroutine
+    def set_sampling_strategy(self, sensor_name, strategy_and_params):
+        """Set sampling strategy for the sensors of all the group's clients.
+
+        Only sensors that match the specified filter are considered. See the
+        `KATCPResource.set_sampling_strategies` docstring for parameter
+        definitions and more info.
+
+        Returns
+        -------
+        sensors_strategies : tornado Future
+           Resolves with a dict with client names as keys and with the value as
+           another dict. The value dict is similar to the return value
+           described in the `KATCPResource.set_sampling_strategies` docstring.
+        """
+        futures_dict = {}
+        for res_obj in self.clients:
+            futures_dict[res_obj.name] = res_obj.set_sampling_strategy(
+                sensor_name, strategy_and_params)
         sensors_strategies = yield futures_dict
         raise tornado.gen.Return(sensors_strategies)
 
@@ -1111,45 +1170,77 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
-    def set_sampling_strategy(self, resource_name, sensor_name, strategy_and_parms):
-        sensor_name_in = sensor_name
-        sensor_name = resource.escape_name(sensor_name)
-        if not sensor_name.startswith("agg_"):
-            # Set strategy on resource client - which will cache it if necessary
-            resource_obj = self.children[resource_name]
-            yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
-        else:
-            # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
-            # TODO: Handle aggregates better
-            # (for now the aggregate sensor_obj must exist as you don't know on which resource to cache it)
-            sensor_obj = getattr(self.sensor, sensor_name, None)
-            if sensor_obj:
-                resource_obj = self.children[sensor_obj.parent_name]
-                yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
-            else:
-                self._logger.warn(
-                    'Cannot cache sensor strategy for %s %s'
-                    % (resource_name, sensor_name))
+    def _resource_set_sampling_strategies(self, resource_name, sensor_name, strategy_and_parms):
+        resource_name = result.object.parent_name
+        try:
+            yield self.set_sampling_strategy(resource_name, sensor_name, strategy_and_parms)
+        except:
+            self._logger.error(
+                'Cannot set sensor strategy for %s %s'
+                % (resource_name, sensor_name))
 
-    def set_sensor_listener(self, resource_name, sensor_name, listener):
-        sensor_name_in = sensor_name
-        sensor_name = resource.escape_name(sensor_name)
-        if not sensor_name.startswith("agg_"):
-            # Set listener on resource client - which will cache it if necessary
-            resource_obj = self.children[resource_name]
-            resource_obj.set_sensor_listener(sensor_name, listener)
-        else:
-            # Handle aggregate sensors that are not alwasy pre-allocated to the same mon_ component
-            # TODO: Handle aggregates better
-            # (for now the aggregate sensor_obj must exist as you don't know on which resource to cache it)
-            sensor_obj = getattr(self.sensor, sensor_name, None)
-            if sensor_obj:
-                resource_obj = self.children[sensor_obj.parent_name]
+    @tornado.gen.coroutine
+    def set_sampling_strategies(self, filter, strategy_and_parms):
+        """Set sampling strategies for filtered sensors - these sensors have to exsist"""
+        result_list = yield self.list_sensors(filter=filter)
+        sensor_dict = {}
+        for result in result_list:
+            sensor_name = result.object.normalised_name
+            resource_name = result.object.parent_name
+            if resource_name not in sensor_dict:
+                sensor_dict[resource_name] = {}
+            try:
+                resource_obj = self.children[resource_name]
+                yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
+                sensor_dict[resource_name][sensor_name] = strategy_and_parms
+            except:
+                self._logger.error(
+                    'Cannot cache samplings strategy for %s %s'
+                    % (resource_name, sensor_name))
+                sensor_dict[resource_name][sensor_name] = None
+        raise tornado.gen.Return(sensor_dict)
+
+    @tornado.gen.coroutine
+    def set_sampling_strategy(self, sensor_name, strategy_and_parms):
+        """Set sampling strategies for the specific sensor - this sensor has to exsist"""
+        result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
+        sensor_dict = {}
+        for result in result_list:
+            sensor_name = result.object.normalised_name
+            resource_name = result.object.parent_name
+            if resource_name not in sensor_dict:
+                sensor_dict[resource_name] = {}
+            try:
+                resource_obj = self.children[resource_name]
+                yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
+                sensor_dict[resource_name][sensor_name] = strategy_and_parms
+            except:
+                self._logger.error(
+                    'Cannot cache sampling strategy for %s %s'
+                    % (resource_name, sensor_name))
+                sensor_dict[resource_name][sensor_name] = None
+        raise tornado.gen.Return(sensor_dict)
+
+    @tornado.gen.coroutine
+    def set_sensor_listener(self, sensor_name, listener):
+        """Set listener for the specific sensor - this sensor has to exsist"""
+        result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
+        sensor_dict = {}
+        for result in result_list:
+            sensor_name = result.object.normalised_name
+            resource_name = result.object.parent_name
+            if resource_name not in sensor_dict:
+                sensor_dict[resource_name] = {}
+            try:
+                resource_obj = self.children[resource_name]
                 resource_obj.set_sensor_listener(sensor_name, listener)
-            else:
-                self._logger.warn(
+                sensor_dict[resource_name][sensor_name] = strategy_and_parms
+            except:
+                self._logger.error(
                     'Cannot cache sensor listener for %s %s'
                     % (resource_name, sensor_name))
+                sensor_dict[resource_name][sensor_name] = None
+        raise tornado.gen.Return(sensor_dict)
 
     def add_child_resource_client(self, res_name, res_spec):
         """Add a resource client to the container and start the resource connection"""

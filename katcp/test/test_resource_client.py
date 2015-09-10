@@ -424,7 +424,7 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         self.assertEqual(set(DUT.sensor), initial_sensors | set([escaped_new_sensor]))
 
     @tornado.testing.gen_test(timeout=1000)
-    def test_set_sensor_sampling(self):
+    def test_set_sampling_strategy(self):
         self.server.stop()
         self.server.join()
         DUT = resource_client.KATCPClientResource(self.default_resource_spec)
@@ -432,6 +432,7 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         yield tornado.gen.moment
         test_strategy = ('period', '2.5')
         yield DUT.set_sampling_strategy('an_int', test_strategy)
+        self.assertEqual(DUT._sensor_strategy_cache['an_int'], ('period', '2.5'))
         # Double-check that the sensor does not yet exist
         self.assertNotIn('an_int', DUT.sensor)
         self.server.start()
@@ -446,11 +447,33 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         new_test_strategy = ('event',)
         yield DUT.set_sampling_strategy('an_int', new_test_strategy)
         self.assertEqual(DUT.sensor.an_int.sampling_strategy, new_test_strategy)
+        self.assertEqual(DUT._sensor_strategy_cache['an_int'], ('event',))
 
-        # Also use set_sampling_strategies with a different strategy
-        new_test_strategy = ('period', '3.0')
+    @tornado.testing.gen_test(timeout=1000)
+    def test_set_sampling_strategies(self):
+        self.server.stop()
+        self.server.join()
+        DUT = resource_client.KATCPClientResource(self.default_resource_spec)
+        DUT.start()
+        yield tornado.gen.moment
+        test_strategy = ('period', '2.5')
+        yield DUT.set_sampling_strategy('an_int', test_strategy)
+        self.assertEqual(DUT._sensor_strategy_cache['an_int'], ('period', '2.5'))
+        # Double-check that the sensor does not yet exist
+        self.assertNotIn('an_int', DUT.sensor)
+        self.server.start()
+        self.server.wait_running(timeout=1)
+        advancer = TimewarpAsyncTestCaseTimeAdvancer(self, quantum=0.55)
+        advancer.start()
+        yield DUT.until_synced()
+        self.assertEqual(DUT.sensor.an_int.sampling_strategy, test_strategy)
+
+        # Now call set_sampling_strategy with a different strategy and check that it is
+        # applied to the real sensor
+        new_test_strategy = ('event',)
         yield DUT.set_sampling_strategies('int', new_test_strategy)
         self.assertEqual(DUT.sensor.an_int.sampling_strategy, new_test_strategy)
+        self.assertEqual(DUT._sensor_strategy_cache['an_int'], ('event',))
 
     @tornado.testing.gen_test(timeout=1000)
     def test_set_sensor_listener(self):
@@ -476,6 +499,7 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         # also subscribed
         DUT.set_sensor_listener('an_int', test_listener2)
         self.assertTrue(DUT.sensor.an_int.is_listener, test_listener2)
+        self.assertTrue(DUT.sensor.an_int.is_listener, test_listener1)
 
     # TODO tests
     #
@@ -713,7 +737,7 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         yield DUT.until_synced(timeout=0.5)
 
     @tornado.testing.gen_test(timeout=1000)
-    def test_set_sensor_sampling(self):
+    def test_set_sampling(self):
         self.default_spec_orig = copy.deepcopy(self.default_spec)
         DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
         DUT.start()
@@ -744,33 +768,42 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         strat1 = ('period', '2.1')
         strat2 = ('event',)
         strat3 = ('event-rate', '2', '3')
-        yield DUT.set_sampling_strategy('resource1', 'sensor_1', strat1)
+        yield DUT.set_sampling_strategy('resource1_sensor_1', strat1)
         DUT.children.resource1.set_sampling_strategy.assert_called_once_with(
             'sensor_1', strat1)
         DUT.children.resource2.set_sampling_strategy.assert_not_called()
         DUT.children.resource3.set_sampling_strategy.assert_not_called()
         DUT.children.resource1.set_sampling_strategy.reset_mock()
 
-        yield DUT.set_sampling_strategy('resource2','sensor_1', strat2)
+        yield DUT.set_sampling_strategy('resource2.sensor_1', strat2)
         DUT.children.resource2.set_sampling_strategy.assert_called_once_with(
             'sensor_1', strat2)
         DUT.children.resource1.set_sampling_strategy.assert_not_called()
         DUT.children.resource3.set_sampling_strategy.assert_not_called()
         DUT.children.resource2.set_sampling_strategy.reset_mock()
 
-        yield DUT.set_sampling_strategy('resource2', 'agg_sensor', strat1)
+        yield DUT.set_sampling_strategy('agg_sensor', strat1)
         DUT.children.resource2.set_sampling_strategy.assert_called_once_with(
             'agg_sensor', strat1)
         DUT.children.resource1.set_sampling_strategy.assert_not_called()
         DUT.children.resource3.set_sampling_strategy.assert_not_called()
         DUT.children.resource2.set_sampling_strategy.reset_mock()
 
-        yield DUT.set_sampling_strategy('resource3','sensor_3', strat3)
+        yield DUT.set_sampling_strategy('resource3_sensor_3', strat3)
         DUT.children.resource3.set_sampling_strategy.assert_called_once_with(
             'sensor_3', strat3)
         DUT.children.resource1.set_sampling_strategy.assert_not_called()
         DUT.children.resource2.set_sampling_strategy.assert_not_called()
         DUT.children.resource3.set_sampling_strategy.reset_mock()
+
+        yield DUT.set_sampling_strategies('sensor_1', strat2)
+        DUT.children.resource1.set_sampling_strategy.assert_called_once_with(
+            'sensor_1', strat2)
+        DUT.children.resource2.set_sampling_strategy.assert_called_once_with(
+            'sensor_1', strat2)
+        DUT.children.resource3.set_sampling_strategy.assert_not_called()
+        DUT.children.resource1.set_sampling_strategy.reset_mock()
+        DUT.children.resource2.set_sampling_strategy.reset_mock()
 
     @tornado.testing.gen_test(timeout=1000)
     def test_set_sensor_listener(self):
@@ -805,28 +838,29 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         listener1 = lambda *x : None
         listener2 = lambda *y : None
         listener3 = lambda *z : None
-        DUT.set_sensor_listener('resource1', 'sensor_1', listener1)
+
+        yield DUT.set_sensor_listener('resource1_sensor_1', listener1)
         DUT.children.resource1.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener1)
         DUT.children.resource2.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
         DUT.children.resource1.set_sensor_listener.reset_mock()
 
-        DUT.set_sensor_listener('resource2', 'sensor_1', listener2)
+        DUT.set_sensor_listener('resource2_sensor_1', listener2)
         DUT.children.resource2.set_sensor_listener.assert_called_once_with(
             'sensor_1', listener2)
         DUT.children.resource1.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
         DUT.children.resource2.set_sensor_listener.reset_mock()
 
-        DUT.set_sensor_listener('resource2', 'agg_sensor', listener2)
+        DUT.set_sensor_listener('agg_sensor', listener2)
         DUT.children.resource2.set_sensor_listener.assert_called_once_with(
             'agg_sensor', listener2)
         DUT.children.resource1.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.assert_not_called()
         DUT.children.resource2.set_sensor_listener.reset_mock()
 
-        DUT.set_sensor_listener('resource3', 'sensor_3', listener3)
+        DUT.set_sensor_listener('resource3.sensor_3', listener3)
         DUT.children.resource3.set_sensor_listener.assert_called_once_with(
             'sensor_3', listener3)
         DUT.children.resource1.set_sensor_listener.assert_not_called()
