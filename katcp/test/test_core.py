@@ -7,10 +7,13 @@
 """Tests for the katcp utilities module.
    """
 
-import unittest2 as unittest
 import logging
+import unittest2 as unittest
+
+import tornado
+
 import katcp
-from katcp.core import Sensor
+from katcp.core import Sensor, AsyncState, AsyncEvent
 from katcp.testutils import TestLogHandler, DeviceTestSensor
 
 log_handler = TestLogHandler()
@@ -419,3 +422,58 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(len(Sensor.STATUSES), len(valid_statuses))
         self.assertEqual(len(Sensor.STATUS_NAMES), len(valid_statuses))
 
+
+class TestAsyncState(tornado.testing.AsyncTestCase):
+
+    def setUp(self):
+        super(TestAsyncState, self).setUp()
+        self._valid_states = ['on', 'off', 'floating']
+        self._state = AsyncState(self._valid_states, 'off', self.io_loop)
+
+    def test_init(self):
+        self.assertEqual(self._state.state, 'off')
+        self.assertEqual(sorted(self._state.valid_states),
+                         sorted(self._valid_states))
+
+    @tornado.testing.gen_test
+    def test_timeout_of_until_state(self):
+        @tornado.gen.coroutine
+        def set_state_on():
+            self._state.set_state('on')
+        # Test for timing out
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield self._state.until_state('on', timeout=0.1)
+        # Test for NOT timing out
+        self.io_loop.add_callback(set_state_on)
+        yield self._state.until_state('on', timeout=0.1)
+
+    @tornado.testing.gen_test
+    def test_timeout_of_until_state_in(self):
+        @tornado.gen.coroutine
+        def set_state_floating():
+            self._state.set_state('floating')
+        # Test for timing out
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield self._state.until_state_in('on', 'floating', timeout=0.1)
+        # Test for NOT timing out
+        self.io_loop.add_callback(set_state_floating)
+        yield self._state.until_state_in('on', 'floating', timeout=0.1)
+
+
+class TestAsyncEvent(tornado.testing.AsyncTestCase):
+
+    def setUp(self):
+        super(TestAsyncEvent, self).setUp()
+        self._event = AsyncEvent(self.io_loop)
+
+    @tornado.testing.gen_test
+    def test_timeout_of_until_set(self):
+        @tornado.gen.coroutine
+        def call_set():
+            self._event.set()
+        # Test for timing out
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield self._event.until_set(timeout=0.1)
+        # Test for NOT timing out
+        self.io_loop.add_callback(call_set)
+        yield self._event.until_set(timeout=0.1)

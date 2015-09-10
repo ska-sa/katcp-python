@@ -877,7 +877,7 @@ class DeviceClient(object):
         """
         return self._running.isSet()
 
-    def until_running(self):
+    def until_running(self, timeout=None):
         """Return future that resolves when the client is running.
 
         Notes
@@ -886,7 +886,7 @@ class DeviceClient(object):
         Must be called from the same ioloop as the client.
 
         """
-        return self._running.until_set()
+        return self._running.until_set(timeout=timeout)
 
     def wait_running(self, timeout=None):
         """Wait until the client is running.
@@ -923,11 +923,17 @@ class DeviceClient(object):
         return self._connected.isSet()
 
     @tornado.gen.coroutine
-    def until_connected(self):
+    def until_connected(self, timeout=None):
         """Return future that resolves when the client is connected."""
-        yield self.until_running()
+        t0 = self.ioloop.time()
+        yield self.until_running(timeout=timeout)
+        t1 = self.ioloop.time()
+        if timeout:
+            timedelta = timeout - (t1 - t0)
+        else:
+            timedelta = None
         assert get_thread_ident() == self.ioloop_thread_id
-        yield self._connected.until_set()
+        yield self._connected.until_set(timeout=timedelta)
 
     def wait_connected(self, timeout=None):
         """Wait until the client is connected.
@@ -950,16 +956,22 @@ class DeviceClient(object):
         return self._connected.wait_with_ioloop(self.ioloop, timeout)
 
     @tornado.gen.coroutine
-    def until_protocol(self):
+    def until_protocol(self, timeout=None):
         """Return future that resolves after receipt of katcp protocol info.
 
         If the returned future resolves, the server's protocol information is
         available in the ProtocolFlags instance self.protocol_flags.
 
         """
-        yield self.until_running()
+        t0 = self.ioloop.time()
+        yield self.until_running(timeout=timeout)
+        t1 = self.ioloop.time()
+        if timeout:
+            timedelta = timeout - (t1 - t0)
+        else:
+            timedelta = None
         assert get_thread_ident() == self.ioloop_thread_id
-        yield self._received_protocol_info.until_set()
+        yield self._received_protocol_info.until_set(timeout=timedelta)
 
     def wait_protocol(self, timeout=None):
         """Wait until katcp protocol information has been received from server.

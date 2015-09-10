@@ -307,7 +307,7 @@ class KATCPClientResource(resource.KATCPResource):
         """
         return not self.state == 'disconnected'
 
-    def until_state(self, state):
+    def until_state(self, state, timeout=None):
         """Future that resolves when a certain client state is attained
 
         Parameters
@@ -315,14 +315,14 @@ class KATCPClientResource(resource.KATCPResource):
 
         state : str
             Desired state, one of ("disconnected", "syncing", "synced")
+        timeout: float
+            Timeout for operation in seconds.
         """
-        return self._state.until_state(state)
+        return self._state.until_state(state, timeout=timeout)
 
     def wait_connected(self, timeout=None):
-        """Future that resolves when the state is not 'disconnected'
-        TODO: implement timeout
-        """
-        return self._state.until_state_in('syncing', 'synced')
+        """Future that resolves when the state is not 'disconnected'."""
+        return self._state.until_state_in('syncing', 'synced', timeout=timeout)
 
     def _update_state(self, _flag=None):
         # Update self._state, optional _flag parameter is ignored to be compatible with
@@ -372,17 +372,17 @@ class KATCPClientResource(resource.KATCPResource):
         return ReplyWrappedInspectingClientAsync(
             host, port, ioloop=ioloop_set_to, auto_reconnect=self.auto_reconnect)
 
-    def until_synced(self):
+    def until_synced(self, timeout=None):
         """Convenience method to wait (with Future) until client is synced"""
-        return self._state.until_state('synced')
+        return self._state.until_state('synced', timeout=timeout)
 
-    def until_not_synced(self):
+    def until_not_synced(self, timeout=None):
         """Convenience method to wait (with Future) until client is not synced"""
         not_synced_states = [state for state in self._state.valid_states
                              if state != 'synced']
         not_synced_futures = [self._state.until_state(state)
                               for state in not_synced_states]
-        return until_any(*not_synced_futures)
+        return until_any(*not_synced_futures, timeout=timeout)
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
@@ -1104,25 +1104,34 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             res.start()
 
     @tornado.gen.coroutine
-    def until_synced(self):
+    def until_synced(self, timeout=None):
         """Return a tornado Future; resolves when all subordinate clients are synced"""
-        yield [r.until_synced() for r in dict.values(self.children)]
+        futures = []
+        if timeout:
+            for resource in dict.values(self.children):
+                futures.append(with_timeout(self.ioloop.time() + timeout,
+                                            resource.until_synced(),
+                                            self.ioloop))
+        else:
+            futures = [r.until_synced() for r in dict.values(self.children)]
+        yield futures
 
     @tornado.gen.coroutine
-    def until_not_synced(self):
+    def until_not_synced(self, timeout=None):
         """Return a tornado Future; resolves when any subordinate client is not synced"""
-        yield until_any(*[
-            r.until_not_synced() for r in dict.values(self.children)])
+        yield until_any(*[r.until_not_synced() for r in dict.values(self.children)],
+                        timeout=timeout)
 
-
-    def until_any_child_in_state(self, state):
+    def until_any_child_in_state(self, state, timeout=None):
         """Return a tornado Future; resolves when any client is in specified state"""
-        return until_any(*[r.until_state(state) for r in dict.values(self.children)])
+        return until_any(*[r.until_state(state) for r in dict.values(self.children)],
+                         timeout=timeout)
 
     @tornado.gen.coroutine
-    def until_all_children_in_state(self, state):
+    def until_all_children_in_state(self, state, timeout=None):
         """Return a tornado Future; resolves when all clients are in specified state"""
-        yield [r.until_state(state) for r in dict.values(self.children)]
+        yield [r.until_state(state, timeout=timeout)
+               for r in dict.values(self.children)]
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",

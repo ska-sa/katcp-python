@@ -861,6 +861,31 @@ class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase, TestUtilMixin):
         self.client.start()
 
     @tornado.testing.gen_test
+    def test_timeout_of_until_connected(self):
+        # Test for timing out
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield self.client.until_connected(timeout=0.0001)
+        # Test for NOT timing out
+        host, port = self.server.bind_address
+        client2 = katcp.CallbackClient(host, port)
+        client2.set_ioloop(self.io_loop)
+        client2.start()
+        yield client2.until_connected(timeout=0.5)
+        self.assertTrue(client2.is_connected)
+
+    @tornado.testing.gen_test
+    def test_timeout_of_until_protocol(self):
+        # Test for timing out
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield self.client.until_protocol(timeout=0.0001)
+        # Test for NOT timing out
+        host, port = self.server.bind_address
+        client2 = katcp.CallbackClient(host, port)
+        client2.set_ioloop(self.io_loop)
+        client2.start()
+        yield client2.until_protocol(timeout=0.5)
+
+    @tornado.testing.gen_test
     def test_future_request_simple(self):
         yield self.client.until_connected()
         reply, informs = yield self.client.future_request(Message.request('watchdog'))
