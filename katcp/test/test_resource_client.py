@@ -867,6 +867,53 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         DUT.children.resource2.set_sensor_listener.assert_not_called()
         DUT.children.resource3.set_sensor_listener.reset_mock()
 
+
+    @tornado.testing.gen_test(timeout=1000)
+    def test_listening(self):
+        spec = dict(name="resource1",
+            description='resource for testing',
+            address=('testhost', 12345),
+            controlled=True)
+
+        ##DUT = resource_client.KATCPClientResource(spec)
+        ##DUT.start()
+        self.default_spec_orig = copy.deepcopy(self.default_spec)
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        DUT.start()
+
+
+        # Setup a new sensor with listener and trigger some sensor updates
+        new_sensor = DeviceTestSensor(DeviceTestSensor.INTEGER, 'new_sensor',
+                                      "An Integer.",
+                                      "count", [-50, 50], timestamp=self.io_loop.time(),
+                                      status=DeviceTestSensor.NOMINAL, value=0)
+        server = self.servers["resource1"]
+        server.add_sensor(new_sensor)
+        yield DUT.until_synced()
+        import time
+        t0 = time.time() - 5 # A little old
+        t, status, value = (t0, Sensor.WARN, -1)
+        new_sensor.set(t, status, value)
+
+        listener = mock.MagicMock()
+        #yield DUT.set_sensor_listener('resource1_new_sensor', listener)
+        DUT.children.resource1.set_sensor_listener('new_sensor', listener)
+        print "listener_cache",DUT.children.resource1._sensor_listener_cache
+
+        t, status, value = (t0+1, Sensor.NOMINAL, 0)
+        new_sensor.set(t, status, value)
+        t, status, value = (t0+2, Sensor.NOMINAL, 10)
+        new_sensor.set(t, status, value)
+        t, status, value = (t0+3, Sensor.NOMINAL, 5)
+        new_sensor.set(t, status, value)
+        t, status, value = (t0+2, Sensor.NOMINAL, 4)
+        new_sensor.set(t, status, value)
+        t, status, value = (t0+3, Sensor.NOMINAL, 3)
+        new_sensor.set(t, status, value)
+        yield tornado.gen.sleep(1)
+        print "listener.mock_calls", listener.mock_calls
+        self.assertEquals(len(listener.mock_calls), 3)
+        listener.reset_mock()
         return
 
     def get_expected(self, testserv_attr):
