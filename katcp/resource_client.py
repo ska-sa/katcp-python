@@ -672,23 +672,36 @@ class KATCPClientResourceSensorsManager(object):
         sensor_name : str
             Name of the sensor
         strategy_and_params : seq of str or str
-            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the strategy
-            names and parameters are as defined by the KATCP spec. As str contains the
-            same elements in space-separated form.
+            As tuple contains (<strat_name>, [<strat_parm1>, ...]) where the
+            strategy names and parameters are as defined by the KATCP spec. As
+            str contains the same elements in space-separated form.
 
         Returns
         -------
-        done : tornado Future that resolves when done or raises KATCPSensorError
+        sensor_strategy : tuple
+            (success, info) with
 
+            success : bool
+                True if setting succeeded for this sensor, else False
+            info : tuple
+               Normalibed sensor strategy and parameters as tuple if
+               success == True else, sys.exc_info() tuple for the error
+               that occured.
         """
-
-        strategy_and_params = resource.normalize_strategy_parameters(strategy_and_params)
-        self._strategy_cache[sensor_name] = strategy_and_params
-        reply = yield self._inspecting_client.wrapped_request(
-            'sensor-sampling', sensor_name, *strategy_and_params)
-        if not reply.succeeded:
-            raise KATCPSensorError('Error setting strategy for sensor {0}: \n'
-                                   '{1!s}'.format(sensor_name, reply))
+        try:
+            strategy_and_params = resource.normalize_strategy_parameters(
+                strategy_and_params)
+            self._strategy_cache[sensor_name] = strategy_and_params
+            reply = yield self._inspecting_client.wrapped_request(
+                'sensor-sampling', sensor_name, *strategy_and_params)
+            if not reply.succeeded:
+                raise KATCPSensorError('Error setting strategy for sensor {0}: \n'
+                                       '{1!s}'.format(sensor_name, reply))
+            sensor_strategy = (True, strategy_and_params)
+        except Exception as e:
+            self._logger.exception('Exception found!')
+            sensor_strategy = (False, str(e))
+        raise tornado.gen.Return(sensor_strategy)
 
     @tornado.gen.coroutine
     def reapply_sampling_strategies(self):
