@@ -444,17 +444,20 @@ class KATCPClientResource(resource.KATCPResource):
         sensor_obj = dict.get(self._sensor, sensor_name)
         self._sensor_strategy_cache[sensor_name] = strategy_and_parms
         sensor_dict = {}
+        self._logger.debug(
+                'Cached strategy {} for sensor {}'
+                .format(strategy_and_parms, sensor_name))
         if sensor_obj:
             # The sensor exists, so set the strategy and continue. Log errors,
             # but don't raise anything
             try:
                 yield sensor_obj.set_sampling_strategy(strategy_and_parms)
                 sensor_dict[sensor_name] = strategy_and_parms
-            except Exception:
+            except Exception as exc:
                 self._logger.exception(
-                    'Unhandled exception trying to set sensor strategy {!r} for sensor {}'
-                    .format(strategy_and_parms, sensor_name))
-                sensor_dict[sensor_name] = None
+                    'Unhandled exception trying to set sensor strategy {!r} for sensor {} ({})'
+                    .format(strategy_and_parms, sensor_name, exc))
+                sensor_dict[sensor_name] = str(exc)
         # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
         raise tornado.gen.Return(sensor_dict)
 
@@ -473,10 +476,25 @@ class KATCPClientResource(resource.KATCPResource):
         sensor_name = resource.escape_name(sensor_name)
         sensor_obj = dict.get(self._sensor, sensor_name)
         self._sensor_listener_cache[sensor_name].append(listener)
+        sensor_dict = {}
+        self._logger.debug(
+                'Cached listener {} for sensor {}'
+                .format(listener, sensor_name))
         if sensor_obj:
             # The sensor exists, so register the listener and continue.
-            sensor_obj.register_listener(listener, reading=True)
+            try:
+                sensor_obj.register_listener(listener, reading=True)
+                sensor_dict[sensor_name] = listener
+                self._logger.debug(
+                    'Registered listener {} for sensor {}'
+                    .format(listener, sensor_name))
+            except Exception as exc:
+                self._logger.exception(
+                    'Unhandled exception trying to set sensor listener {} for sensor {} ({})'
+                    .format(listener, sensor_name, exc))
+                sensor_dict[sensor_name] = str(exc)
         # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
+        return sensor_dict
 
     def _request_factory(self, name, description):
         return KATCPClientResourceRequest(
@@ -1206,10 +1224,13 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 resource_obj = self.children[resource_name]
                 yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
                 sensor_dict[resource_name][sensor_name] = strategy_and_parms
-            except:
-                self._logger.error(
-                    'Cannot cache samplings strategy for %s %s'
+                self._logger.debug(
+                    'Set sampling strategy on resource %s for %s'
                     % (resource_name, sensor_name))
+            except Exception as exc:
+                self._logger.error(
+                    'Cannot set sampling strategy on resource %s for %s (%s)'
+                    % (resource_name, sensor_name, exc))
                 sensor_dict[resource_name][sensor_name] = None
         raise tornado.gen.Return(sensor_dict)
 
@@ -1227,10 +1248,13 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 resource_obj = self.children[resource_name]
                 yield resource_obj.set_sampling_strategy(sensor_name, strategy_and_parms)
                 sensor_dict[resource_name][sensor_name] = strategy_and_parms
-            except:
-                self._logger.error(
-                    'Cannot cache sampling strategy for %s %s'
+                self._logger.debug(
+                    'Set sampling strategy on resource %s for %s'
                     % (resource_name, sensor_name))
+            except Exception as exc:
+                self._logger.error(
+                    'Cannot set sampling strategy on resource %s for %s (%s)'
+                    % (resource_name, sensor_name, exc))
                 sensor_dict[resource_name][sensor_name] = None
         raise tornado.gen.Return(sensor_dict)
 
@@ -1247,11 +1271,14 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             try:
                 resource_obj = self.children[resource_name]
                 resource_obj.set_sensor_listener(sensor_name, listener)
-                sensor_dict[resource_name][sensor_name] = strategy_and_parms
-            except:
-                self._logger.error(
-                    'Cannot cache sensor listener for %s %s'
+                sensor_dict[resource_name][sensor_name] = listener
+                self._logger.debug(
+                    'Set sensor listener on resource %s for %s'
                     % (resource_name, sensor_name))
+            except Exception as exc:
+                self._logger.error(
+                    'Cannot set sensor listener on resource %s for %s (%s)'
+                    % (resource_name, sensor_name, exc))
                 sensor_dict[resource_name][sensor_name] = None
         raise tornado.gen.Return(sensor_dict)
 
