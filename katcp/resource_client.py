@@ -1247,7 +1247,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             try:
                 resource_obj = self.children[resource_name]
                 resource_obj.set_sensor_listener(sensor_name, listener)
-                sensor_dict[resource_name][sensor_name] = strategy_and_parms
+                sensor_dict[resource_name][sensor_name] = listener
             except:
                 self._logger.error(
                     'Cannot cache sensor listener for %s %s'
