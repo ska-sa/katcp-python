@@ -1258,7 +1258,6 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 sensor_dict[resource_name][sensor_name] = None
         raise tornado.gen.Return(sensor_dict)
 
-    @tornado.gen.coroutine
     def set_sensor_listener(self, sensor_name, listener):
         """Set listener for the specific sensor - this sensor has to exsist"""
         result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
@@ -1280,7 +1279,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                     'Cannot set sensor listener on resource %s for %s (%s)'
                     % (resource_name, sensor_name, exc))
                 sensor_dict[resource_name][sensor_name] = None
-        raise tornado.gen.Return(sensor_dict)
+        return sensor_dict
 
     def add_child_resource_client(self, res_name, res_spec):
         """Add a resource client to the container and start the resource connection"""
