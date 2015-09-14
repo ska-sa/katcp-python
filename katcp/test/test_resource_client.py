@@ -890,30 +890,29 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         server = self.servers["resource1"]
         server.add_sensor(new_sensor)
         yield DUT.until_synced()
+        katcp_sensor = DUT.children.resource1.sensor.new_sensor
         import time
         t0 = time.time() - 5 # A little old
         t, status, value = (t0, Sensor.WARN, -1)
-        new_sensor.set(t, status, value)
+        katcp_sensor.set(t, status, value)
 
-        listener = mock.MagicMock()
-        #yield DUT.set_sensor_listener('resource1_new_sensor', listener)
+        listener = mock.Mock()
         DUT.children.resource1.set_sensor_listener('new_sensor', listener)
-        print "listener_cache",DUT.children.resource1._sensor_listener_cache
-
-        t, status, value = (t0+1, Sensor.NOMINAL, 0)
-        new_sensor.set(t, status, value)
-        t, status, value = (t0+2, Sensor.NOMINAL, 10)
-        new_sensor.set(t, status, value)
-        t, status, value = (t0+3, Sensor.NOMINAL, 5)
-        new_sensor.set(t, status, value)
+        t, status, value = (t0+0.5, Sensor.NOMINAL, -2)
+        katcp_sensor.set(t, status, value)
+        self.assertEqual(katcp_sensor.reading.status, 'nominal')
+        self.assertEqual(katcp_sensor.reading.value, -2)
+        katcp_sensor.set(t, status, value)
+        t, status, value = (t0+1, Sensor.NOMINAL, 10)
+        katcp_sensor.set(t, status, value)
+        t, status, value = (t0+1.5, Sensor.NOMINAL, 5)
+        katcp_sensor.set(t, status, value)
         t, status, value = (t0+2, Sensor.NOMINAL, 4)
-        new_sensor.set(t, status, value)
-        t, status, value = (t0+3, Sensor.NOMINAL, 3)
-        new_sensor.set(t, status, value)
-        yield tornado.gen.sleep(1)
+        katcp_sensor.set(t, status, value)
+        t, status, value = (t0+2.5, Sensor.NOMINAL, 3)
+        katcp_sensor.set(t, status, value)
         print "listener.mock_calls", listener.mock_calls
-        self.assertEquals(len(listener.mock_calls), 3)
-        listener.reset_mock()
+        self.assertEquals(len(listener.mock_calls), 6)
         return
 
     def get_expected(self, testserv_attr):
