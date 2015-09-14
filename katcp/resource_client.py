@@ -461,6 +461,7 @@ class KATCPClientResource(resource.KATCPResource):
         # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
         raise tornado.gen.Return(sensor_dict)
 
+    @tornado.gen.coroutine
     def set_sensor_listener(self, sensor_name, listener):
         """Set a sensor listener for a sensor even if it is not yet known
         The listener registration should persist across sensor disconnect/reconnect.
@@ -494,7 +495,7 @@ class KATCPClientResource(resource.KATCPResource):
                     .format(listener, sensor_name, exc))
                 sensor_dict[sensor_name] = str(exc)
         # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
-        return sensor_dict
+        raise tornado.gen.Return(sensor_dict)
 
     def _request_factory(self, name, description):
         return KATCPClientResourceRequest(
@@ -1258,6 +1259,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 sensor_dict[resource_name][sensor_name] = None
         raise tornado.gen.Return(sensor_dict)
 
+    @tornado.gen.coroutine
     def set_sensor_listener(self, sensor_name, listener):
         """Set listener for the specific sensor - this sensor has to exsist"""
         result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
@@ -1269,7 +1271,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                 sensor_dict[resource_name] = {}
             try:
                 resource_obj = self.children[resource_name]
-                resource_obj.set_sensor_listener(sensor_name, listener)
+                yield resource_obj.set_sensor_listener(sensor_name, listener)
                 sensor_dict[resource_name][sensor_name] = listener
                 self._logger.debug(
                     'Set sensor listener on resource %s for %s'
@@ -1279,7 +1281,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                     'Cannot set sensor listener on resource %s for %s (%s)'
                     % (resource_name, sensor_name, exc))
                 sensor_dict[resource_name][sensor_name] = None
-        return sensor_dict
+        raise tornado.gen.Return(sensor_dict)
 
     def add_child_resource_client(self, res_name, res_spec):
         """Add a resource client to the container and start the resource connection"""
