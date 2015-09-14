@@ -704,6 +704,9 @@ class KATCPSensor(object):
         """
         listener_id = hashable_identity(listener)
         self._listeners[listener_id] = (listener, reading)
+        logger.debug(
+                    'Register listener for {}'
+                    .format(self.name))
 
     def unregister_listener(self, listener):
         """Remove a listener callback added with register_listener().
@@ -726,6 +729,9 @@ class KATCPSensor(object):
         self._listeners = {}
 
     def call_listeners(self, reading):
+        logger.debug(
+                    'Calling listeners {}'
+                    .format(self.name))
         for listener, use_reading in self._listeners.values():
             try:
                 if use_reading:
