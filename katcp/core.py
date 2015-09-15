@@ -1678,6 +1678,7 @@ def until_any(*futures, **kwargs):
 
     """
     timeout = kwargs.get('timeout', None)
+    ioloop = kwargs.get('ioloop', None) or tornado.ioloop.IOLoop.current()
     any_future = tornado_Future()
     def handle_done(done_future):
         if not any_future.done():
@@ -1702,9 +1703,7 @@ def until_any(*futures, **kwargs):
             break
 
     if timeout:
-        return with_timeout(self._ioloop.time() + timeout,
-                            any_future,
-                            self._ioloop)
+        return with_timeout(ioloop.time() + timeout, any_future, ioloop)
     else:
         return any_future
 
