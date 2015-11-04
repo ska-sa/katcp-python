@@ -1380,10 +1380,12 @@ class IOLoopThreadWrapper(object):
             # Should never get here since the tornado future should raise
             assert False, 'Tornado Future should have raised'
 
-    def decorate_callable(self, callable_, timeout=None):
+    def decorate_callable(self, callable_):
         """Decorate a callable to use call_in_ioloop"""
         @wraps(callable_)
         def decorated(*args, **kwargs):
+            # Extract timeout from request itself or use default for ioloop wrapper
+            timeout = kwargs.get('timeout')
             return self.call_in_ioloop(callable_, args, kwargs, timeout)
 
         decorated.__doc__ = '\n\n'.join((
