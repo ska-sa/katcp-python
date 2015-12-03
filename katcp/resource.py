@@ -640,6 +640,23 @@ class KATCPSensor(object):
     def type(self):
         return self._sensor.type
 
+    def parse_value(self, s_value):
+        """Parse a value from a string.
+
+        Parameters
+        ----------
+        s_value : str
+            A string value to attempt to convert to a value for
+            the sensor.
+
+        Returns
+        -------
+        value : object
+            A value of a type appropriate to the sensor.
+
+        """
+        return self._sensor.parse_value(s_value)
+
     def set_strategy(self, strategy, params=None):
         """Set current sampling strategy for sensor.
         Add this footprint for backwards compatibility.
