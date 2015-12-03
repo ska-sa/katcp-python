@@ -657,7 +657,6 @@ class KATCPSensor(object):
         """
         return self._sensor.parse_value(s_value)
 
-
     def set_strategy(self, strategy, params=None):
         """Set current sampling strategy for sensor.
         Add this footprint for backwards compatibility.
