@@ -1646,7 +1646,74 @@ class AsyncState(object):
 
     # TODO Add until_not_state() ?
 
+class LatencyTimer(object):
+    """Track for how long already-resolved futures are yielded.
+
+    In a tornado coroutine every yield statement does not guarantee a trip through
+    the ioloop -- in many cases the result is immediately available. e.g. ::
+
+      @tornado.gen.coroutine
+      def a_coroutine(producer):
+        while True:
+            future = producer()
+            result = yield future
+
+    If producer's result is immediately available, it will return a future that is already
+    resolved (i.e. `future.done() == True`). `torado.gen.coroutine` will the immediately
+    produce the return value at the yield statement without going through the ioloop. This
+    improves efficiency by reducing unnecessary ioloop round trips, but can harm latency
+    if `producer` is very productive.
+
+    Example
+    =======
+    ::
+
+      @tornado.gen.coroutine
+      def a_coroutine(producer):
+        latency_timer = LatencyTimer(0.05)  # 50ms max latency
+        while True:
+            future = producer()
+            latency_timer.check_future(future)
+                if latency_timer.time_to_yield():
+                    yield gen.moment
+            result = yield future
+
+    """
+    def __init__(self, max_loop_latency, ioloop=None):
+        """Initialise LatencyTimer
+
+        Arguments
+        =========
+        max_loop_latency : float
+            suggest yielding `tornado.gen.moment` if the loop has avoided the
+            ioloop longer than `max_loop_latency` seconds.
+        ioloop : tornado.ioloop.IOLoop instance
+            Use `ioloop.time()` to get elapsed time. Defaults to
+            tornado.ioloop.IOLoop.current()
+
+        """
+        self.max_loop_latency = max_loop_latency
+        self.ioloop = ioloop or tornado.ioloop.IOLoop.current()
+        self.prev_done = False
+        self.done_since = self.ioloop.time()
+        self.done = False
+
+    def check_future(self, fut):
+        """Call with each future that is to be yielded on"""
+        done = self.done = fut.done()
+        if done and not self.prev_done:
+            self.done_since = self.ioloop.time()
+        self.prev_done = done
+
+    def time_to_yield(self):
+        """Call after check_future(). If True, it is time to yield tornado.gen.moment"""
+        delta = self.ioloop.time() - self.done_since
+        if self.done and delta > self.max_loop_latency:
+            return True
+        return False
+
 def hashable_identity(obj):
+
     """Generate a hashable ID that is stable for methods etc
 
     Approach borrowed from blinker. Why it matters: see e.g.

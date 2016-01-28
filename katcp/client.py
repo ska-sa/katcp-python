@@ -23,7 +23,7 @@ from concurrent.futures import Future, TimeoutError
 
 from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
-                   ProtocolFlags, AsyncEvent, until_later,
+                   ProtocolFlags, AsyncEvent, until_later, LatencyTimer,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
 from .ioloop_manager import IOLoopManager
 
@@ -129,8 +129,8 @@ class DeviceClient(object):
 
     """
 
-    MSGS_PER_LOOP = 100
-    """Number of messages to receive before yielding to the ioloop.
+    MAX_LOOP_LATENCY = 0.03
+    """Do not spend more than this many seconds reading pipelined socket data
 
     IOStream inline-reading can result in ioloop starvation (see
     https://groups.google.com/forum/#!topic/python-tornado/yJrDAwDR_kA).
@@ -679,13 +679,14 @@ class DeviceClient(object):
     @gen.coroutine
     def _line_read_loop(self):
         assert get_thread_ident() == self.ioloop_thread_id
-        counter = 0
+        latency_timer = LatencyTimer(self.MAX_LOOP_LATENCY)
         while self._running.isSet():
-            counter += 1
-            if counter % self.MSGS_PER_LOOP == 0:
-                yield gen.moment
             try:
-                line = yield self._stream.read_until_regex('\n|\r')
+                line_fut = self._stream.read_until_regex('\n|\r')
+                latency_timer.check_future(line_fut)
+                if latency_timer.time_to_yield():
+                    yield gen.moment
+                line = yield line_fut
             except tornado.iostream.StreamClosedError:
                 # Assume that _stream_closed_callback() will handle this case
                 break
