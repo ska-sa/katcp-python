@@ -21,7 +21,8 @@ from peak.util.proxies import ObjectWrapper
 from katcp import resource, inspecting_client, Message
 from katcp.resource import KATCPReply, KATCPSensorError
 from katcp.core import (AttrDict, AsyncCallbackEvent, steal_docstring_from,
-                        AsyncState, AsyncEvent, until_any, log_future_exceptions)
+                        AsyncState, AsyncEvent, LatencyTimer,
+                        until_any, log_future_exceptions)
 
 log = logging.getLogger(__name__)
 
@@ -178,6 +179,12 @@ class KATCPClientResource(resource.KATCPResource):
 
     Inspects the KATCP interface of the resources, exposing sensors and requests as per
     the :class:`katcp.resource.KATCPResource` API. Can also operate without exposin
+    """
+
+    MAX_LOOP_LATENCY = 0.03
+    """
+    When doing potentially tight loops in coroutines yield tornado.gen.moment
+    after this much time. This is a suggestion for methods to use.
     """
 
     @property
@@ -548,8 +555,20 @@ class KATCPClientResource(resource.KATCPResource):
     @tornado.gen.coroutine
     def _add_requests(self, request_keys):
         # Instantiate KATCPRequest instances and store on self.req
-        request_instances = yield {key: self._inspecting_client.future_get_request(key)
-                                   for key in request_keys}
+
+        # Use LatencyTimer to avoid starving the ioloop
+        latency_timer = LatencyTimer(self.MAX_LOOP_LATENCY)
+
+        request_instance_fut = {}
+        for key in request_keys:
+            fut = request_instance_fut[key] = (
+                self._inspecting_client.future_get_request(key))
+            latency_timer.check_future(fut)
+            if latency_timer.time_to_yield():
+                yield tornado.gen.moment
+
+        request_instances = yield request_instance_fut
+
         added_names = []
         for r_name, r_obj in request_instances.items():
             r_name_escaped = resource.escape_name(r_name)
@@ -578,9 +597,18 @@ class KATCPClientResource(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def _add_sensors(self, sensor_keys):
+        # Use LatencyTimer to avoid starving the ioloop
+        latency_timer = LatencyTimer(self.MAX_LOOP_LATENCY)
+        sensor_instance_fut = {}
         # Get KATCPSensor instance futures from inspecting client
-        sensor_instances = yield {key: self._inspecting_client.future_get_sensor(key)
-                                  for key in sensor_keys}
+        for key in sensor_keys:
+             fut = sensor_instance_fut[key] = (
+                 self._inspecting_client.future_get_sensor(key))
+             latency_timer.check_future(fut)
+             if latency_timer.time_to_yield():
+                 yield tornado.gen.moment
+
+        sensor_instances = yield sensor_instance_fut
         # Store KATCPSensor instances in self.sensor
         added_names = []
         for s_name, s_obj in sensor_instances.items():
