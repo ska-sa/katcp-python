@@ -23,7 +23,7 @@ from concurrent.futures import Future, TimeoutError
 
 from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
-                   ProtocolFlags, AsyncEvent, until_later,
+                   ProtocolFlags, AsyncEvent, until_later, LatencyTimer,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
 from .ioloop_manager import IOLoopManager
 
@@ -679,21 +679,13 @@ class DeviceClient(object):
     @gen.coroutine
     def _line_read_loop(self):
         assert get_thread_ident() == self.ioloop_thread_id
-        counter = 0
-        prev_done = False
-        done_since = self.ioloop.time()
+        latency_timer = LatencyTimer(self.MAX_LOOP_LATENCY)
         while self._running.isSet():
-            self._logger.warn('lineloop')
             try:
                 line_fut = self._stream.read_until_regex('\n|\r')
-                done = line_fut.done()
-                if done and not prev_done:
-                    done_since = self.ioloop.time()
-                prev_done = done
-                delta = self.ioloop.time() - done_since
-                if done and delta > self.MAX_LOOP_LATENCY:
+                latency_timer.check_future(line_fut)
+                if latency_timer.time_to_yield():
                     yield gen.moment
-                    done_since = self.ioloop.time()
                 line = yield line_fut
             except tornado.iostream.StreamClosedError:
                 # Assume that _stream_closed_callback() will handle this case
