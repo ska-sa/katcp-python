@@ -129,8 +129,8 @@ class DeviceClient(object):
 
     """
 
-    MSGS_PER_LOOP = 100
-    """Number of messages to receive before yielding to the ioloop.
+    MAX_LOOP_LATENCY = 0.03
+    """Do not spend more than this many seconds reading pipelined socket data
 
     IOStream inline-reading can result in ioloop starvation (see
     https://groups.google.com/forum/#!topic/python-tornado/yJrDAwDR_kA).
@@ -680,12 +680,21 @@ class DeviceClient(object):
     def _line_read_loop(self):
         assert get_thread_ident() == self.ioloop_thread_id
         counter = 0
+        prev_done = False
+        done_since = self.ioloop.time()
         while self._running.isSet():
-            counter += 1
-            if counter % self.MSGS_PER_LOOP == 0:
-                yield gen.moment
+            self._logger.warn('lineloop')
             try:
-                line = yield self._stream.read_until_regex('\n|\r')
+                line_fut = self._stream.read_until_regex('\n|\r')
+                done = line_fut.done()
+                if done and not prev_done:
+                    done_since = self.ioloop.time()
+                prev_done = done
+                delta = self.ioloop.time() - done_since
+                if done and delta > self.MAX_LOOP_LATENCY:
+                    yield gen.moment
+                    done_since = self.ioloop.time()
+                line = yield line_fut
             except tornado.iostream.StreamClosedError:
                 # Assume that _stream_closed_callback() will handle this case
                 break
