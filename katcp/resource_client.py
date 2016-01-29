@@ -247,6 +247,15 @@ class KATCPClientResource(resource.KATCPResource):
             raise RuntimeError('Cannot find inspecting client, have you called start()?')
         return ic.katcp_client.versions
 
+    @property
+    def last_connect_time(self):
+        try:
+            ic = self._inspecting_client
+        except AttributeError:
+            raise RuntimeError('Cannot find inspecting client, have you called start()?')
+        return ic.katcp_client.last_connect_time
+
+
     def __init__(self, resource_spec, parent=None, logger=log):
         """Initialise resource with given specification
 

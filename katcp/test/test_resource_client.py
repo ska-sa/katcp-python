@@ -153,7 +153,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         self.assertEqual(sorted(DUT.req), sorted(['req_one', 'req_two']))
 
     @tornado.testing.gen_test
-    def test_versions(self):
+    def test_lowlevel_client_attributes(self):
         resource_spec = dict(
             name='testdev',
             description='resource for testing',
@@ -164,12 +164,16 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
             # Before calling start() a runtime error should be raised since the inspecting
             # client has not yet been instantiated
             DUT.versions
+        with self.assertRaises(RuntimeError):
+            DUT.last_connect_time
 
         ic = DUT.inspecting_client_factory(DUT.address[0], DUT.address[1], None)
         DUT._inspecting_client = mock.Mock(spec_set=ic)
         DUT._inspecting_client.katcp_client = mock.Mock(spec_set=ic.katcp_client)
         v = DUT._inspecting_client.katcp_client.versions = mock.Mock()
+        l = DUT._inspecting_client.katcp_client.last_connect_time = mock.Mock()
         self.assertIs(DUT.versions, v)
+        self.assertIs(DUT.last_connect_time, l)
 
     @tornado.testing.gen_test
     def test_list_sensors(self):
