@@ -239,6 +239,14 @@ class KATCPClientResource(resource.KATCPResource):
     def synced(self):
         return self.state == 'synced'
 
+    @property
+    def versions(self):
+        try:
+            ic = self._inspecting_client
+        except AttributeError:
+            raise RuntimeError('Cannot find inspecting client, have you called start()?')
+        return ic.katcp_client.versions
+
     def __init__(self, resource_spec, parent=None, logger=log):
         """Initialise resource with given specification
 
