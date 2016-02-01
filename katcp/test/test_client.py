@@ -926,18 +926,71 @@ class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase, TestUtilMixin):
         self.assertEqual(reply, Message.reply(
             'slow-command', 'fail', 'Client stopped before reply was received', mid=mid))
 
-
-class test_AsyncClientTimeoutsIntegrated(TimewarpAsyncTestCase):
+class test_AsyncClientIntegratedBase(TimewarpAsyncTestCase):
     def setUp(self):
-        super(test_AsyncClientTimeoutsIntegrated, self).setUp()
-        self.server = DeviceTestServer('', 0)
+        super(test_AsyncClientIntegratedBase, self).setUp()
+        self.server = DeviceTestServer('localhost', 0)
         self.server.set_ioloop(self.io_loop)
         self.server.set_concurrency_options(thread_safe=False, handler_thread=False)
         self.server.start()
 
         host, port = self.server.bind_address
+        logger.info('host, port: {}:{}'.format(host, port))
         self.client = katcp.CallbackClient(host, port)
         self.client.set_ioloop(self.io_loop)
+
+
+class test_AsyncClientIntegrated(test_AsyncClientIntegratedBase):
+
+    @tornado.testing.gen_test()
+    def test_last_connect_time(self):
+        self.server.stop()
+        yield self.wake_ioloop()
+        self.client.start()
+        yield self.client.until_running()
+        # Client is running, but server has stopped, so there should be no connection
+        self.assertEqual(self.client.last_connect_time, None,
+                         "last_connect_time should be 'None' before first connection")
+
+        # Start up the server
+        self.server.start()
+        # and give the client time to connect
+        yield self.client._waiting_to_retry.until_set()
+        t0 = self.io_loop.time()
+        self.set_ioloop_time(t0 + self.client.auto_reconnect_delay*1.1)
+        # The connection should be made at the current ioloop time
+        tc0 = self.io_loop.time()
+        # Wait for the client to go through the motions of connecting
+        yield self.client.until_connected()
+        # Check that the correct connection time was stored
+        self.assertEqual(self.client.last_connect_time, tc0)
+
+        # Move time along and check that the last_connect_time is unchanged
+        t1 = tc0 + 1.5
+        self.set_ioloop_time(t1)
+        yield self.wake_ioloop()
+        # Connect time should not have changed since we did not reconnect
+        self.assertEqual(self.client.last_connect_time, tc0)
+
+        # Stop the server and check that last_connect_time is not affected
+        self.server.stop()
+        yield self.client._waiting_to_retry.until_set()
+        self.assertFalse(self.client.is_connected())
+        # Connect time should not have changed since we did not reconnect
+        self.assertEqual(self.client.last_connect_time, tc0)
+
+        # Restart the server and check that last_connect_time is updated
+        self.server.start()
+        t2 = t1 + 1.2
+        self.set_ioloop_time(t2)
+        yield self.client.until_connected()
+        # Connect time should now be the current time
+        self.assertEqual(self.client.last_connect_time, t2)
+
+
+class test_AsyncClientTimeoutsIntegrated(test_AsyncClientIntegratedBase):
+    def setUp(self):
+        super(test_AsyncClientTimeoutsIntegrated, self).setUp()
         self.client.start()
 
 

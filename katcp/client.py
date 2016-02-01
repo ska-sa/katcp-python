@@ -147,6 +147,8 @@ class DeviceClient(object):
         self._logger = logger
         # Indicate that client is running and ready connect
         self._running = AsyncEvent()
+        # Indicate that the client is waiting for a reconnect. Purely for testing.
+        self._waiting_to_retry = AsyncEvent()
         # Indicate that client is connected to its server
         self._connected = AsyncEvent()
         # Indicate that the client is disconnected
@@ -178,6 +180,8 @@ class DeviceClient(object):
         self._threadsafe = False
         # Version information as received from the server
         self.versions = ObjectDict()
+        # Last time a connection was made in seconds since Unix Epoch
+        self.last_connect_time = None
 
     @property
     def protocol_flags(self):
@@ -456,6 +460,7 @@ class DeviceClient(object):
         if stream:
             self._disconnected.clear()
             self._connected.set()
+            self.last_connect_time = self.ioloop.time()
             try:
                 self.notify_connected(True)
             except Exception:
@@ -668,7 +673,9 @@ class DeviceClient(object):
                 except Exception:
                     self._logger.exception('Unhandled exception in _reading_loop()')
             elif self._auto_reconnect:
+                self.ioloop.add_callback(self._waiting_to_retry.set)
                 yield until_later(self.auto_reconnect_delay)
+                self._waiting_to_retry.clear()
                 yield self._connect()
             else:
                 break
