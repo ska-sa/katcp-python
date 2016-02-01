@@ -1213,15 +1213,8 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     @tornado.gen.coroutine
     def until_synced(self, timeout=None):
         """Return a tornado Future; resolves when all subordinate clients are synced"""
-        futures = []
-        if timeout:
-            for resource in dict.values(self.children):
-                futures.append(with_timeout(self.ioloop.time() + timeout,
-                                            resource.until_synced(),
-                                            self.ioloop))
-        else:
-            futures = [r.until_synced() for r in dict.values(self.children)]
-        yield futures
+        futures = [r.until_synced(timeout) for r in dict.values(self.children)]
+        yield tornado.gen.multi(futures, quiet_exceptions=tornado.gen.TimeoutError)
 
     @tornado.gen.coroutine
     def until_not_synced(self, timeout=None):
@@ -1237,20 +1230,24 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     @tornado.gen.coroutine
     def until_all_children_in_state(self, state, timeout=None):
         """Return a tornado Future; resolves when all clients are in specified state"""
-        yield [r.until_state(state, timeout=timeout)
-               for r in dict.values(self.children)]
+        futures = [r.until_state(state, timeout=timeout)
+                   for r in dict.values(self.children)]
+        yield tornado.gen.multi(futures, quiet_exceptions=tornado.gen.TimeoutError)
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True, tuple=False, refresh=False):
         return list_sensors(self,
-            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
+            dict.items(self.sensor), filter, strategy, status,
+                            use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
-    def _resource_set_sampling_strategies(self, resource_name, sensor_name, strategy_and_parms):
+    def _resource_set_sampling_strategies(
+            self, resource_name, sensor_name, strategy_and_parms):
         resource_name = result.object.parent_name
         try:
-            yield self.set_sampling_strategy(resource_name, sensor_name, strategy_and_parms)
+            yield self.set_sampling_strategy(
+                resource_name, sensor_name, strategy_and_parms)
         except:
             self._logger.error(
                 'Cannot set sensor strategy for %s %s'

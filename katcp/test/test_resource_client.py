@@ -670,14 +670,14 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         self.assertFalse(DUT.until_synced().done())
         self.assertTrue(DUT.until_not_synced().done())
 
-        # Set all child states sync functions to resolved at not-synced to unresolved
+        # Set all child states sync functions to resolved and not_synced to unresolved
         for child in DUT.children.values():
             f = tornado.concurrent.Future()
             f.set_result(None)
-            # Need to use partial since the closure is shared between all
-            # loop iterations
-            child.until_synced = partial(lambda x : x, f)
-            child.until_not_synced = tornado.concurrent.Future
+            child.until_synced = mock.create_autospec(
+                child.until_synced, return_value=f)
+            child.until_not_synced = mock.create_autospec(
+                child.until_not_synced, return_value=tornado.concurrent.Future())
 
         # Now until_synced() should be resolved and until_not_synced() unresolved
         self.assertTrue(DUT.until_synced().done())
@@ -690,17 +690,13 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
                 # Set child to not synced
                 f = tornado.concurrent.Future()
                 f.set_result(None)
-                # Need to use partial since the closure is shared between all
-                # loop iterations
-                child.until_not_synced = partial(lambda x : x, f)
-                child.until_synced = tornado.concurrent.Future
+                child.until_not_synced.return_value = f
+                child.until_synced.return_value = tornado.concurrent.Future()
             else:
                 f = tornado.concurrent.Future()
                 f.set_result(None)
-                # Need to use partial since the closure is shared between all
-                # loop iterations
-                child.until_synced = partial(lambda x : x, f)
-                child.until_not_synced = tornado.concurrent.Future
+                child.until_synced.return_value = tornado.concurrent.Future()
+                child.until_not_synced.return_value = f
 
         self.assertFalse(DUT.until_synced().done())
         self.assertTrue(DUT.until_not_synced().done())
