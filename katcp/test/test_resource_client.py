@@ -69,7 +69,7 @@ class test_transform_future(tornado.testing.AsyncTestCase):
             trans_f.result()
 
 
-class test_KATCPClientresourceRequest(unittest.TestCase):
+class test_KATCPClientResourceRequest(unittest.TestCase):
     def setUp(self):
         self.mock_client = mock.Mock()
         self.DUT = resource_client.KATCPClientResourceRequest(
@@ -112,6 +112,55 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         self.assertEqual(DUT.controlled, False)
 
     @tornado.testing.gen_test
+    def test_dummy_requests(self):
+        resource_spec_nodummy = dict(
+            name='testdev',
+            description='resource for testing',
+            address=('testhost', 12345),
+            controlled=True)
+        resource_spec_dummy = dict(resource_spec_nodummy)
+        resource_spec_dummy['dummy_unknown_requests'] = True
+        requests = ('req-one', 'req_two')
+        DUT_nodummy = self.get_DUT_mock_inspecting_client(
+            resource_spec_nodummy)
+        DUT_dummy = self.get_DUT_mock_inspecting_client(
+            resource_spec_dummy)
+        yield DUT_dummy._add_requests(requests)
+        yield DUT_nodummy._add_requests(requests)
+        # First check that actual requests are handled correctly
+        for DUT in (DUT_nodummy, DUT_dummy):
+            # For real requests we expect a string, see
+            # get_DUT_mock_inspecting_client() below.
+            req = DUT_nodummy.req.req_one
+            self.assertEqual(req, 'req-one')
+
+        # Check that the non-dummy client doesn't have non-existing requests
+        with self.assertRaises(AttributeError):
+            DUT_nodummy.req.blah
+
+        # Check that we get a dummy request for the dummied client
+        dummy_req = DUT_dummy.req.blah
+        dummy_reply = yield dummy_req('abc', 'def', 123)
+        self.assertTrue(dummy_reply.succeeded)
+
+    def get_DUT_mock_inspecting_client(self, resource_spec, *args, **kwargs):
+        """Return a KATCPClientResource instance with a mocked inspecting client
+
+        Note that the inspecting client request factory is moced to return a
+        string matching the name of the request rather than a KATCPRequest object
+
+        """
+        DUT = resource_client.KATCPClientResource(
+            dict(resource_spec), *args, **kwargs)
+        ic = DUT._inspecting_client = mock.Mock()
+        def future_get_request(key):
+            f = tornado.concurrent.Future()
+            f.set_result(key)
+            return f
+        ic.future_get_request.side_effect = future_get_request
+        return DUT
+
+    @tornado.testing.gen_test
     def test_control(self):
         always_allow = ('req-one', 'req_two', 'exclude_one')
         always_exclude = ('exclude_one', 'exclude-two')
@@ -128,17 +177,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
             always_excluded_requests=always_exclude,
             controlled=True)
 
-        def get_DUT():
-            DUT = resource_client.KATCPClientResource(dict(resource_spec))
-            ic = DUT._inspecting_client = mock.Mock()
-            def future_get_request(key):
-                f = tornado.concurrent.Future()
-                f.set_result(key)
-                return f
-            ic.future_get_request.side_effect = future_get_request
-            return DUT
-
-        DUT = get_DUT()
+        DUT = self.get_DUT_mock_inspecting_client(resource_spec)
         yield DUT._add_requests(dev_requests)
         # We expect all the requests, except for those in the always_exclude list to be
         # available. Note, exclude-one should not be available even though it is in
@@ -148,7 +187,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
         # Now try one with no control, only req-one and req-two should be available
         resource_spec['controlled'] = False
-        DUT = get_DUT()
+        DUT = self.get_DUT_mock_inspecting_client(resource_spec)
         yield DUT._add_requests(dev_requests)
         self.assertEqual(sorted(DUT.req), sorted(['req_one', 'req_two']))
 

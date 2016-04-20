@@ -363,9 +363,6 @@ class KATCPRequest(object):
             KATCP name of the request
         description : str
             KATCP request description (as returned by ?help <name>)
-        client : client obj
-            KATCP client connected to the KATCP resource that exposes a wrapped_request()
-            method like :meth:`ReplyWrappedInspectingClientAsync.wrapped_request`.
         is_active : callable, optional
             Returns True if this request is active, else False
 
@@ -434,6 +431,14 @@ class KATCPRequest(object):
         """True if resource for this request is active"""
         return self._is_active()
 
+class KATCPDummyRequest(KATCPRequest):
+    """Dummy counterpart to KATCPRequest that always returns a successful reply"""
+    def issue_request(self, *args, **kwargs):
+        reply_msg = Message.reply('fake', 'ok')
+        reply = KATCPReply(reply_msg, [])
+        fut = Future()
+        fut.set_result(reply)
+        return fut
 
 class KATCPSensorReading(collections.namedtuple(
         'KATCPSensorReading', 'received_timestamp timestamp istatus value')):
