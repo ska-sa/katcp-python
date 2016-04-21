@@ -14,7 +14,7 @@ import logging
 
 import tornado
 
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from functools import wraps, partial
 
 from concurrent.futures import Future, TimeoutError
@@ -1454,6 +1454,20 @@ class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
+
+class DefaultAttrDict(defaultdict):
+    """
+    Similar to AttrDict but adds `collections.defaultdict` functionality
+
+    Supports default values both for key and attribute access
+
+    """
+    def __init__(self, *args, **kwargs):
+        super(DefaultAttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+    def __getattr__(self, name):
+        return self[name]
 
 class AsyncEvent(object):
     """tornado.concurrent.Future Event based on threading.Event API

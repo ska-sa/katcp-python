@@ -20,7 +20,8 @@ from peak.util.proxies import ObjectWrapper
 
 from katcp import resource, inspecting_client, Message
 from katcp.resource import KATCPReply, KATCPSensorError
-from katcp.core import (AttrDict, AsyncCallbackEvent, steal_docstring_from,
+from katcp.core import (AttrDict, DefaultAttrDict, AsyncCallbackEvent,
+                        steal_docstring_from,
                         AsyncState, AsyncEvent, LatencyTimer,
                         until_any, log_future_exceptions)
 
@@ -55,7 +56,8 @@ def transform_future(transformation, future):
     return new_future
 
 @tornado.gen.coroutine
-def list_sensors(parent_class, sensor_items, filter, strategy, status, use_python_identifiers, tuple, refresh):
+def list_sensors(parent_class, sensor_items, filter, strategy, status,
+                 use_python_identifiers, tuple, refresh):
     """Helper for implementing :meth:`katcp.resource.KATCPResource.list_sensors`
 
     Parameters
@@ -280,6 +282,10 @@ class KATCPClientResource(resource.KATCPResource):
               If True, auto-reconnect should the network connection be closed.
           auto_reconnect_delay : float seconds. Default : 0.5s
               Delay between reconnection retries.
+          dummy_unknown_requests : bool. Default : False
+              If true, provide dummy request functions for any unknown requests. Can be
+              used as a rough simulation of a device for testing when some requests are
+              not available.
           # TODO(NM) 'keep', ie. katcorelib behaviour where requests / sensors never
           # disappear even if the device looses them. Or was it only sensors? Should look
           # at katcorelib
@@ -316,7 +322,14 @@ class KATCPClientResource(resource.KATCPResource):
         self._parent = parent
         self._ioloop_set_to = None
         self._sensor = AttrDict()
-        self._req = AttrDict()
+        dummy_unknown_requests = bool(resource_spec.get('dummy_unknown_requests'))
+        if dummy_unknown_requests:
+            DummyRequest = partial(resource.KATCPDummyRequest,
+                                   'dummy', 'No help for dummies')
+            self._req = DefaultAttrDict(DummyRequest)
+        else:
+            self._req = AttrDict()
+
         # Save the pop() / items() methods in case a sensor/request with the same name is
         # added
         self._state = AsyncState(("disconnected", "syncing", "synced"))
