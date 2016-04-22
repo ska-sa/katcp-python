@@ -13,9 +13,7 @@ import katcp.core
 
 from collections import namedtuple, defaultdict
 
-from concurrent.futures import Future
 from tornado.gen import maybe_future, Return
-from tornado.concurrent import Future as tornado_Future
 
 from katcp.core import AttrDict, until_any, future_timeout_manager
 
@@ -42,6 +40,7 @@ class InspectingClientStateType(namedtuple(
 class SyncError(Exception):
     """Raised if an error occurs during syncing with a device"""
 
+
 class _InformHookDeviceClient(katcp.AsyncClient):
     """DeviceClient that adds inform hooks."""
 
@@ -63,7 +62,7 @@ class _InformHookDeviceClient(katcp.AsyncClient):
 
         """
         # Do not hook the same callback multiple times
-        if not callback in self._inform_hooks[inform_name]:
+        if callback not in self._inform_hooks[inform_name]:
             self._inform_hooks[inform_name].append(callback)
 
     def handle_inform(self, msg):
@@ -224,12 +223,10 @@ class InspectingClientAsync(object):
                                 if not state.synced)
         return self._state.until_state_in(*unsynced_states, timeout=timeout)
 
-
     def until_data_synced(self, timeout=None):
         data_synced_states = tuple(state for state in self.valid_states
                                    if state.data_synced)
         return self._state.until_state_in(*data_synced_states, timeout=timeout)
-
 
     @tornado.gen.coroutine
     def connect(self, timeout=None):
@@ -347,7 +344,6 @@ class InspectingClientAsync(object):
         """
         self._state_cb = cb
 
-
     def close(self):
         self.stop()
         self.join()
@@ -362,10 +358,6 @@ class InspectingClientAsync(object):
     def join(self, timeout=None):
         self.katcp_client.join(timeout)
 
-    def handle_sensor_value(self):
-        """Handle #sensor-value informs just like #sensor-status informs"""
-        self.katcp_client.hook_inform('sensor-value',
-                                      self._cb_inform_sensor_status)
     def _update_index(self, index, name, data):
         if name not in index:
             index[name] = data
@@ -463,7 +455,8 @@ class InspectingClientAsync(object):
             sensors_old, sensors_updated, name, self._sensors_index)
 
         for sensor_name in removed:
-            del self._sensor_object_cache[sensor_name]
+            if sensor_name in self._sensor_object_cache:
+                del self._sensor_object_cache[sensor_name]
 
         if added or removed:
             raise Return(AttrDict(added=added, removed=removed))
@@ -485,8 +478,9 @@ class InspectingClientAsync(object):
 
         Notes
         -----
-        Ensure that self.state.data_synced == True if yielding to future_check_sensor from
-        a state-change callback, or a deadlock will occur.
+        Ensure that self.state.data_synced == True if yielding to
+        future_check_sensor from a state-change callback, or a deadlock will
+        occur.
 
         """
         exist = False
