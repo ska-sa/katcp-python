@@ -1693,7 +1693,7 @@ def mock_req(req_name, *args, **kwargs):
     if not sock:
         sock = WaitingMock()
     if server:
-        client_conn = ClientConnection(server, sock)
+        client_conn = ClientConnection(server._server, sock)
     if not client_conn:
         client_conn = WaitingMock()
 
