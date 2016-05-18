@@ -589,7 +589,9 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
                               group2=['client1', 'client-2'],
                               group3=['client1', 'client-2', 'another-client'])
         DUT = resource_client.KATCPClientResourceContainer(copy.deepcopy(spec))
-        self.assertEqual(sorted(DUT.groups), ['group1', 'group2', 'group3'])
+        DUT.add_group('group4', ('client-2', 'another-client'))
+        self.assertEqual(sorted(DUT.groups), ['group1', 'group2', 'group3', 'group4'])
+        spec['groups']['group4'] = ('client-2', 'another-client')
 
         for group_name, group in DUT.groups.items():
             # Smoke test that no errors are raised

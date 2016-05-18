@@ -1203,6 +1203,18 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
         self._groups = groups
 
+    def add_group(self, group_name, group_client_names):
+        """Add a new :class:`ClientGroup` to container groups member.
+
+        Add the group named *group_name* with sequence of client names to the
+        container groups member. From there it will be wrapped appropriately
+        in the higher-level thread-safe container.
+        """
+        group_configs = self._resources_spec.get('groups', {})
+        group_configs[group_name] = group_client_names
+        self._resources_spec['groups'] = group_configs
+        self._init_groups()
+
     def set_ioloop(self, ioloop=None):
         """Set the tornado ioloop to use
 
