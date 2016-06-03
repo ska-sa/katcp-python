@@ -135,6 +135,8 @@ class InspectingClientAsync(object):
                                       self._cb_inform_sensor_status)
         self.katcp_client.hook_inform('interface-changed',
                                       self._cb_inform_interface_change)
+        self.katcp_client.hook_inform('device-changed',
+                                      self._cb_inform_interface_change)
         # Hook a callback for/to deprecated informs.
         # _cb_inform_deprecated will log a message when one of these informs
         # are received.
