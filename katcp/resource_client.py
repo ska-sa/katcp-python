@@ -982,7 +982,19 @@ class ClientGroup(object):
     @property
     def req(self):
         if self._clients_dirty:
-            self._req = AttrDict()
+            def has_dummy_requests(client):
+                """True if client returns a dummy request for unknown ones."""
+                default_req_factory = getattr(client.req, 'default_factory',
+                                              lambda: None)
+                default_req = default_req_factory()
+                return isinstance(default_req, resource.KATCPDummyRequest)
+
+            if any(has_dummy_requests(client) for client in self.clients):
+                DummyRequest = partial(resource.KATCPDummyRequest,
+                                       'dummy', 'No help for dummies')
+                self._req = DefaultAttrDict(DummyRequest)
+            else:
+                self._req = AttrDict()
             for client in self.clients:
                 for name, request in dict.iteritems(client.req):
                     if name not in self._req:

@@ -120,7 +120,12 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
             controlled=True)
         resource_spec_dummy = dict(resource_spec_nodummy)
         resource_spec_dummy['dummy_unknown_requests'] = True
-        requests = ('req-one', 'req_two')
+        class SimpleRequest(str):
+            """Add description property to str to appease ClientGroup.req()"""
+            @property
+            def description(self):
+                return self
+        requests = (SimpleRequest('req-one'), SimpleRequest('req_two'))
         DUT_nodummy = self.get_DUT_mock_inspecting_client(
             resource_spec_nodummy)
         DUT_dummy = self.get_DUT_mock_inspecting_client(
@@ -142,6 +147,20 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         dummy_req = DUT_dummy.req.blah
         dummy_reply = yield dummy_req('abc', 'def', 123)
         self.assertTrue(dummy_reply.succeeded)
+
+        # Repeat dummy tests for a simple ClientGroup
+        group = resource_client.ClientGroup('group', (DUT_nodummy, DUT_dummy))
+        # A real request should appear on the group level too
+        req = group.req.req_one
+        self.assertEqual(req.name, 'req_one')
+        # Since group contains at least one dummy client, it too has dummy requests
+        dummy_req = group.req.blah
+        dummy_reply = yield dummy_req('abc', 'def', 123)
+        self.assertTrue(dummy_reply.succeeded)
+        # Check that group without dummy clients doesn't have non-existing requests
+        group_nodummy = resource_client.ClientGroup('group', (DUT_nodummy,))
+        with self.assertRaises(AttributeError):
+            group_nodummy.req.blah
 
     def get_DUT_mock_inspecting_client(self, resource_spec, *args, **kwargs):
         """Return a KATCPClientResource instance with a mocked inspecting client
