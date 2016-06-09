@@ -257,6 +257,9 @@ class KATCPClientResource(resource.KATCPResource):
             raise RuntimeError('Cannot find inspecting client, have you called start()?')
         return ic.katcp_client.last_connect_time
 
+    @property
+    def dummy_unknown_requests(self):
+        return self._dummy_unknown_requests
 
     def __init__(self, resource_spec, parent=None, logger=log):
         """Initialise resource with given specification
@@ -322,8 +325,8 @@ class KATCPClientResource(resource.KATCPResource):
         self._parent = parent
         self._ioloop_set_to = None
         self._sensor = AttrDict()
-        dummy_unknown_requests = bool(resource_spec.get('dummy_unknown_requests'))
-        if dummy_unknown_requests:
+        self._dummy_unknown_requests = bool(resource_spec.get('dummy_unknown_requests'))
+        if self._dummy_unknown_requests:
             DummyRequest = partial(resource.KATCPDummyRequest,
                                    'dummy', 'No help for dummies')
             self._req = DefaultAttrDict(DummyRequest)
@@ -982,14 +985,7 @@ class ClientGroup(object):
     @property
     def req(self):
         if self._clients_dirty:
-            def has_dummy_requests(client):
-                """True if client returns a dummy request for unknown ones."""
-                default_req_factory = getattr(client.req, 'default_factory',
-                                              lambda: None)
-                default_req = default_req_factory()
-                return isinstance(default_req, resource.KATCPDummyRequest)
-
-            if any(has_dummy_requests(client) for client in self.clients):
+            if any(client.dummy_unknown_requests for client in self.clients):
                 DummyRequest = partial(resource.KATCPDummyRequest,
                                        'dummy', 'No help for dummies')
                 self._req = DefaultAttrDict(DummyRequest)

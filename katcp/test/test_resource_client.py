@@ -127,6 +127,9 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
             resource_spec_dummy)
         yield DUT_dummy._add_requests(requests)
         yield DUT_nodummy._add_requests(requests)
+        # Check dummy flag
+        self.assertFalse(DUT_nodummy.dummy_unknown_requests)
+        self.assertTrue(DUT_dummy.dummy_unknown_requests)
         # First check that actual requests are handled correctly
         for DUT in (DUT_nodummy, DUT_dummy):
             # For real requests we expect a string, see
