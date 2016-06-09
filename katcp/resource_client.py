@@ -1316,7 +1316,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def set_sampling_strategy(self, sensor_name, strategy_and_parms):
-        """Set sampling strategies for the specific sensor - this sensor has to exsist"""
+        """Set sampling strategies for the specific sensor - this sensor has to exist"""
         result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
         sensor_dict = {}
         for result in result_list:

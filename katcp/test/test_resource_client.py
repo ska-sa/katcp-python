@@ -120,12 +120,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
             controlled=True)
         resource_spec_dummy = dict(resource_spec_nodummy)
         resource_spec_dummy['dummy_unknown_requests'] = True
-        class SimpleRequest(str):
-            """Add description property to str to appease ClientGroup.req()"""
-            @property
-            def description(self):
-                return self
-        requests = (SimpleRequest('req-one'), SimpleRequest('req_two'))
+        requests = ('req-one', 'req_two')
         DUT_nodummy = self.get_DUT_mock_inspecting_client(
             resource_spec_nodummy)
         DUT_dummy = self.get_DUT_mock_inspecting_client(
@@ -174,7 +169,8 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         ic = DUT._inspecting_client = mock.Mock()
         def future_get_request(key):
             f = tornado.concurrent.Future()
-            f.set_result(key)
+            req_obj = resource_client.KATCPClientResourceRequest(key, key, ic)
+            f.set_result(req_obj)
             return f
         ic.future_get_request.side_effect = future_get_request
         return DUT
