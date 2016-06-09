@@ -132,7 +132,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
             # For real requests we expect a string, see
             # get_DUT_mock_inspecting_client() below.
             req = DUT_nodummy.req.req_one
-            self.assertEqual(req, 'req-one')
+            self.assertEqual(req.name, 'req-one')
 
         # Check that the non-dummy client doesn't have non-existing requests
         with self.assertRaises(AttributeError):
