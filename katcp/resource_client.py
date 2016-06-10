@@ -257,6 +257,9 @@ class KATCPClientResource(resource.KATCPResource):
             raise RuntimeError('Cannot find inspecting client, have you called start()?')
         return ic.katcp_client.last_connect_time
 
+    @property
+    def dummy_unknown_requests(self):
+        return self._dummy_unknown_requests
 
     def __init__(self, resource_spec, parent=None, logger=log):
         """Initialise resource with given specification
@@ -322,8 +325,8 @@ class KATCPClientResource(resource.KATCPResource):
         self._parent = parent
         self._ioloop_set_to = None
         self._sensor = AttrDict()
-        dummy_unknown_requests = bool(resource_spec.get('dummy_unknown_requests'))
-        if dummy_unknown_requests:
+        self._dummy_unknown_requests = bool(resource_spec.get('dummy_unknown_requests'))
+        if self._dummy_unknown_requests:
             DummyRequest = partial(resource.KATCPDummyRequest,
                                    'dummy', 'No help for dummies')
             self._req = DefaultAttrDict(DummyRequest)
@@ -982,7 +985,12 @@ class ClientGroup(object):
     @property
     def req(self):
         if self._clients_dirty:
-            self._req = AttrDict()
+            if any(client.dummy_unknown_requests for client in self.clients):
+                DummyRequest = partial(resource.KATCPDummyRequest,
+                                       'dummy', 'No help for dummies')
+                self._req = DefaultAttrDict(DummyRequest)
+            else:
+                self._req = AttrDict()
             for client in self.clients:
                 for name, request in dict.iteritems(client.req):
                     if name not in self._req:
@@ -1304,7 +1312,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def set_sampling_strategy(self, sensor_name, strategy_and_parms):
-        """Set sampling strategies for the specific sensor - this sensor has to exsist"""
+        """Set sampling strategies for the specific sensor - this sensor has to exist"""
         result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
         sensor_dict = {}
         for result in result_list:

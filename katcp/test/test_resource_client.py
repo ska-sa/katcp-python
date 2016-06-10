@@ -127,12 +127,15 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
             resource_spec_dummy)
         yield DUT_dummy._add_requests(requests)
         yield DUT_nodummy._add_requests(requests)
+        # Check dummy flag
+        self.assertFalse(DUT_nodummy.dummy_unknown_requests)
+        self.assertTrue(DUT_dummy.dummy_unknown_requests)
         # First check that actual requests are handled correctly
         for DUT in (DUT_nodummy, DUT_dummy):
             # For real requests we expect a string, see
             # get_DUT_mock_inspecting_client() below.
             req = DUT_nodummy.req.req_one
-            self.assertEqual(req, 'req-one')
+            self.assertEqual(req.name, 'req-one')
 
         # Check that the non-dummy client doesn't have non-existing requests
         with self.assertRaises(AttributeError):
@@ -142,6 +145,20 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         dummy_req = DUT_dummy.req.blah
         dummy_reply = yield dummy_req('abc', 'def', 123)
         self.assertTrue(dummy_reply.succeeded)
+
+        # Repeat dummy tests for a simple ClientGroup
+        group = resource_client.ClientGroup('group', (DUT_nodummy, DUT_dummy))
+        # A real request should appear on the group level too
+        req = group.req.req_one
+        self.assertEqual(req.name, 'req_one')
+        # Since group contains at least one dummy client, it too has dummy requests
+        dummy_req = group.req.blah
+        dummy_reply = yield dummy_req('abc', 'def', 123)
+        self.assertTrue(dummy_reply.succeeded)
+        # Check that group without dummy clients doesn't have non-existing requests
+        group_nodummy = resource_client.ClientGroup('group', (DUT_nodummy,))
+        with self.assertRaises(AttributeError):
+            group_nodummy.req.blah
 
     def get_DUT_mock_inspecting_client(self, resource_spec, *args, **kwargs):
         """Return a KATCPClientResource instance with a mocked inspecting client
@@ -155,7 +172,8 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         ic = DUT._inspecting_client = mock.Mock()
         def future_get_request(key):
             f = tornado.concurrent.Future()
-            f.set_result(key)
+            req_obj = resource_client.KATCPClientResourceRequest(key, key, ic)
+            f.set_result(req_obj)
             return f
         ic.future_get_request.side_effect = future_get_request
         return DUT
