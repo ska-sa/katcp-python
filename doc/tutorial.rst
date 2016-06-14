@@ -4,6 +4,8 @@
 Tutorial
 ********
 
+ .. module:: katcp
+
 Installing the Python Katcp Library
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -195,13 +197,72 @@ messages into function arguments in the same way the :func:`request
 <katcp.kattypes.request>` decorator is used in the server example below, except
 that the `req` parameter is omitted.
 
+.. _Tutorial_high_level_client:
+
+Using the high-level client API
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The high level client API inspects a KATCP device server and present requests as
+method calls and sensors as objects.
+
+A high level client for the example server presented in the following section: ::
+
+    import tornado
+
+    from tornado.ioloop import IOLoop
+    from katcp import resource_client
+
+    ioloop = IOLoop.current()
+
+    client = resource_client.KATCPClientResource(dict(
+        name='demo-client',
+        address=('localhost', 5000),
+        controlled=True))
+
+    @tornado.gen.coroutine
+    def demo():
+        # Wait until the client has finished inspecting the device
+        yield client.until_synced()
+        help_response = yield client.req.help()
+        print "device help:\n ", help_response
+        add_response = yield client.req.add(3, 6)
+        print "3 + 6 response:\n", add_response
+        # By not yielding we are not waiting for the response
+        pick_response_future = client.req.pick_fruit()
+        # Instead we wait for the fruit.result sensor status to change to
+        # nominal. Before we can wait on a sensor, a strategy must be set:
+        client.sensor.fruit_result.set_strategy('event')
+        # If the condition does not occur within the timeout (default 5s), we will
+        # get a TimeoutException
+        yield client.sensor.fruit_result.wait(
+            lambda reading: reading.status == 'nominal')
+        fruit = yield client.sensor.fruit_result.get_value()
+        print 'Fruit picked: ', fruit
+        # And see how the ?pick-fruit request responded by yielding on its future
+        pick_response = yield pick_response_future
+        print 'pick response: \n', pick_response
+        # Finally stop the ioloop so that the program exits
+        ioloop.stop()
+
+    # Note, katcp.resource_client.ThreadSafeKATCPClientResourceWrapper can be use to
+    # turn the client into a 'blocking' client for use in e.g. ipython. It will turn
+    # all functions that return tornado futures into blocking calls, and will bounce
+    # all method calls through the ioloop. In this case the ioloop must be started
+    # in a separate thread. katcp.ioloop_manager.IOLoopManager can be used to manage
+    # the ioloop thread.
+
+    ioloop.add_callback(client.start)
+    ioloop.add_callback(demo)
+    ioloop.start()
+
+
 Writing your own Server
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 Creating a server requires sub-classing :class:`DeviceServer <katcp.DeviceServer>`.
 This class already provides all the requests and inform messages required by the
-KATCP protocol.  However, its implementations require a little assistance from the
-sub-class in order to function.
+KATCP protocol.  However, its implementation require a little assistance from the
+subclass in order to function.
 
 A very simple server example looks like::
 
@@ -290,8 +351,8 @@ A very simple server example looks like::
               self._fruit_result.set_value(r)
               req.reply("ok", r)
 
-          handle_timer = threading.Timer(delay, pick_handler)
-          handle_timer.start()
+          self.ioloop.add_callback(
+            self.ioloop.call_later, delay, pick_handler)
 
           raise AsyncReply
 
@@ -325,7 +386,8 @@ that provides the device. Each device implementation should have a unique
 not specified, it defaults to the latest implemented version of KATCP, with all
 supported optional features. Using a version different from the default may
 change server behaviour; furthermore version info may need to be passed to the
-:func:`@request` and :func:`@return_reply` decorators.
+:func:`@request <katcp.kattypes.request>` and :func:`@return_reply
+<katcp.kattypes.return_reply>` decorators.
 
 The :meth:`setup_sensors` method registers :class:`Sensor <katcp.Sensor>` objects with
 the device server. The base class uses this information to implement the :samp:`?sensor-list`,
@@ -351,8 +413,8 @@ similar operation for replies. Once the request method returns a tuple (or list)
 of reply arguments, the decorator checks the values of the arguments and
 constructs a suitable reply message.
 
-Use of the :meth:`request <katcp.kattypes.request>` and :meth:`return_reply`
-decorators is encouraged but entirely optional.
+Use of the :func:`request <katcp.kattypes.request>` and :func:`return_reply
+<katcp.kattypes.return_reply>` decorators is encouraged but entirely optional.
 
 Message dispatch is handled in much the same way as described in the client
 example, with the exception that there are not :meth:`unhandled_request`,
@@ -368,7 +430,11 @@ adding the following imports ::
   import signal
   import tornado
 
-and replace the `if __name__ == "__main__":` block with ::
+  from katcp import AsyncDeviceServer
+
+Also replace `class MyServer(DeviceServer)` with `class
+MyServer(AsyncDeviceServer)` and replace the `if __name__ == "__main__":` block
+with ::
 
   @tornado.gen.coroutine
   def on_shutdown(ioloop, server):
@@ -379,8 +445,6 @@ and replace the `if __name__ == "__main__":` block with ::
   if __name__ == "__main__":
       ioloop = tornado.ioloop.IOLoop.current()
       server = MyServer(server_host, server_port)
-      server.set_concurrency_options(thread_safe=False, handler_thread=False)
-      server.set_ioloop(ioloop)
       # Hook up to SIGINT so that ctrl-C results in a clean shutdown
       signal.signal(signal.SIGINT, lambda sig, frame: ioloop.add_callback_from_signal(
 	  on_shutdown, ioloop, server))
@@ -395,42 +459,75 @@ is sent when a server shuts down.
 Event Loops and Thread Safety
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-TODO NB!!! Description below is outdated, since the whole katcp network backend
-has been replaced with a stack based on tornado. For now, read the code :)
+As of version 0.6.0, katcp-python was completely reworked to use Tornado as an
+event- and network library. A typical Tornado application would only use a
+single `tornado.ioloop.IOLoop` event-loop instance. Logically independent parts of the
+application would all share the same ioloop using e.g. coroutines to allow
+concurrent tasks.
 
+However, to maintain backwards compatiblity with the thread-semantics of older
+versions of this library, it supports starting a `tornado.ioloop.IOLoop`
+instance in a new thread for each client or server. Instantiating the
+:class:`BlockingClient` or :class:`CallbackClient` client classes or the
+:class:`DeviceServer` server class will implement the backward compatible
+behaviour by default, while using :class:`AsyncClient` or
+:class:`AsyncDeviceServer` will by default use `tornado.ioloop.IOLoop.current()`
+as the ioloop (can be overidden using their `set_ioloop` methods), and won't
+enable thread safety by default (can be overridden using
+:meth:`AsyncDeviceServer.set_concurrency_operations` and
+:meth:`AsyncClient.enable_thread_safety`)
 
-Each client and each server starts a network event-loop in a new thread,
-although this design may change in the future. In the case of a purely
-network-event driven server or client, all user code would execute in the thread
-context of the server or client event loop. Therefore all handler functions must
-be non-blocking to prevent unresponsiveness. Unhandled exceptions raised by
-handlers running in the network event-thread are caught and logged; in the case
-of servers, an error reply including the traceback is sent over the network
-interface. Slow operations (such as picking fruit) may be delegated to another
-thread as shown in the `request_pick_fruit` handler in the server example.
+Note that any message (request, reply, iform) handling methods should not
+block. A blocking handler will block the ioloop, causing all timed operations
+(e.g. sensor strategies), network io, etc. to block. This is particularly
+important when multiple servers/clients share a single ioloop. A good solution
+for handlers that need to wait on other tasks is to implement them as Tornado
+couroutines. A :class:`DeviceServer` will not accept another request message
+from a client connection until the request handler has completed / resolved its
+future. Multiple outstanding requests can be handled concurrently by raising the
+:class:`AsyncReply` exception in a request handler. It is then the
+responsibility of the user to ensure that a reply is eventually sent using the
+`req` object.
+
+If :meth:`DeviceServer.set_concurrency_options` has `handler_thread=True` (the
+default for :class:`DeviceServer`, :class:`AsyncDeviceServer` defaults to
+`False`), all the requests to a server is serialised and handled in a separate
+request handing thread. This allows request handlers to block without prevent
+sensor strategy updates, and provides backwards-compatible concurrency
+semantics.
+
+In the case of a purely network-event driven server or client, all user code
+would execute in the thread context of the server or client event
+loop. Therefore all handler functions must be non-blocking to prevent
+unresponsiveness. Unhandled exceptions raised by handlers running in the network
+event-thread are caught and logged; in the case of servers, an error reply
+including the traceback is sent over the network interface. Slow operations
+(such as picking fruit) may be delegated to another thread (as shown in the
+`request_pick_fruit` handler in the server example) or tornado coroutine.
 
 If a device is linked to processing that occurs independently of network events,
 one approach would be a model thread running in the background. The KATCP
 handler code would then defer requests to the model. The model must provide a
-thread-safe interface to the KATCP code.
+thread-safe interface to the KATCP code. If using an async server
+(e.g. :class:`AsyncDeviceServer` or :meth:`DeviceServer.set_concurrency_options`
+called with `thread_safe=False`), all interaction with the device server needs
+to be through the :meth:`tornado.ioloop.Ioloop.add_callback` method of the
+server's ioloop. The server's ioloop instance can be accessed through its
+`ioloop` attribute. If a threadsafe server (e.g. :class:`DeviceServer` with
+default concurrency options) or client (e.g. :class:`CallbackClient`) is used, 
+all the public methods provided by this katcp library for sending `!replies` or
+`#informs` are thread safe.
 
-All the public methods provided by this katcp library for sending `!replies` or
-`#informs` are thread safe. Furthermore, updates to :class:`Sensor` objects
-using the public setter methods are also thread-safe, provided that the same is
-true for all the observers attached to the sensor.
-
-In addition to the network event-loop, subclasses of :class:`DeviceServer
-<katcp.DeviceServer>` also start a sampling reactor thread. This is used to send
-sensor updates to clients on the basis of the requested sampling
-strategies. This means that subclasses of :class:`DeviceServer
-<katcp.DeviceServer>` automatically support all the sampling strategies
-specified by the KATCP spec.
+Updates to :class:`Sensor` objects using the public setter methods are always
+thread-safe, provided that the same is true for all the observers attached to
+the sensor. The server observers used to implement sampling strategies are
+threadsafe, even if an asyc server is used.
 
 Backwards Compatibility
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Server Backwards Compatibility
-------------------------------
+Server Protocol Backwards Compatibility
+---------------------------------------
 
 A minor modification of the first several lines of the example in
 `Writing your own Server`_ suffices to create a KATCP v4 server::
@@ -464,8 +561,8 @@ A minor modification of the first several lines of the example in
 
 The rest of the example follows as before.
 
-Client Backwards Compatibility
-------------------------------
+Client Protocol Backwards Compatibility
+---------------------------------------
 
 The :meth:`DeviceClient <katcp.DeviceClient>` client automatically detects the
 version of the server if it can, see

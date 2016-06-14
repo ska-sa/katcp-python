@@ -46,6 +46,7 @@ Exceptions
 Server
 ^^^^^^
 
+
 DeviceServer
 """"""""""""
 
@@ -83,6 +84,25 @@ Exceptions
 .. autoclass:: KatcpDeviceError
     :members:
 
+High Level Clients
+^^^^^^^^^^^^^^^^^^
+
+KATCPClientResource
+"""""""""""""""""""
+
+.. autoclass:: KATCPClientResource
+    :members:
+    :inherited-members:
+
+KATCPClientResourceContainer
+""""""""""""""""""""""""""""
+
+.. autoclass:: KATCPClientResourceContainer
+    :members:
+    :inherited-members:
+
+
+
 Message Parsing
 ^^^^^^^^^^^^^^^
 
@@ -113,11 +133,6 @@ DeviceMetaclass
 .. autoclass:: DeviceMetaclass
     :members:
 
-ExcepthookThread
-""""""""""""""""
-
-.. autoclass:: ExcepthookThread
-    :members:
 
 Version Information
 ^^^^^^^^^^^^^^^^^^^
