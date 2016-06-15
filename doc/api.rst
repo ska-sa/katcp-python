@@ -31,6 +31,14 @@ CallbackClient
     :members:
     :inherited-members:
 
+AsyncClient
+"""""""""""
+
+.. autoclass:: AsyncClient
+    :members:
+    :inherited-members:
+
+
 Base Classes
 """"""""""""
 
@@ -45,6 +53,14 @@ Exceptions
 
 Server
 ^^^^^^
+
+
+AsyncDeviceServer
+"""""""""""""""""
+
+.. autoclass:: AsyncDeviceServer
+    :members:
+    :inherited-members:
 
 
 DeviceServer

@@ -35,7 +35,7 @@ def demo():
 
     ioloop.stop()
 
-# Note, katcp.resource_client.ThreadSafeKATCPClientResourceWrapper can be use to
+# Note, katcp.resource_client.ThreadSafeKATCPClientResourceWrapper can be used to
 # turn the client into a 'blocking' client for use in e.g. ipython. It will turn
 # all functions that return tornado futures into blocking calls, and will bounce
 # all method calls through the ioloop. In this case the ioloop must be started

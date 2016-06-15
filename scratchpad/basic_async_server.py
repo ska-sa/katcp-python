@@ -65,7 +65,7 @@ class MyServer(DeviceServer):
     @request()
     @return_reply(Timestamp())
     def request_time(self, req):
-        """Return the current time in ms since the Unix Epoch."""
+        """Return the current time in seconds since the Unix Epoch."""
         r = time.time()
         self._time_result.set_value(r)
         return ("ok", r)
