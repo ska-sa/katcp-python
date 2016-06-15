@@ -1248,6 +1248,24 @@ class DeviceServerBase(object):
         self.ioloop = self._server.ioloop
 
     def set_concurrency_options(self, thread_safe=True, handler_thread=True):
+        """Set concurrency options for this device server.
+        Must be called before :meth:`start`.
+
+        Parameters
+        ==========
+
+        thread_safe : bool
+            If True, make the server public methods thread safe. Incurs
+            performance overhead.
+        handler_thread : bool
+            Can only be set if `thread_safe` is True. Handle all requests (even
+            from different clients) in a separate, single, request-handling
+            thread. Blocking request handlers will prevent the server from
+            handling new requests from any client, but sensor strategies should
+            still function. This more or less mimicks the behaviour of a server
+            in library versions before 0.6.0.
+
+        """
         if handler_thread:
             assert thread_safe, "handler_thread=True requires thread_safe=True"
         self._server.client_connection_factory = (

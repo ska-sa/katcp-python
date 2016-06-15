@@ -22,7 +22,12 @@ Contents
    releasenotes
    api
    kattypes
+   client
+   inspecting_client
+   resource
+   resource_client
    sampling
+   server
    tutorial
 
 Indices and tables

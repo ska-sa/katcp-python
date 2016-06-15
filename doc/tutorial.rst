@@ -47,12 +47,12 @@ have finished with the client, :meth:`stop` can be called to request that the
 thread shutdown. Finally, :meth:`join` is used to wait for the client thread to
 finish.
 
-While the client is active the :meth:`blocking_request
+While the client is active the :meth:`blocking_request()
 <katcp.BlockingClient.blocking_request>` method can be used to send messages to
 the KATCP server and wait for replies. If a reply is not received within the
 allowed time, a :exc:`RuntimeError` is raised.
 
-If a reply is received :meth:`blocking_request
+If a reply is received :meth:`blocking_request()
 <katcp.BlockingClient.blocking_request>` returns two values. The first is the
 :class:`Message <katcp.Message>` containing the reply. The second is a list of
 messages containing any KATCP informs associated with the reply.
@@ -92,7 +92,7 @@ but doesn't want to wait for a reply, the
 Note that the :func:`reply_cb` and :func:`inform_cb` callback functions are both
 called inside the client's event-loop thread so should not perform any
 operations that block. If needed, pass the data out to from the callback
-function to another thread using a :class:`Queue <Queue.Queue>` or similar
+function to another thread using a :class:`Queue.Queue` or similar
 structure.
 
 
@@ -107,7 +107,7 @@ from which both are derived.
 
 :class:`DeviceClient` has two methods for sending messages:
 
-    * :meth:`request <katcp.DeviceClient.request>` for sending request
+    * :meth:`request() <katcp.DeviceClient.request>` for sending request
       :class:`Messages <katcp.Message>`
     * :meth:`send_message <katcp.DeviceClient.send_message>` for sending
       arbitrary :class:`Messages <katcp.Message>`
@@ -118,17 +118,19 @@ server.
 
 .. note::
 
-    The :meth:`send_message <katcp.DeviceClient.send_message>` method does not
+    The :meth:`send_message() <DeviceClient.send_message>` method does not
     return an error code or raise an exception if sending the message
     fails. Since the underlying protocol is entirely asynchronous, the only
     means to check that a request was successful is receive a reply message. One
     can check that the client is connected before sending a message using
-    :meth:`is_connected`.
+    :meth:`is_connected() <DeviceClient.is_connected>`.
 
-When the :class:`DeviceClient` thread receives a completed message
-:meth:`handle_message` is called.  The default :meth:`handle_message`
-implementation calls one of :meth:`handle_reply`, :meth:`handle_inform`
-or :meth:`handle_request` depending on the type of message received.
+When the :class:`DeviceClient` thread receives a completed message,
+:meth:`handle_message` is called.  The default :meth:`handle_message()
+<DeviceClient.handle_message>` implementation calls one of :meth:`handle_reply
+<DeviceClient.handle_reply>`, :meth:`handle_inform()
+<DeviceClient.handle_inform>` or :meth:`handle_request()
+<DeviceClient.handle_request>` depending on the type of message received.
 
 .. note::
 
@@ -144,7 +146,7 @@ Similarly an inform message named :samp:`bar` will be dispatched to
 :meth:`unhandled_reply`, :meth:`unhandled_inform` or :meth:`unhandled_request`
 is called.
 
-Your own client may hook into this dispath tree at any point by implementing
+Your own client may hook into this dispatch tree at any point by implementing
 or overriding the appropriate methods.
 
 An example of a simple client that only handles replies to :samp:`help`
@@ -191,9 +193,9 @@ messages is presented below::
     client.join()
 
 
-Client handler functions can use the :func:`unpack_message
+Client handler functions can use the :func:`unpack_message()
 <katcp.kattypes.unpack_message>` decorator from `kattypes` module to unpack
-messages into function arguments in the same way the :func:`request
+messages into function arguments in the same way the :func:`request()
 <katcp.kattypes.request>` decorator is used in the server example below, except
 that the `req` parameter is omitted.
 
@@ -202,7 +204,7 @@ that the `req` parameter is omitted.
 Using the high-level client API
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The high level client API inspects a KATCP device server and present requests as
+The high level client API inspects a KATCP device server and presents requests as
 method calls and sensors as objects.
 
 A high level client for the example server presented in the following section: ::
@@ -244,7 +246,7 @@ A high level client for the example server presented in the following section: :
         # Finally stop the ioloop so that the program exits
         ioloop.stop()
 
-    # Note, katcp.resource_client.ThreadSafeKATCPClientResourceWrapper can be use to
+    # Note, katcp.resource_client.ThreadSafeKATCPClientResourceWrapper can be used to
     # turn the client into a 'blocking' client for use in e.g. ipython. It will turn
     # all functions that return tornado futures into blocking calls, and will bounce
     # all method calls through the ioloop. In this case the ioloop must be started
@@ -259,10 +261,10 @@ A high level client for the example server presented in the following section: :
 Writing your own Server
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Creating a server requires sub-classing :class:`DeviceServer <katcp.DeviceServer>`.
-This class already provides all the requests and inform messages required by the
-KATCP protocol.  However, its implementation require a little assistance from the
-subclass in order to function.
+Creating a server requires sub-classing :class:`DeviceServer
+<katcp.DeviceServer>`.  This class already provides all the requests and inform
+messages required by the KATCP protocol.  However, its implementation requires a
+little assistance from the subclass in order to function.
 
 A very simple server example looks like::
 
@@ -324,7 +326,7 @@ A very simple server example looks like::
       @request()
       @return_reply(Timestamp())
       def request_time(self, req):
-          """Return the current time in ms since the Unix Epoch."""
+          """Return the current time in seconds since the Unix Epoch."""
           r = time.time()
           self._time_result.set_value(r)
           return ("ok", r)
@@ -389,35 +391,37 @@ change server behaviour; furthermore version info may need to be passed to the
 :func:`@request <katcp.kattypes.request>` and :func:`@return_reply
 <katcp.kattypes.return_reply>` decorators.
 
-The :meth:`setup_sensors` method registers :class:`Sensor <katcp.Sensor>` objects with
-the device server. The base class uses this information to implement the :samp:`?sensor-list`,
-:samp:`?sensor-value` and :samp:`?sensor-sampling` requests.  :meth:`add_sensor` should be
-called once for each sensor the device should contain. You may create the sensor objects
-inside :meth:`setup_sensors` (as done in the example) or elsewhere if you wish.
+The :meth:`setup_sensors` method registers :class:`Sensor <katcp.Sensor>`
+objects with the device server. The base class uses this information to
+implement the :samp:`?sensor-list`, :samp:`?sensor-value` and
+:samp:`?sensor-sampling` requests.  :meth:`add_sensor()
+<katcp.DeviceServer.add_sensor>` should be called once for each sensor the
+device should contain. You may create the sensor objects inside
+:meth:`setup_sensors` (as done in the example) or elsewhere if you wish.
 
 Request handlers are added to the server by creating methods whose names start
-with "request\_".  These methods take two arguments -- the client socket that
-the request came from and the request message.  Notice that the message argument
-is missing from the methods in the example. This is a result of the
-:meth:`request <katcp.kattypes.request>` decorator that has been applied to the
-methods.
+with "request\_".  These methods take two arguments -- the client-request object
+(abstracts the client socket and the request context) that the request came from
+and the request message.  Notice that the message argument is missing from the
+methods in the example. This is a result of the :meth:`request()
+<katcp.kattypes.request>` decorator that has been applied to the methods.
 
-The :meth:`request <katcp.kattypes.request>` decorator takes a list of
-:class:`kattype <katcp.kattypes.KatcpType>` objects describing the request
+The :meth:`request() <katcp.kattypes.request>` decorator takes a list of
+:class:`KatcpType <katcp.kattypes.KatcpType>` objects describing the request
 arguments. Once the arguments have been checked they are passed in to the
 underlying request method as additional parameters instead of the request
 message.
 
-The :meth:`return_reply <katcp.kattypes.return_reply>` decorator performs a
+The :meth:`return_reply <katcp.kattypes.return_reply()>` decorator performs a
 similar operation for replies. Once the request method returns a tuple (or list)
 of reply arguments, the decorator checks the values of the arguments and
 constructs a suitable reply message.
 
-Use of the :func:`request <katcp.kattypes.request>` and :func:`return_reply
+Use of the :func:`request() <katcp.kattypes.request>` and :func:`return_reply()
 <katcp.kattypes.return_reply>` decorators is encouraged but entirely optional.
 
 Message dispatch is handled in much the same way as described in the client
-example, with the exception that there are not :meth:`unhandled_request`,
+example, with the exception that there are no :meth:`unhandled_request`,
 :meth:`unhandled_reply` or :meth:`unhandled_request` methods. Instead, the
 server will log an exception.
 
@@ -474,7 +478,7 @@ behaviour by default, while using :class:`AsyncClient` or
 :class:`AsyncDeviceServer` will by default use `tornado.ioloop.IOLoop.current()`
 as the ioloop (can be overidden using their `set_ioloop` methods), and won't
 enable thread safety by default (can be overridden using
-:meth:`AsyncDeviceServer.set_concurrency_operations` and
+:meth:`AsyncDeviceServer.set_concurrency_options` and
 :meth:`AsyncClient.enable_thread_safety`)
 
 Note that any message (request, reply, iform) handling methods should not
@@ -492,8 +496,8 @@ responsibility of the user to ensure that a reply is eventually sent using the
 If :meth:`DeviceServer.set_concurrency_options` has `handler_thread=True` (the
 default for :class:`DeviceServer`, :class:`AsyncDeviceServer` defaults to
 `False`), all the requests to a server is serialised and handled in a separate
-request handing thread. This allows request handlers to block without prevent
-sensor strategy updates, and provides backwards-compatible concurrency
+request handing thread. This allows request handlers to block without preventing
+sensor strategy updates, providing backwards-compatible concurrency
 semantics.
 
 In the case of a purely network-event driven server or client, all user code
@@ -502,8 +506,9 @@ loop. Therefore all handler functions must be non-blocking to prevent
 unresponsiveness. Unhandled exceptions raised by handlers running in the network
 event-thread are caught and logged; in the case of servers, an error reply
 including the traceback is sent over the network interface. Slow operations
-(such as picking fruit) may be delegated to another thread (as shown in the
-`request_pick_fruit` handler in the server example) or tornado coroutine.
+(such as picking fruit) may be delegated to another thread (if a threadsafe
+server is used), a callback (as shown in the `request_pick_fruit` handler in the
+server example) or tornado coroutine.
 
 If a device is linked to processing that occurs independently of network events,
 one approach would be a model thread running in the background. The KATCP

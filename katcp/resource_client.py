@@ -432,7 +432,7 @@ class KATCPClientResource(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def set_sampling_strategies(self, filter, strategy_and_parms):
-        """Set a strategy for all sensors matching the filter even if it is not yet known.
+        """Set a strategy for all sensors matching the filter, including unseen sensors
         The strategy should persist across sensor disconnect/reconnect.
 
         filter : str
