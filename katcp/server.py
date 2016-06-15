@@ -1262,7 +1262,7 @@ class DeviceServerBase(object):
             from different clients) in a separate, single, request-handling
             thread. Blocking request handlers will prevent the server from
             handling new requests from any client, but sensor strategies should
-            still function. This more or less mimicks the behaviour of a server
+            still function. This more or less mimics the behaviour of a server
             in library versions before 0.6.0.
 
         """

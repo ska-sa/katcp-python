@@ -91,7 +91,7 @@ but doesn't want to wait for a reply, the
 
 Note that the :func:`reply_cb` and :func:`inform_cb` callback functions are both
 called inside the client's event-loop thread so should not perform any
-operations that block. If needed, pass the data out to from the callback
+operations that block. If needed, pass the data out from the callback
 function to another thread using a :class:`Queue.Queue` or similar
 structure.
 
@@ -127,7 +127,7 @@ server.
 
 When the :class:`DeviceClient` thread receives a completed message,
 :meth:`handle_message` is called.  The default :meth:`handle_message()
-<DeviceClient.handle_message>` implementation calls one of :meth:`handle_reply
+<DeviceClient.handle_message>` implementation calls one of :meth:`handle_reply()
 <DeviceClient.handle_reply>`, :meth:`handle_inform()
 <DeviceClient.handle_inform>` or :meth:`handle_request()
 <DeviceClient.handle_request>` depending on the type of message received.
@@ -401,7 +401,7 @@ device should contain. You may create the sensor objects inside
 
 Request handlers are added to the server by creating methods whose names start
 with "request\_".  These methods take two arguments -- the client-request object
-(abstracts the client socket and the request context) that the request came from
+(abstracts the client socket and the request context) that the request came from,
 and the request message.  Notice that the message argument is missing from the
 methods in the example. This is a result of the :meth:`request()
 <katcp.kattypes.request>` decorator that has been applied to the methods.
