@@ -9,7 +9,7 @@ Release Notes
 
 * Major change: Use the tornado event loop and async socket routines.
 
-See also :download:`CHANGELOG` for more details on chages.
+See also :download:`CHANGELOG` for more details on changes.
 
 Important API changes
 ---------------------
@@ -259,7 +259,7 @@ your git origin.
 
   python setup.py build_sphinx
 
-* Next execute::
+* Next execute ::
 
    python setup.py sdist upload
    python setup.py build_sphinx upload_sphinx --upload-dir=build/sphinx/html
