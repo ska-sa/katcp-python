@@ -1,10 +1,14 @@
 #!/usr/bin/env python
+import re
+
 from setuptools import setup, find_packages
 from katcp import version
 
 version_str = version.VERSION_STR
 git_branch, git_revision = version.get_git_revision()
-if git_branch:
+
+# Only add git revision info if this is not a final versioned release
+if git_branch and not re.match(r'^\d+\.\d+\.\d+$', version_str):
     version_str = version_str+'git-{0}-{1}'.format(git_branch, git_revision)
 
 
