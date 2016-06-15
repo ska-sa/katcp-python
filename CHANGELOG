@@ -1,4 +1,9 @@
- (0.6.?)
+ (0.6.0)
+ * Added high level, simple to use, client API (KATCPResource) that connects to,
+   inspects and presents a high level, hierarchical object oriented interface to
+   multiple KATCP devices.
+ * Added mid level client API (InspectingClient) that abstracts the inspection
+   of a KATCP device.
  * Backwards-incompatible change in Sensor observer API
  * Sensor strategies now call back with raw Python datatype values rather than
    KATCP formatted values, using the same 'reading' API as Sensor
@@ -6,6 +11,7 @@
  * Tornado ioloop / iostream based sensor sampling
  * Tornado ioloop / iostream based server
  * Sever message handlers can now return futures
+ * Server supports fully async mode with Tornado futures.
  * Threaded message handle compatibility mode + new Async mode (performance
    penalty for threaded mode, but is default for now)
  * Tornado ioloop / iostream based client AsyncClient, single implementation for

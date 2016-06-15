@@ -2244,6 +2244,19 @@ class DeviceServer(DeviceServerBase):
     # pylint: enable-msg = W0613
 
 
+class AsyncDeviceServer(DeviceServer):
+    """`DeviceServer` that is automatically configured for async use.
+
+    Same as instantiating a :class:`DeviceServer` instance and calling methods
+    `set_concurrency_options(thread_safe=False, handler_thread=False)` and
+    `set_ioloop(tornado.ioloop.IOLoop.current())` before starting.
+
+    """
+    def __init__(self, *args, **kwargs):
+        super(AsyncDeviceServer, self).__init__(*args, **kwargs)
+        self.set_concurrency_options(thread_safe=False, handler_thread=False)
+        self.set_ioloop(tornado.ioloop.IOLoop.current())
+
 class DeviceLogger(object):
     """Object for logging messages from a DeviceServer.
 

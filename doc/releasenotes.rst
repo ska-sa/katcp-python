@@ -4,28 +4,46 @@
 Release Notes
 *************
 
-0.6.?
+0.6.0
 =====
 
 * Major change: Use the tornado event loop and async socket routines.
-* TODO Write about how the library should be used for blocking or async code.
 
-See also :download:`CHANGELOG.txt` for more details on chages.
+See also :download:`CHANGELOG` for more details on chages.
 
 Important API changes
 ---------------------
+
+Tornado based event loop(s)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+While the networking stack and event loops have been re-implemented using
+Tornado, this change should be largely invisible to existing users of the
+library. All client and server classes now expose a `ioloop` attribute that is
+the :class:`tornado.ioloop.IOLoop` instance being used. Unless new server or
+client classes are used or default settings are changed, the thread-safety and
+concurrency semantics of 0.5.x versions should be retained. User code that made
+use of non-public interfaces may run into trouble.
+
+High level auto-inspecting KATCP client APIs added
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The high level client API inspects a KATCP device server and present requests as
+method calls and sensors as objects. See :ref:`Tutorial_high_level_client`.
+
 
 Sensor observer API
 ^^^^^^^^^^^^^^^^^^^
 
 The :class:`katcp.core.Sensor` sensor observer API has been changed to pass the
 sensor reading in the `observer.update()` callback, preventing potential lost
-updates due to race conditions. This is a backwards incompatible changes.
+updates due to race conditions. This is a backwards incompatible change.
 Whereas before observers were called as `observer.update(sensor)`, they are now
-called as `observer.update(sensor, reading)`.
+called as `observer.update(sensor, reading)`, where `reading` is an instance of
+:class:`katcp.core.Reading`.
 
-Sample Reactor callback API
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Sample Strategy callback API
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Sensor strategies now call back with the sensor object and raw Python datatype
 values rather than the sensor name and KATCP formatted values. The sensor
@@ -215,13 +233,15 @@ you have `git@github.com:ska-sa/katcp-python.git` (or the https equivalent) as
 your git origin.
 
 * Edit CHANGELOG with the details of the changes, and doc/releasenotes.rst (this
-  file) with the change summary.
+  file) with the change summary. Consider more detailed document updates /
+  examples.
 
 * Update version.py::
 
     VERSION = (0, X, Y, 'final', 0)
 
-  Then run tests update the test that fails because the version inform changed.
+  Then run tests and update the test that fails because the version inform
+  changed.
 
 * Commit and tag the final changes::
 
@@ -231,8 +251,13 @@ your git origin.
 
 * Execute this the first time you do a release::
 
-    pip install sphinx-pypi-upload
+    pip install sphinx-pypi-upload Sphinx
     python setup.py register
+
+* Check the documentation by building it (should be in the `build/sphinx/html`
+  directory) ::
+
+  python setup.py build_sphinx
 
 * Next execute::
 
@@ -245,3 +270,5 @@ your git origin.
   the next develpment release::
 
     VERSION = (0, X, Y+1, 'alpha', 0)
+
+  and commit to master.

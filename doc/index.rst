@@ -21,7 +21,6 @@ Contents
 
    releasenotes
    api
-   txkatcp
    kattypes
    sampling
    tutorial

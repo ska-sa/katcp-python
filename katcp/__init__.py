@@ -25,10 +25,13 @@ try:
                        AsyncReply, KatcpDeviceError, KatcpClientError,
                        Sensor, ProtocolFlags, AttrDict)
 
-    from .server import DeviceServerBase, DeviceServer, DeviceLogger
+    from .server import (DeviceServerBase, DeviceServer, AsyncDeviceServer,
+                         DeviceLogger)
 
     from .client import (DeviceClient, AsyncClient, CallbackClient,
                          BlockingClient)
+
+    from .resource_client import (KATCPClientResource, KATCPClientResourceContainer)
 
     from .sensortree import (GenericSensorTree, BooleanSensorTree,
                              AggregateSensorTree)
