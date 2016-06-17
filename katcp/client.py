@@ -113,7 +113,7 @@ class DeviceClient(object):
     """
     __metaclass__ = DeviceMetaclass
 
-    MAX_MSG_SIZE = 128*1024
+    MAX_MSG_SIZE = 2*1024*1024
     """Maximum message size that can be received in bytes.
 
     If more than MAX_MSG_SIZE bytes are read from the socket without
