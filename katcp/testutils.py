@@ -553,13 +553,13 @@ class BlockingTestClient(client.BlockingClient):
         else:
             cmpfun = lambda got, exp: got == exp
 
-        lastval = None
+        lastval = self.get_sensor_value(sensorname, sensortype)
         while time.time() < stoptime:
-            lastval = self.get_sensor_value(sensorname, sensortype)
             if cmpfun(lastval, value):
                 success = True
                 break
             time.sleep(pollfreq)
+            lastval = self.get_sensor_value(sensorname, sensortype)
 
         if not success:
             self.test.fail("Timed out while waiting %ss for %s sensor to"
