@@ -19,7 +19,7 @@ Tornado based event loop(s)
 
 While the networking stack and event loops have been re-implemented using
 Tornado, this change should be largely invisible to existing users of the
-library. All client and server classes now expose a `ioloop` attribute that is
+library. All client and server classes now expose an `ioloop` attribute that is
 the :class:`tornado.ioloop.IOLoop` instance being used. Unless new server or
 client classes are used or default settings are changed, the thread-safety and
 concurrency semantics of 0.5.x versions should be retained. User code that made
@@ -35,7 +35,7 @@ method calls and sensors as objects. See :ref:`Tutorial_high_level_client`.
 Sensor observer API
 ^^^^^^^^^^^^^^^^^^^
 
-The :class:`katcp.core.Sensor` sensor observer API has been changed to pass the
+The :class:`katcp.Sensor` sensor observer API has been changed to pass the
 sensor reading in the `observer.update()` callback, preventing potential lost
 updates due to race conditions. This is a backwards incompatible change.
 Whereas before observers were called as `observer.update(sensor)`, they are now
@@ -47,7 +47,7 @@ Sample Strategy callback API
 
 Sensor strategies now call back with the sensor object and raw Python datatype
 values rather than the sensor name and KATCP formatted values. The sensor
-classes have also grown a :meth:`katcp.core.Sensor.format_reading` method that
+classes have also grown a :meth:`katcp.Sensor.format_reading` method that
 can be used to do KATCP-version specific formatting of the sensor reading.
 
 0.5.5
