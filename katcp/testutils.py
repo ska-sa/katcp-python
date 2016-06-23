@@ -522,6 +522,18 @@ class BlockingTestClient(client.BlockingClient):
             self.assert_sensor_not_equal(sensorname, expected, sensortype,
                                          msg=msg, places=places)
 
+    def wait_condition(self, timeout, predicate, *args, **kwargs):
+        """ Wait for the boolean function `predicate(*args, **kwargs)` to become True.
+        Default polling period is 0.02s. A different period may be set by specifying
+        'poll_period' as a named arg in the predicate."""
+        t0 = time.time()
+        poll_period = kwargs.pop('poll_period', 0.02)
+        cond = predicate(*args, **kwargs)
+        while not (cond or (time.time()-t0 >timeout)):
+            time.sleep(poll_period)
+            cond = predicate(*args, **kwargs)
+        return (cond, '' if cond else 'Timed out after %s seconds' % timeout)
+
     def wait_until_sensor_equals(self, timeout, sensorname, value,
                                  sensortype=str, places=7, pollfreq=0.02):
         """Wait until a sensor's value equals the given value, or times out.
@@ -553,13 +565,13 @@ class BlockingTestClient(client.BlockingClient):
         else:
             cmpfun = lambda got, exp: got == exp
 
-        lastval = None
+        lastval = self.get_sensor_value(sensorname, sensortype)
         while time.time() < stoptime:
-            lastval = self.get_sensor_value(sensorname, sensortype)
             if cmpfun(lastval, value):
                 success = True
                 break
             time.sleep(pollfreq)
+            lastval = self.get_sensor_value(sensorname, sensortype)
 
         if not success:
             self.test.fail("Timed out while waiting %ss for %s sensor to"
