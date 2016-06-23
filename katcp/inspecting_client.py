@@ -448,9 +448,10 @@ class InspectingClientAsync(object):
             sen_name = msg.arguments[0]
             sensors_updated.add(sen_name)
             sen = {'description': msg.arguments[1],
-                   'unit': msg.arguments[2],
+                   'units': msg.arguments[2],
                    'sensor_type': msg.arguments[3],
                    'params': msg.arguments[4:]}
+            #import IPython ; IPython.embed()
             self._update_index(self._sensors_index, sen_name, sen)
 
         added, removed = self._difference(
@@ -532,6 +533,7 @@ class InspectingClientAsync(object):
                 sensor_params = katcp.Sensor.parse_params(
                     sensor_type,
                     sensor_info.get('params'))
+                #import IPython ; IPython.embed()
                 obj = self.sensor_factory(
                     name=name,
                     sensor_type=sensor_type,

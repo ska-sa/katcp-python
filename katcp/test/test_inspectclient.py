@@ -315,10 +315,9 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
 
         sen = yield self.client.future_get_sensor('an.int')
         req = yield self.client.future_get_request('watchdog')
-
         self.assertIs(sen, sf.return_value)
         sf.assert_called_once_with(
-            units=None, sensor_type=0, params=[-5, 5],
+            units='count', sensor_type=0, params=[-5, 5],
             description='An Integer.', name='an.int')
         self.assertIs(req, rf.return_value)
         rf.assert_called_once_with('watchdog', mock.ANY)
