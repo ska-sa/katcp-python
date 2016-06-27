@@ -782,6 +782,7 @@ class ClientRequestConnection(object):
 class MessageHandlerThread(object):
     """Provides backwards compatibility for server expecting its own thread."""
     def __init__(self, handler, log_inform_formatter, logger=log):
+        import ipdb; ipdb.set_trace()
         self.handler = handler
         try:
             owner = handler.im_self.name
@@ -860,6 +861,7 @@ class MessageHandlerThread(object):
             self._logger.info('Message handler thread stopped.')
 
     def start(self, timeout=None):
+        import ipdb; ipdb.set_trace()
         if self._thread and self._thread.isAlive():
             raise RuntimeError('Cannot start since thread is already running')
         self._thread = threading.Thread(target=self.run, name=self.name)
