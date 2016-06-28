@@ -482,6 +482,40 @@ class BlockingTestClient(client.BlockingClient):
         else:
             self.test.assertNotEqual(got, expected, msg)
 
+    def wait_until_sensors_equal(self, timeout, sensor_tuples, msg=None):
+        """Wait up to timeout seconds for several sensors to reach the given values.
+        Parameters
+        ----------
+        sensor_tuples : list of tuples
+            A list of tuples specifying the sensor values to be checked. See
+            :meth:`expected_sensor_value_tuple`.
+        timeout : float seconds
+           The overall timeout for all the sensors to reach their targets
+        msg : str or None, optional
+            A custom message to print if the assertion fails. If the string
+            contains %r, it will be replaced with the sensor's value. A default
+            message is defined in this method.
+
+        """
+        sensor_tuples = [self.expected_sensor_value_tuple(*t)
+                         for t in sensor_tuples]
+        max_time = time.time() + timeout
+        try:
+            self.assert_sensors_equal(sensor_tuples, msg)
+            return
+        except AssertionError:
+            pass
+        while time.time() < max_time:
+            try:
+                self.assert_sensors_equal(sensor_tuples, msg)
+                return
+            except AssertionError:
+                time.sleep(0.01)
+
+        msg = (msg or '') + ': timed out after {}s'.format(timeout)
+        self.assert_sensors_equal(sensor_tuples, msg)
+
+
     def assert_sensors_equal(self, sensor_tuples, msg=None):
         """Assert that the values of several sensors are equal to given values.
 
@@ -535,7 +569,7 @@ class BlockingTestClient(client.BlockingClient):
         return (cond, '' if cond else 'Timed out after %s seconds' % timeout)
 
     def wait_until_sensor_equals(self, timeout, sensorname, value,
-                                 sensortype=str, places=7, pollfreq=0.02):
+                                 sensortype=str, places=7, pollperiod=0.02):
         """Wait until a sensor's value equals the given value, or times out.
 
         Parameters
@@ -551,11 +585,11 @@ class BlockingTestClient(client.BlockingClient):
         places : int, optional
             The number of places to use in a float comparison. Has no effect
             if sensortype is not float.
-        pollfreq : float, optional
+        pollperiod : float, optional
             How frequently to poll for the sensor value.
 
         """
-        # TODO Should be changed to use some varient of SensorTransitionWaiter
+        # TODO Should be changed to use some variant of SensorTransitionWaiter
 
         stoptime = time.time() + timeout
         success = False
@@ -570,7 +604,7 @@ class BlockingTestClient(client.BlockingClient):
             if cmpfun(lastval, value):
                 success = True
                 break
-            time.sleep(pollfreq)
+            time.sleep(pollperiod)
             lastval = self.get_sensor_value(sensorname, sensortype)
 
         if not success:

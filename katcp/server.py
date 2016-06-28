@@ -782,6 +782,11 @@ class MessageHandlerThread(object):
     """Provides backwards compatibility for server expecting its own thread."""
     def __init__(self, handler, log_inform_formatter, logger=log):
         self.handler = handler
+        try:
+            owner = handler.im_self.name
+        except AttributeError:
+            owner = handler.im_self.__class__.__name__
+        self.name = "{}.message_handler" .format(owner)
         self.log_inform_formatter = log_inform_formatter
         self._wake = threading.Event()
         self._msg_queue = deque()
@@ -856,7 +861,7 @@ class MessageHandlerThread(object):
     def start(self, timeout=None):
         if self._thread and self._thread.isAlive():
             raise RuntimeError('Cannot start since thread is already running')
-        self._thread = threading.Thread(target=self.run)
+        self._thread = threading.Thread(target=self.run, name=self.name)
         self._thread.start()
         if timeout:
             return self.wait_running(timeout)
