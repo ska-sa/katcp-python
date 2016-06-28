@@ -447,7 +447,6 @@ class KATCPServer(object):
         # Do stuff to put us on the IOLoop
         self.ioloop_thread_id = get_thread_ident()
         self._tcp_server.add_socket(self._server_sock)
-        threading.currentThread().name = getattr(self, 'name', self.__class__.__name__)
         self._running.set()
 
     @gen.coroutine
