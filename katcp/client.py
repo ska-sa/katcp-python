@@ -656,7 +656,7 @@ class DeviceClient(object):
                     # changed that means this client has been stopped and re-started
                     # before we could get back to this finally clause. This would result
                     # in us stopping the new ioloop. D'oh!
-                    self.stop()
+                    self.ioloop.add_callback(self.stop)
             except RuntimeError, e:
                 if str(e) == 'IOLoop is closing':
                     # Seems the ioloop was stopped already, no worries.

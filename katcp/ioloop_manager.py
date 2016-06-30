@@ -55,7 +55,7 @@ class IOLoopManager(object):
         def run_ioloop():
             try:
                 self._ioloop.start()
-                self._ioloop.close()
+                self._ioloop.close(all_fds=True)
             except Exception:
                 self._logger.error('Error running tornado IOloop: ',
                                    exc_info=True)
