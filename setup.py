@@ -44,8 +44,6 @@ setup(
     ],
     # run tests and install these requirements with python setup.py nosetests
     tests_require=[
-        "linecache2",
-        "traceback2",
         "unittest2",
         "nose",
         "mock",
