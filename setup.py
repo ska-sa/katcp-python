@@ -11,15 +11,14 @@ git_branch, git_revision = version.get_git_revision()
 if git_branch and not re.match(r'^\d+\.\d+\.\d+$', version_str):
     version_str = version_str+'git-{0}-{1}'.format(git_branch, git_revision)
 
-
-setup (
-    name = "katcp",
-    version = version_str,
-    description = "Karoo Array Telescope Communication Protocol library",
-    author = "SKA SA KAT-7 / MeerKAT CAM team",
-    author_email = "cam@ska.ac.za",
-    packages = find_packages(),
-    scripts = [
+setup(
+    name="katcp",
+    version=version_str,
+    description="Karoo Array Telescope Communication Protocol library",
+    author="SKA SA KAT-7 / MeerKAT CAM team",
+    author_email="cam@ska.ac.za",
+    packages=find_packages(),
+    scripts=[
         "scripts/katcp-exampleserver.py",
         "scripts/katcp-exampleclient.py",
     ],
@@ -35,10 +34,23 @@ setup (
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Topic :: Scientific/Engineering :: Astronomy",
     ],
-    platforms = [ "OS Independent" ],
-    install_requires = ["ply", "tornado>=4.0", "futures", "nose", "unittest2", "mock", "ProxyTypes"],
+    platforms=["OS Independent"],
     keywords="kat kat7 ska MeerKAT",
-    zip_safe = False,
-    # Bitten Test Suite
-    test_suite = "nose.collector",
+    install_requires=[
+        "ply",
+        "tornado>=4.0",
+        "futures",
+        "ProxyTypes"
+    ],
+    # run tests and install these requirements with python setup.py nosetests
+    tests_require=[
+        "unittest2>=0.5.1",
+        "nose>=1.3, <2.0",
+        "mock>=1.0, <2.0",
+        "pylint",
+        "coverage",
+        "nosexcover"
+    ],
+    zip_safe=False,
+    test_suite="nose.collector",
 )
