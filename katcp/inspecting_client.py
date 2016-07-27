@@ -15,7 +15,8 @@ from collections import namedtuple, defaultdict
 
 from tornado.gen import maybe_future, Return
 
-from katcp.core import AttrDict, until_any, future_timeout_manager
+from katcp.core import (AttrDict, until_any, future_timeout_manager,
+                        steal_docstring_from)
 
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', 'name description')
@@ -200,6 +201,10 @@ class InspectingClientAsync(object):
     def synced(self):
         """Boolean indicating if the device has been synchronised."""
         return self._state.state.synced
+
+    @steal_docstring_from(_InformHookDeviceClient.preset_protocol_flags)
+    def preset_protocol_flags(self, protocol_flags):
+        self.katcp_client.preset_protocol_flags(protocol_flags)
 
     def set_ioloop(self, ioloop):
         self.katcp_client.set_ioloop(ioloop)
