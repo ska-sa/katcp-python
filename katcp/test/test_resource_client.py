@@ -26,7 +26,7 @@ from katcp.testutils import (DeviceTestServer, DeviceTestSensor,
                              TimewarpAsyncTestCaseTimeAdvancer)
 
 from katcp import resource, inspecting_client, ioloop_manager, Message, Sensor
-from katcp.core import AttrDict, AsyncEvent
+from katcp.core import AttrDict, AsyncEvent, ProtocolFlags
 
 # module under test
 from katcp import resource_client
@@ -802,6 +802,28 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
                 """A new command."""
                 return Message.reply(msg.name, "ok", "bling1", "bling2")
             s._request_handlers['sparkling-new-'+s_name] = handler
+
+    @tornado.testing.gen_test
+    def test_preset_protocol_flags(self):
+        pf1 = ProtocolFlags(4, 0, '')
+        pf2 = ProtocolFlags(5, 0, 'M')
+        pf3 = ProtocolFlags(5, 0, 'I')
+        clients = self.default_spec['clients']
+        clients['resource1']['preset_protocol_flags'] = pf1
+        clients['resource2']['preset_protocol_flags'] = pf2
+        clients['resource3']['preset_protocol_flags'] = pf3
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        DUT.start()
+        children = DUT.children
+        self.assertEqual(
+            children.resource1._inspecting_client.katcp_client.protocol_flags,
+            pf1)
+        self.assertEqual(
+            children.resource2._inspecting_client.katcp_client.protocol_flags,
+            pf2)
+        self.assertEqual(
+            children.resource3._inspecting_client.katcp_client.protocol_flags,
+            pf3)
 
     @tornado.testing.gen_test
     def test_timeout_of_until_synced(self):

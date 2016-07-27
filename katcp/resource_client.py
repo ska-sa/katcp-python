@@ -289,6 +289,9 @@ class KATCPClientResource(resource.KATCPResource):
               If true, provide dummy request functions for any unknown requests. Can be
               used as a rough simulation of a device for testing when some requests are
               not available.
+          preset_protocol_flags : :class:`katcp.core.ProtocolFlags` instance
+              Assume these protocol settings and ignore the server's
+              #katcp-protocol informs.
           # TODO(NM) 'keep', ie. katcorelib behaviour where requests / sensors never
           # disappear even if the device looses them. Or was it only sensors? Should look
           # at katcorelib
@@ -335,6 +338,7 @@ class KATCPClientResource(resource.KATCPResource):
 
         # Save the pop() / items() methods in case a sensor/request with the same name is
         # added
+        self._preset_protocol_flags = resource_spec.get('preset_protocol_flags')
         self._state = AsyncState(("disconnected", "syncing", "synced"))
         self._connected = AsyncCallbackEvent(self._update_state)
         self._sensors_synced = AsyncCallbackEvent(self._update_state)
@@ -390,6 +394,8 @@ class KATCPClientResource(resource.KATCPResource):
         ic = self._inspecting_client = self.inspecting_client_factory(
             host, port, self._ioloop_set_to)
         self.ioloop = ic.ioloop
+        if self._preset_protocol_flags:
+            ic.preset_protocol_flags(self._preset_protocol_flags)
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
         ic.set_state_callback(self._inspecting_client_state_callback)
         ic.request_factory = self._request_factory
