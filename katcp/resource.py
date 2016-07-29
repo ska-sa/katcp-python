@@ -180,6 +180,7 @@ class KATCPResource(object):
     def children(self):
         """AttrDict of subordinate KATCPResource objects keyed by their names."""
 
+    @tornado.gen.coroutine
     def wait(self, sensor_name, condition_or_value, status=None, timeout=5):
         """Wait for a sensor in this resource to satisfy a condition.
 
@@ -216,7 +217,12 @@ class KATCPResource(object):
         """
         sensor_name = escape_name(sensor_name)
         sensor = self.sensor[sensor_name]
-        return sensor.wait(condition_or_value, status, timeout)
+        try:
+            yield sensor.wait(condition_or_value, status, timeout)
+        except tornado.gen.TimeoutError:
+            raise tornado.gen.Return(False)
+        else:
+            raise tornado.gen.Return(True)
 
     @abc.abstractmethod
     def list_sensors(self, filter="", strategy=False, status="",

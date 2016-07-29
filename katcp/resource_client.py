@@ -1116,7 +1116,7 @@ class ClientGroup(object):
         for client in self.clients:
             futures[client.name] = client.wait(sensor_name, condition_or_value,
                                                status, timeout)
-        results = yield until_all(futures)
+        results = yield futures
         raise tornado.gen.Return(all(results.values()))
 
 
