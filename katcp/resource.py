@@ -181,7 +181,7 @@ class KATCPResource(object):
         """AttrDict of subordinate KATCPResource objects keyed by their names."""
 
     @tornado.gen.coroutine
-    def wait(self, sensor_name, condition_or_value, status=None, timeout=5):
+    def wait(self, sensor_name, condition_or_value, timeout=5):
         """Wait for a sensor in this resource to satisfy a condition.
 
         Parameters
@@ -194,9 +194,6 @@ class KATCPResource(object):
             condition is satisfied. Since the reading is passed in, the value,
             status, timestamp or received_timestamp attributes can all be used
             in the check.
-        status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
-            Wait for this status, at the same time as value above, to be
-            obtained. Ignore status if None
         timeout : float or None
             The timeout in seconds (None means wait forever)
 
@@ -218,7 +215,7 @@ class KATCPResource(object):
         sensor_name = escape_name(sensor_name)
         sensor = self.sensor[sensor_name]
         try:
-            yield sensor.wait(condition_or_value, status, timeout)
+            yield sensor.wait(condition_or_value, timeout)
         except tornado.gen.TimeoutError:
             raise tornado.gen.Return(False)
         else:
@@ -851,7 +848,7 @@ class KATCPSensor(object):
         # By now the sensor manager should have set the reading
         raise Return(self._reading.status)
 
-    def wait(self, condition_or_value, status=None, timeout=None):
+    def wait(self, condition_or_value, timeout=None):
         """Wait for the sensor to satisfy a condition.
 
         Parameters
@@ -863,9 +860,6 @@ class KATCPSensor(object):
             status, timestamp or received_timestamp attributes can all be used
             in the check.
             TODO: Sequences of conditions (use SensorTranstionWaiter thingum?)
-        status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
-            Wait for this status, at the same time as value above, to be
-            obtained. Ignore status if None
         timeout : float or None
             The timeout in seconds (None means wait forever)
 
@@ -900,9 +894,7 @@ class KATCPSensor(object):
             # This handler is called whenever a sensor update is received
             try:
                 assert sensor is self
-                cond_matched = condition_test(reading)
-                status_matched = reading.status == status or status is None
-                if cond_matched and status_matched:
+                if condition_test(reading):
                     self.unregister_listener(handle_update)
                     # Try and be idempotent if called multiple times after the
                     # condition is matched. This should not happen unless the

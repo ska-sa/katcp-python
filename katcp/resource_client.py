@@ -1077,7 +1077,7 @@ class ClientGroup(object):
         raise tornado.gen.Return(sensors_strategies)
 
     @tornado.gen.coroutine
-    def wait(self, sensor_name, condition_or_value, status=None, timeout=5):
+    def wait(self, sensor_name, condition_or_value, timeout=5):
         """Wait for sensor present on all group clients to satisfy a condition.
 
         Parameters
@@ -1090,9 +1090,6 @@ class ClientGroup(object):
             condition is satisfied. Since the reading is passed in, the value,
             status, timestamp or received_timestamp attributes can all be used
             in the check.
-        status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
-            Wait for this status, at the same time as value above, to be
-            obtained. Ignore status if None
         timeout : float or None
             The timeout in seconds (None means wait forever)
 
@@ -1115,7 +1112,7 @@ class ClientGroup(object):
         futures = {}
         for client in self.clients:
             futures[client.name] = client.wait(sensor_name, condition_or_value,
-                                               status, timeout)
+                                               timeout)
         results = yield futures
         class TestableDict(dict):
             def __bool__(self):

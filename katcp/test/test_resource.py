@@ -94,8 +94,10 @@ class test_KATCPSensor(TimewarpAsyncTestCase):
         # wait for value and status
         waiting_value = 3
         waiting_status = 'warn'
+        waiting_condition = lambda reading: reading.value == waiting_value and \
+                                            reading.status == waiting_status
         self.io_loop.add_callback(DUT.set_value, 3, Sensor.WARN)
-        yield DUT.wait(waiting_value, waiting_status)
+        yield DUT.wait(waiting_condition, timeout=timeout)
         self.assertEqual(DUT.value, waiting_value)
         self.assertEqual(DUT.status, waiting_status)
         # Check that no stray listeners are left behind
@@ -130,4 +132,3 @@ class test_KATCPRequest(unittest.TestCase):
         rv = DUT(*req_args, **req_kwargs)
         self.assertEqual(rv, DUT.issue_request.return_value)
         DUT.issue_request.assert_called_once_with(*req_args, **req_kwargs)
-
