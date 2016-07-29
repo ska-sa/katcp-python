@@ -1096,16 +1096,14 @@ class ClientGroup(object):
         Returns
         -------
         This command returns a tornado Future that resolves with True when all
-        sensor values satisfy the condition. It will never resolve with False;
-        if a timeout is given a TimeoutError happens instead.
+        sensor values satisfy the condition, or False if any sensor condition
+        is still not satisfied after a given timeout period.
 
         Raises
         ------
         :class:`KATCPSensorError`
             If any of the sensors do not have a strategy set, or if the named
             sensor is not present
-        :class:`tornado.gen.TimeoutError`
-            If any sensor condition still fails after a stated timeout period
 
         """
         # Build dict of futures instead of list as this will be easier to debug
@@ -1115,6 +1113,7 @@ class ClientGroup(object):
                                                timeout)
         results = yield futures
         class TestableDict(dict):
+            """Dictionary of results that can be tested for overall success."""
             def __bool__(self):
                 return all(self.values())
             def __nonzero__(self):
@@ -1423,7 +1422,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                                        .format(child_name))
 
     @steal_docstring_from(resource.KATCPResource.wait)
-    def wait(self, sensor_name, condition, timeout=5):
+    def wait(self, sensor_name, condition_or_value, timeout=5):
         raise NotImplementedError
 
     def _child_add_requests(self, child, sensor_keys):

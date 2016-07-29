@@ -200,16 +200,14 @@ class KATCPResource(object):
         Returns
         -------
         This command returns a tornado Future that resolves with True when the
-        sensor value satisfies the condition. It will never resolve with False;
-        if a timeout is given a TimeoutError happens instead.
+        sensor value satisfies the condition, or False if the condition is
+        still not satisfied after a given timeout period.
 
         Raises
         ------
         :class:`KATCPSensorError`
             If the sensor does not have a strategy set, or if the named sensor
             is not present
-        :class:`tornado.gen.TimeoutError`
-            If the sensor condition still fails after a stated timeout period
 
         """
         sensor_name = escape_name(sensor_name)
