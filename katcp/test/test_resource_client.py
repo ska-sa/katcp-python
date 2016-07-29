@@ -1087,7 +1087,7 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         for client in DUT.children.values():
             client.set_sampling_strategy('wait_sensor', 'event')
         group = DUT.groups['test']
-        result = yield group.wait('wait_sensor', 0, timeout=0.5)
+        result = yield group.wait('wait_sensor', 0, timeout=None)
         self.assertEqual(result, True)
         with self.assertRaises(tornado.gen.TimeoutError):
             yield group.wait('wait_sensor', 1, timeout=0.5)

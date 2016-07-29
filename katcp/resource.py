@@ -197,18 +197,21 @@ class KATCPResource(object):
             Wait for this status, at the same time as value above, to be
             obtained. Ignore status if None
         timeout : float or None
-            The timeout in seconds
+            The timeout in seconds (None means wait forever)
 
         Returns
         -------
-        This command returns a tornado Future that resolves with True if the
-        sensor values satisifed the condition with the timeout, else resolves
-        with False.
+        This command returns a tornado Future that resolves with True when the
+        sensor value satisfies the condition. It will never resolve with False;
+        if a timeout is given a TimeoutError happens instead.
 
         Raises
         ------
-        Resolves with a :class:`KATCPSensorError` exception if the sensors does
-        not have a strategy set.
+        :class:`KATCPSensorError`
+            If the sensor does not have a strategy set, or if the named sensor
+            is not present
+        :class:`tornado.gen.TimeoutError`
+            If the sensor condition still fails after a stated timeout period
 
         """
         sensor_name = escape_name(sensor_name)
@@ -843,7 +846,7 @@ class KATCPSensor(object):
         raise Return(self._reading.status)
 
     def wait(self, condition_or_value, status=None, timeout=None):
-        """Wait for sensor to satisfy a condition.
+        """Wait for the sensor to satisfy a condition.
 
         Parameters
         ----------
@@ -853,30 +856,27 @@ class KATCPSensor(object):
             condition is satisfied. Since the reading is passed in, the value,
             status, timestamp or received_timestamp attributes can all be used
             in the check.
-
-            Sequences of conditions are TODO, use SensorTranstionWaiter thingum?
+            TODO: Sequences of conditions (use SensorTranstionWaiter thingum?)
         status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
             Wait for this status, at the same time as value above, to be
             obtained. Ignore status if None
         timeout : float or None
-            The timeout in seconds
+            The timeout in seconds (None means wait forever)
 
         Returns
         -------
-        This command returns a tornado Future that resolves with True if the
-        sensor values satisifed the condition with the timeout, else resolves
-        with False.
+        This command returns a tornado Future that resolves with True when the
+        sensor value satisfies the condition. It will never resolve with False;
+        if a timeout is given a TimeoutError happens instead.
 
         Raises
         ------
-        Resolves with a :class:`KATCPSensorError` exception if the sensors does
-        not have a strategy set.
-
-        Resolves with :class:`tornado.gen.TimeoutError` if timeout is not None
-        and the sensor does not attain the requested value within the timeout.
+        :class:`KATCPSensorError`
+            If the sensor does not have a strategy set
+        :class:`tornado.gen.TimeoutError`
+            If the sensor condition still fails after a stated timeout period
 
         """
-
         if (isinstance(condition_or_value, collections.Sequence) and not
                 isinstance(condition_or_value, basestring)):
             raise NotImplementedError(
@@ -978,4 +978,3 @@ class KATCPReply(_KATCPReplyTuple):
     def succeeded(self):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
-

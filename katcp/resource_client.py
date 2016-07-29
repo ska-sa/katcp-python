@@ -1078,8 +1078,7 @@ class ClientGroup(object):
 
     @tornado.gen.coroutine
     def wait(self, sensor_name, condition_or_value, status=None, timeout=5):
-        """Wait for a sensor present on all clients in the group to satisfy a
-        condition.
+        """Wait for sensor present on all group clients to satisfy a condition.
 
         Parameters
         ----------
@@ -1095,19 +1094,21 @@ class ClientGroup(object):
             Wait for this status, at the same time as value above, to be
             obtained. Ignore status if None
         timeout : float or None
-            The timeout in seconds
+            The timeout in seconds (None means wait forever)
 
         Returns
         -------
-        This command returns a tornado Future that resolves with True if the
-        sensor values satisifed the condition with the timeout, else resolves
-        with False.
+        This command returns a tornado Future that resolves with True when all
+        sensor values satisfy the condition. It will never resolve with False;
+        if a timeout is given a TimeoutError happens instead.
 
         Raises
         ------
-        Resolves with a :class:`KATCPSensorError` exception if any of the
-        sensors do not have a strategy set, or if the named sensor is not
-        present
+        :class:`KATCPSensorError`
+            If any of the sensors do not have a strategy set, or if the named
+            sensor is not present
+        :class:`tornado.gen.TimeoutError`
+            If any sensor condition still fails after a stated timeout period
 
         """
         # Build dict of futures instead of list as this will be easier to debug
