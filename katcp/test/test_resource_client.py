@@ -1068,6 +1068,30 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         self.assertIs(DUT.req.resource3_halt,
                       DUT.children['resource3'].req.halt)
 
+    @tornado.testing.gen_test(timeout=1)
+    def test_group_wait(self):
+        # Start new container
+        self.default_spec_orig = copy.deepcopy(self.default_spec)
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        DUT.add_group('test', DUT.children.keys())
+        DUT.start()
+        # Setup a new sensor on all clients to wait on
+        wait_sensor = DeviceTestSensor(DeviceTestSensor.INTEGER, 'wait_sensor',
+                                       "An Integer.",
+                                       "count", [-50, 50], timestamp=self.io_loop.time(),
+                                       status=DeviceTestSensor.NOMINAL, value=0)
+        for server in self.servers.values():
+            server.add_sensor(wait_sensor)
+        yield DUT.until_synced()
+        # Ensure strategies are set for wait() to work
+        for client in DUT.children.values():
+            client.set_sampling_strategy('wait_sensor', 'event')
+        group = DUT.groups['test']
+        result = yield group.wait('wait_sensor', 0, timeout=None)
+        self.assertEqual(result, True)
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield group.wait('wait_sensor', 1, timeout=0.5)
+
 
 class test_ThreadsafeMethodAttrWrapper(unittest.TestCase):
     def setUp(self):
