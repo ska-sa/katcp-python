@@ -55,6 +55,23 @@ def transform_future(transformation, future):
     future.add_done_callback(_transform)
     return new_future
 
+def until_all(futures):
+    """Run multiple operations in parallel but only raise a single TimeoutError.
+
+    This returns a yieldable object that will contain the results of `futures`
+    in an equivalent container (list or dict). However, it only raises the
+    first TimeoutError and ignores any further timeouts. This makes it useful
+    to wait on the results of multiple operations with the same timeout, as the
+    first occurrence of a timeout means that any unresolved futures will also
+    necessarily time out, leading to a rash of duplicate exceptions otherwise.
+
+    The function name implies kinship with :func:`katcp.core.until_any`.
+    The primary difference is that `until_any` takes an explicit timeout while
+    this function relies on the individual futures to have their own timeouts.
+
+    """
+    return tornado.gen.multi(futures, quiet_exceptions=tornado.gen.TimeoutError)
+
 @tornado.gen.coroutine
 def list_sensors(parent_class, sensor_items, filter, strategy, status,
                  use_python_identifiers, tuple, refresh):
@@ -1093,12 +1110,14 @@ class ClientGroup(object):
         present
 
         """
-        wait_result_futures = {}
+        # Build dict of futures instead of list as this will be easier to debug
+        futures = {}
         for client in self.clients:
-            wait_result_futures[client.name] = client.wait(
-                sensor_name, condition_or_value, status, timeout)
-        wait_results = yield wait_result_futures
-        raise tornado.gen.Return(all(wait_results.values()))
+            futures[client.name] = client.wait(sensor_name, condition_or_value,
+                                               status, timeout)
+        results = yield until_all(futures)
+        raise tornado.gen.Return(all(results.values()))
+
 
 class KATCPClientResourceContainer(resource.KATCPResource):
     """Class for containing multiple :class:`KATCPClientResource` instances
@@ -1253,7 +1272,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def until_synced(self, timeout=None):
         """Return a tornado Future; resolves when all subordinate clients are synced"""
         futures = [r.until_synced(timeout) for r in dict.values(self.children)]
-        yield tornado.gen.multi(futures, quiet_exceptions=tornado.gen.TimeoutError)
+        yield until_all(futures)
 
     @tornado.gen.coroutine
     def until_not_synced(self, timeout=None):
@@ -1271,7 +1290,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         """Return a tornado Future; resolves when all clients are in specified state"""
         futures = [r.until_state(state, timeout=timeout)
                    for r in dict.values(self.children)]
-        yield tornado.gen.multi(futures, quiet_exceptions=tornado.gen.TimeoutError)
+        yield until_all(futures)
 
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
