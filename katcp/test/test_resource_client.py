@@ -1089,9 +1089,13 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         group = DUT.groups['test']
         # Test the no timeout case too for what it's worth
         result = yield group.wait('wait_sensor', 0, timeout=None)
-        self.assertEqual(result, True)
+        self.assertTrue(result)
+        for client in DUT.children.values():
+            self.assertTrue(result[client.name])
         result = yield group.wait('wait_sensor', 1, timeout=0.5)
-        self.assertEqual(result, False)
+        self.assertFalse(result)
+        for client in DUT.children.values():
+            self.assertFalse(result[client.name])
 
 
 class test_ThreadsafeMethodAttrWrapper(unittest.TestCase):

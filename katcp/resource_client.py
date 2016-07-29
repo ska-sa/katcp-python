@@ -1117,7 +1117,12 @@ class ClientGroup(object):
             futures[client.name] = client.wait(sensor_name, condition_or_value,
                                                status, timeout)
         results = yield futures
-        raise tornado.gen.Return(all(results.values()))
+        class TestableDict(dict):
+            def __bool__(self):
+                return all(self.values())
+            def __nonzero__(self):
+                return self.__bool__()
+        raise tornado.gen.Return(TestableDict(results))
 
 
 class KATCPClientResourceContainer(resource.KATCPResource):
