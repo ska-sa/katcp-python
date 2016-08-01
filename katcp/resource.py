@@ -857,7 +857,7 @@ class KATCPSensor(object):
             condition is satisfied. Since the reading is passed in, the value,
             status, timestamp or received_timestamp attributes can all be used
             in the check.
-            TODO: Sequences of conditions (use SensorTranstionWaiter thingum?)
+            TODO: Sequences of conditions (use SensorTransitionWaiter thingum?)
         timeout : float or None
             The timeout in seconds (None means wait forever)
 
