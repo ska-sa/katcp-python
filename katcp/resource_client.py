@@ -66,7 +66,7 @@ def until_all(futures):
     necessarily time out, leading to a rash of duplicate exceptions otherwise.
 
     The function name implies kinship with :func:`katcp.core.until_any`.
-    The primary difference is that `until_any` takes an explicit timeout while
+    Their interfaces differ in that `until_any` takes an explicit timeout while
     this function relies on the individual futures to have their own timeouts.
 
     """
