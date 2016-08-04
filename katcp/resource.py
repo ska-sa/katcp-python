@@ -180,7 +180,8 @@ class KATCPResource(object):
     def children(self):
         """AttrDict of subordinate KATCPResource objects keyed by their names."""
 
-    def wait(self, sensor_name, condition_or_value, status=None, timeout=5):
+    @tornado.gen.coroutine
+    def wait(self, sensor_name, condition_or_value, timeout=5):
         """Wait for a sensor in this resource to satisfy a condition.
 
         Parameters
@@ -193,27 +194,30 @@ class KATCPResource(object):
             condition is satisfied. Since the reading is passed in, the value,
             status, timestamp or received_timestamp attributes can all be used
             in the check.
-        status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
-            Wait for this status, at the same time as value above, to be
-            obtained. Ignore status if None
         timeout : float or None
-            The timeout in seconds
+            The timeout in seconds (None means wait forever)
 
         Returns
         -------
-        This command returns a tornado Future that resolves with True if the
-        sensor values satisifed the condition with the timeout, else resolves
-        with False.
+        This command returns a tornado Future that resolves with True when the
+        sensor value satisfies the condition, or False if the condition is
+        still not satisfied after a given timeout period.
 
         Raises
         ------
-        Resolves with a :class:`KATCPSensorError` exception if the sensors does
-        not have a strategy set.
+        :class:`KATCPSensorError`
+            If the sensor does not have a strategy set, or if the named sensor
+            is not present
 
         """
         sensor_name = escape_name(sensor_name)
         sensor = self.sensor[sensor_name]
-        return sensor.wait(condition_or_value, status, timeout)
+        try:
+            yield sensor.wait(condition_or_value, timeout)
+        except tornado.gen.TimeoutError:
+            raise tornado.gen.Return(False)
+        else:
+            raise tornado.gen.Return(True)
 
     @abc.abstractmethod
     def list_sensors(self, filter="", strategy=False, status="",
@@ -842,8 +846,8 @@ class KATCPSensor(object):
         # By now the sensor manager should have set the reading
         raise Return(self._reading.status)
 
-    def wait(self, condition_or_value, status=None, timeout=None):
-        """Wait for sensor to satisfy a condition.
+    def wait(self, condition_or_value, timeout=None):
+        """Wait for the sensor to satisfy a condition.
 
         Parameters
         ----------
@@ -853,30 +857,24 @@ class KATCPSensor(object):
             condition is satisfied. Since the reading is passed in, the value,
             status, timestamp or received_timestamp attributes can all be used
             in the check.
-
-            Sequences of conditions are TODO, use SensorTranstionWaiter thingum?
-        status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
-            Wait for this status, at the same time as value above, to be
-            obtained. Ignore status if None
+            TODO: Sequences of conditions (use SensorTransitionWaiter thingum?)
         timeout : float or None
-            The timeout in seconds
+            The timeout in seconds (None means wait forever)
 
         Returns
         -------
-        This command returns a tornado Future that resolves with True if the
-        sensor values satisifed the condition with the timeout, else resolves
-        with False.
+        This command returns a tornado Future that resolves with True when the
+        sensor value satisfies the condition. It will never resolve with False;
+        if a timeout is given a TimeoutError happens instead.
 
         Raises
         ------
-        Resolves with a :class:`KATCPSensorError` exception if the sensors does
-        not have a strategy set.
-
-        Resolves with :class:`tornado.gen.TimeoutError` if timeout is not None
-        and the sensor does not attain the requested value within the timeout.
+        :class:`KATCPSensorError`
+            If the sensor does not have a strategy set
+        :class:`tornado.gen.TimeoutError`
+            If the sensor condition still fails after a stated timeout period
 
         """
-
         if (isinstance(condition_or_value, collections.Sequence) and not
                 isinstance(condition_or_value, basestring)):
             raise NotImplementedError(
@@ -894,9 +892,7 @@ class KATCPSensor(object):
             # This handler is called whenever a sensor update is received
             try:
                 assert sensor is self
-                cond_matched = condition_test(reading)
-                status_matched = reading.status == status or status is None
-                if cond_matched and status_matched:
+                if condition_test(reading):
                     self.unregister_listener(handle_update)
                     # Try and be idempotent if called multiple times after the
                     # condition is matched. This should not happen unless the
@@ -978,4 +974,3 @@ class KATCPReply(_KATCPReplyTuple):
     def succeeded(self):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
         return bool(self)
-

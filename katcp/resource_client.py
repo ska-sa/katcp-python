@@ -1060,9 +1060,8 @@ class ClientGroup(object):
         raise tornado.gen.Return(sensors_strategies)
 
     @tornado.gen.coroutine
-    def wait(self, sensor_name, condition_or_value, status=None, timeout=5):
-        """Wait for a sensor present on all clients in the group to satisfy a
-        condition.
+    def wait(self, sensor_name, condition_or_value, timeout=5):
+        """Wait for sensor present on all group clients to satisfy a condition.
 
         Parameters
         ----------
@@ -1074,31 +1073,36 @@ class ClientGroup(object):
             condition is satisfied. Since the reading is passed in, the value,
             status, timestamp or received_timestamp attributes can all be used
             in the check.
-        status : int enum, key of katcp.Sensor.SENSOR_TYPES or None
-            Wait for this status, at the same time as value above, to be
-            obtained. Ignore status if None
         timeout : float or None
-            The timeout in seconds
+            The timeout in seconds (None means wait forever)
 
         Returns
         -------
-        This command returns a tornado Future that resolves with True if the
-        sensor values satisifed the condition with the timeout, else resolves
-        with False.
+        This command returns a tornado Future that resolves with True when all
+        sensor values satisfy the condition, or False if any sensor condition
+        is still not satisfied after a given timeout period.
 
         Raises
         ------
-        Resolves with a :class:`KATCPSensorError` exception if any of the
-        sensors do not have a strategy set, or if the named sensor is not
-        present
+        :class:`KATCPSensorError`
+            If any of the sensors do not have a strategy set, or if the named
+            sensor is not present
 
         """
-        wait_result_futures = {}
+        # Build dict of futures instead of list as this will be easier to debug
+        futures = {}
         for client in self.clients:
-            wait_result_futures[client.name] = client.wait(
-                sensor_name, condition_or_value, status, timeout)
-        wait_results = yield wait_result_futures
-        raise tornado.gen.Return(all(wait_results.values()))
+            futures[client.name] = client.wait(sensor_name, condition_or_value,
+                                               timeout)
+        results = yield futures
+        class TestableDict(dict):
+            """Dictionary of results that can be tested for overall success."""
+            def __bool__(self):
+                return all(self.values())
+            def __nonzero__(self):
+                return self.__bool__()
+        raise tornado.gen.Return(TestableDict(results))
+
 
 class KATCPClientResourceContainer(resource.KATCPResource):
     """Class for containing multiple :class:`KATCPClientResource` instances
@@ -1401,7 +1405,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
                                        .format(child_name))
 
     @steal_docstring_from(resource.KATCPResource.wait)
-    def wait(self, sensor_name, condition, timeout=5):
+    def wait(self, sensor_name, condition_or_value, timeout=5):
         raise NotImplementedError
 
     def _child_add_requests(self, child, sensor_keys):
