@@ -641,11 +641,11 @@ class KATCPClientResource(resource.KATCPResource):
         sensor_instance_fut = {}
         # Get KATCPSensor instance futures from inspecting client
         for key in sensor_keys:
-             fut = sensor_instance_fut[key] = (
-                 self._inspecting_client.future_get_sensor(key))
-             latency_timer.check_future(fut)
-             if latency_timer.time_to_yield():
-                 yield tornado.gen.moment
+            fut = sensor_instance_fut[key] = (
+                self._inspecting_client.future_get_sensor(key))
+            latency_timer.check_future(fut)
+            if latency_timer.time_to_yield():
+                yield tornado.gen.moment
 
         sensor_instances = yield sensor_instance_fut
         # Store KATCPSensor instances in self.sensor
@@ -684,8 +684,9 @@ class KATCPClientResource(resource.KATCPResource):
         removed_names = []
         for s_name in sensor_keys:
             s_name_escaped = resource.escape_name(s_name)
-            dict.pop(self.sensor, s_name_escaped)
-            removed_names.append(s_name_escaped)
+            if s_name_escaped in self.sensor:
+                dict.pop(self.sensor, s_name_escaped)
+                removed_names.append(s_name_escaped)
 
         if self.parent:
             self.parent._child_remove_sensors(self, removed_names)
@@ -698,6 +699,7 @@ class KATCPClientResource(resource.KATCPResource):
             module=self.__class__.__module__,
             classname=self.__class__.__name__,
             name=self.name, id=id(self))
+
 
 class KATCPClientResourceSensorsManager(object):
     """Implementation of KATSensorsManager ABC for a directly-connected client
