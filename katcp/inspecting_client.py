@@ -164,9 +164,6 @@ class InspectingClientAsync(object):
                 connected=False, synced=False, model_changed=False, data_synced=False)
         )
 
-    def __del__(self):
-        self.close()
-
     def inform_hook_client_factory(self, host, port, *args, **kwargs):
         """Return an instance of :class:`_InformHookDeviceClient` or similar
 
@@ -353,7 +350,6 @@ class InspectingClientAsync(object):
 
     def close(self):
         self.stop()
-        self.join()
 
     def start(self, timeout=None):
         return self.connect(timeout)
@@ -361,6 +357,7 @@ class InspectingClientAsync(object):
     def stop(self, timeout=None):
         self._running = False
         self.katcp_client.stop(timeout)
+        self.join(timeout)
 
     def join(self, timeout=None):
         self.katcp_client.join(timeout)
