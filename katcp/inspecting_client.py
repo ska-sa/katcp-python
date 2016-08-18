@@ -83,6 +83,9 @@ class InspectingClientAsync(object):
     Note: This class is not threadsafe at present, it should only be called
     from the ioloop.
 
+    Note: always call stop() after start() and you are done with the container
+    to make sure the container cleans up correctly.
+
     """
     sensor_factory = katcp.Sensor
     """Factory that produces a KATCP Sensor compatible instance.
@@ -352,12 +355,15 @@ class InspectingClientAsync(object):
         self.stop()
 
     def start(self, timeout=None):
+        """
+        Note: always call stop() when you are done with the container
+        to make sure the container cleans up correctly.
+        """
         return self.connect(timeout)
 
     def stop(self, timeout=None):
         self._running = False
         self.katcp_client.stop(timeout)
-        self.join(timeout)
 
     def join(self, timeout=None):
         self.katcp_client.join(timeout)
