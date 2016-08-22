@@ -83,6 +83,9 @@ class InspectingClientAsync(object):
     Note: This class is not threadsafe at present, it should only be called
     from the ioloop.
 
+    Note: always call stop() after start() and you are done with the container
+    to make sure the container cleans up correctly.
+
     """
     sensor_factory = katcp.Sensor
     """Factory that produces a KATCP Sensor compatible instance.
@@ -163,9 +166,6 @@ class InspectingClientAsync(object):
             InspectingClientStateType(
                 connected=False, synced=False, model_changed=False, data_synced=False)
         )
-
-    def __del__(self):
-        self.close()
 
     def inform_hook_client_factory(self, host, port, *args, **kwargs):
         """Return an instance of :class:`_InformHookDeviceClient` or similar
@@ -353,9 +353,12 @@ class InspectingClientAsync(object):
 
     def close(self):
         self.stop()
-        self.join()
 
     def start(self, timeout=None):
+        """
+        Note: always call stop() when you are done with the container
+        to make sure the container cleans up correctly.
+        """
         return self.connect(timeout)
 
     def stop(self, timeout=None):
