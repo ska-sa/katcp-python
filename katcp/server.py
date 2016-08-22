@@ -2422,9 +2422,20 @@ class DeviceLogger(object):
             name = kwargs.get("name")
             if name is None:
                 name = self._root_logger_name
+            try:
+                inform_msg = msg % args
+            except TypeError:
+                # Catch the "not enough arguments for format string" exception.
+                inform_msg = "{} {}".format(
+                    msg,
+                    args if args else '').strip()
+
             self._device_server.mass_inform(
                 self._device_server.create_log_inform(
-                    self.level_name(level), msg % args, name, timestamp=timestamp))
+                    self.level_name(level),
+                    inform_msg,
+                    name,
+                    timestamp=timestamp))
 
     def trace(self, msg, *args, **kwargs):
         """Log a trace message."""
