@@ -28,6 +28,7 @@ from katcp.testutils import (
     start_thread_with_cleanup, WaitingMock, ClientConnectionTest, mock_req,
     handle_mock_req)
 from katcp.core import FailReply
+import katversion
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -272,10 +273,11 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self.assertEqual(mock_conn.inform.call_count, no_msgs)
         # Get all the messages sent to _send_message
         msgs = [str(call[0][0]) for call in mock_conn.inform.call_args_list]
+        katcp_version = katversion.get_version()
         self._assert_msgs_equal(msgs, (
             r'#version-connect katcp-protocol 5.0-IM',
             # Will have to be updated for every library version bump
-            r'#version-connect katcp-library katcp-python-0.6.0',
+            r'#version-connect katcp-library katcp-python-%s' % katcp_version,
             r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g') )
 
     def test_request_sensor_sampling_clear(self):

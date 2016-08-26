@@ -34,8 +34,10 @@ from .sampling import SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
 from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
                    VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR)
-from .version import VERSION, VERSION_STR
 from .kattypes import (request, return_reply)
+
+from katversion import get_version
+VERSION_STR = get_version()
 
 
 log = logging.getLogger("katcp.server")
@@ -1939,8 +1941,7 @@ class DeviceServer(DeviceServerBase):
         """
         versions = [
             ("katcp-protocol", (self.PROTOCOL_INFO, None)),
-            ("katcp-library", ("katcp-python-%d.%d" % VERSION[:2],
-                               VERSION_STR)),
+            ("katcp-library", ("katcp-python-%s" % VERSION_STR, VERSION_STR)),
             ("katcp-device", (self.version(), self.build_state())),
         ]
         extra_versions = sorted(self.extra_versions.items())
