@@ -36,9 +36,10 @@ from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
                    VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR)
 from .kattypes import (request, return_reply)
 
-from katversion import get_version
-VERSION_STR = get_version()
-
+# 'import katcp' so that we can use katcp.__version__ later
+# we cannot do this: 'from . import __version__' because __version__
+# does not exist at this stage
+import katcp
 
 log = logging.getLogger("katcp.server")
 
@@ -1536,7 +1537,7 @@ class DeviceServer(DeviceServerBase):
                 "version-connect", "katcp-protocol", self.PROTOCOL_INFO))
             client_conn.inform(Message.inform(
                 "version-connect", "katcp-library",
-                "katcp-python-%s" % VERSION_STR))
+                "katcp-python-%s" % katcp.__version__))
             client_conn.inform(Message.inform(
                 "version-connect", "katcp-device",
                 self.version(), self.build_state()))
@@ -1941,7 +1942,7 @@ class DeviceServer(DeviceServerBase):
         """
         versions = [
             ("katcp-protocol", (self.PROTOCOL_INFO, None)),
-            ("katcp-library", ("katcp-python-%s" % VERSION_STR, VERSION_STR)),
+            ("katcp-library", ("katcp-python-%s" % katcp.__version__, katcp.__version__)),
             ("katcp-device", (self.version(), self.build_state())),
         ]
         extra_versions = sorted(self.extra_versions.items())
