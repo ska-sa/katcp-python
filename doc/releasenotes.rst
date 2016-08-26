@@ -4,6 +4,18 @@
 Release Notes
 *************
 
+0.6.1
+=====
+
+* Various bug fixes
+* Improvements to testing utilities
+* Improvements to various docstrings
+* Use `katversion` to determine version string on install
+* Better dependency management using setup.py with `setuptools`
+* Fixed a memory leak when using KATCPResourceContainer
+
+See also :download:`CHANGELOG` for more details on changes.
+
 0.6.0
 =====
 
@@ -236,16 +248,13 @@ your git origin.
   file) with the change summary. Consider more detailed document updates /
   examples.
 
-* Update version.py::
-
-    VERSION = (0, X, Y, 'final', 0)
-
-  Then run tests and update the test that fails because the version inform
-  changed.
+* Be aware that `https://pypi.python.org/pypi/katversion` generates the version
+  string. katversion looks at git tags to figure out the version number, so we
+  need to add a tag and push that to github.
 
 * Commit and tag the final changes::
 
-    git commit -a -m'Final updates for release 0.X.Y
+    git commit -a -m "Final updates for release 0.X.Y"
     git tag -a v0.X.Y -m "Version 0.X.Y Stable"
     git push --tags
 
@@ -266,9 +275,4 @@ your git origin.
 
 * Check the pypi page to see that the upload and doc build was successful.
 
-* Good, it seems you have managed to release katcp! Now bump the version.py for
-  the next develpment release::
-
-    VERSION = (0, X, Y+1, 'alpha', 0)
-
-  and commit to master.
+* Good, it seems you have managed to release katcp!
