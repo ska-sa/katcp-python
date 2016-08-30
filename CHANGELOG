@@ -1,5 +1,5 @@
  (0.6.1)
- * Increased the maximum memory size that can be received up from 128k to 2M
+ * Increased the maximum message size that can be received up from 128k to 2M
  * Minor docstring fixes
  * Fixed testutils
  * Fixed inspecting client from losing units values
