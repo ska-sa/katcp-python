@@ -6,15 +6,21 @@ node('docker') {
 
     docker.image('cambuilder:latest').inside('-u root') {
         stage 'Checkout SCM'
-            checkout scm
-            sh "git checkout ${env.BRANCH_NAME}"
+            checkout([
+                $class: 'GitSCM',
+                branches: [[name: "${env.BRANCH_NAME}"]],
+                doGenerateSubmoduleConfigurations: false,
+                extensions: [[$class: 'LocalBranch', localBranch: "${env.BRANCH_NAME}"], [$class: 'PruneStaleBranch']],
+                submoduleCfg: [],
+                userRemoteConfigs: [[credentialsId: 'd725cdb1-3e38-42ca-9193-979c69452685', url: 'https://github.com/ska-sa/katcp-python.git']]
+            ])
 
         stage 'Install & Unit Tests'
             timeout(time: 30, unit: 'MINUTES') {
-	        sh 'pip install . -U --pre --user'
-	        sh 'python setup.py nosetests -v --with-xunit'
-	        step([$class: 'JUnitResultArchiver', testResults: 'nosetests.xml'])
-	        }
+                sh 'pip install . -U --pre --user'
+                sh 'python setup.py nosetests -v --with-xunit'
+                step([$class: 'JUnitResultArchiver', testResults: 'nosetests.xml'])
+            }
 
         stage 'Build .whl & .deb'
             sh 'fpm -s python -t deb .'
