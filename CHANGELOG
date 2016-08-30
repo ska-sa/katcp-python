@@ -1,3 +1,16 @@
+ (0.6.1)
+ * Increased the maximum message size that can be received up from 128k to 2M
+ * Minor docstring fixes
+ * Fixed testutils
+ * Fixed inspecting client from losing units values
+ * Avoid blocking python interpreter shutdown and avoid leaking file descriptors
+ * Improved setup.py dependencies and removed pip-build-requirements.txt
+ * Allow high level clients to preset KATCP flags
+ * Simplify sensor wait() interface
+ * Added a check that the sensor exists before removing it
+ * Better handling of malformed log lines
+ * Use katversion and git tags to determine package version on install
+
  (0.6.0)
  * Added high level, simple to use, client API (KATCPResource) that connects to,
    inspects and presents a high level, hierarchical object oriented interface to
