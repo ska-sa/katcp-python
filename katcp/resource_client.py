@@ -399,7 +399,8 @@ class KATCPClientResource(resource.KATCPResource):
         ic.katcp_client.auto_reconnect_delay = self.auto_reconnect_delay
         ic.set_state_callback(self._inspecting_client_state_callback)
         ic.request_factory = self._request_factory
-        self._sensor_manager = KATCPClientResourceSensorsManager(ic, self.name, logger=self._logger)
+        self._sensor_manager = KATCPClientResourceSensorsManager(
+            ic, self.name, logger=self._logger)
         ic.handle_sensor_value()
         ic.sensor_factory = self._sensor_manager.sensor_factory
 

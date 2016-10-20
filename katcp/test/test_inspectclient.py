@@ -18,6 +18,30 @@ from katcp.inspecting_client import InspectingClientAsync
 
 logger = logging.getLogger(__name__)
 
+class TestExponentialRandomBackoff(unittest.TestCase):
+    def test_delays(self):
+        with mock.patch(inspecting_client.__name__+'.random.random') as m_rand:
+            # Parameters calculated so that 4 calls to fail will be < delay_max,
+            rv = m_rand.return_value = 0.4
+            di = 1.5
+            dm = 12
+            ex = 2
+            r = 0.7
+            kwargs = dict(
+                delay_initial=di, delay_max=dm, exp_fac=ex, randomicity=r)
+            DUT = inspecting_client.ExponentialRandomBackoff(**kwargs)
+            first_delay = DUT.delay
+            self.assertAlmostEqual(first_delay, (1-r)*di + r*di*rv)
+            for i in range(1,4):
+                DUT.failed()
+                self.assertAlmostEqual(DUT.delay, first_delay*(ex**i))
+
+            # Do several more failures
+            [DUT.failed() for x in range(5)]
+            max_expected_delay = (1-r)*dm + r*dm*rv
+            self.assertEqual(DUT.delay, max_expected_delay)
+
+
 class TestICAClass(tornado.testing.AsyncTestCase):
 
     def setUp(self):
@@ -141,7 +165,7 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
     def test_timeout_of_until_synced(self):
         # Test for timing out
         with self.assertRaises(tornado.gen.TimeoutError):
-            yield self.client.until_synced(timeout=0.001)
+            yield self.client.until_synced(timeout=0.00001)
         # Test for NOT timing out
         yield self.client.until_synced(timeout=0.5)
 
@@ -332,6 +356,8 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self.state_cb_future = tornado.concurrent.Future()
         self.client = InspectingClientAsync(self.host, self.port,
                                             ioloop=self.io_loop)
+        # Set a short initial_resync timeout to make resync tests quick
+        self.client.initial_resync_timeout = 0.001
         self.client.set_state_callback(self._test_state_cb)
         self.done_state_cb_futures = []
         self.cnt_state_cb_futures = collections.defaultdict(tornado.concurrent.Future)
@@ -363,10 +389,11 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self.assertEqual(state, inspecting_client.InspectingClientStateType(
             connected=True, synced=False, model_changed=False, data_synced=False))
         self.assertIs(model_changes, None)
-        # Due to the structure of the state loop the initial state may be sent twice
-        # before we get her, and was the case for the initial implementation. Changes made
-        # on 2015-01-26 caused it to happy only once, hence + 1. If the implementation
-        # changes having + 2 would also be OK.
+        # Due to the structure of the state loop the initial state may be sent
+        # twice before we get here, and was the case for the initial
+        # implementation. Changes made on 2015-01-26 caused it to happy only
+        # once, hence + 1. If the implementation changes having + 2 would also
+        # be OK.
         yield self._check_no_cb(num_calls_before + 1)
 
         # Now let the server send #version-connect informs
@@ -405,6 +432,35 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self.assertIs(model_changes, None)
         yield self._check_no_cb(num_calls_before + 1)
 
+    @tornado.gen.coroutine
+    def _test_inspection_error(self, break_var, break_message):
+        # Test that the client retries if there is an error in the inspection
+        # process
+        setattr(self.server, break_var, break_message)
+
+        self.client.connect()
+        # Wait for the client to be connected
+        yield self.client.until_connected()
+        # Wait for the state loop to send another update or 2
+        yield self.state_cb_future
+        state, model_changes = yield self.state_cb_future
+        # Check that data is still not synced
+        self.assertFalse(state.synced)
+        self.assertFalse(state.data_synced)
+
+        # Now fix the inspection request, client should sync up.
+        setattr(self.server, break_var, False)
+        yield self.client.until_synced()
+        self.assertTrue(self.client.synced)
+
+    @tornado.testing.gen_test(timeout=1)
+    def test_help_inspection_error(self):
+        yield self._test_inspection_error('break_help', 'Help is broken')
+
+    @tornado.testing.gen_test(timeout=1)
+    def test_sensor_list_inspection_error(self):
+        yield self._test_inspection_error(
+            'break_sensor_list', 'Sensor-list is broken')
 
 class Test_InformHookDeviceClient(tornado.testing.AsyncTestCase):
     def setUp(self):

@@ -25,7 +25,12 @@ from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
 from peak.util.proxies import ObjectWrapper
 
-from .core import Sensor, Message, AsyncReply, AsyncEvent, AttrDict
+from .core import (Sensor,
+                   Message,
+                   AsyncReply,
+                   AsyncEvent,
+                   AttrDict,
+                   steal_docstring_from)
 from .server import DeviceServer, FailReply, ClientConnection
 
 
@@ -951,6 +956,10 @@ class DeviceTestServer(DeviceServer):
         self._inform_handlers = dict(self._inform_handlers)
         self._reply_handlers = dict(self._reply_handlers)
         self.__msgs = []
+        # Set to fail string if the sensor-list request should break
+        self.break_sensor_list = False
+        # Set to fail string if the help request should break
+        self.break_help = False
         self.restart_queue = Queue.Queue()
         self.set_restart_queue(self.restart_queue)
         # Map of ClientConnection -> futures that can be resolved to cancel command
@@ -1030,6 +1039,18 @@ class DeviceTestServer(DeviceServer):
         self.__msgs.append(msg)
         self._check_cnt_futures()
         return super(DeviceTestServer, self).handle_message(req, msg)
+
+    @steal_docstring_from(DeviceServer.request_help)
+    def request_help(self, req, msg):
+        if self.break_help:
+            return req.make_reply('fail', self.break_help)
+        return super(DeviceTestServer, self).request_help(req, msg)
+
+    @steal_docstring_from(DeviceServer.request_sensor_list)
+    def request_sensor_list(self, req, msg):
+        if self.break_sensor_list:
+            return req.make_reply('fail', self.break_sensor_list)
+        return super(DeviceTestServer, self).request_sensor_list(req, msg)
 
     @property
     def messages(self):

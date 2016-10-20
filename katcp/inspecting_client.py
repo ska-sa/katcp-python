@@ -6,6 +6,7 @@
 from __future__ import print_function
 
 import logging
+import random
 
 import tornado
 
@@ -20,6 +21,70 @@ from katcp.core import (AttrDict, until_any, future_timeout_manager,
 
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', 'name description')
+
+class ExponentialRandomBackoff(object):
+
+    def __init__(
+            self, delay_initial=1., delay_max=90., exp_fac=3., randomicity=0.95):
+        """Calculate random retry timeouts that increase exponentially
+
+        Input Parameters
+        ----------------
+
+        delay_initial : float
+            Initial base delay in seconds
+        delay_max : float
+            Maximum delay in seconds
+        exp_fac : float
+            Increase the base timeout by this factor for each failure
+        randomicity : float
+            Fraction of timeout that should be randomly calculated. If
+            randomicity is 0, the base delay will always be used, if it is 1, a
+            random value between 0 and the base delay is calculated, or the
+            weighted average of the two for intermediate values.
+
+        """
+        self.delay_initial = delay_initial
+        self.delay_max = delay_max
+        self.exp_fac = exp_fac
+        """Increase timeout by this factor for each consecutive failure"""
+        self._base_delay = self.delay_initial
+        self.randomicity = randomicity
+        self._update_delay()
+
+    def _update_delay(self):
+        r = self.randomicity
+        assert 0 <= r <= 1
+        assert 0 <= self.delay_initial <= self.delay_max
+        bd = self._base_delay
+        d = (1 - r)*bd + r*random.random()*bd
+        self._delay = min(d, self.delay_max)
+
+    def failed(self):
+        """Call whenever an action has failed, grows delay exponentially
+
+        After calling failed(), the `delay` property contains the next delay
+        """
+        try:
+            bd = self._base_delay
+            exp_fac = self.exp_fac
+            assert exp_fac > 1
+            self._base_delay = min(bd * exp_fac, self.delay_max)
+            self._update_delay()
+        except Exception:
+            ic_logger.exception(
+                'Unhandled exception trying to calculate a retry timout')
+
+    def success(self):
+        """Call whenever an action has succeeded, resets delay to minimum"""
+        self._base_delay = self.delay_min
+        self._update_delay()
+
+    @property
+    def delay(self):
+        return self._delay
+
+
 
 class InspectingClientStateType(namedtuple(
         'InspectingClientStateType', 'connected synced model_changed data_synced')):
@@ -109,12 +174,15 @@ class InspectingClientAsync(object):
     """
 
     sync_timeout = 5
-    reconnect_timeout = 1
+    initial_resync_timeout = 1
+    max_resync_timeout = 90
 
     def __init__(self, host, port, ioloop=None, initial_inspection=None,
                  auto_reconnect=True, logger=ic_logger):
-        # TODO Consider optinal 'name' parameter just to make logging clearer
+        # TODO Consider optional 'name' parameter just to make logging clearer
         self._logger = logger
+        self.resync_delay = None
+        """Set to an ExponentialRandomBackoff instance in _state_loop"""
         if initial_inspection is None:
             initial_inspection = True
         self.initial_inspection = bool(initial_inspection)
@@ -271,7 +339,10 @@ class InspectingClientAsync(object):
     @tornado.gen.coroutine
     def _state_loop(self):
         # TODO (NM) Arrange for _running to be set to false and stopping the katcp client
-        # if this loop exits a
+        # if this loop exits
+        self.resync_delay = ExponentialRandomBackoff(
+            self.initial_resync_timeout, self.max_resync_timeout)
+
         is_connected = self.katcp_client.is_connected
         while self._running:
             self._logger.debug('Sending intial state')
@@ -308,16 +379,21 @@ class InspectingClientAsync(object):
                 continue
                 # Next loop through should cause re-inspection and handle state updates
             except SyncError, e:
-                retry_wait_time = self.reconnect_timeout
-                self._logger.warn("Error syncing with device : {0!s} "
-                                  "'Retrying in {1}s.".format(e, retry_wait_time))
+                retry_wait_time = self.resync_delay.delay
+                self.resync_delay.failed()
+                self._logger.warn(
+                    "Error syncing with device {}: {!s} 'Retrying in {}s."
+                    .format(
+                        self.katcp_client.bind_address_string,
+                        e, retry_wait_time))
                 yield katcp.core.until_later(retry_wait_time)
                 # TODO (NM) Perhaps maintain count of unsuccessful attempts, and reconnect
                 # if too many happen. Perhaps also integrate exponential-backoff stuff
                 # here? Or outsource to a user-supplied class or callback?
                 continue
             except Exception:
-                retry_wait_time = self.reconnect_timeout
+                retry_wait_time = self.resync_delay.delay
+                self.resync_delay.failed()
                 self._logger.exception(
                     'Unhandled exception in client-sync loop. Triggering disconnect and '
                     'Retrying in {}s.'
@@ -325,6 +401,8 @@ class InspectingClientAsync(object):
                 self.katcp_client.disconnect()
                 yield katcp.core.until_later(retry_wait_time)
                 continue
+            else:
+                self.resync_delay.success()
 
     @tornado.gen.coroutine
     def _send_state(self, connected, synced, model_changed, data_synced,
@@ -416,6 +494,15 @@ class InspectingClientAsync(object):
             msg = katcp.Message.request('help', name)
         reply, informs = yield self.katcp_client.future_request(
             msg, timeout=timeout)
+        if not reply.reply_ok():
+            # If an unknown request is specified the desired result is to return
+            # an empty list even though the request will fail
+            if name is None or 'Unknown request' not in reply.arguments[1]:
+                raise SyncError(
+                    'Error reply during sync process for {}: {}'
+                    .format(self.katcp_client.bind_address_string, reply))
+
+
         requests_old = set(self._requests_index.keys())
         requests_updated = set()
         for msg in informs:
@@ -450,6 +537,16 @@ class InspectingClientAsync(object):
 
         reply, informs = yield self.katcp_client.future_request(
             msg, timeout=timeout)
+        self._logger.debug('{} received {} sensor-list informs, reply: {}'
+            .format(self.katcp_client.bind_address_string, len(informs), reply))
+        if not reply.reply_ok():
+            # If an unknown sensor is specified the desired result is to return
+            # an empty list, even though the request will fail
+            if name is None or 'Unknown sensor' not in reply.arguments[1]:
+                raise SyncError('Error reply during sync process: {}'
+                                .format(reply))
+
+
         sensors_old = set(self._sensors_index.keys())
         sensors_updated = set()
         for msg in informs:
@@ -459,7 +556,6 @@ class InspectingClientAsync(object):
                    'units': msg.arguments[2],
                    'sensor_type': msg.arguments[3],
                    'params': msg.arguments[4:]}
-            #import IPython ; IPython.embed()
             self._update_index(self._sensors_index, sen_name, sen)
 
         added, removed = self._difference(
@@ -541,7 +637,6 @@ class InspectingClientAsync(object):
                 sensor_params = katcp.Sensor.parse_params(
                     sensor_type,
                     sensor_info.get('params'))
-                #import IPython ; IPython.embed()
                 obj = self.sensor_factory(
                     name=name,
                     sensor_type=sensor_type,

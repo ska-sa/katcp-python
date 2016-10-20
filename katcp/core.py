@@ -64,11 +64,11 @@ def log_coroutine_exceptions(coro):
 
     import logging
 
-    @log_coroutine_exceptions
-    @tornado.gen.coroutine
     class A(object):
         _logger = logging.getLogger(__name__)
 
+        @log_coroutine_exceptions
+        @tornado.gen.coroutine
         def raiser(self, arg):
             yield tornado.gen.moment
             raise Exception(arg)
