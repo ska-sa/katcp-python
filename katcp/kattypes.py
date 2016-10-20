@@ -13,6 +13,7 @@ import re
 import logging
 
 from functools import partial
+from decimal import Decimal
 
 from tornado import gen
 
@@ -158,7 +159,10 @@ class Int(KatcpType):
 
     def decode(self, value, major):
         try:
-            return int(float(value))
+            try:
+                return int(value)
+            except ValueError:
+                return int(Decimal(value))
         except:
             raise ValueError("Could not parse value '%s' as integer." % value)
 
