@@ -396,7 +396,9 @@ class DeviceClient(object):
         assert get_thread_ident() == self.ioloop_thread_id
         data = str(msg) + "\n"
         # Log all sent messages here so no one else has to.
-        self._logger.debug(repr(data))
+        if self._logger.isEnabledFor(logging.DEBUG):
+            self._logger.debug("Sending to {}: {}"
+                               .format(self.bind_address_string, repr(data)))
         if not self._connected.isSet():
             raise KatcpClientDisconnected('Not connected to device {0}'.format(
                 self.bind_address_string))
@@ -509,7 +511,9 @@ class DeviceClient(object):
         """
         # log messages received so that no one else has to
         if self._logger.isEnabledFor(logging.DEBUG):
-            self._logger.debug(repr(str(msg)))
+            self._logger.debug(
+                "received from {}: {}"
+                .format(self.bind_address_string, repr(str(msg))))
 
         if msg.mtype == Message.INFORM:
             return self.handle_inform(msg)
