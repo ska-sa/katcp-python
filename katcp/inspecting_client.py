@@ -372,7 +372,6 @@ class InspectingClientAsync(object):
                         continue
                     model_changes = yield self.inspect()
                     model_changed = bool(model_changes)
-                    synced = not model_changed
                     yield self._send_state(
                         connected=True, synced=False,
                         model_changed=model_changed, data_synced=True,
@@ -475,6 +474,7 @@ class InspectingClientAsync(object):
 
     @tornado.gen.coroutine
     def inspect(self):
+        """Inspect device requests and sensors, update model"""
         timeout_manager = future_timeout_manager(self.sync_timeout)
         request_changes = yield self.inspect_requests(timeout=timeout_manager.remaining())
         sensor_changes = yield self.inspect_sensors(timeout=timeout_manager.remaining())
@@ -489,7 +489,7 @@ class InspectingClientAsync(object):
 
     @tornado.gen.coroutine
     def inspect_requests(self, name=None, timeout=None):
-        """Inspect all or one requests on the device.
+        """Inspect all or one requests on the device. Update requests index.
 
         Parameters
         ----------
@@ -530,7 +530,7 @@ class InspectingClientAsync(object):
 
     @tornado.gen.coroutine
     def inspect_sensors(self, name=None, timeout=None):
-        """Inspect all or one sensor on the device.
+        """Inspect all or one sensor on the device. Update sensors index.
 
         Parameters
         ----------
