@@ -52,12 +52,18 @@ class ExponentialRandomBackoff(object):
         self.randomicity = randomicity
         self._update_delay()
 
-    def _update_delay(self):
-        r = self.randomicity
-        assert 0 <= r <= 1
+    def _validate_parameters(self):
+        # Since a user could potentially change these parameters at any time and
+        # since it is nice to give feedback at __init__ time as well, have a
+        # single validation routine that can be called any place it matters
         assert 0 <= self.delay_initial <= self.delay_max
-        bd = self._base_delay
-        d = (1 - r)*bd + r*random.random()*bd
+        assert 0 <= self.randomicity <= 1
+        assert self.exp_fac > 1
+
+    def _update_delay(self):
+        self._validate_parameters()
+        r = self.randomicity
+        d = ((1 - r) + r*random.random())*self._base_delay
         self._delay = min(d, self.delay_max)
 
     def failed(self):
@@ -66,10 +72,10 @@ class ExponentialRandomBackoff(object):
         After calling failed(), the `delay` property contains the next delay
         """
         try:
-            bd = self._base_delay
-            exp_fac = self.exp_fac
-            assert exp_fac > 1
-            self._base_delay = min(bd * exp_fac, self.delay_max)
+            self._validate_parameters()
+            self._base_delay = min(
+                self._base_delay * self.exp_fac,
+                self.delay_max)
             self._update_delay()
         except Exception:
             ic_logger.exception(
@@ -77,7 +83,7 @@ class ExponentialRandomBackoff(object):
 
     def success(self):
         """Call whenever an action has succeeded, resets delay to minimum"""
-        self._base_delay = self.delay_min
+        self._base_delay = self.delay_initial
         self._update_delay()
 
     @property
@@ -173,7 +179,10 @@ class InspectingClientAsync(object):
 
     """
 
-    sync_timeout = 5
+    # TODO (NM 2016-10-21) sync_timeout should be 5 seconds, but until we deal
+    # with the thundering herd at startup when connecting to a large number of
+    # clients concurrently in a single process, see Jira CB-1609
+    sync_timeout = 8
     initial_resync_timeout = 1
     max_resync_timeout = 90
 
@@ -355,6 +364,9 @@ class InspectingClientAsync(object):
                                        model_changed=False, data_synced=False)
                 yield until_any(self.katcp_client.until_protocol(),
                                 self._disconnected.until_set())
+                # TODO NM 2016-10-21 The naming of this attribute is incredibly
+                # confusing, we need to think about what "initial_inspection"
+                # how supposed to be handled
                 if self.initial_inspection:
                     if not is_connected():
                         continue

@@ -38,8 +38,14 @@ class TestExponentialRandomBackoff(unittest.TestCase):
 
             # Do several more failures
             [DUT.failed() for x in range(5)]
+            # Check that the delay does not grow beyond the maximum expected
+            # value
             max_expected_delay = (1-r)*dm + r*dm*rv
-            self.assertEqual(DUT.delay, max_expected_delay)
+            self.assertAlmostEqual(DUT.delay, max_expected_delay)
+
+            # Test that DUT.success() resets the delay
+            DUT.success()
+            self.assertEqual(DUT.delay, first_delay)
 
 
 class TestICAClass(tornado.testing.AsyncTestCase):
@@ -391,7 +397,7 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self.assertIs(model_changes, None)
         # Due to the structure of the state loop the initial state may be sent
         # twice before we get here, and was the case for the initial
-        # implementation. Changes made on 2015-01-26 caused it to happy only
+        # implementation. Changes made on 2015-01-26 caused it to happen only
         # once, hence + 1. If the implementation changes having + 2 would also
         # be OK.
         yield self._check_no_cb(num_calls_before + 1)
