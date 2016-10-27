@@ -377,10 +377,11 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self.cnt_state_cb_futures[num_calls].set_result(None)
 
     @tornado.gen.coroutine
-    def _check_no_cb(self, no_expected):
-        """Let the ioloop run and assert that the callback was not called"""
+    def _check_cb_count(self, expected_count):
+        """Let the ioloop run and assert that the callback has been called 
+        the expected number of times"""
         yield tornado.gen.moment
-        self.assertEqual(len(self.done_state_cb_futures), no_expected)
+        self.assertEqual(len(self.done_state_cb_futures), expected_count)
 
     @tornado.testing.gen_test(timeout=1)
     def test_from_connect(self):
@@ -400,7 +401,7 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         # implementation. Changes made on 2015-01-26 caused it to happen only
         # once, hence + 1. If the implementation changes having + 2 would also
         # be OK.
-        yield self._check_no_cb(num_calls_before + 1)
+        yield self._check_cb_count(num_calls_before + 1)
 
         # Now let the server send #version-connect informs
         num_calls_before = len(self.done_state_cb_futures)
@@ -408,7 +409,7 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         # We're expecting two calls hard on each other's heels, so lets wait for them
         yield self.cnt_state_cb_futures[num_calls_before + 2]
         # We expected two status callbacks, and no more after
-        yield self._check_no_cb(num_calls_before + 2)
+        yield self._check_cb_count(num_calls_before + 2)
         state, model_changes = yield self.done_state_cb_futures[-2]
         state2, model_changes2 = yield self.done_state_cb_futures[-1]
         self.assertEqual(state, inspecting_client.InspectingClientStateType(
@@ -436,7 +437,7 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self.assertEqual(state, inspecting_client.InspectingClientStateType(
             connected=False, synced=False, model_changed=False, data_synced=False))
         self.assertIs(model_changes, None)
-        yield self._check_no_cb(num_calls_before + 1)
+        yield self._check_cb_count(num_calls_before + 1)
 
     @tornado.gen.coroutine
     def _test_inspection_error(self, break_var, break_message):

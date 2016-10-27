@@ -108,6 +108,16 @@ class InspectingClientStateType(namedtuple(
     """
     __slots__ = []
 
+    def __str__(self):
+        def _boolstr(name):
+            val = bool(getattr(self, name))
+            return name if val else "!"+name
+        return "[{} {} {} {}]".format(
+            _boolstr('connected'),
+            _boolstr('synced'),
+            _boolstr('model_changed'),
+            _boolstr('data_synced'))
+
 
 class SyncError(Exception):
     """Raised if an error occurs during syncing with a device"""
@@ -354,7 +364,7 @@ class InspectingClientAsync(object):
 
         is_connected = self.katcp_client.is_connected
         while self._running:
-            self._logger.debug('Sending intial state')
+            self._logger.debug('Sending initial state')
             yield self._send_state(connected=is_connected(), synced=False,
                                    model_changed=False, data_synced=False)
             try:
@@ -386,6 +396,9 @@ class InspectingClientAsync(object):
                                        model_changed=False, data_synced=True)
                 yield until_any(self._interface_changed.until_set(),
                                 self._disconnected.until_set())
+                self._logger.debug('in _state_loop: interface_changed=%s,'
+                        ' is_connected=%s', self._interface_changed.is_set(),
+                        self._disconnected.is_set())
                 self._interface_changed.clear()
                 continue
                 # Next loop through should cause re-inspection and handle state updates
@@ -421,7 +434,7 @@ class InspectingClientAsync(object):
         # Should only be called from _state_loop()
         state = InspectingClientStateType(connected, synced, model_changed, data_synced)
         self._state.set_state(state)
-        self._logger.debug('InspectingClient State changed to {0}'.format(state))
+        self._logger.debug('InspectingClient state changed to {0}'.format(state))
 
         if self._state_cb:
             yield maybe_future(self._state_cb(state, model_changes))
@@ -762,6 +775,7 @@ class InspectingClientAsync(object):
 
     def _cb_inform_interface_change(self, msg):
         """Update the sensors and requests available."""
+        self._logger.debug('cb_inform_interface_change(%s)', msg)
         self._interface_changed.set()
 
     def _cb_inform_deprecated(self, msg):
@@ -854,3 +868,4 @@ class InspectingClientAsync(object):
                 added_keys.add(key)
 
         return added_keys, removed_keys
+
