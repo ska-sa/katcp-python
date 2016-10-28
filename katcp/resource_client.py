@@ -218,6 +218,10 @@ class KATCPClientResource(resource.KATCPResource):
         return self._address[1]
 
     @property
+    def address_string(self):
+        return "{}:{}".format(*self._address)
+
+    @property
     def name(self):
         return self._name
 
@@ -550,27 +554,34 @@ class KATCPClientResource(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def _inspecting_client_state_callback(self, state, model_changes):
-        log.debug('Received {0}, {1}'.format(state, model_changes))
+        log.debug('{}: Received {}, {}'
+                  .format(self.address_string, state, model_changes))
         if state.connected:
             if not state.synced:
-                log.debug('Setting state to "syncing"')
+                log.debug('{}: Setting state to "syncing"'.format(self.address_string))
                 self._state.set_state('syncing')
                 if model_changes:
-                    log.debug('handling model updates')
+                    log.debug('{}: handling model updates: {}'.format(
+                        self.address_string,model_changes))
                     yield self._update_model(model_changes)
-                    log.debug('finished handling model updates')
+                    log.debug('{}: finished handling model updates'
+                              .format(self.address_string))
                 if state.data_synced:
                     # Reapply cached sensor strategies. Can only be done if
                     # data_synced==True, or else the
                     # self._inspecting_client.future_check_sensor() will deadlock
-                    log.debug('Reapplying sampling strategies')
+                    log.debug('{}: Reapplying sampling strategies'
+                              .format(self.address_string))
                     yield self._sensor_manager.reapply_sampling_strategies()
-                    log.debug('Done Reapplying sampling strategies')
+                    log.debug('{}: Done Reapplying sampling strategies'
+                              .format(self.address_string))
             else:
-                log.debug('Setting state to "synced"')
+                log.debug('{}: Setting state to "synced"'
+                          .format(self.address_string))
                 self._state.set_state('synced')
         else:
-            log.debug('Setting state to "disconnected"')
+            log.debug('{}: Setting state to "disconnected"'
+                      .format(self.address_string))
             self._state.set_state('disconnected')
 
         log.debug('Done with _inspecting_client_state_callback')
