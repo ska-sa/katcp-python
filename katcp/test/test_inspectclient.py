@@ -353,7 +353,8 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         rf.assert_called_once_with('watchdog', mock.ANY)
 
 class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
-
+    longMessage = True
+    maxDiff = None
     def setUp(self):
         super(TestInspectingClientAsyncStateCallback, self).setUp()
         self.server = DeviceTestServer('', 0)
@@ -414,14 +415,21 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         state2, model_changes2 = yield self.done_state_cb_futures[-1]
         self.assertEqual(state, inspecting_client.InspectingClientStateType(
             connected=True, synced=False, model_changed=True, data_synced=True))
+        # Check that the expected model changes came from the callback
+        self._test_expected_model_changes(model_changes)
+        self.assertEqual(state2, inspecting_client.InspectingClientStateType(
+            connected=True, synced=True, model_changed=False, data_synced=True))
+        self.assertEqual(model_changes2, None)
+
+    def _test_expected_model_changes(self, model_changes):
+        # Check that the model_changes reflect the sensors and requests of the
+        # test sever (self.server)
         server_sensors = self.server._sensors.keys()
         server_requests = self.server._request_handlers.keys()
         self.assertEqual(model_changes, dict(
             sensors=dict(added=set(server_sensors), removed=set()),
             requests=dict(added=set(server_requests), removed=set())))
-        self.assertEqual(state2, inspecting_client.InspectingClientStateType(
-            connected=True, synced=True, model_changed=False, data_synced=True))
-        self.assertEqual(model_changes2, None)
+
 
     @tornado.testing.gen_test(timeout=1)
     def test_reconnect(self):
@@ -450,15 +458,26 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         yield self.client.until_connected()
         # Wait for the state loop to send another update or 2
         yield self.state_cb_future
-        state, model_changes = yield self.state_cb_future
+        state, _ = yield self.state_cb_future
         # Check that data is still not synced
         self.assertFalse(state.synced)
         self.assertFalse(state.data_synced)
 
         # Now fix the inspection request, client should sync up.
         setattr(self.server, break_var, False)
+        # Check that the server's sensors and request are reflected in the model
+        # changes.
+        #
+        changes_state = inspecting_client.InspectingClientStateType(
+            connected=True, synced=False, model_changed=True, data_synced=True)
+        yield self.client.until_state(changes_state)
+        state, model_changes = self.done_state_cb_futures[-1].result()
+        assert state == changes_state
+        self._test_expected_model_changes(model_changes)
         yield self.client.until_synced()
         self.assertTrue(self.client.synced)
+
+
 
     @tornado.testing.gen_test(timeout=1)
     def test_help_inspection_error(self):

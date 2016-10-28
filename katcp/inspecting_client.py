@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import logging
 import random
+import copy
 
 import tornado
 
@@ -289,6 +290,14 @@ class InspectingClientAsync(object):
         """Boolean indicating if the device has been synchronised."""
         return self._state.state.synced
 
+    @property
+    def bind_address(self):
+        return self.katcp_client.bind_address
+
+    @property
+    def bind_address_string(self):
+        return self.katcp_client.bind_address_string
+
     @steal_docstring_from(_InformHookDeviceClient.preset_protocol_flags)
     def preset_protocol_flags(self, protocol_flags):
         self.katcp_client.preset_protocol_flags(protocol_flags)
@@ -321,6 +330,15 @@ class InspectingClientAsync(object):
         data_synced_states = tuple(state for state in self.valid_states
                                    if state.data_synced)
         return self._state.until_state_in(*data_synced_states, timeout=timeout)
+
+    def until_state(self, desired_state, timeout=None):
+        """
+        Wait until state is desired_state, InspectingClientStateType instance
+
+        Returns a future
+
+        """
+        return self._state.until_state(desired_state)
 
     @tornado.gen.coroutine
     def connect(self, timeout=None):
@@ -363,13 +381,16 @@ class InspectingClientAsync(object):
             self.initial_resync_timeout, self.max_resync_timeout)
 
         is_connected = self.katcp_client.is_connected
+        last_sync_failed = False
         while self._running:
-            self._logger.debug('Sending initial state')
+            self._logger.debug('{}: Sending intial state'
+                               .format(self.bind_address_string))
             yield self._send_state(connected=is_connected(), synced=False,
                                    model_changed=False, data_synced=False)
             try:
                 yield self.katcp_client.until_connected()
-                self._logger.debug('Sending post-connected  state')
+                self._logger.debug('{}: Sending post-connected state'
+                                   .format(self.bind_address_string))
                 yield self._send_state(connected=is_connected(), synced=False,
                                        model_changed=False, data_synced=False)
                 yield until_any(self.katcp_client.until_protocol(),
@@ -382,6 +403,8 @@ class InspectingClientAsync(object):
                         continue
                     model_changes = yield self.inspect()
                     model_changed = bool(model_changes)
+                    self._logger.debug('{}: Sending data-synced state'
+                                       .format(self.bind_address_string))
                     yield self._send_state(
                         connected=True, synced=False,
                         model_changed=model_changed, data_synced=True,
@@ -392,8 +415,15 @@ class InspectingClientAsync(object):
                     continue
                 # We waited for the previous _send_state call (and user callbacks) to
                 # complete before we change the state to synced=True
+                self._logger.debug('{}: Sending synced state'
+                                   .format(self.bind_address_string))
                 yield self._send_state(connected=True, synced=True,
                                        model_changed=False, data_synced=True)
+                if last_sync_failed:
+                    self._logger.warn(
+                        'Succesfully resynced with {} after failure'
+                        .format(self.bind_address_string))
+                    last_sync_failed = False
                 yield until_any(self._interface_changed.until_set(),
                                 self._disconnected.until_set())
                 self._logger.debug('in _state_loop: interface_changed=%s,'
@@ -403,12 +433,13 @@ class InspectingClientAsync(object):
                 continue
                 # Next loop through should cause re-inspection and handle state updates
             except SyncError, e:
+                last_sync_failed = True
                 retry_wait_time = self.resync_delay.delay
                 self.resync_delay.failed()
                 self._logger.warn(
                     "Error syncing with device {}: {!s} 'Retrying in {}s."
                     .format(
-                        self.katcp_client.bind_address_string,
+                        self.bind_address_string,
                         e, retry_wait_time))
                 yield katcp.core.until_later(retry_wait_time)
                 # TODO (NM) Perhaps maintain count of unsuccessful attempts, and reconnect
@@ -416,6 +447,7 @@ class InspectingClientAsync(object):
                 # here? Or outsource to a user-supplied class or callback?
                 continue
             except Exception:
+                last_sync_failed = True
                 retry_wait_time = self.resync_delay.delay
                 self.resync_delay.failed()
                 self._logger.exception(
@@ -489,8 +521,17 @@ class InspectingClientAsync(object):
     def inspect(self):
         """Inspect device requests and sensors, update model"""
         timeout_manager = future_timeout_manager(self.sync_timeout)
-        request_changes = yield self.inspect_requests(timeout=timeout_manager.remaining())
-        sensor_changes = yield self.inspect_sensors(timeout=timeout_manager.remaining())
+        sensor_index_before = copy.copy(self._sensors_index)
+        request_index_before = copy.copy(self._requests_index)
+        try:
+            request_changes = yield self.inspect_requests(timeout=timeout_manager.remaining())
+            sensor_changes = yield self.inspect_sensors(timeout=timeout_manager.remaining())
+        except Exception:
+            # Ensure atomicity of sensor and request updates ; if the one
+            # fails, the other should act as if it has failed too.
+            self._sensors_index = sensor_index_before
+            self._requests_index = request_index_before
+            raise
 
         model_changes = AttrDict()
         if request_changes:
@@ -525,7 +566,7 @@ class InspectingClientAsync(object):
             if name is None or 'Unknown request' not in reply.arguments[1]:
                 raise SyncError(
                     'Error reply during sync process for {}: {}'
-                    .format(self.katcp_client.bind_address_string, reply))
+                    .format(self.bind_address_string, reply))
 
 
         requests_old = set(self._requests_index.keys())
@@ -563,7 +604,7 @@ class InspectingClientAsync(object):
         reply, informs = yield self.katcp_client.future_request(
             msg, timeout=timeout)
         self._logger.debug('{} received {} sensor-list informs, reply: {}'
-            .format(self.katcp_client.bind_address_string, len(informs), reply))
+            .format(self.bind_address_string, len(informs), reply))
         if not reply.reply_ok():
             # If an unknown sensor is specified the desired result is to return
             # an empty list, even though the request will fail
