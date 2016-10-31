@@ -338,7 +338,7 @@ class InspectingClientAsync(object):
         Returns a future
 
         """
-        return self._state.until_state(desired_state)
+        return self._state.until_state(desired_state, timeout=timeout)
 
     @tornado.gen.coroutine
     def connect(self, timeout=None):
