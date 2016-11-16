@@ -20,7 +20,7 @@ node('docker') {
                 timeout(time: 30, unit: 'MINUTES') {
                     try {
                         sh 'pip install . -U --pre'
-                        sh 'python setup.py nosetests'
+                        sh 'python setup.py nosetests --with-xunit'
                     } finally {
                         step([$class: 'JUnitResultArchiver', testResults: 'nosetests.xml'])
                     }
