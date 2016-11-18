@@ -355,6 +355,7 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
 class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
     longMessage = True
     maxDiff = None
+
     def setUp(self):
         super(TestInspectingClientAsyncStateCallback, self).setUp()
         self.server = DeviceTestServer('', 0)
@@ -379,7 +380,7 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
 
     @tornado.gen.coroutine
     def _check_cb_count(self, expected_count):
-        """Let the ioloop run and assert that the callback has been called 
+        """Let the ioloop run and assert that the callback has been called
         the expected number of times"""
         yield tornado.gen.moment
         self.assertEqual(len(self.done_state_cb_futures), expected_count)
@@ -395,14 +396,18 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
 
         state, model_changes = yield self.state_cb_future
         self.assertEqual(state, inspecting_client.InspectingClientStateType(
+            connected=False, synced=False, model_changed=False, data_synced=False))
+
+        state, model_changes = yield self.state_cb_future
+        self.assertEqual(state, inspecting_client.InspectingClientStateType(
             connected=True, synced=False, model_changed=False, data_synced=False))
         self.assertIs(model_changes, None)
         # Due to the structure of the state loop the initial state may be sent
         # twice before we get here, and was the case for the initial
         # implementation. Changes made on 2015-01-26 caused it to happen only
         # once, hence + 1. If the implementation changes having + 2 would also
-        # be OK.
-        yield self._check_cb_count(num_calls_before + 1)
+        # be OK. As, indeed, changes made on 2016-11-03 caused again :)
+        yield self._check_cb_count(num_calls_before + 2)
 
         # Now let the server send #version-connect informs
         num_calls_before = len(self.done_state_cb_futures)

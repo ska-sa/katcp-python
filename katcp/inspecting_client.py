@@ -353,6 +353,7 @@ class InspectingClientAsync(object):
         ------
 
         :class:`tornado.gen.TimeoutError` if the connect timeout expires
+
         """
         # Start KATCP device client.
         assert not self._running
@@ -366,7 +367,9 @@ class InspectingClientAsync(object):
         except tornado.gen.TimeoutError:
             self.katcp_client.stop()
             raise
-        yield maybe_timeout(self.katcp_client.until_connected())
+
+        if timeout:
+            yield maybe_timeout(self.katcp_client.until_connected())
         self._logger.debug('Katcp client connected')
 
         self._running = True
@@ -863,6 +866,8 @@ class InspectingClientAsync(object):
         reply, informs = yield ic.simple_request('help', 'sensor-list')
 
         """
+        # TODO (NM 2016-11-03) This method should really live on the lower level
+        # katcp_client in client.py, is generally useful IMHO
         use_mid = kwargs.get('use_mid')
         timeout = kwargs.get('timeout')
         mid = kwargs.get('mid')

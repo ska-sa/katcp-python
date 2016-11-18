@@ -1832,6 +1832,7 @@ def future_timeout_manager(timeout=None, ioloop=None):
         return timeout - (ioloop.time() - t0) if timeout else None
 
     def maybe_timeout(f):
+        """Applies timeout if timeout is not None"""
         if not timeout:
             return f
         else:
