@@ -554,53 +554,53 @@ class KATCPClientResource(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def _inspecting_client_state_callback(self, state, model_changes):
-        log.debug('{}: Received {}, {}'
+        self._logger.debug('{}: Received {}, {}'
                   .format(self.address_string, state, model_changes))
         if state.connected:
             if not state.synced:
-                log.debug('{}: Setting state to "syncing"'.format(self.address_string))
+                self._logger.debug('{}: Setting state to "syncing"'.format(self.address_string))
                 self._state.set_state('syncing')
                 if model_changes:
-                    log.debug('{}: handling model updates: {}'.format(
+                    self._logger.debug('{}: handling model updates: {}'.format(
                         self.address_string,model_changes))
                     yield self._update_model(model_changes)
-                    log.debug('{}: finished handling model updates'
+                    self._logger.debug('{}: finished handling model updates'
                               .format(self.address_string))
                 if state.data_synced:
                     # Reapply cached sensor strategies. Can only be done if
                     # data_synced==True, or else the
                     # self._inspecting_client.future_check_sensor() will deadlock
-                    log.debug('{}: Reapplying sampling strategies'
+                    self._logger.debug('{}: Reapplying sampling strategies'
                               .format(self.address_string))
                     yield self._sensor_manager.reapply_sampling_strategies()
-                    log.debug('{}: Done Reapplying sampling strategies'
+                    self._logger.debug('{}: Done Reapplying sampling strategies'
                               .format(self.address_string))
             else:
-                log.debug('{}: Setting state to "synced"'
+                self._logger.debug('{}: Setting state to "synced"'
                           .format(self.address_string))
                 self._state.set_state('synced')
         else:
-            log.debug('{}: Setting state to "disconnected"'
+            self._logger.debug('{}: Setting state to "disconnected"'
                       .format(self.address_string))
             self._state.set_state('disconnected')
 
-        log.debug('Done with _inspecting_client_state_callback')
+        self._logger.debug('Done with _inspecting_client_state_callback')
 
     @tornado.gen.coroutine
     def _update_model(self, model_changes):
         if 'requests' in model_changes:
-            log.debug('Removing requests')
+            self._logger.debug('Removing requests')
             yield self._remove_requests(model_changes.requests.removed)
-            log.debug('Adding requests')
+            self._logger.debug('Adding requests')
             yield self._add_requests(model_changes.requests.added)
-            log.debug('Done with requests')
+            self._logger.debug('Done with requests')
         if 'sensors' in model_changes:
-            log.debug('Removing sensors')
+            self._logger.debug('Removing sensors')
             yield self._remove_sensors(model_changes.sensors.removed)
-            log.debug('Adding sensors')
+            self._logger.debug('Adding sensors')
             yield self._add_sensors(model_changes.sensors.added)
-            log.debug('Done with sensors')
-        log.debug('Done with model')
+            self._logger.debug('Done with sensors')
+        self._logger.debug('Done with model')
 
 
     @tornado.gen.coroutine
