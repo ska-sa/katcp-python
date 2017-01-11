@@ -191,7 +191,7 @@ class TestSampling(TimewarpAsyncTestCase):
         # Check initial update
         self.assertEqual(self.calls, [(self.sensor, (t, status, value))])
         self.calls = []
-        # Some Updates less than delta from intial value
+        # Some Updates less than delta from initial value
         self.sensor.set_value(value + 1)
         self.sensor.set_value(value + delta)
         self.sensor.set_value(value)
@@ -315,7 +315,7 @@ class TestSampling(TimewarpAsyncTestCase):
         self.assertEqual(self.calls, [])
         DUT.start()
         yield self.wake_ioloop()
-        # Check intial update
+        # Check initial update
         self.assertEqual(len(self.calls), 1)
 
         # Jump forward a lot, should not result in another sample

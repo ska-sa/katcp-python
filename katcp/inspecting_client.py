@@ -172,8 +172,8 @@ class InspectingClientAsync(object):
     sensor_factory = katcp.Sensor
     """Factory that produces a KATCP Sensor compatible instance.
 
-    signature: sensor_factory(name,
-                              sensor_type,
+    signature: sensor_factory(sensor_type,
+                              name,
                               description,
                               units,
                               params)
@@ -386,7 +386,7 @@ class InspectingClientAsync(object):
         is_connected = self.katcp_client.is_connected
         last_sync_failed = False
         while self._running:
-            self._logger.debug('{}: Sending intial state'
+            self._logger.debug('{}: Sending initial state'
                                .format(self.bind_address_string))
             yield self._send_state(connected=is_connected(), synced=False,
                                    model_changed=False, data_synced=False)
@@ -480,11 +480,19 @@ class InspectingClientAsync(object):
     def set_state_callback(self, cb):
         """Set user callback for state changes
 
-        Called as cb(state, model_changes)
+        Called as ``cb(state, model_changes)``
 
-        where state is InspectingClientStateType instance, and model_changes ...
+        where `state` is an :class:`InspectingClientStateType` instance, and
+        `model_changes` is an :class:`~katcp.core.AttrDict`. The latter may
+        contain keys ``requests`` and ``sensors`` to describe changes to
+        requests or sensors respectively. These in turn have attributes
+        ``added`` and ``removed`` which are sets of request/sensor names.
+        Requests/sensors that have been modified will appear in both sets.
 
-        TODO More docs on what the callback is called with
+        .. warning::
+
+            It is possible for `model_changes` to be ``None``, or for either
+            ``requests`` or ``sensors`` to be absent from `model_changes`.
         """
         self._state_cb = cb
 
@@ -555,7 +563,13 @@ class InspectingClientAsync(object):
         timeout : float or None, optional
             Timeout for request inspection, None for no timeout
 
-        TODO Return value
+        Returns
+        -------
+        changes : :class:`~katcp.core.AttrDict`
+            AttrDict with keys ``added`` and ``removed`` (of type
+            :class:`set`), listing the requests that have been added or removed
+            respectively.  Modified requests are listed in both. If there are
+            no changes, returns ``None`` instead.
         """
         if name is None:
             msg = katcp.Message.request('help')
@@ -596,8 +610,13 @@ class InspectingClientAsync(object):
         timeout : float or None, optional
             Timeout for sensors inspection, None for no timeout
 
-        TODO Return value
-
+        Returns
+        -------
+        changes : :class:`~katcp.core.AttrDict`
+            AttrDict with keys ``added`` and ``removed`` (of type
+            :class:`set`), listing the sensors that have been added or removed
+            respectively.  Modified sensors are listed in both. If there are no
+            changes, returns ``None`` instead.
         """
         if name is None:
             msg = katcp.Message.request('sensor-list')
