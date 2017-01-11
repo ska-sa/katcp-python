@@ -537,8 +537,8 @@ class InspectingClientAsync(object):
 
         Tornado future that resolves with:
 
-        model_changes : Nested AttrDict
-            Contanins sets of added/removed request/sensor names
+        model_changes : Nested AttrDict or None
+            Contains sets of added/removed request/sensor names
 
             Example structure:
 
@@ -552,6 +552,9 @@ class InspectingClientAsync(object):
 
             If there are no changes keys may be omitted. If an item is in both
             the 'added' and 'removed' sets that means that it changed.
+
+            If neither request not sensor changes are present, None is returned
+            instead of a nested structure.
 
         """
         timeout_manager = future_timeout_manager(self.sync_timeout)
