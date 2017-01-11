@@ -12,7 +12,7 @@ import struct
 import re
 import logging
 
-from functools import partial
+from functools import partial, wraps
 
 from tornado import gen
 
@@ -923,6 +923,31 @@ def make_reply(msgname, types, arguments, major):
             msgname, *pack_types((Str(),) + types, arguments, major))
     raise ValueError("First returned value must be 'ok' or 'fail'.")
 
+def concurrent_reply(handler):
+    """Decorator for concurrent async request handlers
+
+    By default async request handlers that return a Future are serialised
+    per-connection, i.e. until the most recent handler resolves it future, the
+    next message will not be read from the client stream. A handler decorated
+    with this decorator allows the next message to be read before it has
+    resolved its future, allowing multiple requests from a single client to be
+    handled concurrently. This is similar to raising AsyncReply.
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     @return_reply(Int())
+    ...     @concurrent_reply
+    ...     @tornado.gen.coroutine
+    ...     def request_myreq(self, req):
+    ...         result = yield self.slow_operation()
+    ...         return (req, result)
+    ...
+
+    """
+
+    handler.concurrent_reply = True
+    return handler
 
 @gen.coroutine
 def async_make_reply(msgname, types, arguments_future, major):
