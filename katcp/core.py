@@ -1791,8 +1791,8 @@ def until_any(*futures, **kwargs):
 def future_timeout_manager(timeout=None, ioloop=None):
     """Create Helper function for yielding with a cumulative timeout if required
 
-    Keeps track of time over multiple timeout calls so that a single timeout can be placed
-    over multiple operations.
+    Keeps track of time over multiple timeout calls so that a single timeout can
+    be placed over multiple operations.
 
     Parameters
     ----------
@@ -1805,11 +1805,12 @@ def future_timeout_manager(timeout=None, ioloop=None):
     ------------
 
     maybe_timeout : func
-        Accepts a future, and wraps it in :func:tornado.gen.with_timeout. maybe_timeout
-        raises :class:`tornado.gen.TimeoutError` if the timeout expires
+        Accepts a future, and wraps it in
+        :func:tornado.gen.with_timeout. maybe_timeout raises
+        :class:`tornado.gen.TimeoutError` if the timeout expires
 
-        Has a function attribute `remaining()` that returns the remaining timeout or None
-        if timeout == None
+        Has a function attribute `remaining()` that returns the remaining
+        timeout or None if timeout == None
 
     Example
     -------

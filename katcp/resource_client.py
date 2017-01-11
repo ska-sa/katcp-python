@@ -562,7 +562,8 @@ class KATCPClientResource(resource.KATCPResource):
                 self._state.set_state('syncing')
                 if model_changes:
                     self._logger.debug('{}: handling model updates: {}'.format(
-                        self.address_string,model_changes))
+                        self.address_string, model_changes))
+
                     yield self._update_model(model_changes)
                     self._logger.debug('{}: finished handling model updates'
                               .format(self.address_string))

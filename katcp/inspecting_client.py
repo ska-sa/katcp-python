@@ -530,13 +530,41 @@ class InspectingClientAsync(object):
 
     @tornado.gen.coroutine
     def inspect(self):
-        """Inspect device requests and sensors, update model"""
+        """Inspect device requests and sensors, update model
+
+        Returns
+        -------
+
+        Tornado future that resolves with:
+
+        model_changes : Nested AttrDict or None
+            Contains sets of added/removed request/sensor names
+
+            Example structure:
+
+            {'requests': {
+                'added': set(['req1', 'req2']),
+                'removed': set(['req10', 'req20'])}
+             'sensors': {
+                'added': set(['sens1', 'sens2']),
+                'removed': set(['sens10', 'sens20'])}
+            }
+
+            If there are no changes keys may be omitted. If an item is in both
+            the 'added' and 'removed' sets that means that it changed.
+
+            If neither request not sensor changes are present, None is returned
+            instead of a nested structure.
+
+        """
         timeout_manager = future_timeout_manager(self.sync_timeout)
         sensor_index_before = copy.copy(self._sensors_index)
         request_index_before = copy.copy(self._requests_index)
         try:
-            request_changes = yield self.inspect_requests(timeout=timeout_manager.remaining())
-            sensor_changes = yield self.inspect_sensors(timeout=timeout_manager.remaining())
+            request_changes = yield self.inspect_requests(
+                timeout=timeout_manager.remaining())
+            sensor_changes = yield self.inspect_sensors(
+                timeout=timeout_manager.remaining())
         except Exception:
             # Ensure atomicity of sensor and request updates ; if the one
             # fails, the other should act as if it has failed too.
@@ -565,11 +593,19 @@ class InspectingClientAsync(object):
 
         Returns
         -------
+        Tornado future that resolves with:
+
         changes : :class:`~katcp.core.AttrDict`
             AttrDict with keys ``added`` and ``removed`` (of type
             :class:`set`), listing the requests that have been added or removed
             respectively.  Modified requests are listed in both. If there are
             no changes, returns ``None`` instead.
+
+            Example structure:
+
+            {'added': set(['req1', 'req2']),
+             'removed': set(['req10', 'req20'])}
+
         """
         if name is None:
             msg = katcp.Message.request('help')
@@ -612,11 +648,19 @@ class InspectingClientAsync(object):
 
         Returns
         -------
+        Tornado future that resolves with:
+
         changes : :class:`~katcp.core.AttrDict`
             AttrDict with keys ``added`` and ``removed`` (of type
             :class:`set`), listing the sensors that have been added or removed
             respectively.  Modified sensors are listed in both. If there are no
             changes, returns ``None`` instead.
+
+        Example structure:
+
+            {'added': set(['sens1', 'sens2']),
+             'removed': set(['sens10', 'sens20'])}
+
         """
         if name is None:
             msg = katcp.Message.request('sensor-list')
@@ -808,9 +852,15 @@ class InspectingClientAsync(object):
     @tornado.gen.coroutine
     def update_sensor(self, name, timestamp, status, value):
         sensor = self._sensor_object_cache.get(name)
+        # TODO (NM) Performance improvement idea: Make this a normal function
+        # that only handles the cached sensor object case (should be the common
+        # case). If cached sensor is not found, kick off a coroutine that
+        # handles the future_get_sensor case.
         if not sensor:
             sensor = yield self.future_get_sensor(name)
         if sensor:
+            # TODO (NM) Performance idea: prolly we can cache katcp_major at
+            # sync time?
             katcp_major = self.katcp_client.protocol_flags.major
             sensor.set_formatted(timestamp, status, value, katcp_major)
         else:
