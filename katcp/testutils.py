@@ -1679,10 +1679,10 @@ class WaitingMock(mock.Mock):
         except Queue.Full:
             pass
 
-    def reset_mock(self, visited=None):
+    def reset_mock(self):
         # Re-set call_count as an AtomicIaddCallback instance since
         # the reset_mock() super-method does self.call_count=0
-        super(WaitingMock, self).reset_mock(visited)
+        super(WaitingMock, self).reset_mock()
         self.call_count = AtomicIaddCallback(
             self.call_count, callback=self._call_count_callback)
 

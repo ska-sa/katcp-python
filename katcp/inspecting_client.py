@@ -172,8 +172,8 @@ class InspectingClientAsync(object):
     sensor_factory = katcp.Sensor
     """Factory that produces a KATCP Sensor compatible instance.
 
-    signature: sensor_factory(name,
-                              sensor_type,
+    signature: sensor_factory(sensor_type,
+                              name,
                               description,
                               units,
                               params)
@@ -338,7 +338,7 @@ class InspectingClientAsync(object):
         Returns a future
 
         """
-        return self._state.until_state(desired_state)
+        return self._state.until_state(desired_state, timeout=timeout)
 
     @tornado.gen.coroutine
     def connect(self, timeout=None):
@@ -353,6 +353,7 @@ class InspectingClientAsync(object):
         ------
 
         :class:`tornado.gen.TimeoutError` if the connect timeout expires
+
         """
         # Start KATCP device client.
         assert not self._running
@@ -366,7 +367,9 @@ class InspectingClientAsync(object):
         except tornado.gen.TimeoutError:
             self.katcp_client.stop()
             raise
-        yield maybe_timeout(self.katcp_client.until_connected())
+
+        if timeout:
+            yield maybe_timeout(self.katcp_client.until_connected())
         self._logger.debug('Katcp client connected')
 
         self._running = True
@@ -383,7 +386,7 @@ class InspectingClientAsync(object):
         is_connected = self.katcp_client.is_connected
         last_sync_failed = False
         while self._running:
-            self._logger.debug('{}: Sending intial state'
+            self._logger.debug('{}: Sending initial state'
                                .format(self.bind_address_string))
             yield self._send_state(connected=is_connected(), synced=False,
                                    model_changed=False, data_synced=False)
@@ -477,11 +480,19 @@ class InspectingClientAsync(object):
     def set_state_callback(self, cb):
         """Set user callback for state changes
 
-        Called as cb(state, model_changes)
+        Called as ``cb(state, model_changes)``
 
-        where state is InspectingClientStateType instance, and model_changes ...
+        where `state` is an :class:`InspectingClientStateType` instance, and
+        `model_changes` is an :class:`~katcp.core.AttrDict`. The latter may
+        contain keys ``requests`` and ``sensors`` to describe changes to
+        requests or sensors respectively. These in turn have attributes
+        ``added`` and ``removed`` which are sets of request/sensor names.
+        Requests/sensors that have been modified will appear in both sets.
 
-        TODO More docs on what the callback is called with
+        .. warning::
+
+            It is possible for `model_changes` to be ``None``, or for either
+            ``requests`` or ``sensors`` to be absent from `model_changes`.
         """
         self._state_cb = cb
 
@@ -581,15 +592,16 @@ class InspectingClientAsync(object):
         -------
         Tornado future that resolves with:
 
-        request_changes : AttrDict of sets or None
-            Contanins sets of added/removed request names
+        changes : :class:`~katcp.core.AttrDict`
+            AttrDict with keys ``added`` and ``removed`` (of type
+            :class:`set`), listing the requests that have been added or removed
+            respectively.  Modified requests are listed in both. If there are
+            no changes, returns ``None`` instead.
 
             Example structure:
 
             {'added': set(['req1', 'req2']),
              'removed': set(['req10', 'req20'])}
-
-            Resolves with None if there are no changes
 
         """
         if name is None:
@@ -635,15 +647,16 @@ class InspectingClientAsync(object):
         -------
         Tornado future that resolves with:
 
-        request_changes : AttrDict of sets or None
-            Contanins sets of added/removed request names
+        changes : :class:`~katcp.core.AttrDict`
+            AttrDict with keys ``added`` and ``removed`` (of type
+            :class:`set`), listing the sensors that have been added or removed
+            respectively.  Modified sensors are listed in both. If there are no
+            changes, returns ``None`` instead.
 
-            Example structure:
+        Example structure:
 
             {'added': set(['sens1', 'sens2']),
              'removed': set(['sens10', 'sens20'])}
-
-            Resolves with None if there are no changes
 
         """
         if name is None:
@@ -919,6 +932,8 @@ class InspectingClientAsync(object):
         reply, informs = yield ic.simple_request('help', 'sensor-list')
 
         """
+        # TODO (NM 2016-11-03) This method should really live on the lower level
+        # katcp_client in client.py, is generally useful IMHO
         use_mid = kwargs.get('use_mid')
         timeout = kwargs.get('timeout')
         mid = kwargs.get('mid')
