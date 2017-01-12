@@ -698,8 +698,7 @@ def request(*types, **options):
                 new_args = unpack_types(types, msg.arguments, argnames, major)
                 return handler(self, *new_args)
 
-        raw_handler.__name__ = handler.__name__
-        raw_handler.__doc__ = handler.__doc__
+        raw_handler = wraps(handler)(raw_handler)
         # explicitly note that this decorator has been run, so that
         # return_reply can know if it's on the outside.
         raw_handler._request_decorated = True
@@ -709,7 +708,7 @@ def request(*types, **options):
 
 # partial calls below 'copy' the function, letting us change the docstring without
 # affecting the original function's docstring
-inform = partial(request, has_req=False)
+inform = wraps(request)(partial(request, has_req=False))
 inform.__doc__ = """Decorator for inform handler methods.
 
 The method being decorated should take arguments matching the list of types.
@@ -741,7 +740,7 @@ Examples
 
 """
 
-unpack_message = partial(request, has_req=False)
+unpack_message = wraps(request)(partial(request, has_req=False))
 unpack_message.__doc__ = (
 """Decorator that unpacks katcp.Messages to function arguments.
 
@@ -829,15 +828,18 @@ def return_reply(*types, **options):
                              " with 'request_').")
         msgname = convert_method_name('request_', handler.__name__)
 
+        @wraps(handler)
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
             if gen.is_future(reply_args):
                 return async_make_reply(msgname, types, reply_args, major)
             else:
                 return make_reply(msgname, types, reply_args, major)
-        raw_handler.__name__ = handler.__name__
-        raw_handler.__doc__ = handler.__doc__
 
+
+        # TODO NM 2017-01-12 Consider using the decorator module to create
+        # signature preserving decorators that would avoid the need for this
+        # trickery
         if not getattr(handler, "_request_decorated", False):
             # We are on the inside.
             # We must preserve the original function parameter names for the
@@ -889,6 +891,7 @@ def send_reply(*types, **options):
                         % options.keys())
 
     def decorator(handler):
+        @wraps(handler)
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
             req = reply_args[0]
