@@ -1075,19 +1075,20 @@ class DeviceServerBase(object):
                         finally:
                             done_future.set_result(None)
 
+                    # TODO When using the return_reply() decorator the future
+                    # returned is not currently threadsafe, must either deal
+                    # with it here, or in kattypes.py. Would be nice if we don't
+                    # have to always fall back to adding a callback, or wrapping
+                    # a thread-safe future. Supporting sync-with-thread and
+                    # async futures is turning out to be a pain in the ass ;)
+                    self.ioloop.add_callback(reply.add_done_callback, async_reply)
+                    # reply.add_done_callback(async_reply)
+
                     if getattr(handler, 'concurrent_reply', False):
                         # Return immediately if this is a concurrent handler
                         self._logger.debug("%s FUTURE CONCURRENT", msg.name)
                         return
                     else:
-                        # TODO When using the return_reply() decorator the future
-                        # returned is not currently threadsafe, must either deal
-                        # with it here, or in kattypes.py. Would be nice if we don't
-                        # have to always fall back to adding a callback, or wrapping
-                        # a thread-safe future. Supporting sync-with-thread and
-                        # async futures is turning out to be a pain in the ass ;)
-                        self.ioloop.add_callback(reply.add_done_callback, async_reply)
-                        # reply.add_done_callback(async_reply)
                         self._logger.debug("%s FUTURE OK" % (msg.name,))
                         return done_future
                 else:
