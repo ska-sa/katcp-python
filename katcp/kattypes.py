@@ -12,7 +12,7 @@ import struct
 import re
 import logging
 
-from functools import partial, wraps
+from functools import partial, wraps, update_wrapper
 
 from tornado import gen
 
@@ -698,7 +698,7 @@ def request(*types, **options):
                 new_args = unpack_types(types, msg.arguments, argnames, major)
                 return handler(self, *new_args)
 
-        raw_handler = wraps(handler)(raw_handler)
+        update_wrapper(raw_handler, handler)
         # explicitly note that this decorator has been run, so that
         # return_reply can know if it's on the outside.
         raw_handler._request_decorated = True
@@ -708,7 +708,9 @@ def request(*types, **options):
 
 # partial calls below 'copy' the function, letting us change the docstring without
 # affecting the original function's docstring
-inform = wraps(request)(partial(request, has_req=False))
+inform = partial(request, has_req=False)
+update_wrapper(inform, request)
+inform.__name__ = 'inform'
 inform.__doc__ = """Decorator for inform handler methods.
 
 The method being decorated should take arguments matching the list of types.
@@ -740,7 +742,9 @@ Examples
 
 """
 
-unpack_message = wraps(request)(partial(request, has_req=False))
+unpack_message = partial(request, has_req=False)
+update_wrapper(unpack_message, request)
+update_wrapper.__name__ = 'unpack_message'
 unpack_message.__doc__ = (
 """Decorator that unpacks katcp.Messages to function arguments.
 
@@ -949,7 +953,7 @@ def concurrent_reply(handler):
 
     """
 
-    handler.concurrent_reply = True
+    handler._concurrent_reply = True
     return handler
 
 @gen.coroutine

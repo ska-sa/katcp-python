@@ -1052,17 +1052,19 @@ class DeviceServerBase(object):
                 # is complete. Attach a message-sending callback to the future,
                 # and return the future.
                 if gen.is_future(reply):
+                    concurrent = getattr(handler, '_concurrent_reply', False)
+                    concurrent_str = ' CONCURRENT' if concurrent else ''
+
                     done_future = Future()
                     def async_reply(f):
                         try:
                             connection.reply(f.result(), msg)
-                            if getattr(handler, 'concurrent_reply', False):
-                                self._logger.debug(
-                                    "%s FUTURE CONCURRENT replied", msg.name)
+                            self._logger.debug("%s FUTURE%s replied",
+                                               msg.name, concurrent_str)
                         except FailReply, e:
                             reason = str(e)
-                            self._logger.error("Request %s FUTURE FAIL: %s"
-                                               % (msg.name, reason))
+                            self._logger.error("Request %s FUTURE%s FAIL: %s",
+                                               msg.name, concurrent_str, reason)
                             reply = Message.reply(msg.name, "fail", reason)
                             connection.reply(reply, msg)
                         except AsyncReply:
@@ -1084,9 +1086,9 @@ class DeviceServerBase(object):
                     self.ioloop.add_callback(reply.add_done_callback, async_reply)
                     # reply.add_done_callback(async_reply)
 
-                    if getattr(handler, 'concurrent_reply', False):
+                    if concurrent:
                         # Return immediately if this is a concurrent handler
-                        self._logger.debug("%s FUTURE CONCURRENT", msg.name)
+                        self._logger.debug("%s FUTURE CONCURRENT OK", msg.name)
                         return
                     else:
                         self._logger.debug("%s FUTURE OK" % (msg.name,))
