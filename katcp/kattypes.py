@@ -927,7 +927,7 @@ def concurrent_reply(handler):
     """Decorator for concurrent async request handlers
 
     By default async request handlers that return a Future are serialised
-    per-connection, i.e. until the most recent handler resolves it future, the
+    per-connection, i.e. until the most recent handler resolves its future, the
     next message will not be read from the client stream. A handler decorated
     with this decorator allows the next message to be read before it has
     resolved its future, allowing multiple requests from a single client to be
