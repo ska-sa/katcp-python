@@ -12,11 +12,11 @@ import struct
 import re
 import logging
 
-from functools import partial
+from functools import partial, wraps
 
 from tornado import gen
 
-from .core import (Message, FailReply, DEFAULT_KATCP_MAJOR,
+from .core import (Message, FailReply, ConcurrentReply, DEFAULT_KATCP_MAJOR,
                    SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC, MS_TO_SEC_FAC,
                    convert_method_name)
 
@@ -603,7 +603,7 @@ class Parameter(object):
                             (self.position, self.name, message))
 
 
-# request, return_reply and inform method decorators
+# request, return_reply, send_reply, concurrent_reply and inform method decorators
 
 def request(*types, **options):
     """Decorator for request handler methods.
@@ -778,6 +778,29 @@ Examples
 """)
 
 
+def concurrent_reply(handler):
+    """Decorator to indicate that the reply may be concurrent with other
+    requests. This is equivalent to raising :exc:`~katcp.core.AsyncReply`.
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     @request(Int())
+    ...     @return_reply(Int(), Float())
+    ...     @concurrent_reply
+    ...     @tornado.gen.coroutine
+    ...     def request_myreq(self, req, my_int):
+    ...         yield tornado.gen.sleep(1)
+    ...         return ("ok", my_int + 1, my_int * 2.0)
+    ...
+    """
+    @wraps(handler)
+    def wrapper(*args, **kwargs):
+        ret = handler(*args, **kwargs)
+        return ConcurrentReply(ret)
+    return wrapper
+
+
 def return_reply(*types, **options):
     """Decorator for returning replies from request handler methods.
 
@@ -831,10 +854,20 @@ def return_reply(*types, **options):
 
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
+            concurrent = False
+            # Handle the case where concurrent_reply is used on the inside
+            # of return_reply.
+            if isinstance(reply_args, ConcurrentReply):
+                concurrent = True
+                reply_args = reply_args.wrapped
             if gen.is_future(reply_args):
-                return async_make_reply(msgname, types, reply_args, major)
+                ret = async_make_reply(msgname, types, reply_args, major)
             else:
-                return make_reply(msgname, types, reply_args, major)
+                ret = make_reply(msgname, types, reply_args, major)
+            # Put back ConcurrentReply wrapper if it was stripped
+            if concurrent:
+                ret = ConcurrentReply(ret)
+            return ret
         raw_handler.__name__ = handler.__name__
         raw_handler.__doc__ = handler.__doc__
 

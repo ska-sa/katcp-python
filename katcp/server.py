@@ -29,7 +29,7 @@ from concurrent.futures import Future
 
 from .ioloop_manager import IOLoopManager, with_relative_timeout
 from .core import (DeviceMetaclass, Message, MessageParser,
-                   FailReply, AsyncReply, ProtocolFlags)
+                   FailReply, AsyncReply, ConcurrentReply, ProtocolFlags)
 from .sampling import SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
 from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
@@ -1044,8 +1044,12 @@ class DeviceServerBase(object):
         # raise an error as needed.
         if msg.name in self._request_handlers:
             req_conn = ClientRequestConnection(connection, msg)
+            concurrent = False
             try:
                 reply = self._request_handlers[msg.name](self, req_conn, msg)
+                if isinstance(reply, ConcurrentReply):
+                    reply = reply.wrapped
+                    concurrent = True
                 # If we get a future, assume this is an async message handler
                 # that will resolve the future with the reply message when it
                 # is complete. Attach a message-sending callback to the future,
@@ -1079,8 +1083,12 @@ class DeviceServerBase(object):
                     # async futures is turning out to be a pain in the ass ;)
                     self.ioloop.add_callback(reply.add_done_callback, async_reply)
                     # reply.add_done_callback(async_reply)
-                    self._logger.debug("%s FUTURE OK" % (msg.name,))
-                    return done_future
+                    if concurrent:
+                        self._logger.debug("%s FUTURE CONCURRENT OK" % (msg.name,))
+                        send_reply = False
+                    else:
+                        self._logger.debug("%s FUTURE OK" % (msg.name,))
+                        return done_future
                 else:
                     assert (reply.mtype == Message.REPLY)
                     assert (reply.name == msg.name)
