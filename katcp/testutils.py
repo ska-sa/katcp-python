@@ -1694,7 +1694,7 @@ class WaitingMock(mock.Mock):
         """
         t0 = time.time()
         to_wait = timeout
-        if self.call_count >= count:
+        if self.call_count >= count and len(self.call_args_list) >= count:
             return True
         while to_wait >= 0 and self.call_count < count:
             try:
@@ -1708,13 +1708,10 @@ class WaitingMock(mock.Mock):
         # call_args or call_args_list, so it is possible that we return from
         # assert_wait_call_count() before the results are available. Try sleep
         # some more until this stops being the case.
-        quantum = to_wait / 100.
+        quantum = 0.001
         while to_wait >= 0 and len(self.call_args_list) < count:
-            try:
-                self._counted_queue.get(timeout=quantum)
-            except Queue.Empty:
-                pass
-            to_wait -= quantum
+            time.sleep(quantum)
+            to_wait = timeout - (time.time() - t0)
 
 
 def mock_req(req_name, *args, **kwargs):
@@ -1922,4 +1919,3 @@ class TimewarpAsyncTestCaseTimeAdvancer(threading.Thread):
         yield self.test_instance.set_ioloop_time(
             self.test_instance.ioloop_time + self.quantum)
         future.set_result(None)
-
