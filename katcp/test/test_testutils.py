@@ -5,8 +5,8 @@ import threading
 import time
 
 from katcp import Sensor
-
 from katcp import testutils
+
 
 def get_sensor(sensor_type, name=None):
     if name is None:
@@ -121,3 +121,43 @@ class test_wait_sensor(unittest.TestCase):
                 (2, Sensor.ERROR),
                 (0, Sensor.ERROR))
         self._wait_sensor(vals, 0, status=Sensor.ERROR)
+
+
+class test_WaitingMock(unittest.TestCase):
+
+    def test_reset_mock(self):
+        # Verify that the call_count and call_args_list variables
+        # are initially zero, and get cleared by calling reset_mock
+        DUT = testutils.WaitingMock()
+        self.assertEqual(DUT.call_count, 0)
+        self.assertEqual(len(DUT.call_args_list), 0)
+        DUT()
+        self.assertEqual(DUT.call_count, 1)
+        self.assertEqual(len(DUT.call_args_list), 1)
+        DUT.reset_mock()
+        self.assertEqual(DUT.call_count, 0)
+        self.assertEqual(len(DUT.call_args_list), 0)
+
+    def test_assert_wait_call_count_success(self):
+        # Test the normal case, in which the mock was called
+        DUT = testutils.WaitingMock()
+        DUT(123)
+        DUT.assert_wait_call_count(1, timeout=0.1)
+
+    def test_assert_wait_call_count_fail_on_call_count(self):
+        # Test the negative case, when the mock was not called.
+        # This should cause an assertion error after the timeout.
+        DUT = testutils.WaitingMock()
+        with self.assertRaises(AssertionError):
+            DUT.assert_wait_call_count(1, timeout=0.1)
+
+    def test_assert_wait_call_count_fail_on_call_args(self):
+        # Synthetic test case where the call_count is correct, but the
+        # call_args_list has not been updated yet.  This might occur if
+        # the mock call is done in a different thread to the unit test.
+        # In this case we expect a runtime error after the timeout.
+        DUT = testutils.WaitingMock()
+        DUT(123)
+        DUT.call_args_list = []
+        with self.assertRaises(RuntimeError):
+            DUT.assert_wait_call_count(1, timeout=0.1)

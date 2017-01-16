@@ -1679,10 +1679,10 @@ class WaitingMock(mock.Mock):
         except Queue.Full:
             pass
 
-    def reset_mock(self):
+    def reset_mock(self, visited=None):
         # Re-set call_count as an AtomicIaddCallback instance since
         # the reset_mock() super-method does self.call_count=0
-        super(WaitingMock, self).reset_mock()
+        super(WaitingMock, self).reset_mock(visited)
         self.call_count = AtomicIaddCallback(
             self.call_count, callback=self._call_count_callback)
 
@@ -1712,6 +1712,14 @@ class WaitingMock(mock.Mock):
         while to_wait >= 0 and len(self.call_args_list) < count:
             time.sleep(quantum)
             to_wait = timeout - (time.time() - t0)
+
+        # If the call_args_list still hasn't been updated after the loop above
+        # then the test using this function may fail if it looks at the
+        # call_args_list.  Raise a RuntimeError to let the test author know
+        # something went wrong.  The timeout parameter used by the test
+        # should be increased.
+        if self.call_count >= count and len(self.call_args_list) < count:
+            raise RuntimeError("call_args_list not updated within timeout.")
 
 
 def mock_req(req_name, *args, **kwargs):
