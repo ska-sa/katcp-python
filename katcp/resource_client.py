@@ -1473,13 +1473,9 @@ class IOLoopThreadWrapper(object):
             return future.result(timeout)
         except TimeoutError:
             raise
-        except KeyboardInterrupt:
-            print('=== KeyboardInterrupt ===')
-            sys.exc_clear()
-
         except Exception:
-            # If we have an exception use the tornado future instead since it will print a
-            # nicer traceback.
+            # If we have an exception use the tornado future instead since it
+            # will print a nicer traceback.
             tornado_future.result()
             # Should never get here since the tornado future should raise
             assert False, 'Tornado Future should have raised'
