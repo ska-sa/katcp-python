@@ -1679,10 +1679,10 @@ class WaitingMock(mock.Mock):
         except Queue.Full:
             pass
 
-    def reset_mock(self):
+    def reset_mock(self, visited=None):
         # Re-set call_count as an AtomicIaddCallback instance since
         # the reset_mock() super-method does self.call_count=0
-        super(WaitingMock, self).reset_mock()
+        super(WaitingMock, self).reset_mock(visited)
         self.call_count = AtomicIaddCallback(
             self.call_count, callback=self._call_count_callback)
 
@@ -1694,7 +1694,7 @@ class WaitingMock(mock.Mock):
         """
         t0 = time.time()
         to_wait = timeout
-        if self.call_count >= count:
+        if self.call_count >= count and len(self.call_args_list) >= count:
             return True
         while to_wait >= 0 and self.call_count < count:
             try:
@@ -1708,13 +1708,18 @@ class WaitingMock(mock.Mock):
         # call_args or call_args_list, so it is possible that we return from
         # assert_wait_call_count() before the results are available. Try sleep
         # some more until this stops being the case.
-        quantum = to_wait / 100.
+        quantum = 0.001
         while to_wait >= 0 and len(self.call_args_list) < count:
-            try:
-                self._counted_queue.get(timeout=quantum)
-            except Queue.Empty:
-                pass
-            to_wait -= quantum
+            time.sleep(quantum)
+            to_wait = timeout - (time.time() - t0)
+
+        # If the call_args_list still hasn't been updated after the loop above
+        # then the test using this function may fail if it looks at the
+        # call_args_list.  Raise a RuntimeError to let the test author know
+        # something went wrong.  The timeout parameter used by the test
+        # should be increased.
+        if self.call_count >= count and len(self.call_args_list) < count:
+            raise RuntimeError("call_args_list not updated within timeout.")
 
 
 def mock_req(req_name, *args, **kwargs):
@@ -1922,4 +1927,3 @@ class TimewarpAsyncTestCaseTimeAdvancer(threading.Thread):
         yield self.test_instance.set_ioloop_time(
             self.test_instance.ioloop_time + self.quantum)
         future.set_result(None)
-
