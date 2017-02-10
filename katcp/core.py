@@ -756,6 +756,23 @@ class AsyncReply(Exception):
     pass
 
 
+class ConcurrentReply(object):
+    """Returned by request handlers to indicate that the request should be
+    allowed to execute concurrently with other requests on the connection.
+    It wraps the actual reply, which is typically a future.
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     def request_myreq(self, req, msg):
+    ...         future = self._async_callback(req, msg)
+    ...         return ConcurrentReply(future)
+    ...
+    """
+    def __init__(self, wrapped):
+        self.wrapped = wrapped
+
+
 # Only Imported here to prevent circular import issues.
 from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp, Address
 
