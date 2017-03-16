@@ -13,6 +13,7 @@ import re
 import logging
 
 from functools import partial
+from decimal import Decimal
 
 from tornado import gen
 
@@ -158,7 +159,10 @@ class Int(KatcpType):
 
     def decode(self, value, major):
         try:
-            return int(value)
+            try:
+                return int(value)
+            except ValueError:
+                return int(Decimal(value))
         except:
             raise ValueError("Could not parse value '%s' as integer." % value)
 
@@ -293,7 +297,7 @@ class Lru(KatcpType):
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = range(2)
 
-    ## @brief Mapping from LRU value constant to LRU value name.
+    # @brief Mapping from LRU value constant to LRU value name.
     LRU_VALUES = {
         LRU_NOMINAL: "nominal",
         LRU_ERROR: "error",
@@ -302,7 +306,7 @@ class Lru(KatcpType):
     # LRU_VALUES not found by pylint
     # pylint: disable-msg = E0602
 
-    ## @brief Mapping from LRU value name to LRU value constant.
+    # @brief Mapping from LRU value name to LRU value constant.
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
 
     def encode(self, value, major):

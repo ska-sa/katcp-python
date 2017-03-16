@@ -61,9 +61,11 @@ class TestInt(TestType):
             (optional, None, ValueError),
         ]
 
+        bint = int('5' * 60)
         self._unpack = [
             (basic, "5", 5),
             (basic, "-5", -5),
+            (basic, str(bint) + ".22222", bint),
             (basic, "a", ValueError),
             (basic, None, ValueError),
             (self.minmax, "5", 5),
