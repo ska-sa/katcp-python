@@ -753,6 +753,11 @@ class BlockingTestClient(client.BlockingClient):
         informs_count : None or int, optional
             Keyword parameter.  Assert that the number of informs received
             matches this number, if not None.
+        informs_args_equal : None or list of lists
+            Keyword parameter.  Assert that the arguments of the informs
+            received match this list. The sub-lists are the expected args for
+            each inform. The order of received informs must match the order of
+            the main list. Implicitly also checks the number of informs received.
 
         """
         reply, informs = self.blocking_request(Message.request(requestname,
@@ -775,6 +780,7 @@ class BlockingTestClient(client.BlockingClient):
         args_in = kwargs.get("args_in")
         args_length = kwargs.get("args_length")
         informs_count = kwargs.get("informs_count")
+        informs_args_equal = kwargs.get("informs_args_equal")
 
         if args_echo:
             args_equal = [str(p) for p in params]
@@ -800,6 +806,14 @@ class BlockingTestClient(client.BlockingClient):
                    "parameters %r, but received %d."
                    % (informs_count, requestname, params, len(informs)))
             self.test.assertEqual(len(informs), informs_count, msg)
+
+        if informs_args_equal is not None:
+            expected_inform_args = list(informs_args_equal)
+            actual_inform_args = [inform.arguments for inform in informs]
+            msg = ("Expected inform arguments {expected_inform_args} in reply to request "
+                   "{requestname!r} called with parameters {params!r}, "
+                   "but received {actual_inform_args!r}.".format(**locals()))
+            self.test.assertEqual(actual_inform_args, expected_inform_args, msg)
 
         return args
 
