@@ -174,6 +174,10 @@ class TestProtocolFlags(unittest.TestCase):
         # check an unknown flag
         self.assertEqual(PF.parse_version("5.1-MIU"),
                          PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS, 'U'])))
+        # Check request timeout hint flag
+        self.assertEqual(PF.parse_version("5.1-MTI"),
+                         PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
+                                       PF.REQUEST_TIMEOUT_HINTS])))
 
     def test_str(self):
         PF = katcp.ProtocolFlags
@@ -183,12 +187,21 @@ class TestProtocolFlags(unittest.TestCase):
         self.assertEqual(str(PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
                                            "U"]))),
                          "5.0-IMU")
+        self.assertEqual(str(PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
+                                           PF.REQUEST_TIMEOUT_HINTS]))),
+                         "5.1-IMT")
+
 
     def test_incompatible_options(self):
         PF = katcp.ProtocolFlags
         # Katcp v4 and below don't support message ids
         with self.assertRaises(ValueError):
             PF(4, 0, [PF.MESSAGE_IDS])
+
+        # Katcp v5 and below don't support (proposed) timeout hint flag
+        with self.assertRaises(ValueError):
+            PF(5, 0, [PF.REQUEST_TIMEOUT_HINTS])
+
 
 class TestSensor(unittest.TestCase):
 

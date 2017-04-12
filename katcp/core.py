@@ -596,6 +596,9 @@ class ProtocolFlags(object):
 
     MULTI_CLIENT = 'M'
     MESSAGE_IDS = 'I'
+    # New proposal flag to indicate that a device supports ?request-timeout-hint
+    # See CB-2051
+    REQUEST_TIMEOUT_HINTS = 'T'
 
     STRATEGIES_V4 = frozenset(['none', 'auto', 'period', 'event',
                                'differential'])
@@ -607,15 +610,24 @@ class ProtocolFlags(object):
         5: STRATEGIES_V5
         }
 
+    REQUEST_TIMEOUT_HINTS_MIN_VERSION = (5, 1)
+
     def __init__(self, major, minor, flags):
         self.major = major
         self.minor = minor
         self.flags = set(list(flags))
         self.multi_client = self.MULTI_CLIENT in self.flags
         self.message_ids = self.MESSAGE_IDS in self.flags
+        self.request_timeout_hints = self.REQUEST_TIMEOUT_HINTS in self.flags
         if self.message_ids and self.major < MID_KATCP_MAJOR:
             raise ValueError(
                 'MESSAGE_IDS is only supported in katcp v5 and newer')
+        version_supports_hints = ((self.major, self.minor) >=
+                                  self.REQUEST_TIMEOUT_HINTS_MIN_VERSION)
+        if self.request_timeout_hints and not version_supports_hints:
+            raise ValueError(
+                'REQUEST_TIMEOUT_HINTS only suported in katcp v{}.{} and newer'
+                .format(self.major, self.minor))
 
     def strategy_allowed(self, strategy):
         return strategy in self.STRATEGIES_ALLOWED_BY_MAJOR_VERSION[self.major]
