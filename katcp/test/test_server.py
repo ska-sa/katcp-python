@@ -46,8 +46,6 @@ logger = logging.getLogger(__name__)
 
 NO_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
 
-# TODO: Tests with server in asynchronous mode!
-
 class test_ClientConnection(unittest.TestCase):
     def test_init(self):
         # Test that the ClientConnection methods are correctly bound to the
