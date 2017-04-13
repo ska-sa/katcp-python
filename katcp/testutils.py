@@ -32,6 +32,10 @@ from .core import (Sensor,
                    AttrDict,
                    steal_docstring_from)
 from .server import DeviceServer, FailReply, ClientConnection
+from .kattypes import (request,
+                       return_reply,
+                       Float,
+                       concurrent_reply)
 
 
 logger = logging.getLogger(__name__)
@@ -961,7 +965,6 @@ class BlockingTestClient(client.BlockingClient):
 class DeviceTestServer(DeviceServer):
     """Test server."""
 
-
     def __init__(self, *args, **kwargs):
         super(DeviceTestServer, self).__init__(*args, **kwargs)
         # Make a copies so that test users can modify the available handlers without
@@ -997,9 +1000,6 @@ class DeviceTestServer(DeviceServer):
         rv = yield super(DeviceTestServer, self).on_client_connect(client_conn)
         raise gen.Return(rv)
 
-    def cancel_slow(self):
-        self._cancel_slow_command.set()
-
     def setup_sensors(self):
         self.restarted = False
         self.add_sensor(DeviceTestSensor(
@@ -1020,7 +1020,14 @@ class DeviceTestServer(DeviceServer):
         raise FailReply("There was a problem with your request.")
 
     def request_slow_command(self, req, msg):
-        """A slow command, waits for msg.arguments[0] seconds."""
+        """A slow command, waits for msg.arguments[0] seconds.
+
+        This is an async request that will allow another request to be handled
+        before this one replies.
+
+        Request can be cancelled using ?cancel-slow-command
+
+        """
         if req.client_connection in self._slow_futures:
             raise FailReply(
                 'A slow command is already running for this connection')
@@ -1038,7 +1045,7 @@ class DeviceTestServer(DeviceServer):
                 self._logger.exception('Unable to complete ?slow-command request')
                 req.reply('fail', 'Unhandled exception, see logs')
             finally:
-                del self._slow_futures[req.client_connection]
+                self._slow_futures.pop(req.client_connection, None)
         self.ioloop.add_callback(slow_timeout)
         raise AsyncReply
 
@@ -1089,6 +1096,40 @@ class DeviceTestServer(DeviceServer):
             if not fut.done:
                 fut.set_result(None)
         super(DeviceTestServer, self).stop(*args, **kwargs)
+
+class AsyncDeviceTestServer(DeviceTestServer):
+    def __init__(self, *args, **kwargs):
+        super(AsyncDeviceTestServer, self).__init__(*args, **kwargs)
+        self.set_concurrency_options(thread_safe=False, handler_thread=False)
+
+    @request(Float())
+    @return_reply()
+    @concurrent_reply
+    @gen.coroutine
+    def request_slow_command(self, req, wait_time):
+        """A slow coroutine request, waits for msg.arguments[0] seconds.
+
+        This is an async request that will allow another request to be handled
+        before this one replies.
+
+        Request can be cancelled using ?cancel-slow-command
+
+        """
+        if req.client_connection in self._slow_futures:
+            raise FailReply(
+                'A slow command is already running for this connection')
+
+        t0 = time.time()
+        fut = self._slow_futures[req.client_connection] = Future()
+        try:
+            yield gen.with_timeout(t0 + wait_time, fut)
+        except gen.TimeoutError:
+            pass
+        finally:
+            self._slow_futures.pop(req.client_connection, None)
+
+        raise gen.Return(('ok', ))
+
 
 
 class SensorComparisonMixin(object):

@@ -31,7 +31,8 @@ logging.getLogger("katcp").addHandler(log_handler)
 
 logger = logging.getLogger(__name__)
 
-NO_HELP_MESSAGES = 16         # Number of requests on DeviceTestServer
+# Number of requests on DeviceTestServer
+NO_HELP_MESSAGES = len(DeviceTestServer._request_handlers)
 
 
 def remove_version_connect(msgs):
