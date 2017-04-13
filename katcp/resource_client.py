@@ -551,7 +551,7 @@ class KATCPClientResource(resource.KATCPResource):
         # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
         raise tornado.gen.Return(sensor_dict)
 
-    def _request_factory(self, name, description):
+    def _request_factory(self, name, description, timeout_hint):
         return KATCPClientResourceRequest(
             name, description, self._inspecting_client, self.is_active)
 

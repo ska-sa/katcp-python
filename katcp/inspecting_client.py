@@ -21,7 +21,7 @@ from katcp.core import (AttrDict, until_any, future_timeout_manager,
                         steal_docstring_from)
 
 ic_logger = logging.getLogger("katcp.inspect_client")
-RequestType = namedtuple('Request', 'name description')
+RequestType = namedtuple('Request', 'name description timeout_hint')
 
 class ExponentialRandomBackoff(object):
 
@@ -587,7 +587,7 @@ class InspectingClientAsync(object):
         Parameters
         ----------
         name : str or None, optional
-            Name of the sensor or None to get all requests.
+            Name of the request or None to get all requests.
         timeout : float or None, optional
             Timeout for request inspection, None for no timeout
 
@@ -607,12 +607,13 @@ class InspectingClientAsync(object):
              'removed': set(['req10', 'req20'])}
 
         """
+        maybe_timeout = future_timeout_manager(timeout)
         if name is None:
             msg = katcp.Message.request('help')
         else:
             msg = katcp.Message.request('help', name)
         reply, informs = yield self.katcp_client.future_request(
-            msg, timeout=timeout)
+            msg, timeout=maybe_timeout.remaining())
         if not reply.reply_ok():
             # If an unknown request is specified the desired result is to return
             # an empty list even though the request will fail
@@ -621,12 +622,22 @@ class InspectingClientAsync(object):
                     'Error reply during sync process for {}: {}'
                     .format(self.bind_address_string, reply))
 
+        # Get recommended timeouts hints for slow requests if the server
+        # provides them
+        timeout_hints_available = (
+            self.katcp_client.protocol_flags.request_timeout_hints)
+        if timeout_hints_available:
+            timeout_hints = yield self._get_request_timeout_hints(
+                name, timeout=maybe_timeout.remaining())
+        else:
+            timeout_hints = {}
 
         requests_old = set(self._requests_index.keys())
         requests_updated = set()
         for msg in informs:
             req_name = msg.arguments[0]
-            req = {'description': msg.arguments[1]}
+            req = {'description': msg.arguments[1],
+                   'timeout_hint': timeout_hints.get(req_name)}
             requests_updated.add(req_name)
             self._update_index(self._requests_index, req_name, req)
 
@@ -634,6 +645,53 @@ class InspectingClientAsync(object):
             requests_old, requests_updated, name, self._requests_index)
         if added or removed:
             raise Return(AttrDict(added=added, removed=removed))
+
+    @tornado.gen.coroutine
+    def _get_request_timeout_hints(self, name=None, timeout=None):
+        """Get request timeout hints from device
+
+        Parameters
+        =========
+        name : str or None, optional
+            Name of the request or None to get all request  timeout hints.
+        timeout : float seconds
+            Timeout for ?request-timeout-hint
+
+        Returns
+        -------
+        Tornado future that resolves with:
+
+        timeout_hints : dict request_name -> timeout_hint
+
+        where
+
+        request_name : str
+            Name of the request
+        timeout_hint : float
+            Suggested request timeout hint from device ?request-timeout_hint
+
+        Note, if there is no request hint, there will be no entry in the
+        dict. If you request the hint for a named request that has no hint, an
+        empty dict will be returned.
+
+        """
+        timeout_hints = {}
+        req_msg_args = ['request-timeout-hint']
+        if name:
+            req_msg_args.append(name)
+        req_msg = katcp.Message.request(*req_msg_args)
+        reply, informs = yield self.katcp_client.future_request(
+            req_msg, timeout=timeout)
+        if not reply.reply_ok():
+            raise SyncError('Error retrieving request timeout hints: "{}"\n'
+                            'in reply to request {}, continuing with sync'
+                            .format(reply, req_msg))
+        for inform in informs:
+            request_name = inform.arguments[0]
+            timeout_hint = float(inform.arguments[1])
+            if timeout_hint > 0:
+                timeout_hints[request_name] = timeout_hint
+        raise Return(timeout_hints)
 
     @tornado.gen.coroutine
     def inspect_sensors(self, name=None, timeout=None):
@@ -844,7 +902,7 @@ class InspectingClientAsync(object):
             obj = request_info.get('obj')
             if obj is None:
                 obj = self.request_factory(
-                    name, request_info.get('description', ''))
+                    name, **request_info)
                 self._requests_index[name]['obj'] = obj
 
         raise tornado.gen.Return(obj)

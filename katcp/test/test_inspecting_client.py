@@ -11,7 +11,9 @@ import katcp
 from concurrent.futures import Future
 
 from katcp import Sensor, Message
-from katcp.testutils import (DeviceTestServer, start_thread_with_cleanup,
+from katcp.testutils import (DeviceTestServer,
+                             DeviceTestServerWithTimeoutHints,
+                             start_thread_with_cleanup,
                              DeviceTestSensor)
 from katcp import inspecting_client
 from katcp.inspecting_client import InspectingClientAsync
@@ -153,6 +155,87 @@ class TestICAClass(tornado.testing.AsyncTestCase):
         self.assertIn('new', index['B'].get('description'))
         self.assertFalse(index['A'].get('_changed', False))
         self.assertTrue(index['B'].get('_changed'))
+
+
+class TestInspectingClientInspect(tornado.testing.AsyncTestCase):
+    """Check that inspection populates the request/sensor index correctly"""
+
+    def setUp(self):
+        super(TestInspectingClientInspect, self).setUp()
+        self.server = DeviceTestServer('', 0)
+        start_thread_with_cleanup(self, self.server, start_timeout=1)
+        self.server_with_timeout_hints = DeviceTestServerWithTimeoutHints('', 0)
+        start_thread_with_cleanup(self, self.server_with_timeout_hints,
+                                  start_timeout=1)
+
+    def _get_server(self, hints):
+        """Return a running test server with or without request timeout hints
+
+        Parameters
+        ----------
+        hints : bool
+            Whether or not the server should have request timeout hints enabled
+
+        """
+        ServerClass = (DeviceTestServerWithTimeoutHints if hints
+                       else DeviceTestServer)
+        server = ServerClass('', 0)
+        start_thread_with_cleanup(self, server, start_timeout=1)
+        host, port = server.bind_address
+        return host, port, server
+
+    def _get_expected_request_index(self, server):
+        """Return expected request index data structure for given server instance
+
+        Parameters
+        ----------
+        server : :class:`DeviceServer` instance
+
+        """
+        hints = getattr(server, 'request_timeout_hints', {})
+        expected = {}
+        for req, handler in server._request_handlers.items():
+            expected[req] = {'description': handler.__doc__,
+                             'timeout_hint': hints.get(req)}
+        return expected
+
+    @tornado.gen.coroutine
+    def _test_inspect_requests_no_timeout_hints(self, timeout_hints):
+        """Test  index creation
+
+        Parameters
+        ----------
+        timeout_hints : bool
+            Whether or not the server being tested against should privide
+            request timeout hints
+
+        Disables :meth:`InspectingClient.inspect_requests` so that inspecting
+        does not happen until the test triggers is. Then checks that
+        :attr:`InspectingClient._requests_index` is correctly generated
+
+        """
+        host, port, server = self._get_server(hints=timeout_hints)
+        DUT = InspectingClientAsync(host, port, ioloop=self.io_loop)
+        # mock out the state loop so that syncing does not happen automatically
+        DUT._state_loop = mock.Mock()
+        # Connect to test server
+        yield DUT.connect(timeout=1)
+        # Now run the method under test
+        yield DUT.inspect_requests()
+        expected_request_index = self._get_expected_request_index(server)
+        self.assertEqual(DUT._requests_index, expected_request_index)
+
+    @tornado.testing.gen_test
+    def test_inspect_request_no_timeout_hints(self):
+        yield self._test_inspect_requests_no_timeout_hints(timeout_hints=False)
+
+    @tornado.testing.gen_test
+    def test_inspect_request_with_timeout_hints(self):
+        yield self._test_inspect_requests_no_timeout_hints(
+            timeout_hints=True)
+
+    # TODO NM 2017-04-12 Tests should be added for sensor index. I just added
+    # the minimum needed to test new functionality for CB-569
 
 
 class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
@@ -350,7 +433,8 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
             units='count', sensor_type=0, params=[-5, 5],
             description='An Integer.', name='an.int')
         self.assertIs(req, rf.return_value)
-        rf.assert_called_once_with('watchdog', mock.ANY)
+        rf.assert_called_once_with(
+            'watchdog', description=mock.ANY, timeout_hint=None)
 
 class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
     longMessage = True
