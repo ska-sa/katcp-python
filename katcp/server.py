@@ -28,7 +28,7 @@ from tornado.util import ObjectDict
 from concurrent.futures import Future
 
 from .ioloop_manager import IOLoopManager, with_relative_timeout
-from .core import (DeviceMetaclass, Message, MessageParser,
+from .core import (DeviceServerMetaclass, Message, MessageParser,
                    FailReply, AsyncReply, ProtocolFlags)
 from .sampling import SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
@@ -938,7 +938,7 @@ class DeviceServerBase(object):
 
     """
 
-    __metaclass__ = DeviceMetaclass
+    __metaclass__ = DeviceServerMetaclass
 
     ## @brief Protocol versions and flags. Default to version 5, subclasses
     ## should override PROTOCOL_INFO

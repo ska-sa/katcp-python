@@ -38,7 +38,8 @@ from katcp.testutils import (
     start_thread_with_cleanup,
     WaitingMock)
 from katcp.core import FailReply
-from katcp import __version__
+from katcp import (kattypes,
+                   __version__)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -917,6 +918,111 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         except Exception:
             # Use the tornado future to get a usable traceback
             tornado_future.result()
+
+
+class TestHandlerFiltering(unittest.TestCase):
+    class DeviceWithEverything(katcp.DeviceServer):
+        PROTOCOL_INFO = katcp.ProtocolFlags(
+            5, 1, [
+                katcp.ProtocolFlags.MULTI_CLIENT,
+                katcp.ProtocolFlags.MESSAGE_IDS,
+                katcp.ProtocolFlags.REQUEST_TIMEOUT_HINTS])
+
+        def request_simple(self, req, msg):
+            """A simple request"""
+
+        @kattypes.return_reply()
+        @kattypes.minimum_katcp_version(5, 1)
+        def request_version_51(self, req, msg):
+            """Request KATCP v5.1"""
+
+        @kattypes.minimum_katcp_version(5, 0)
+        def request_version_5(self, req, msg):
+            """Request KATCP v5.0"""
+
+        @kattypes.request()
+        @kattypes.has_katcp_protocol_flags(
+                [katcp.ProtocolFlags.MULTI_CLIENT,
+                 katcp.ProtocolFlags.MESSAGE_IDS])
+        def request_flags(self, req):
+            """Request some flags"""
+
+        @kattypes.has_katcp_protocol_flags(
+                [katcp.ProtocolFlags.MULTI_CLIENT])
+        def request_fewer_flags(self, req, msg):
+            """Request with fewer flags"""
+
+        @kattypes.request()
+        @kattypes.return_reply()
+        @kattypes.minimum_katcp_version(5, 1)
+        @kattypes.has_katcp_protocol_flags(
+            [katcp.ProtocolFlags.MULTI_CLIENT])
+        def request_version_and_flags(self, req, msg):
+            """Request with version and flag requirements"""
+
+    all_expected_handlers = frozenset(['simple', 'version-51', 'version-5',
+                                       'flags', 'fewer-flags',
+                                       'version-and-flags'])
+
+    def _test_handler_protocol_filters(self, DeviceCls, expected_handlers):
+        """Test that handlers are filtered according to protocol requirements."""
+        expected_handlers = set(expected_handlers)
+        not_expected_handlers = self.all_expected_handlers - expected_handlers
+        actual_device_handlers = set(DeviceCls._request_handlers.keys())
+
+        self.assertEqual(actual_device_handlers & expected_handlers,
+                         expected_handlers)
+        self.assertEqual(set(), actual_device_handlers & not_expected_handlers)
+
+
+    def test_handler_protocol_filters_all(self):
+        """Test handler filtering where everything should be included"""
+        self._test_handler_protocol_filters(self.DeviceWithEverything,
+                                            self.all_expected_handlers)
+
+    def test_handler_protocol_filters_five_with_nothing(self):
+        """Test handler filtering where protocol flags exclude some"""
+        class DeviceVersionFiveOneWithNothing(self.DeviceWithEverything):
+            PROTOCOL_INFO = katcp.ProtocolFlags(5, 1, [])
+
+        self._test_handler_protocol_filters(
+            DeviceVersionFiveOneWithNothing,
+            ['simple', 'version-5', 'version-51'])
+
+    def test_handler_protocol_filters_five_one_with_multi(self):
+        """Test handler filtering where protocol flags and version exclude some"""
+
+
+        class DeviceVersionFiveOneWithMultiClient(self.DeviceWithEverything):
+            PROTOCOL_INFO = katcp.ProtocolFlags(5, 1, [
+                katcp.ProtocolFlags.MULTI_CLIENT])
+
+        self._test_handler_protocol_filters(
+            DeviceVersionFiveOneWithMultiClient,
+            ['simple', 'version-5', 'version-51', 'fewer-flags',
+            'version-and-flags'])
+
+    def test_handler_protocol_filters_five(self):
+        """Test handler filtering for a KATCP v5.0 device"""
+
+        class DeviceVersionFive(self.DeviceWithEverything):
+            PROTOCOL_INFO = katcp.ProtocolFlags(
+                5, 0, [
+                    katcp.ProtocolFlags.MULTI_CLIENT,
+                    katcp.ProtocolFlags.MESSAGE_IDS])
+
+        self._test_handler_protocol_filters(
+            DeviceVersionFive,
+            ['simple', 'version-5', 'flags', 'fewer-flags'])
+
+    def test_handler_protocol_filters_four(self):
+        """Test handler filtering for a KATCP v4.0 device"""
+        class DeviceVersionFour(self.DeviceWithEverything):
+            PROTOCOL_INFO = katcp.ProtocolFlags(
+                4, 0, [katcp.ProtocolFlags.MULTI_CLIENT])
+        self._test_handler_protocol_filters(
+            DeviceVersionFour, ['simple', 'fewer-flags'])
+
 
 class TestDeviceServerClientIntegratedAsync(
         tornado.testing.AsyncTestCase,

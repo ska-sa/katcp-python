@@ -700,20 +700,64 @@ class DeviceMetaclass(type):
         for name in dir(mcs):
             if not callable(getattr(mcs, name)):
                 continue
+            handler = getattr(mcs, name)
             if name.startswith("request_"):
                 request_name = convert_method_name("request_", name)
-                mcs._request_handlers[request_name] = getattr(mcs, name)
-                assert(mcs._request_handlers[request_name].__doc__ is not None)
+                if mcs.check_protocol(handler):
+                    mcs._request_handlers[request_name] = handler
+                    assert(handler.__doc__ is not None)
             elif name.startswith("inform_"):
                 inform_name = convert_method_name("inform_", name)
-                mcs._inform_handlers[inform_name] = getattr(mcs, name)
-                assert(mcs._inform_handlers[inform_name].__doc__ is not None)
+                if mcs.check_protocol(handler):
+                    mcs._inform_handlers[inform_name] = handler
+                    assert(handler.__doc__ is not None)
                 # There is a bit of a name colission between the reply_*
                 # convention and the server reply_inform() method
             elif name.startswith("reply_") and name != 'reply_inform':
                 reply_name = convert_method_name("reply_", name)
-                mcs._reply_handlers[reply_name] = getattr(mcs, name)
-                assert(mcs._reply_handlers[reply_name].__doc__ is not None)
+                if mcs.check_protocol(handler):
+                    mcs._reply_handlers[reply_name] = handler
+                    assert(handler.__doc__ is not None)
+
+    def check_protocol(mcs, handler):
+        """Return False if `handler` should be filtered"""
+        # One cannot know protocol flags at definition time for device clients.
+        return True
+
+class DeviceServerMetaclass(DeviceMetaclass):
+    """Specialisation of DeviceMetaclass for Device Servers
+
+    Adds functionality for protocol-flag based filtering of handlers
+
+    """
+
+    def check_protocol(mcs, handler):
+        """
+        True if the current server's protocol flags satisfy handler requirements
+
+        """
+        try:
+            protocol_info = mcs.PROTOCOL_INFO
+        except Exception:
+            import pdb ; pdb.set_trace()
+        protocol_version = (protocol_info.major, protocol_info.minor)
+        protocol_flags = protocol_info.flags
+
+        # Check if minimum protocol version requirement is met
+        min_protocol_version = getattr(handler, '_minimum_katcp_version', None)
+        protocol_version_ok = (min_protocol_version is None or
+                               protocol_version >= min_protocol_version)
+
+        # Check if required optional protocol flags are present
+        required_katcp_protocol_flags = getattr(
+            handler, '_has_katcp_protocol_flags', None)
+        protocol_flags_ok = (
+            required_katcp_protocol_flags is None or
+            all(flag in protocol_flags
+                for flag in required_katcp_protocol_flags))
+
+        return protocol_version_ok and protocol_flags_ok
+
 
 
 class KatcpDeviceError(Exception):
