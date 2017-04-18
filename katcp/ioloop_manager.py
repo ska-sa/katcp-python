@@ -1,12 +1,19 @@
+import sys
 import time
 import logging
 import threading
+import textwrap
 
 import tornado.ioloop
 
-from concurrent.futures import Future
+from functools import wraps
+
+from peak.util.proxies import ObjectWrapper
+from concurrent.futures import Future, TimeoutError
+from tornado.concurrent import Future as tornado_Future
 from tornado import gen
 
+from thread import get_ident as get_thread_ident
 
 log = logging.getLogger(__name__)
 
@@ -158,3 +165,84 @@ class IOLoopManager(object):
             self._ioloop_thread.join(timeout)
         except AttributeError:
             raise RuntimeError('Cannot join if not started')
+
+class IOLoopThreadWrapper(object):
+    default_timeout = None
+
+    def __init__(self, ioloop=None):
+        self.ioloop = ioloop = ioloop or tornado.ioloop.IOLoop.current()
+        self._thread_id = None
+        ioloop.add_callback(self._install)
+
+    def call_in_ioloop(self, fn, args, kwargs, timeout=None):
+        timeout = timeout or self.default_timeout
+        if get_thread_ident() == self._thread_id:
+            raise RuntimeError("Cannot call a thread-wrapped object from the ioloop")
+        future, tornado_future = Future(), tornado_Future()
+        self.ioloop.add_callback(
+            self._ioloop_call, future, tornado_future, fn, args, kwargs)
+        try:
+            # Use the threadsafe future to block
+            return future.result(timeout)
+        except TimeoutError:
+            raise
+        except Exception:
+            # If we have an exception use the tornado future instead since it
+            # will print a nicer traceback.
+            tornado_future.result()
+            # Should never get here since the tornado future should raise
+            assert False, 'Tornado Future should have raised'
+
+    def decorate_callable(self, callable_):
+        """Decorate a callable to use call_in_ioloop"""
+        @wraps(callable_)
+        def decorated(*args, **kwargs):
+            # Extract timeout from request itself or use default for ioloop wrapper
+            timeout = kwargs.get('timeout')
+            return self.call_in_ioloop(callable_, args, kwargs, timeout)
+
+        decorated.__doc__ = '\n\n'.join((
+"""Wrapped async call. Will call in ioloop.
+
+This call will block until the original callable has finished running on the ioloop, and
+will pass on the return value. If the original callable returns a future, this call will
+wait for the future to resolve and return the value or raise the exception that the future
+resolves with.
+
+Original Callable Docstring
+---------------------------
+""",
+            textwrap.dedent(decorated.__doc__ or '')))
+
+        return decorated
+
+    def _install(self):
+        self._thread_id = get_thread_ident()
+
+    def _ioloop_call(self, future, tornado_future, fn, args, kwargs):
+        gen.chain_future(tornado_future, future)
+        try:
+            result_future = gen.maybe_future(fn(*args, **kwargs))
+            gen.chain_future(result_future, tornado_future)
+        except Exception:
+            tornado_future.set_exc_info(sys.exc_info())
+
+class ThreadSafeMethodAttrWrapper(ObjectWrapper):
+    # Attributes must be in the class definition, or else they will be
+    # proxied to __subject__
+    _ioloop_wrapper = None
+
+    def __init__(self, subject, ioloop_wrapper):
+        self._ioloop_wrapper = ioloop_wrapper
+        super(ThreadSafeMethodAttrWrapper, self).__init__(subject)
+
+    def __getattr__(self, attr):
+        val = super(ThreadSafeMethodAttrWrapper, self).__getattr__(attr)
+        if callable(val):
+            return self._ioloop_wrapper.decorate_callable(val)
+        else:
+            return val
+
+    def _getattr(self, attr):
+        return self._ioloop_wrapper.call_in_ioloop(getattr, (self.__subject__,
+            attr), {})
