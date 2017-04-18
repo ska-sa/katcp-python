@@ -948,7 +948,7 @@ def concurrent_reply(handler):
     ...     @tornado.gen.coroutine
     ...     def request_myreq(self, req):
     ...         result = yield self.slow_operation()
-    ...         return (req, result)
+    ...         raise tornado.gen.Return((req, result))
     ...
 
     """

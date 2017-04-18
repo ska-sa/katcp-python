@@ -1091,7 +1091,7 @@ class DeviceServerBase(object):
                         self._logger.debug("%s FUTURE CONCURRENT OK", msg.name)
                         return
                     else:
-                        self._logger.debug("%s FUTURE OK" % (msg.name,))
+                        self._logger.debug("%s FUTURE OK", msg.name)
                         return done_future
                 else:
                     assert (reply.mtype == Message.REPLY)

@@ -895,13 +895,14 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
                 self.assertTrue(reply.reply_ok(),
                                 '?cancel-slow-command should succeed')
                 slow_reply, _ = yield slow_f
-                self.assertTrue(slow_reply.reply_ok(),
-                                '?slow-command should succeed after being canceled')
+                self.assertTrue(
+                    slow_reply.reply_ok(),
+                    '?slow-command should succeed after being cancelled')
                 t2 = time.time()
                 self.assertTrue(
                     t2 - t1 < 0.1*slow_wait_time,
                     'Slow request should be cancelled almost immediately')
-            except Exception, exc:
+            except Exception as exc:
                 tornado_future.set_exc_info(sys.exc_info())
                 threadsafe_future.set_exception(exc)
             else:
