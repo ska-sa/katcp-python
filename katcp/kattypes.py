@@ -12,7 +12,7 @@ import struct
 import re
 import logging
 
-from functools import partial
+from functools import partial, wraps, update_wrapper
 
 from tornado import gen
 
@@ -698,8 +698,7 @@ def request(*types, **options):
                 new_args = unpack_types(types, msg.arguments, argnames, major)
                 return handler(self, *new_args)
 
-        raw_handler.__name__ = handler.__name__
-        raw_handler.__doc__ = handler.__doc__
+        update_wrapper(raw_handler, handler)
         # explicitly note that this decorator has been run, so that
         # return_reply can know if it's on the outside.
         raw_handler._request_decorated = True
@@ -710,6 +709,8 @@ def request(*types, **options):
 # partial calls below 'copy' the function, letting us change the docstring without
 # affecting the original function's docstring
 inform = partial(request, has_req=False)
+update_wrapper(inform, request)
+inform.__name__ = 'inform'
 inform.__doc__ = """Decorator for inform handler methods.
 
 The method being decorated should take arguments matching the list of types.
@@ -742,6 +743,8 @@ Examples
 """
 
 unpack_message = partial(request, has_req=False)
+update_wrapper(unpack_message, request)
+update_wrapper.__name__ = 'unpack_message'
 unpack_message.__doc__ = (
 """Decorator that unpacks katcp.Messages to function arguments.
 
@@ -829,15 +832,18 @@ def return_reply(*types, **options):
                              " with 'request_').")
         msgname = convert_method_name('request_', handler.__name__)
 
+        @wraps(handler)
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
             if gen.is_future(reply_args):
                 return async_make_reply(msgname, types, reply_args, major)
             else:
                 return make_reply(msgname, types, reply_args, major)
-        raw_handler.__name__ = handler.__name__
-        raw_handler.__doc__ = handler.__doc__
 
+
+        # TODO NM 2017-01-12 Consider using the decorator module to create
+        # signature preserving decorators that would avoid the need for this
+        # trickery
         if not getattr(handler, "_request_decorated", False):
             # We are on the inside.
             # We must preserve the original function parameter names for the
@@ -889,6 +895,7 @@ def send_reply(*types, **options):
                         % options.keys())
 
     def decorator(handler):
+        @wraps(handler)
         def raw_handler(self, *args):
             reply_args = handler(self, *args)
             req = reply_args[0]
@@ -923,6 +930,31 @@ def make_reply(msgname, types, arguments, major):
             msgname, *pack_types((Str(),) + types, arguments, major))
     raise ValueError("First returned value must be 'ok' or 'fail'.")
 
+def concurrent_reply(handler):
+    """Decorator for concurrent async request handlers
+
+    By default async request handlers that return a Future are serialised
+    per-connection, i.e. until the most recent handler resolves its future, the
+    next message will not be read from the client stream. A handler decorated
+    with this decorator allows the next message to be read before it has
+    resolved its future, allowing multiple requests from a single client to be
+    handled concurrently. This is similar to raising AsyncReply.
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     @return_reply(Int())
+    ...     @concurrent_reply
+    ...     @tornado.gen.coroutine
+    ...     def request_myreq(self, req):
+    ...         result = yield self.slow_operation()
+    ...         raise tornado.gen.Return((req, result))
+    ...
+
+    """
+
+    handler._concurrent_reply = True
+    return handler
 
 @gen.coroutine
 def async_make_reply(msgname, types, arguments_future, major):

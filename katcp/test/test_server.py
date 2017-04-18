@@ -8,6 +8,7 @@
    """
 
 import unittest2 as unittest
+import sys
 import socket
 import errno
 import time
@@ -15,8 +16,10 @@ import logging
 import thread
 import threading
 
-import katcp
 import mock
+import tornado.testing
+
+import katcp
 
 from concurrent.futures import Future
 from collections import defaultdict
@@ -24,9 +27,16 @@ from functools import partial
 from tornado import gen
 
 from katcp.testutils import (
-    TestLogHandler, BlockingTestClient, DeviceTestServer, TestUtilMixin,
-    start_thread_with_cleanup, WaitingMock, ClientConnectionTest, mock_req,
-    handle_mock_req)
+    AsyncDeviceTestServer,
+    BlockingTestClient,
+    ClientConnectionTest,
+    DeviceTestServer,
+    handle_mock_req,
+    mock_req,
+    TestLogHandler,
+    TestUtilMixin,
+    start_thread_with_cleanup,
+    WaitingMock)
 from katcp.core import FailReply
 from katcp import __version__
 
@@ -35,8 +45,6 @@ logging.getLogger("katcp").addHandler(log_handler)
 logger = logging.getLogger(__name__)
 
 NO_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
-
-# TODO: Tests with server in asynchronous mode!
 
 class test_ClientConnection(unittest.TestCase):
     def test_init(self):
@@ -238,6 +246,20 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
             '#sensor-value 1234000 1 a-sens nominal 1',
             '!sensor-value ok 1'])
 
+class TestDeviceServerV4Async(TestDeviceServerV4):
+
+    class DeviceTestServerV4(DeviceTestServer):
+        ## Protocol versions and flags for a katcp v4 server
+        PROTOCOL_INFO = katcp.ProtocolFlags(4, 0, set([
+            katcp.ProtocolFlags.MULTI_CLIENT,
+            ]))
+
+        def __init__(self, *args, **kwargs):
+            super(TestDeviceServerV4Async.DeviceTestServerV4, self).__init__(
+                *args, **kwargs)
+            self.set_concurrency_options(thread_safe=False, handler_thread=False)
+
+
 class TestVersionCompatibility(unittest.TestCase):
     def test_wrong_version(self):
         class DeviceTestServerWrong(DeviceTestServer):
@@ -304,27 +326,31 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self.assertTrue(self.server.has_sensor('blaah'))
 
 
+class test_DeviceServerAsync(test_DeviceServer):
+    def setUp(self):
+        super(test_DeviceServerAsync, self).setUp()
+        self.server.set_concurrency_options(
+            thread_safe=False, handler_thread=False)
+
+
 class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     BLACKLIST = ("version-connect", "version", "build-state")
 
     def setUp(self):
+        super(TestDeviceServerClientIntegrated, self).setUp()
         self._setup_server()
         host, port = self.server.bind_address
         self.server_addr = (host, port)
 
         self.client = BlockingTestClient(self, host, port)
-        self.client.start(timeout=1)
+        start_thread_with_cleanup(self, self.client, start_timeout=1)
         self.assertTrue(self.client.wait_protocol(timeout=1))
+
 
     def _setup_server(self):
         self.server = DeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server, start_timeout=1)
-
-    def tearDown(self):
-        if self.client.running():
-            self.client.stop()
-            self.client.join()
 
     def test_log(self):
         get_msgs = self.client.message_recorder(
@@ -835,9 +861,67 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.server.add_sensor(an_int)
         self.test_sampling()
 
+    def test_async_request_handler(self):
+        """
+        Request handlers allowing other requests to be handled before replying
 
-class TestDeviceServerClientIntegratedAsync(TestDeviceServerClientIntegrated):
+        """
+        # We use a coroutine running on the client's ioloop for this test
+        @gen.coroutine
+        def do_async_request_test(threadsafe_future, tornado_future):
+            try:
+                slow_wait_time = 20
+                # Kick off a slow, async request
+                slow_f = self.client.future_request(katcp.Message.request(
+                    'slow-command', slow_wait_time))
+                t0 = time.time()
+                # Do another normal request that should reply before the slow
+                # request
+                reply, _ = yield self.client.future_request(
+                    katcp.Message.request('watchdog'))
+                self.assertTrue(reply.reply_ok(), 'Normal request should succeed')
+                # Normal request should reply quickly
+                t1 = time.time()
+                self.assertTrue(
+                    t1 - t0 < 0.1*slow_wait_time,
+                    'The normal request should reply almost immediately')
+                # Slow request should still be outstanding
+                self.assertFalse(
+                    slow_f.done(),
+                    'slow async request should not be complete yet')
+                # Now cancel the slow command
+                reply, _ = yield self.client.future_request(
+                    katcp.Message.request('cancel-slow-command'))
+                self.assertTrue(reply.reply_ok(),
+                                '?cancel-slow-command should succeed')
+                slow_reply, _ = yield slow_f
+                self.assertTrue(
+                    slow_reply.reply_ok(),
+                    '?slow-command should succeed after being cancelled')
+                t2 = time.time()
+                self.assertTrue(
+                    t2 - t1 < 0.1*slow_wait_time,
+                    'Slow request should be cancelled almost immediately')
+            except Exception as exc:
+                tornado_future.set_exc_info(sys.exc_info())
+                threadsafe_future.set_exception(exc)
+            else:
+                threadsafe_future.set_result(None)
+
+        tornado_future = gen.Future()
+        threadsafe_future = Future()
+        self.client.ioloop.add_callback(
+            do_async_request_test, threadsafe_future, tornado_future)
+        try:
+            threadsafe_future.result()
+        except Exception:
+            # Use the tornado future to get a usable traceback
+            tornado_future.result()
+
+class TestDeviceServerClientIntegratedAsync(
+        tornado.testing.AsyncTestCase,
+        TestDeviceServerClientIntegrated):
+
     def _setup_server(self):
-        self.server = DeviceTestServer('', 0)
-        self.server.set_concurrency_options(thread_safe=False, handler_thread=False)
+        self.server = AsyncDeviceTestServer('', 0)
         start_thread_with_cleanup(self, self.server, start_timeout=1)
