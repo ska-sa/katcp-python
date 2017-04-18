@@ -12,6 +12,7 @@ import os
 import tornado.ioloop
 
 from thread import get_ident as get_thread_ident
+from functools import wraps
 
 from .core import Message, Sensor
 
@@ -44,7 +45,9 @@ def update_in_ioloop(update):
     (the ioloop instance in use). Also assumes the signature
     `update(self, sensor, reading)` for the method.
 
+
     """
+    @wraps(update)
     def wrapped_update(self, sensor, reading):
         if get_thread_ident() == self._ioloop_thread_id:
             update(self, sensor, reading)
