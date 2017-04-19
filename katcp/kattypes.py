@@ -1021,7 +1021,7 @@ def has_katcp_protocol_flags(protocol_flags):
     return decorator
 
 def request_timeout_hint(timeout_hint):
-    """Add recommended client timeout hint to a request for request
+    """Decorator; add recommended client timeout hint to a request for request
 
     Useful for requests that take longer than average to reply. Hint is provided
     to clients via ?request-timeout-hint. Note this is only exposed if the
@@ -1031,13 +1031,15 @@ def request_timeout_hint(timeout_hint):
     Parameters
     ----------
     timeout_hint : float (seconds) or None
-        How long the decorated request should reasonably take to reply
+        How long the decorated request should reasonably take to reply. No
+        timeout hint if None, similar to never using the decorator, provided for
+        consistency.
 
     Examples
     --------
     >>> class MyDevice(DeviceServer):
     ...     @return_reply(Int())
-    ...     @request_timeout_hint
+    ...     @request_timeout_hint(15) # Set request timeout hint to 15 seconds
     ...     @tornado.gen.coroutine
     ...     def request_myreq(self, req):
     ...         '''A slow request'''

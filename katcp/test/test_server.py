@@ -290,8 +290,9 @@ katcp_version = __version__
 class test_DeviceServer(unittest.TestCase, TestUtilMixin):
 
     expected_connect_messages = (
+            # Will have to be updated if the default KATCP protocol
+            # spec version changes
             r'#version-connect katcp-protocol 5.0-IM',
-            # Will have to be updated for every library version bump
             r'#version-connect katcp-library katcp-python-%s' % katcp_version,
             r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g')
 
@@ -359,7 +360,6 @@ class test_DeviceServer51(test_DeviceServer):
 
     expected_connect_messages = (
         r'#version-connect katcp-protocol 5.1-IMT',
-        # Will have to be updated for every library version bump
         r'#version-connect katcp-library katcp-python-%s' % katcp_version,
         r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g')
 
@@ -395,7 +395,7 @@ class test_DeviceServer51(test_DeviceServer):
         self._assert_msgs_equal(req.inform_msgs,
                                 ['#request-timeout-hint help 0.0'])
 
-        # Now set hint on help command and check that it is reflected Note, in
+        # Now set hint on help command and check that it is reflected. Note, in
         # Python 3 the im_func would not be neccesary, but in Python 2 you
         # cannot add a new attribute to an instance method. For Python 2 we need
         # to make a copy of the original handler function using partial and then
@@ -1064,14 +1064,14 @@ class TestHandlerFiltering(unittest.TestCase):
                          expected_handlers)
         self.assertEqual(set(), actual_device_handlers & not_expected_handlers)
 
-
     def test_handler_protocol_filters_all(self):
         """Test handler filtering where everything should be included"""
         self._test_handler_protocol_filters(self.DeviceWithEverything,
                                             self.all_expected_handlers)
 
-    def test_handler_protocol_filters_five_with_nothing(self):
+    def test_handler_protocol_filters_five_one_with_nothing(self):
         """Test handler filtering where protocol flags exclude some"""
+
         class DeviceVersionFiveOneWithNothing(self.DeviceWithEverything):
             PROTOCOL_INFO = katcp.ProtocolFlags(5, 1, [])
 
@@ -1081,7 +1081,6 @@ class TestHandlerFiltering(unittest.TestCase):
 
     def test_handler_protocol_filters_five_one_with_multi(self):
         """Test handler filtering where protocol flags and version exclude some"""
-
 
         class DeviceVersionFiveOneWithMultiClient(self.DeviceWithEverything):
             PROTOCOL_INFO = katcp.ProtocolFlags(5, 1, [
@@ -1107,9 +1106,11 @@ class TestHandlerFiltering(unittest.TestCase):
 
     def test_handler_protocol_filters_four(self):
         """Test handler filtering for a KATCP v4.0 device"""
+
         class DeviceVersionFour(self.DeviceWithEverything):
             PROTOCOL_INFO = katcp.ProtocolFlags(
                 4, 0, [katcp.ProtocolFlags.MULTI_CLIENT])
+
         self._test_handler_protocol_filters(
             DeviceVersionFour, ['simple', 'fewer-flags'])
 
