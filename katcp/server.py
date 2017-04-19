@@ -28,13 +28,16 @@ from tornado.util import ObjectDict
 from concurrent.futures import Future
 
 from .ioloop_manager import IOLoopManager, with_relative_timeout
-from .core import (DeviceMetaclass, Message, MessageParser,
+from .core import (DeviceServerMetaclass, Message, MessageParser,
                    FailReply, AsyncReply, ProtocolFlags)
 from .sampling import SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
 from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
                    VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR)
-from .kattypes import (request, return_reply)
+from .kattypes import (request, return_reply,
+                       minimum_katcp_version,
+                       has_katcp_protocol_flags,
+                       Int, Str)
 
 # 'import katcp' so that we can use katcp.__version__ later
 # we cannot do this: 'from . import __version__' because __version__
@@ -938,7 +941,7 @@ class DeviceServerBase(object):
 
     """
 
-    __metaclass__ = DeviceMetaclass
+    __metaclass__ = DeviceServerMetaclass
 
     ## @brief Protocol versions and flags. Default to version 5, subclasses
     ## should override PROTOCOL_INFO
@@ -1813,6 +1816,81 @@ class DeviceServer(DeviceServerBase):
                 return req.make_reply("ok", "1")
             return req.make_reply("fail", "Unknown request method.")
 
+    @request(Str(optional=True))
+    @return_reply(Int())
+    @has_katcp_protocol_flags(ProtocolFlags.REQUEST_TIMEOUT_HINTS)
+    def request_request_timeout_hint(self, req, request):
+        """Return timeout hints for requests
+
+        KATCP requests should generally take less than 5s to complete, but some
+        requests are unavoidably slow. This results in spurious client timeout
+        errors. This request provides timeout hints that clients can use to
+        select suitable request timeouts.
+
+        Parameters
+        ----------
+        request : str, optional
+            The name of the request to return a timeout hint for (the default is
+            to return hints for all requests that have timeout hints). Returns
+            one inform per request. Must be an existing request if specified.
+
+        Informs
+        -------
+        request : str
+            The name of the request.
+        suggested_timeout : float
+            Suggested request timeout in seconds for the request. If
+            `suggested_timeout` is zero (0), no timeout hint is available.
+
+        Returns
+        -------
+        success : {'ok', 'fail'}
+            Whether sending the help succeeded.
+        informs : int
+            Number of #request-timeout-hint inform messages sent.
+
+        Examples
+        --------
+        ::
+
+            ?request-timeout-hint
+            #request-timeout-hint halt 5
+            #request-timeout-hint very-slow-request 500
+            ...
+            !request-timeout-hint ok 5
+
+            ?request-timeout-hint moderately-slow-request
+            #request-timeout-hint moderately-slow-request 20
+            !request-timeout-hint ok 1
+
+        Notes
+        -----
+
+        ?request-timeout-hint without a parameter will only return informs for
+        requests that have specific timeout hints, so it will most probably be a
+        subset of all the requests, or even no informs at all.
+
+        """
+        timeout_hints = {}
+        if request:
+            if request not in self._request_handlers:
+                raise FailReply('Unknown request method')
+            timeout_hint = getattr(
+                self._request_handlers[request], 'request_timeout_hint', None)
+            timeout_hint = timeout_hint or 0
+            timeout_hints[request] = timeout_hint
+        else:
+            for request_, handler in self._request_handlers.items():
+                timeout_hint = getattr(handler, 'request_timeout_hint', None)
+                if timeout_hint:
+                    timeout_hints[request_] = timeout_hint
+
+        cnt = len(timeout_hints)
+        for request_name, timeout_hint in sorted(timeout_hints.items()):
+            req.inform(request_name, float(timeout_hint))
+
+        return ('ok', cnt)
+
     def request_log_level(self, req, msg):
         """Query or set the current logging level.
 
@@ -1918,6 +1996,8 @@ class DeviceServer(DeviceServerBase):
             req.inform(addr)
         return req.make_reply('ok', str(num_clients))
 
+
+    @minimum_katcp_version(5, 0)
     def request_version_list(self, req, msg):
         """Request the list of versions of roles and subcomponents.
 

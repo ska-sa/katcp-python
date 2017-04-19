@@ -23,7 +23,7 @@ import katcp
 
 from concurrent.futures import Future
 from collections import defaultdict
-from functools import partial
+from functools import partial, wraps
 from tornado import gen
 
 from katcp.testutils import (
@@ -38,7 +38,8 @@ from katcp.testutils import (
     start_thread_with_cleanup,
     WaitingMock)
 from katcp.core import FailReply
-from katcp import __version__
+from katcp import (kattypes,
+                   __version__)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -246,6 +247,15 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
             '#sensor-value 1234000 1 a-sens nominal 1',
             '!sensor-value ok 1'])
 
+    def test_excluded_default_handlers(self):
+        """
+        Test that default handers from higher KATCP versions are not included
+
+        """
+        self.assertNotIn('request-timeout-hint', self.server._request_handlers)
+        self.assertNotIn('version-list', self.server._request_handlers)
+
+
 class TestDeviceServerV4Async(TestDeviceServerV4):
 
     class DeviceTestServerV4(DeviceTestServer):
@@ -275,8 +285,17 @@ class TestVersionCompatibility(unittest.TestCase):
         with self.assertRaises(ValueError):
             DeviceTestServerWrong('', 0)
 
+katcp_version = __version__
 
 class test_DeviceServer(unittest.TestCase, TestUtilMixin):
+
+    expected_connect_messages = (
+            # Will have to be updated if the default KATCP protocol
+            # spec version changes
+            r'#version-connect katcp-protocol 5.0-IM',
+            r'#version-connect katcp-library katcp-python-%s' % katcp_version,
+            r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g')
+
     def setUp(self):
         self.server = DeviceTestServer('', 0)
 
@@ -295,12 +314,7 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self.assertEqual(mock_conn.inform.call_count, no_msgs)
         # Get all the messages sent to _send_message
         msgs = [str(call[0][0]) for call in mock_conn.inform.call_args_list]
-        katcp_version = __version__
-        self._assert_msgs_equal(msgs, (
-            r'#version-connect katcp-protocol 5.0-IM',
-            # Will have to be updated for every library version bump
-            r'#version-connect katcp-library katcp-python-%s' % katcp_version,
-            r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g'))
+        self._assert_msgs_equal(msgs, self.expected_connect_messages)
 
     def test_request_sensor_sampling_clear(self):
         self.server.clear_strategies = mock.Mock()
@@ -325,12 +339,89 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self.server.add_sensor(katcp.Sensor.boolean('blaah', 'blaah sens'))
         self.assertTrue(self.server.has_sensor('blaah'))
 
+    def test_excluded_default_handlers(self):
+        """
+        Test that default handers from higher KATCP versions are not included
+
+        """
+        # TODO NM 2017-04-18 This should probably be removed if we do official
+        # KATCP v5.1 release and make it the default server version
+        self.assertNotIn('request-timeout-hint', self.server._request_handlers)
+
 
 class test_DeviceServerAsync(test_DeviceServer):
     def setUp(self):
         super(test_DeviceServerAsync, self).setUp()
         self.server.set_concurrency_options(
             thread_safe=False, handler_thread=False)
+
+class test_DeviceServer51(test_DeviceServer):
+    """Proposed additional tests for Verion 5.1 server"""
+
+    expected_connect_messages = (
+        r'#version-connect katcp-protocol 5.1-IMT',
+        r'#version-connect katcp-library katcp-python-%s' % katcp_version,
+        r'#version-connect katcp-device deviceapi-5.6 buildy-1.2g')
+
+    def setUp(self):
+        class DeviceTestServer51(DeviceTestServer):
+            PROTOCOL_INFO = katcp.ProtocolFlags(
+            5, 1, [
+                katcp.ProtocolFlags.MULTI_CLIENT,
+                katcp.ProtocolFlags.MESSAGE_IDS,
+                katcp.ProtocolFlags.REQUEST_TIMEOUT_HINTS])
+        self.server = DeviceTestServer51('', 0)
+        self.server.set_concurrency_options(
+            thread_safe=False, handler_thread=False)
+
+    def test_excluded_default_handlers(self):
+        pass                  #  No excluded default handlers for v5.1 as of yet
+
+    def test_request_timeout_hint(self):
+        req = mock_req('request-timeout-hint')
+        handle_mock_req(self.server, req)
+        # Check that the default test server "slow command" request has the
+        # expected timeout hint of 99 seconds
+        self._assert_msgs_equal([req.reply_msg],
+                                ['!request-timeout-hint ok 1'])
+        self._assert_msgs_equal(req.inform_msgs,
+                                ['#request-timeout-hint slow-command 99.0'])
+        # Check that a request without a hint gives a timeout of 0 if explicitly
+        # asked for
+        req = mock_req('request-timeout-hint', 'help')
+        handle_mock_req(self.server, req)
+        self._assert_msgs_equal([req.reply_msg],
+                                ['!request-timeout-hint ok 1'])
+        self._assert_msgs_equal(req.inform_msgs,
+                                ['#request-timeout-hint help 0.0'])
+
+        # Now set hint on help command and check that it is reflected. Note, in
+        # Python 3 the im_func would not be neccesary, but in Python 2 you
+        # cannot add a new attribute to an instance method. For Python 2 we need
+        # to make a copy of the original handler function using partial and then
+        # mess with that copy.
+        handler_original = self.server._request_handlers['help'].im_func
+        handler_updated = wraps(handler_original)(partial(handler_original,
+                                                          self.server))
+        self.server._request_handlers[
+            'help'] = kattypes.request_timeout_hint(25.5)(handler_updated)
+        req = mock_req('request-timeout-hint', 'help')
+        handle_mock_req(self.server, req)
+        self._assert_msgs_equal([req.reply_msg],
+                                ['!request-timeout-hint ok 1'])
+        self._assert_msgs_equal(req.inform_msgs,
+                                ['#request-timeout-hint help 25.5'])
+        req = mock_req('request-timeout-hint')
+        handle_mock_req(self.server, req)
+        # Check that the default test server "slow command" request has the
+        # expected timeout hint of 99 seconds
+        self._assert_msgs_equal([req.reply_msg],
+                                ['!request-timeout-hint ok 2'])
+        self._assert_msgs_equal(req.inform_msgs,
+                                ['#request-timeout-hint help 25.5',
+                                 '#request-timeout-hint slow-command 99.0'])
+
+
 
 
 class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
@@ -917,6 +1008,112 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         except Exception:
             # Use the tornado future to get a usable traceback
             tornado_future.result()
+
+
+class TestHandlerFiltering(unittest.TestCase):
+    class DeviceWithEverything(katcp.DeviceServer):
+        PROTOCOL_INFO = katcp.ProtocolFlags(
+            5, 1, [
+                katcp.ProtocolFlags.MULTI_CLIENT,
+                katcp.ProtocolFlags.MESSAGE_IDS,
+                katcp.ProtocolFlags.REQUEST_TIMEOUT_HINTS])
+
+        def request_simple(self, req, msg):
+            """A simple request"""
+
+        @kattypes.return_reply()
+        @kattypes.minimum_katcp_version(5, 1)
+        def request_version_51(self, req, msg):
+            """Request KATCP v5.1"""
+
+        @kattypes.minimum_katcp_version(5, 0)
+        def request_version_5(self, req, msg):
+            """Request KATCP v5.0"""
+
+        @kattypes.request()
+        @kattypes.has_katcp_protocol_flags(
+                [katcp.ProtocolFlags.MULTI_CLIENT,
+                 katcp.ProtocolFlags.MESSAGE_IDS])
+        def request_flags(self, req):
+            """Request some flags"""
+
+        @kattypes.has_katcp_protocol_flags(
+                [katcp.ProtocolFlags.MULTI_CLIENT])
+        def request_fewer_flags(self, req, msg):
+            """Request with fewer flags"""
+
+        @kattypes.request()
+        @kattypes.return_reply()
+        @kattypes.minimum_katcp_version(5, 1)
+        @kattypes.has_katcp_protocol_flags(
+            [katcp.ProtocolFlags.MULTI_CLIENT])
+        def request_version_and_flags(self, req, msg):
+            """Request with version and flag requirements"""
+
+    all_expected_handlers = frozenset(['simple', 'version-51', 'version-5',
+                                       'flags', 'fewer-flags',
+                                       'version-and-flags'])
+
+    def _test_handler_protocol_filters(self, DeviceCls, expected_handlers):
+        """Test that handlers are filtered according to protocol requirements."""
+        expected_handlers = set(expected_handlers)
+        not_expected_handlers = self.all_expected_handlers - expected_handlers
+        actual_device_handlers = set(DeviceCls._request_handlers.keys())
+
+        self.assertEqual(actual_device_handlers & expected_handlers,
+                         expected_handlers)
+        self.assertEqual(set(), actual_device_handlers & not_expected_handlers)
+
+    def test_handler_protocol_filters_all(self):
+        """Test handler filtering where everything should be included"""
+        self._test_handler_protocol_filters(self.DeviceWithEverything,
+                                            self.all_expected_handlers)
+
+    def test_handler_protocol_filters_five_one_with_nothing(self):
+        """Test handler filtering where protocol flags exclude some"""
+
+        class DeviceVersionFiveOneWithNothing(self.DeviceWithEverything):
+            PROTOCOL_INFO = katcp.ProtocolFlags(5, 1, [])
+
+        self._test_handler_protocol_filters(
+            DeviceVersionFiveOneWithNothing,
+            ['simple', 'version-5', 'version-51'])
+
+    def test_handler_protocol_filters_five_one_with_multi(self):
+        """Test handler filtering where protocol flags and version exclude some"""
+
+        class DeviceVersionFiveOneWithMultiClient(self.DeviceWithEverything):
+            PROTOCOL_INFO = katcp.ProtocolFlags(5, 1, [
+                katcp.ProtocolFlags.MULTI_CLIENT])
+
+        self._test_handler_protocol_filters(
+            DeviceVersionFiveOneWithMultiClient,
+            ['simple', 'version-5', 'version-51', 'fewer-flags',
+            'version-and-flags'])
+
+    def test_handler_protocol_filters_five(self):
+        """Test handler filtering for a KATCP v5.0 device"""
+
+        class DeviceVersionFive(self.DeviceWithEverything):
+            PROTOCOL_INFO = katcp.ProtocolFlags(
+                5, 0, [
+                    katcp.ProtocolFlags.MULTI_CLIENT,
+                    katcp.ProtocolFlags.MESSAGE_IDS])
+
+        self._test_handler_protocol_filters(
+            DeviceVersionFive,
+            ['simple', 'version-5', 'flags', 'fewer-flags'])
+
+    def test_handler_protocol_filters_four(self):
+        """Test handler filtering for a KATCP v4.0 device"""
+
+        class DeviceVersionFour(self.DeviceWithEverything):
+            PROTOCOL_INFO = katcp.ProtocolFlags(
+                4, 0, [katcp.ProtocolFlags.MULTI_CLIENT])
+
+        self._test_handler_protocol_filters(
+            DeviceVersionFour, ['simple', 'fewer-flags'])
+
 
 class TestDeviceServerClientIntegratedAsync(
         tornado.testing.AsyncTestCase,

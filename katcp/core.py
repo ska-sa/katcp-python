@@ -569,6 +569,7 @@ class ProtocolFlags(object):
 
     * M - server supports multiple clients
     * I - server supports message identifiers
+    * T - server provides request timeout hints via ?request-timeout-hint
 
     Parameters
     ----------
@@ -596,6 +597,9 @@ class ProtocolFlags(object):
 
     MULTI_CLIENT = 'M'
     MESSAGE_IDS = 'I'
+    # New proposal flag to indicate that a device supports ?request-timeout-hint
+    # See CB-2051
+    REQUEST_TIMEOUT_HINTS = 'T'
 
     STRATEGIES_V4 = frozenset(['none', 'auto', 'period', 'event',
                                'differential'])
@@ -607,15 +611,24 @@ class ProtocolFlags(object):
         5: STRATEGIES_V5
         }
 
+    REQUEST_TIMEOUT_HINTS_MIN_VERSION = (5, 1)
+
     def __init__(self, major, minor, flags):
         self.major = major
         self.minor = minor
         self.flags = set(list(flags))
         self.multi_client = self.MULTI_CLIENT in self.flags
         self.message_ids = self.MESSAGE_IDS in self.flags
+        self.request_timeout_hints = self.REQUEST_TIMEOUT_HINTS in self.flags
         if self.message_ids and self.major < MID_KATCP_MAJOR:
             raise ValueError(
                 'MESSAGE_IDS is only supported in katcp v5 and newer')
+        version_supports_hints = ((self.major, self.minor) >=
+                                  self.REQUEST_TIMEOUT_HINTS_MIN_VERSION)
+        if self.request_timeout_hints and not version_supports_hints:
+            raise ValueError(
+                'REQUEST_TIMEOUT_HINTS only suported in katcp v{}.{} and newer'
+                .format(*self.REQUEST_TIMEOUT_HINTS_MIN_VERSION))
 
     def strategy_allowed(self, strategy):
         return strategy in self.STRATEGIES_ALLOWED_BY_MAJOR_VERSION[self.major]
@@ -687,20 +700,61 @@ class DeviceMetaclass(type):
         for name in dir(mcs):
             if not callable(getattr(mcs, name)):
                 continue
+            handler = getattr(mcs, name)
             if name.startswith("request_"):
                 request_name = convert_method_name("request_", name)
-                mcs._request_handlers[request_name] = getattr(mcs, name)
-                assert(mcs._request_handlers[request_name].__doc__ is not None)
+                if mcs.check_protocol(handler):
+                    mcs._request_handlers[request_name] = handler
+                    assert(handler.__doc__ is not None)
             elif name.startswith("inform_"):
                 inform_name = convert_method_name("inform_", name)
-                mcs._inform_handlers[inform_name] = getattr(mcs, name)
-                assert(mcs._inform_handlers[inform_name].__doc__ is not None)
+                if mcs.check_protocol(handler):
+                    mcs._inform_handlers[inform_name] = handler
+                    assert(handler.__doc__ is not None)
                 # There is a bit of a name colission between the reply_*
                 # convention and the server reply_inform() method
             elif name.startswith("reply_") and name != 'reply_inform':
                 reply_name = convert_method_name("reply_", name)
-                mcs._reply_handlers[reply_name] = getattr(mcs, name)
-                assert(mcs._reply_handlers[reply_name].__doc__ is not None)
+                if mcs.check_protocol(handler):
+                    mcs._reply_handlers[reply_name] = handler
+                    assert(handler.__doc__ is not None)
+
+    def check_protocol(mcs, handler):
+        """Return False if `handler` should be filtered"""
+        # One cannot know protocol flags at definition time for device clients.
+        return True
+
+class DeviceServerMetaclass(DeviceMetaclass):
+    """Specialisation of DeviceMetaclass for Device Servers
+
+    Adds functionality for protocol-flag based filtering of handlers
+
+    """
+
+    def check_protocol(mcs, handler):
+        """
+        True if the current server's protocol flags satisfy handler requirements
+
+        """
+        protocol_info = mcs.PROTOCOL_INFO
+        protocol_version = (protocol_info.major, protocol_info.minor)
+        protocol_flags = protocol_info.flags
+
+        # Check if minimum protocol version requirement is met
+        min_protocol_version = getattr(handler, '_minimum_katcp_version', None)
+        protocol_version_ok = (min_protocol_version is None or
+                               protocol_version >= min_protocol_version)
+
+        # Check if required optional protocol flags are present
+        required_katcp_protocol_flags = getattr(
+            handler, '_has_katcp_protocol_flags', None)
+        protocol_flags_ok = (
+            required_katcp_protocol_flags is None or
+            all(flag in protocol_flags
+                for flag in required_katcp_protocol_flags))
+
+        return protocol_version_ok and protocol_flags_ok
+
 
 
 class KatcpDeviceError(Exception):

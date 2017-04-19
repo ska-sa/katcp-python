@@ -947,6 +947,7 @@ def concurrent_reply(handler):
     ...     @concurrent_reply
     ...     @tornado.gen.coroutine
     ...     def request_myreq(self, req):
+    ...         '''A slow request'''
     ...         result = yield self.slow_operation()
     ...         raise tornado.gen.Return((req, result))
     ...
@@ -955,6 +956,106 @@ def concurrent_reply(handler):
 
     handler._concurrent_reply = True
     return handler
+
+def minimum_katcp_version(major, minor=0):
+    """Decorator; exclude handler if server's protocol version is too low
+
+    Useful for including default handler implementations for KATCP features that
+    are only present in certain KATCP protocol versions
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     '''This device server will expose ?myreq'''
+    ...     PROTOCOL_INFO = katcp.core.ProtocolFlags(5, 1)
+    ...
+    ...     @minimum_katcp_version(5, 1)
+    ...     def request_myreq(self, req, msg):
+    ...         '''A request that should only be present for KATCP >v5.1'''
+    ...         # Request handler implementation here.
+    ...
+    >>> class MyOldDevice(MyDevice):
+    ...     '''This device server will not expose ?myreq'''
+    ...
+    ...     PROTOCOL_INFO = katcp.core.ProtocolFlags(5, 0)
+    ...
+
+    """
+
+    version_tuple = (major, minor)
+    def decorator(handler):
+        handler._minimum_katcp_version = version_tuple
+        return handler
+
+    return decorator
+
+def has_katcp_protocol_flags(protocol_flags):
+    """Decorator; only include handler if server has these protocol flags
+
+    Useful for including default handler implementations for KATCP features that
+    are only present when certain server protocol flags are set.
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     '''This device server will expose ?myreq'''
+    ...     PROTOCOL_INFO = katcp.core.ProtocolFlags(5, 0, [
+                        katcp.core.ProtocolFlags.MULTI_CLIENT])
+    ...
+    ...     @has_katcp_protocol_flags([katcp.core.ProtocolFlags.MULTI_CLIENT])
+    ...     def request_myreq(self, req, msg):
+    ...         '''A request that requires multi-client support'''
+    ...         # Request handler implementation here.
+    ...
+    >>> class MySingleClientDevice(MyDevice):
+    ...     '''This device server will not expose ?myreq'''
+    ...
+    ...     PROTOCOL_INFO = katcp.core.ProtocolFlags(5, 0, [])
+    ...
+
+    """
+    def decorator(handler):
+        handler._has_katcp_protocol_flags = protocol_flags
+        return handler
+
+    return decorator
+
+def request_timeout_hint(timeout_hint):
+    """Decorator; add recommended client timeout hint to a request for request
+
+    Useful for requests that take longer than average to reply. Hint is provided
+    to clients via ?request-timeout-hint. Note this is only exposed if the
+    device server sets the protocol version to KATCP v5.1 or higher and enables
+    the REQUEST_TIMEOUT_HINTS flag in its PROTOCOL_INFO class attribute
+
+    Parameters
+    ----------
+    timeout_hint : float (seconds) or None
+        How long the decorated request should reasonably take to reply. No
+        timeout hint if None, similar to never using the decorator, provided for
+        consistency.
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     @return_reply(Int())
+    ...     @request_timeout_hint(15) # Set request timeout hint to 15 seconds
+    ...     @tornado.gen.coroutine
+    ...     def request_myreq(self, req):
+    ...         '''A slow request'''
+    ...         result = yield self.slow_operation()
+    ...         raise tornado.gen.Return((req, result))
+    ...
+
+    """
+    if timeout_hint is not None:
+        timeout_hint = float(timeout_hint)
+
+    def decorator(handler):
+        handler.request_timeout_hint = timeout_hint
+        return handler
+
+    return decorator
 
 @gen.coroutine
 def async_make_reply(msgname, types, arguments_future, major):
