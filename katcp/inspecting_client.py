@@ -184,7 +184,8 @@ class InspectingClientAsync(object):
     request_factory = RequestType
     """Factory that produces KATCP Request objects
 
-    signature: request_factory(name, description')
+    signature: request_factory(name, description, timeout_hint), all parameters
+               passed as kwargs
 
     Should be set before calling connect()/start().
 
@@ -636,7 +637,8 @@ class InspectingClientAsync(object):
         requests_updated = set()
         for msg in informs:
             req_name = msg.arguments[0]
-            req = {'description': msg.arguments[1],
+            req = {'name': req_name,
+                   'description': msg.arguments[1],
                    'timeout_hint': timeout_hints.get(req_name)}
             requests_updated.add(req_name)
             self._update_index(self._requests_index, req_name, req)
@@ -901,8 +903,7 @@ class InspectingClientAsync(object):
             request_info = self._requests_index[name]
             obj = request_info.get('obj')
             if obj is None:
-                obj = self.request_factory(
-                    name, **request_info)
+                obj = self.request_factory(**request_info)
                 self._requests_index[name]['obj'] = obj
 
         raise tornado.gen.Return(obj)

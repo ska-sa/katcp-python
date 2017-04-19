@@ -195,7 +195,8 @@ class TestInspectingClientInspect(tornado.testing.AsyncTestCase):
         hints = getattr(server, 'request_timeout_hints', {})
         expected = {}
         for req, handler in server._request_handlers.items():
-            expected[req] = {'description': handler.__doc__,
+            expected[req] = {'name': req,
+                             'description': handler.__doc__,
                              'timeout_hint': hints.get(req)}
         return expected
 
@@ -434,7 +435,7 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
             description='An Integer.', name='an.int')
         self.assertIs(req, rf.return_value)
         rf.assert_called_once_with(
-            'watchdog', description=mock.ANY, timeout_hint=None)
+            name='watchdog', description=mock.ANY, timeout_hint=None)
 
 class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
     longMessage = True

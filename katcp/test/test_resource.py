@@ -112,9 +112,12 @@ class test_KATCPRequest(unittest.TestCase):
         active = False
         is_active = lambda: active
         req_name = 'test-request'
-        req_description = '?test-request description'
-        DUT = ConcreteKATCPRequest(
-            req_name, req_description, is_active=is_active)
+        req_description = {
+            'name': req_name,
+            'description': '?test-request description',
+            'timeout_hint': None}
+
+        DUT = ConcreteKATCPRequest(req_description, is_active=is_active)
         DUT.issue_request = mock.Mock()
 
         req_args = ('arg1', 'arg2')

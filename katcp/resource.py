@@ -358,24 +358,31 @@ class KATCPRequest(object):
     """
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, name, description, is_active=lambda: True):
+    def __init__(self, request_description, is_active=lambda: True):
         """Initialize request with given description and network client
 
         Parameters
         ----------
-        name : str
+        request_description : dict
+           name : str
             KATCP name of the request
-        description : str
+           description : str
             KATCP request description (as returned by ?help <name>)
+           timeout_hint : float or None
+            Request timeout suggested by device or None if not provided
         is_active : callable, optional
             Returns True if this request is active, else False
 
         """
-        self._name = name
-        self._description = description
+        for required_description_key in ('name', 'description', 'timeout_hint'):
+            if required_description_key not in request_description:
+                raise ValueError(
+                    'Required request_description key {!r} not present'
+                    .format(required_description_key))
+        self._request_description = dict(request_description)
         self.__doc__ = '\n'.join(('KATCP Documentation',
                                   '===================',
-                                  description,
+                                  self.description,
                                   'KATCPRequest Documentation',
                                   '==========================',
                                   self.__doc__ or ''))
@@ -384,12 +391,18 @@ class KATCPRequest(object):
     @property
     def name(self):
         """Name of the KATCP request."""
-        return self._name
+        return self._request_description['name']
 
     @property
     def description(self):
         """Description of KATCP request as obtained from the ?help request."""
-        return self._description
+        return self._request_description['description']
+
+    @property
+    def timeout_hint(self):
+        """Request timeout suggested by device or None if not provided"""
+        return self._request_description['timeout_hint']
+
 
     def __call__(self, *args, **kwargs):
         """Execute the KATCP request described by this object.
@@ -401,8 +414,9 @@ class KATCPRequest(object):
         Keyword Arguments
         -----------------
         timeout : None or float, optional
-            Timeout in seconds for the request. If None, use default for the
-            :class:`KATCPResource` instance that contains the request.
+            Timeout in seconds for the request. If None, use request timeout
+            hint recieved from server or default for the :class:`KATCPResource`
+            instance that contains the request if no hint is available.
         mid : None or int, optional
             Message identifier to use for the request message. If None, use
             either auto-incrementing value or no mid depending on the KATCP
