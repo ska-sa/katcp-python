@@ -736,10 +736,7 @@ class DeviceServerMetaclass(DeviceMetaclass):
         True if the current server's protocol flags satisfy handler requirements
 
         """
-        try:
-            protocol_info = mcs.PROTOCOL_INFO
-        except Exception:
-            import pdb ; pdb.set_trace()
+        protocol_info = mcs.PROTOCOL_INFO
         protocol_version = (protocol_info.major, protocol_info.minor)
         protocol_flags = protocol_info.flags
 
