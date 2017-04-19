@@ -1805,7 +1805,7 @@ def until_later(delay, ioloop=None):
     return f
 
 def until_any(*futures, **kwargs):
-    """Return a future that resoves when any of the passed futures resolves.
+    """Return a future that resolves when any of the passed futures resolves.
 
     Resolves with the value yielded by the first future to resolve.
 
@@ -1898,3 +1898,48 @@ def future_timeout_manager(timeout=None, ioloop=None):
     maybe_timeout.remaining = _remaining
 
     return maybe_timeout
+
+@tornado.gen.coroutine
+def until_some(*args, **kwargs):
+    """Return a future that resolves when some of the passed futures resolve.
+
+    The futures can be passed as either a sequence of *args* or a dict of
+    *kwargs* (but not both). Some additional keyword arguments are supported,
+    as described below. Once a specified number of underlying futures have
+    resolved, the returned future resolves as well, or a timeout could be
+    raised if specified.
+
+    Parameters
+    ----------
+    done_at_least : None or int
+        Number of futures that need to resolve before this resolves (default all)
+    timeout : None or float
+        Timeout in seconds, or None for no timeout (the default)
+
+    Returns
+    -------
+    This command returns a tornado Future that resolves with a list of
+    (index, value) tuples containing the results of all futures that resolved,
+    with corresponding indices (numbers for *args* futures or keys for *kwargs*
+    futures).
+
+    Raises
+    ------
+    :class:`tornado.gen.TimeoutError`
+        If operation times out before the requisite number of futures resolve
+
+    """
+    done_at_least = kwargs.pop('done_at_least', None)
+    timeout = kwargs.pop('timeout', None)
+    # At this point args and kwargs are either empty or contain futures only
+    if done_at_least is None:
+        done_at_least = len(args) + len(kwargs)
+    wait_iterator = tornado.gen.WaitIterator(*args, **kwargs)
+    maybe_timeout = future_timeout_manager(timeout)
+    results = []
+    while not wait_iterator.done():
+        result = yield maybe_timeout(wait_iterator.next())
+        results.append((wait_iterator.current_index, result))
+        if len(results) >= done_at_least:
+            break
+    raise tornado.gen.Return(results)

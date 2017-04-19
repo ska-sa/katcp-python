@@ -13,7 +13,7 @@ import unittest2 as unittest
 import tornado
 
 import katcp
-from katcp.core import Sensor, AsyncState, AsyncEvent
+from katcp.core import Sensor, AsyncState, AsyncEvent, until_some
 from katcp.testutils import TestLogHandler, DeviceTestSensor
 
 log_handler = TestLogHandler()
@@ -490,3 +490,42 @@ class TestAsyncEvent(tornado.testing.AsyncTestCase):
         # Test for NOT timing out
         self.io_loop.add_callback(call_set)
         yield self._event.until_set(timeout=0.1)
+
+
+class TestUntilSome(tornado.testing.AsyncTestCase):
+
+    @tornado.testing.gen_test
+    def test_until_some_args(self):
+        results = yield until_some()
+        self.assertEqual(results, [], 'Expected empty list for until_some()')
+        f1 = tornado.concurrent.Future()
+        f2 = tornado.concurrent.Future()
+        f3 = tornado.concurrent.Future()
+        # Test for timing out
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield until_some(f1, f2, f3, timeout=0.05)
+        # Test for NOT timing out
+        f3.set_result(84)
+        f1.set_result(24)
+        f2.set_result(42)
+        results = yield until_some(f1, f2, f3, timeout=0.1)
+        self.assertEqual(results, [(0, 24), (1, 42), (2, 84)],
+                         'Results differ for until_some (3 arg futures)')
+
+    @tornado.testing.gen_test
+    def test_until_some_kwargs(self):
+        f1 = tornado.concurrent.Future()
+        f2 = tornado.concurrent.Future()
+        f3 = tornado.concurrent.Future()
+        futures = {'f1': f1, 'f2': f2, 'f3': f3}
+        f1.set_result(24)
+        with self.assertRaises(tornado.gen.TimeoutError):
+            yield until_some(done_at_least=2, timeout=0.05, **futures)
+        f2.set_result(42)
+        results = yield until_some(done_at_least=1, timeout=0.1, **futures)
+        self.assertEqual(dict(results), {'f1': 24},
+                         'Results differ for until_some (1 kwarg future)')
+        f3.set_result(84)
+        results = yield until_some(done_at_least=2, timeout=0.1, **futures)
+        self.assertEqual(dict(results), {'f1': 24, 'f2': 42},
+                         'Results differ for until_some (2 kwarg futures)')
