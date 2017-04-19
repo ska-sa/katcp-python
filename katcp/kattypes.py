@@ -1020,6 +1020,41 @@ def has_katcp_protocol_flags(protocol_flags):
 
     return decorator
 
+def request_timeout_hint(timeout_hint):
+    """Add recommended client timeout hint to a request for request
+
+    Useful for requests that take longer than average to reply. Hint is provided
+    to clients via ?request-timeout-hint. Note this is only exposed if the
+    device server sets the protocol version to KATCP v5.1 or higher and enables
+    the REQUEST_TIMEOUT_HINTS flag in its PROTOCOL_INFO class attribute
+
+    Parameters
+    ----------
+    timeout_hint : float (seconds) or None
+        How long the decorated request should reasonably take to reply
+
+    Examples
+    --------
+    >>> class MyDevice(DeviceServer):
+    ...     @return_reply(Int())
+    ...     @request_timeout_hint
+    ...     @tornado.gen.coroutine
+    ...     def request_myreq(self, req):
+    ...         '''A slow request'''
+    ...         result = yield self.slow_operation()
+    ...         raise tornado.gen.Return((req, result))
+    ...
+
+    """
+    if timeout_hint is not None:
+        timeout_hint = float(timeout_hint)
+
+    def decorator(handler):
+        handler.request_timeout_hint = timeout_hint
+        return handler
+
+    return decorator
+
 @gen.coroutine
 def async_make_reply(msgname, types, arguments_future, major):
     """Wrap future that will resolve with arguments needed by make_reply()."""

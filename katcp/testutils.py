@@ -35,7 +35,8 @@ from .server import DeviceServer, FailReply, ClientConnection
 from .kattypes import (request,
                        return_reply,
                        Float,
-                       concurrent_reply)
+                       concurrent_reply,
+                       request_timeout_hint)
 
 
 logger = logging.getLogger(__name__)
@@ -1019,6 +1020,7 @@ class DeviceTestServer(DeviceServer):
         """A handler which raises a FailReply."""
         raise FailReply("There was a problem with your request.")
 
+    @request_timeout_hint(99)
     def request_slow_command(self, req, msg):
         """A slow command, waits for msg.arguments[0] seconds.
 
@@ -1104,6 +1106,7 @@ class AsyncDeviceTestServer(DeviceTestServer):
 
     @request(Float())
     @return_reply()
+    @request_timeout_hint(99)
     @concurrent_reply
     @gen.coroutine
     def request_slow_command(self, req, wait_time):
