@@ -628,7 +628,7 @@ class ProtocolFlags(object):
         if self.request_timeout_hints and not version_supports_hints:
             raise ValueError(
                 'REQUEST_TIMEOUT_HINTS only suported in katcp v{}.{} and newer'
-                .format(self.major, self.minor))
+                .format(*self.REQUEST_TIMEOUT_HINTS_MIN_VERSION))
 
     def strategy_allowed(self, strategy):
         return strategy in self.STRATEGIES_ALLOWED_BY_MAJOR_VERSION[self.major]
