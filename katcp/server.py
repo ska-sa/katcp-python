@@ -1456,6 +1456,8 @@ class DeviceServer(DeviceServerBase):
       * sensor-value
       * watchdog
       * version-list (only standard in KATCP v5 or later)
+      * request-timeout-hint (pre-standard only if protocol flags indicates
+                              timeout hints, supported for KATCP v5.1 or later)
       * sensor-sampling-clear (non-standard)
 
     .. [#restartf1] Restart relies on .set_restart_queue() being used to

@@ -73,19 +73,35 @@ class test_KATCPClientResourceRequest(unittest.TestCase):
     def setUp(self):
         self.mock_client = mock.Mock()
         self.DUT = resource_client.KATCPClientResourceRequest(
-            'the-request', 'The description', self.mock_client)
+            {'name': 'the-request',
+             'description': 'The description',
+             'timeout_hint': 33.34},
+            self.mock_client)
 
     def test_init(self):
         self.assertEqual(self.DUT.name, 'the-request')
         self.assertEqual(self.DUT.description, 'The description')
+        self.assertEqual(self.DUT.timeout_hint, 33.34)
         # Check that we are registered to the correct ABC
         self.assertIsInstance(self.DUT, resource.KATCPRequest)
 
-    def test_request(self):
+    def test_request_with_timeout_hint(self):
         reply = self.DUT('parm1', 2)
         self.mock_client.wrapped_request.assert_called_once_with(
-            'the-request', 'parm1', 2)
+            'the-request', 'parm1', 2, timeout=33.34)
         self.assertIs(reply, self.mock_client.wrapped_request.return_value)
+
+    def test_request_no_timeout_hint(self):
+        DUT_no_timeout_hint = resource_client.KATCPClientResourceRequest(
+            {'name': 'the-other-request',
+             'description': 'The other description',
+             'timeout_hint': None},
+            self.mock_client)
+        reply = DUT_no_timeout_hint('aparm', 3)
+        self.mock_client.wrapped_request.assert_called_once_with(
+            'the-other-request', 'aparm', 3, timeout=None)
+        self.assertIs(reply, self.mock_client.wrapped_request.return_value)
+
 
 class test_KATCPClientResource(tornado.testing.AsyncTestCase):
     def test_init(self):
@@ -172,7 +188,8 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         ic = DUT._inspecting_client = mock.Mock()
         def future_get_request(key):
             f = tornado.concurrent.Future()
-            req_obj = resource_client.KATCPClientResourceRequest(key, key, ic)
+            req_obj = resource_client.KATCPClientResourceRequest(
+                dict(name=key, description=key, timeout_hint=None), ic)
             f.set_result(req_obj)
             return f
         ic.future_get_request.side_effect = future_get_request
@@ -623,7 +640,10 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
 
             make_fake_requests = lambda mock_client: {
                 req: resource_client.KATCPClientResourceRequest(
-                    req, 'Description for {}'.format(req), mock_client)
+                    {'name':req,
+                     'description': 'Description for {}'.format(req),
+                     'timeout_hint': None},
+                    mock_client)
                 for req in ['req-1', 'req-2', 'req-3']}
 
             def _install_inspecting_client_mocks(mock_client):

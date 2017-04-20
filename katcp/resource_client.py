@@ -337,8 +337,10 @@ class KATCPClientResource(resource.KATCPResource):
         self._sensor = AttrDict()
         self._dummy_unknown_requests = bool(resource_spec.get('dummy_unknown_requests'))
         if self._dummy_unknown_requests:
-            DummyRequest = partial(resource.KATCPDummyRequest,
-                                   'dummy', 'No help for dummies')
+            DummyRequest = partial(
+                resource.KATCPDummyRequest,
+                {'name':'dummy', 'description': 'No help for dummies',
+                 'timeout_hint': None})
             self._req = DefaultAttrDict(DummyRequest)
         else:
             self._req = AttrDict()
@@ -551,9 +553,9 @@ class KATCPClientResource(resource.KATCPResource):
         # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
         raise tornado.gen.Return(sensor_dict)
 
-    def _request_factory(self, name, description):
+    def _request_factory(self, **request_description):
         return KATCPClientResourceRequest(
-            name, description, self._inspecting_client, self.is_active)
+            request_description, self._inspecting_client, self.is_active)
 
     @tornado.gen.coroutine
     def _inspecting_client_state_callback(self, state, model_changes):
@@ -842,15 +844,14 @@ class KATCPClientResourceRequest(resource.KATCPRequest):
     """Callable wrapper around a KATCP request
 
     """
-    def __init__(self, name, description, client, is_active=lambda : True):
+    def __init__(self, request_description, client, is_active=lambda : True):
         """Initialize request with given description and network client
 
         Parameters
         ----------
-        name : str
-            KATCP name of the request
-        description : str
-            KATCP request description (as returned by ?help <name>)
+        request_description : dict
+            Description of KATCP request as required by
+            :class:`katcp.resource.KATCPRequest` init method
         client : client obj
             KATCP client connected to the KATCP resource that exposes a wrapped_request()
             method like :meth:`ReplyWrappedInspectingClientAsync.wrapped_request`.
@@ -859,7 +860,7 @@ class KATCPClientResourceRequest(resource.KATCPRequest):
 
         """
         self._client = client
-        super(KATCPClientResourceRequest, self).__init__(name, description, is_active)
+        super(KATCPClientResourceRequest, self).__init__(request_description, is_active)
 
     def issue_request(self, *args, **kwargs):
         """Issue the wrapped request to the server.
@@ -887,6 +888,10 @@ class KATCPClientResourceRequest(resource.KATCPRequest):
         instance
 
         """
+        timeout = kwargs.pop('timeout', None)
+        if timeout is None:
+            timeout = self.timeout_hint
+        kwargs['timeout'] = timeout
         return self._client.wrapped_request(self.name, *args, **kwargs)
 
 class GroupRequest(object):
@@ -1010,8 +1015,10 @@ class ClientGroup(object):
     def req(self):
         if self._clients_dirty:
             if any(client.dummy_unknown_requests for client in self.clients):
-                DummyRequest = partial(resource.KATCPDummyRequest,
-                                       'dummy', 'No help for dummies')
+                DummyRequest = partial(
+                    resource.KATCPDummyRequest,
+                    {'name':'dummy', 'description': 'No help for dummies',
+                     'timeout_hint': None})
                 self._req = DefaultAttrDict(DummyRequest)
             else:
                 self._req = AttrDict()

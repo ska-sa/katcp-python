@@ -30,14 +30,14 @@ from .core import (Sensor,
                    AsyncReply,
                    AsyncEvent,
                    AttrDict,
-                   steal_docstring_from)
+                   steal_docstring_from,
+                   ProtocolFlags)
 from .server import DeviceServer, FailReply, ClientConnection
 from .kattypes import (request,
                        return_reply,
-                       Float,
+                       Float, Str, Int,
                        concurrent_reply,
                        request_timeout_hint)
-
 
 logger = logging.getLogger(__name__)
 
@@ -1099,6 +1099,7 @@ class DeviceTestServer(DeviceServer):
                 fut.set_result(None)
         super(DeviceTestServer, self).stop(*args, **kwargs)
 
+
 class AsyncDeviceTestServer(DeviceTestServer):
     def __init__(self, *args, **kwargs):
         super(AsyncDeviceTestServer, self).__init__(*args, **kwargs)
@@ -1132,6 +1133,31 @@ class AsyncDeviceTestServer(DeviceTestServer):
             self._slow_futures.pop(req.client_connection, None)
 
         raise gen.Return(('ok', ))
+
+
+class DeviceTestServerWithTimeoutHints(DeviceTestServer):
+    PROTOCOL_INFO = ProtocolFlags(5, 1, set([
+        ProtocolFlags.MULTI_CLIENT,
+        ProtocolFlags.MESSAGE_IDS,
+        ProtocolFlags.REQUEST_TIMEOUT_HINTS
+        ]))
+
+    def __init__(self, *args, **kwargs):
+        super(DeviceTestServerWithTimeoutHints, self).__init__(*args, **kwargs)
+        self.request_timeout_hints = {
+            'slow-command': 10.5,
+            'raise-fail': 2.3}
+
+    @request(Str(optional=True))
+    @return_reply(Int())
+    def request_request_timeout_hint(self, req, name):
+        """Return timeout hints for requests"""
+        hints = ({name: self.request_timeout_hints.get(name, 0)} if name
+                 else self.request_timeout_hints)
+        for req_name, timeout_hint in hints.items():
+            req.inform(req_name, timeout_hint)
+        return ('ok', len(hints))
+
 
 
 
