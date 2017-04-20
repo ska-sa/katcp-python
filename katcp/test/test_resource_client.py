@@ -85,11 +85,23 @@ class test_KATCPClientResourceRequest(unittest.TestCase):
         # Check that we are registered to the correct ABC
         self.assertIsInstance(self.DUT, resource.KATCPRequest)
 
-    def test_request(self):
+    def test_request_with_timeout_hint(self):
         reply = self.DUT('parm1', 2)
         self.mock_client.wrapped_request.assert_called_once_with(
             'the-request', 'parm1', 2, timeout=33.34)
         self.assertIs(reply, self.mock_client.wrapped_request.return_value)
+
+    def test_request_no_timeout_hint(self):
+        DUT_no_timeout_hint = resource_client.KATCPClientResourceRequest(
+            {'name': 'the-other-request',
+             'description': 'The other description',
+             'timeout_hint': None},
+            self.mock_client)
+        reply = DUT_no_timeout_hint('aparm', 3)
+        self.mock_client.wrapped_request.assert_called_once_with(
+            'the-other-request', 'aparm', 3, timeout=None)
+        self.assertIs(reply, self.mock_client.wrapped_request.return_value)
+
 
 class test_KATCPClientResource(tornado.testing.AsyncTestCase):
     def test_init(self):

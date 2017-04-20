@@ -415,7 +415,7 @@ class KATCPRequest(object):
         -----------------
         timeout : None or float, optional
             Timeout in seconds for the request. If None, use request timeout
-            hint recieved from server or default for the :class:`KATCPResource`
+            hint received from server or default for the :class:`KATCPResource`
             instance that contains the request if no hint is available.
         mid : None or int, optional
             Message identifier to use for the request message. If None, use

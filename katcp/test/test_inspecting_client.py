@@ -160,14 +160,6 @@ class TestICAClass(tornado.testing.AsyncTestCase):
 class TestInspectingClientInspect(tornado.testing.AsyncTestCase):
     """Check that inspection populates the request/sensor index correctly"""
 
-    def setUp(self):
-        super(TestInspectingClientInspect, self).setUp()
-        self.server = DeviceTestServer('', 0)
-        start_thread_with_cleanup(self, self.server, start_timeout=1)
-        self.server_with_timeout_hints = DeviceTestServerWithTimeoutHints('', 0)
-        start_thread_with_cleanup(self, self.server_with_timeout_hints,
-                                  start_timeout=1)
-
     def _get_server(self, hints):
         """Return a running test server with or without request timeout hints
 
@@ -201,7 +193,7 @@ class TestInspectingClientInspect(tornado.testing.AsyncTestCase):
         return expected
 
     @tornado.gen.coroutine
-    def _test_inspect_requests_no_timeout_hints(self, timeout_hints):
+    def _test_inspect_requests(self, timeout_hints):
         """Test  index creation
 
         Parameters
@@ -228,11 +220,11 @@ class TestInspectingClientInspect(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_inspect_request_no_timeout_hints(self):
-        yield self._test_inspect_requests_no_timeout_hints(timeout_hints=False)
+        yield self._test_inspect_requests(timeout_hints=False)
 
     @tornado.testing.gen_test
     def test_inspect_request_with_timeout_hints(self):
-        yield self._test_inspect_requests_no_timeout_hints(
+        yield self._test_inspect_requests(
             timeout_hints=True)
 
     # TODO NM 2017-04-12 Tests should be added for sensor index. I just added

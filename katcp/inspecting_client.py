@@ -655,7 +655,7 @@ class InspectingClientAsync(object):
         Parameters
         =========
         name : str or None, optional
-            Name of the request or None to get all request  timeout hints.
+            Name of the request or None to get all request timeout hints.
         timeout : float seconds
             Timeout for ?request-timeout-hint
 
