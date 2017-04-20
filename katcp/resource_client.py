@@ -5,6 +5,7 @@ import logging
 import sys
 import re
 import collections
+import math
 import time
 
 import tornado
@@ -20,7 +21,7 @@ from katcp.resource import KATCPReply, KATCPSensorError
 from katcp.core import (AttrDict, DefaultAttrDict, AsyncCallbackEvent,
                         steal_docstring_from,
                         AsyncState, AsyncEvent, LatencyTimer,
-                        until_any, log_future_exceptions)
+                        until_any, until_some, log_future_exceptions)
 
 # TODO NM 2017-04-13 Importing IOLoopThreadwrapper here for backwards
 # compatibility, user code should be changed to import it from the more logical
@@ -1085,7 +1086,8 @@ class ClientGroup(object):
         raise tornado.gen.Return(sensors_strategies)
 
     @tornado.gen.coroutine
-    def wait(self, sensor_name, condition_or_value, timeout=5):
+    def wait(self, sensor_name, condition_or_value, timeout=5.0, quorum=None,
+             max_grace_period=1.0):
         """Wait for sensor present on all group clients to satisfy a condition.
 
         Parameters
@@ -1099,13 +1101,21 @@ class ClientGroup(object):
             status, timestamp or received_timestamp attributes can all be used
             in the check.
         timeout : float or None
-            The timeout in seconds (None means wait forever)
+            The total timeout in seconds (None means wait forever)
+        quorum : None or int or float
+            The number of clients that are required to satisfy the condition,
+            as either an integer or a float between 0 and 1 indicating a
+            fraction of the total number of clients, rounded up (default all)
+        max_grace_period : float or None
+            After a quorum or initial timeout is reached, wait up to this long
+            in an attempt to get the rest of the clients to satisfy condition
+            as well (achieving effectively a full quorum if all clients behave)
 
         Returns
         -------
-        This command returns a tornado Future that resolves with True when all
-        sensor values satisfy the condition, or False if any sensor condition
-        is still not satisfied after a given timeout period.
+        This command returns a tornado Future that resolves with True when a
+        quorum of clients satisfy the sensor condition, or False if a quorum
+        is not reached after a given timeout period (including a grace period).
 
         Raises
         ------
@@ -1114,16 +1124,37 @@ class ClientGroup(object):
             sensor is not present
 
         """
+        if quorum is None:
+            quorum = len(self.clients)
+        elif quorum < 1:
+            quorum = int(math.ceil(quorum * len(self.clients)))
+        if timeout and max_grace_period:
+            # Avoid having a grace period longer than or equal to timeout
+            grace_period = min(max_grace_period, timeout / 2.)
+            initial_timeout = timeout - grace_period
+        else:
+            grace_period = max_grace_period
+            initial_timeout = timeout
         # Build dict of futures instead of list as this will be easier to debug
         futures = {}
         for client in self.clients:
-            futures[client.name] = client.wait(sensor_name, condition_or_value,
-                                               timeout)
-        results = yield futures
+            f = client.wait(sensor_name, condition_or_value, initial_timeout)
+            futures[client.name] = f
+        # No timeout required here as all futures will resolve after timeout
+        initial_results = yield until_some(done_at_least=quorum, **futures)
+        results = dict(initial_results)
+        # Identify stragglers and let them all respond within grace period
+        stragglers = {}
+        for client in self.clients:
+            if not results.get(client.name, False):
+                f = client.wait(sensor_name, condition_or_value, grace_period)
+                stragglers[client.name] = f
+        rest_of_results = yield until_some(**stragglers)
+        results.update(dict(rest_of_results))
         class TestableDict(dict):
             """Dictionary of results that can be tested for overall success."""
             def __bool__(self):
-                return all(self.values())
+                return sum(self.values()) >= quorum
             def __nonzero__(self):
                 return self.__bool__()
         raise tornado.gen.Return(TestableDict(results))
