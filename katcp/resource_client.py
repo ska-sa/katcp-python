@@ -1104,8 +1104,9 @@ class ClientGroup(object):
             The total timeout in seconds (None means wait forever)
         quorum : None or int or float
             The number of clients that are required to satisfy the condition,
-            as either an integer or a float between 0 and 1 indicating a
-            fraction of the total number of clients, rounded up (default all)
+            as either an explicit integer or a float strictly between 0 and 1
+            indicating a fraction of the total number of clients, rounded up.
+            If None, this means that all clients are required (the default).
         max_grace_period : float or None
             After a quorum or initial timeout is reached, wait up to this long
             in an attempt to get the rest of the clients to satisfy condition
