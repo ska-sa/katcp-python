@@ -224,8 +224,7 @@ class TestInspectingClientInspect(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_inspect_request_with_timeout_hints(self):
-        yield self._test_inspect_requests(
-            timeout_hints=True)
+        yield self._test_inspect_requests(timeout_hints=True)
 
     # TODO NM 2017-04-12 Tests should be added for sensor index. I just added
     # the minimum needed to test new functionality for CB-569
