@@ -1104,9 +1104,11 @@ class ClientGroup(object):
             The total timeout in seconds (None means wait forever)
         quorum : None or int or float
             The number of clients that are required to satisfy the condition,
-            as either an explicit integer or a float strictly between 0 and 1
-            indicating a fraction of the total number of clients, rounded up.
-            If None, this means that all clients are required (the default).
+            as either an explicit integer or a float between 0 and 1 indicating
+            a fraction of the total number of clients, rounded up. If None,
+            this means that all clients are required (the default). Be warned
+            that a value of 1.0 (float) indicates all clients while a value
+            of 1 (int) indicates a single client...
         max_grace_period : float or None
             After a quorum or initial timeout is reached, wait up to this long
             in an attempt to get the rest of the clients to satisfy condition
@@ -1127,7 +1129,11 @@ class ClientGroup(object):
         """
         if quorum is None:
             quorum = len(self.clients)
-        elif quorum < 1:
+        elif quorum > 1:
+            if not isinstance(quorum, int):
+                raise TypeError('Quorum parameter %r must be an integer '
+                                'if outside range [0, 1]' % (quorum,))
+        elif isinstance(quorum, float):
             quorum = int(math.ceil(quorum * len(self.clients)))
         if timeout and max_grace_period:
             # Avoid having a grace period longer than or equal to timeout

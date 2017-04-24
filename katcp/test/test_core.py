@@ -509,7 +509,7 @@ class TestUntilSome(tornado.testing.AsyncTestCase):
         f1.set_result(24)
         f2.set_result(42)
         results = yield until_some(f1, f2, f3, timeout=0.1)
-        self.assertEqual(results, [(0, 24), (1, 42), (2, 84)],
+        self.assertEqual(sorted(results), [(0, 24), (1, 42), (2, 84)],
                          'Results differ for until_some (3 arg futures)')
 
     @tornado.testing.gen_test

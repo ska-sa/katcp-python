@@ -1912,7 +1912,8 @@ def until_some(*args, **kwargs):
     Parameters
     ----------
     done_at_least : None or int
-        Number of futures that need to resolve before this resolves (default all)
+        Number of futures that need to resolve before this resolves or None
+        to wait for all (default None)
     timeout : None or float
         Timeout in seconds, or None for no timeout (the default)
 
