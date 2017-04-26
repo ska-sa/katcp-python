@@ -1095,12 +1095,13 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
         DUT.add_group('test', DUT.children.keys())
         DUT.start()
-        # Setup a new sensor on all clients to wait on
-        wait_sensor = DeviceTestSensor(DeviceTestSensor.INTEGER, 'wait_sensor',
-                                       "An Integer.",
-                                       "count", [-50, 50], timestamp=self.io_loop.time(),
-                                       status=DeviceTestSensor.NOMINAL, value=0)
         for server in self.servers.values():
+            # Setup a new sensor on all clients to wait on
+            wait_sensor = DeviceTestSensor(DeviceTestSensor.INTEGER,
+                                           'wait_sensor', "An Integer.",
+                                           "count", [-50, 50], value=0,
+                                           timestamp=self.io_loop.time(),
+                                           status=DeviceTestSensor.NOMINAL)
             server.add_sensor(wait_sensor)
         yield DUT.until_synced()
         # Ensure strategies are set for wait() to work
@@ -1110,14 +1111,39 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         # Test the no timeout case too for what it's worth
         result = yield group.wait('wait_sensor', 0, timeout=None)
         self.assertTrue(result)
+        result = yield group.wait('wait_sensor', 0, timeout=None, quorum=1.0)
+        self.assertTrue(result)
         # Check detailed results per client
         for client in DUT.children.values():
             self.assertTrue(result[client.name])
-        result = yield group.wait('wait_sensor', 1, timeout=0.5)
+        result = yield group.wait('wait_sensor', 1, timeout=0.1)
         self.assertFalse(result)
         for client in DUT.children.values():
             self.assertFalse(result[client.name])
-
+        # Test quorum functionality
+        with self.assertRaises(TypeError):
+            yield group.wait('wait_sensor', 1, timeout=0.1, quorum=1.1)
+        selected_client = DUT.children.keys()[0]
+        self.servers[selected_client].get_sensor('wait_sensor').set_value(1)
+        result = yield group.wait('wait_sensor', 1, timeout=0.1, quorum=1)
+        self.assertTrue(result)
+        # Be warned that quorum == 1.0 is not the same as quorum == 1 ...
+        result = yield group.wait('wait_sensor', 1, timeout=0.1, quorum=1.0)
+        self.assertFalse(result)
+        result = yield group.wait('wait_sensor', 1, timeout=0.1, quorum=0.1)
+        self.assertTrue(result)
+        for client in DUT.children.values():
+            if client.name == selected_client:
+                self.assertTrue(result[client.name])
+            else:
+                self.assertFalse(result[client.name])
+        result = yield group.wait('wait_sensor', 1, timeout=0.1, quorum=2)
+        self.assertFalse(result)
+        for client in DUT.children.values():
+            if client.name == selected_client:
+                self.assertTrue(result[client.name])
+            else:
+                self.assertFalse(result[client.name])
 
 
 class test_AttrMappingProxy(unittest.TestCase):
