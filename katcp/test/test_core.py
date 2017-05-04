@@ -7,8 +7,10 @@
 """Tests for the katcp utilities module.
    """
 
+from builtins import str
+from builtins import object
 import logging
-import unittest2 as unittest
+import unittest
 
 import tornado
 
