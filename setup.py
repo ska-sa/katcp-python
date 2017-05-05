@@ -32,7 +32,6 @@ setup(
         "ply",
         "tornado>=4.0",
         "futures",
-        "ProxyTypes",
         "future"
     ],
     # run tests and install these requirements with python setup.py nosetests

@@ -7,13 +7,14 @@ import textwrap
 import tornado.ioloop
 
 from functools import wraps
+from thread import get_ident as get_thread_ident
 
-from peak.util.proxies import ObjectWrapper
 from concurrent.futures import Future, TimeoutError
 from tornado.concurrent import Future as tornado_Future
 from tornado import gen
 
-from thread import get_ident as get_thread_ident
+from katcp.object_proxies import ObjectWrapper
+
 
 log = logging.getLogger(__name__)
 
