@@ -35,6 +35,8 @@
     Uses the ply library from http://www.dabeaz.com/ply/.
     """
 
+from __future__ import division, print_function, absolute_import
+
 import ply.lex as lex
 import ply.yacc as yacc
 import katcp

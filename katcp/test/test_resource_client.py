@@ -1,4 +1,4 @@
-from __future__ import print_function
+from __future__ import print_function, division, absolute_import
 ###############################################################################
 # SKA South Africa (http://ska.ac.za/)                                        #
 # Author: cam@ska.ac.za                                                       #
@@ -7,6 +7,7 @@ from __future__ import print_function
 # THIS SOFTWARE MAY NOT BE COPIED OR DISTRIBUTED IN ANY FORM WITHOUT THE      #
 # WRITTEN PERMISSION OF SKA SA.                                               #
 ###############################################################################
+from __future__ import division, print_function, absolute_import
 
 # Python 2/3 compatibility stuff
 from future import standard_library

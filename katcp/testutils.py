@@ -6,7 +6,8 @@
 
 """Test utils for katcp package tests."""
 
-import client
+from __future__ import division, print_function, absolute_import
+
 import logging
 import re
 import time
@@ -23,6 +24,9 @@ from thread import get_ident
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
+
+from katcp import client
+
 
 from .core import (Sensor,
                    Message,

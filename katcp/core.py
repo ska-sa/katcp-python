@@ -6,6 +6,8 @@
 
 """Utilities for dealing with KAT device control language messages."""
 
+from __future__ import division, print_function, absolute_import
+
 import re
 import sys
 import time

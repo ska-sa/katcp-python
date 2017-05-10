@@ -3,7 +3,8 @@
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
 # Copyright 2014 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
-from __future__ import print_function
+
+from __future__ import division, print_function, absolute_import
 
 import logging
 import random

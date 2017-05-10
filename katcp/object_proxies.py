@@ -4,6 +4,8 @@
 # ZPL (Zope Public License if I' not mistaken). The PSF license is BSD style and
 # allows us to copy, modify and redistribute this code.
 
+from __future__ import division, print_function, absolute_import
+
 # Python 2/3 compatibility stuff
 from builtins import object
 #

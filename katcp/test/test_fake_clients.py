@@ -1,6 +1,7 @@
 # Copyright 2015 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
-from __future__ import division
+
+from __future__ import division, print_function, absolute_import
 
 import unittest2 as unittest
 import logging

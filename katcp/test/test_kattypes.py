@@ -7,6 +7,8 @@
 """Tests for the kattypes module.
    """
 
+from __future__ import division, print_function, absolute_import
+
 import unittest2 as unittest
 import mock
 from katcp import Message, FailReply, AsyncReply

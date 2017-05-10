@@ -4,7 +4,11 @@
 # Copyright 2009 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
 
+
+
 """Root of katcp package."""
+from __future__ import division, print_function, absolute_import
+
 from .core import (Message, KatcpSyntaxError, MessageParser,
                    DeviceMetaclass, FailReply,
                    AsyncReply, KatcpDeviceError, KatcpClientError,
