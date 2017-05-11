@@ -1,3 +1,4 @@
+from __future__ import print_function, division, absolute_import
 ###############################################################################
 # SKA South Africa (http://ska.ac.za/)                                        #
 # Author: cam@ska.ac.za                                                       #
@@ -6,8 +7,16 @@
 # THIS SOFTWARE MAY NOT BE COPIED OR DISTRIBUTED IN ANY FORM WITHOUT THE      #
 # WRITTEN PERMISSION OF SKA SA.                                               #
 ###############################################################################
+from __future__ import division, print_function, absolute_import
 
-import unittest2 as unittest
+# Python 2/3 compatibility stuff
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import object
+#
+
+import unittest
 import logging
 import copy
 import time
@@ -16,7 +25,7 @@ import threading
 import tornado
 import mock
 
-from thread import get_ident as get_thread_ident
+from _thread import get_ident as get_thread_ident
 from functools import partial
 
 from concurrent.futures import TimeoutError
@@ -265,7 +274,8 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
         def make_test_sensors(sensors_info):
             test_sensors = AttrDict()
-            for sens_pyname, info in sensors_info.items():
+            # TODO PY3 check if we can get rid of the list() call
+            for sens_pyname, info in list(sensors_info.items()):
                 info = dict(info)
                 info['sensor_type'] = Sensor.INTEGER
                 val = info.pop('value')
@@ -628,7 +638,8 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         self.assertEqual(sorted(DUT.groups), ['group1', 'group2', 'group3', 'group4'])
         spec['groups']['group4'] = ('client-2', 'another-client')
 
-        for group_name, group in DUT.groups.items():
+        # TODO PY3 check if we can get rid of the list() call
+        for group_name, group in list(DUT.groups.items()):
             # Smoke test that no errors are raised
             group.req
             # Check that the correct clients are in each group
@@ -674,8 +685,9 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         m_i_c_2 = mock_inspecting_client(DUT.children.client_2)
         m_i_c_a = mock_inspecting_client(DUT.children.another_client)
 
+        # TODO PY3 check if we can get rid of the list() call
         normalize_reply = lambda reply: {c:r if r is None else str(r.reply)
-                                          for c, r in reply.items()}
+                                          for c, r in list(reply.items())}
 
         yield DUT.children.client1._add_requests(['req-1'])
         g1_reply = yield DUT.groups.group1.req.req_1()
@@ -707,7 +719,8 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         child_specs = self.default_spec_orig['clients']
         self.assertEqual(sorted(DUT.children),
                          sorted(resource.escape_name(n) for n in child_specs))
-        for child_name, child_spec in child_specs.items():
+        # TODO PY3 check if we can get rid of the list() call
+        for child_name, child_spec in list(child_specs.items()):
             child = DUT.children[resource.escape_name(child_name)]
             self.assertEqual(child.name, child_name)
             self.assertEqual(child.parent, DUT)
@@ -721,7 +734,8 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         dict.update(DUT.children, mock_children)
 
         self.assertTrue(DUT.is_active(), "'active' should be True initially")
-        for child_name, child in DUT.children.items():
+        # TODO PY3 check if we can get rid of the list() call
+        for child_name, child in list(DUT.children.items()):
             self.assertTrue(child.is_active(),
                             "Child {} should be active".format(child_name))
 
@@ -730,7 +744,8 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         self.assertFalse(DUT.is_active(),
                          "'active' should be False after set_active(False)")
 
-        for child_name, child in DUT.children.items():
+        # TODO PY3 check if we can get rid of the list() call
+        for child_name, child in list(DUT.children.items()):
             self.assertFalse(child.is_active(),
                             "Child {} should not be active".format(child_name))
 
@@ -738,7 +753,8 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         DUT.set_active(True)
         self.assertTrue(DUT.is_active(),
                         "'active' should be True after set_active(True)")
-        for child_name, child in DUT.children.items():
+        # TODO PY3 check if we can get rid of the list() call
+        for child_name, child in list(DUT.children.items()):
             self.assertTrue(child.is_active(),
                             "Child {} should be active".format(child_name))
 
@@ -750,7 +766,8 @@ class test_KATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         self.assertTrue(DUT.until_not_synced().done())
 
         # Set all child states sync functions to resolved and not_synced to unresolved
-        for child in DUT.children.values():
+        # TODO PY3 check if we can get rid of the list() call
+        for child in list(DUT.children.values()):
             f = tornado.concurrent.Future()
             f.set_result(None)
             child.until_synced = mock.create_autospec(
@@ -806,7 +823,7 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
             'resource2' : dict(controlled=True),
             'resource3' : dict(controlled=True)},
                                  name='intgtest')
-        self.resource_names = self.default_spec['clients'].keys()
+        self.resource_names = list(self.default_spec['clients'].keys())
         self.servers = {rn: DeviceTestServer('', 0) for rn in self.resource_names}
         for i, (s_name, s) in enumerate(sorted(self.servers.items())):
             start_thread_with_cleanup(self, s)
@@ -1031,7 +1048,7 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         katcp_sensor.set(t, status, value)
         t, status, value = (t0+2.5, Sensor.NOMINAL, 3)
         katcp_sensor.set(t, status, value)
-        print "listener.mock_calls", listener.mock_calls
+        print("listener.mock_calls", listener.mock_calls)
         self.assertEquals(len(listener.mock_calls), 6)
         return
 
@@ -1093,9 +1110,10 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         # Start new container
         self.default_spec_orig = copy.deepcopy(self.default_spec)
         DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
-        DUT.add_group('test', DUT.children.keys())
+        DUT.add_group('test', list(DUT.children.keys()))
         DUT.start()
-        for server in self.servers.values():
+        # TODO PY3 check if we can get rid of the list() call
+        for server in list(self.servers.values()):
             # Setup a new sensor on all clients to wait on
             wait_sensor = DeviceTestSensor(DeviceTestSensor.INTEGER,
                                            'wait_sensor', "An Integer.",
@@ -1105,7 +1123,8 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
             server.add_sensor(wait_sensor)
         yield DUT.until_synced()
         # Ensure strategies are set for wait() to work
-        for client in DUT.children.values():
+        # TODO PY3 check if we can get rid of the list() call
+        for client in list(DUT.children.values()):
             client.set_sampling_strategy('wait_sensor', 'event')
         group = DUT.groups['test']
         # Test the no timeout case too for what it's worth
@@ -1114,16 +1133,19 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         result = yield group.wait('wait_sensor', 0, timeout=None, quorum=1.0)
         self.assertTrue(result)
         # Check detailed results per client
-        for client in DUT.children.values():
+        # TODO PY3 check if we can get rid of the list() call
+        for client in list(DUT.children.values()):
             self.assertTrue(result[client.name])
         result = yield group.wait('wait_sensor', 1, timeout=0.1)
         self.assertFalse(result)
-        for client in DUT.children.values():
+        # TODO PY3 check if we can get rid of the list() call
+        for client in list(DUT.children.values()):
             self.assertFalse(result[client.name])
         # Test quorum functionality
         with self.assertRaises(TypeError):
             yield group.wait('wait_sensor', 1, timeout=0.1, quorum=1.1)
-        selected_client = DUT.children.keys()[0]
+        # TODO PY3 check if we can get rid of the list() call
+        selected_client = list(DUT.children.keys())[0]
         self.servers[selected_client].get_sensor('wait_sensor').set_value(1)
         result = yield group.wait('wait_sensor', 1, timeout=0.1, quorum=1)
         self.assertTrue(result)
@@ -1132,14 +1154,16 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         self.assertFalse(result)
         result = yield group.wait('wait_sensor', 1, timeout=0.1, quorum=0.1)
         self.assertTrue(result)
-        for client in DUT.children.values():
+        # TODO PY3 check if we can get rid of the list() call
+        for client in list(DUT.children.values()):
             if client.name == selected_client:
                 self.assertTrue(result[client.name])
             else:
                 self.assertFalse(result[client.name])
         result = yield group.wait('wait_sensor', 1, timeout=0.1, quorum=2)
         self.assertFalse(result)
-        for client in DUT.children.values():
+        # TODO PY3 check if we can get rid of the list() call
+        for client in list(DUT.children.values()):
             if client.name == selected_client:
                 self.assertTrue(result[client.name])
             else:
@@ -1158,7 +1182,8 @@ class test_AttrMappingProxy(unittest.TestCase):
 
         wrapped_dict = resource_client.AttrMappingProxy(test_dict, TestWrapper)
         # Test keys
-        self.assertEqual(wrapped_dict.keys(), test_dict.keys())
+        # TODO PY3 check if we can get rid of the list() call
+        self.assertEqual(list(wrapped_dict.keys()), list(test_dict.keys()))
         # Test key access:
         for key in test_dict:
             self.assertEqual(wrapped_dict[key].wrappee, test_dict[key])
@@ -1167,8 +1192,10 @@ class test_AttrMappingProxy(unittest.TestCase):
             self.assertEqual(getattr(wrapped_dict, key).wrappee,
                              getattr(test_dict, key))
         # Test whole dict comparison
-        self.assertEqual(wrapped_dict,
-                         {k : TestWrapper(v) for k, v in test_dict.items()})
+        # TODO PY3 check if we can get rid of the list() call
+        self.assertEqual(
+            wrapped_dict,
+            {k : TestWrapper(v) for k, v in list(test_dict.items())})
 
 
 class test_ThreadSafeKATCPClientResourceWrapper(unittest.TestCase):
@@ -1245,7 +1272,8 @@ class test_ThreadSafeKATCPClientResourceWrapper_container(unittest.TestCase):
             'resource1' : dict(controlled=True),
             'resource2' : dict(controlled=True)},
                                  name='wraptest')
-        self.resource_names = self.default_spec['clients'].keys()
+        # TODO PY3 check if we can get rid of the list() call
+        self.resource_names = list(self.default_spec['clients'].keys())
         self.servers = {rn: DeviceTestServer('', 0) for rn in self.resource_names}
         for i, (s_name, s) in enumerate(sorted(self.servers.items())):
             start_thread_with_cleanup(self, s)

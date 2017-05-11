@@ -6,9 +6,14 @@
 
 """Tests for the katcp utilities module.
    """
+from __future__ import division, print_function, absolute_import
 
+# Python 2/3 compatibility stuff
+from builtins import str
+from builtins import object
 import logging
-import unittest2 as unittest
+import unittest
+#
 
 import tornado
 

@@ -1,3 +1,5 @@
+from __future__ import division, print_function, absolute_import
+
 import unittest
 
 from thread import get_ident as get_thread_ident

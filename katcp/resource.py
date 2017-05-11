@@ -1,5 +1,7 @@
 """A high-level abstract interface to KATCP clients, sensors and requests."""
 
+from __future__ import division, print_function, absolute_import
+
 import abc
 import sys
 import collections

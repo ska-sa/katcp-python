@@ -6,6 +6,8 @@
 
 """Tests for client module."""
 
+from __future__ import division, print_function, absolute_import
+
 import unittest2 as unittest
 import socket
 import mock
@@ -734,8 +736,8 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             self.assertEqual(replies[0].arguments[0], "ok")
             informs = remove_version_connect(informs)
             if len(informs) != NO_HELP_MESSAGES:
-                print thread_id, len(informs)
-                print [x.arguments[0] for x in informs]
+                print(thread_id, len(informs))
+                print([x.arguments[0] for x in informs])
             self.assertEqual(len(informs), NO_HELP_MESSAGES)
 
     def test_blocking_request(self):

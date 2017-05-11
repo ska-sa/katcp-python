@@ -1,5 +1,12 @@
 # Copyright 2014 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
+from __future__ import division, print_function, absolute_import
+
+# Python 2/3 compatibility stuff
+from builtins import str
+from past.utils import old_div
+from builtins import object
+#
 
 import logging
 import sys
@@ -669,7 +676,7 @@ class KATCPClientResource(resource.KATCPResource):
         sensor_instances = yield sensor_instance_fut
         # Store KATCPSensor instances in self.sensor
         added_names = []
-        for s_name, s_obj in sensor_instances.items():
+        for s_name, s_obj in list(sensor_instances.items()):
             s_name_escaped = resource.escape_name(s_name)
             self._sensor[s_name_escaped] = s_obj
             preset_strategy = self._sensor_strategy_cache.get(s_name_escaped)
@@ -814,7 +821,7 @@ class KATCPClientResourceSensorsManager(object):
     def reapply_sampling_strategies(self):
         """Reapply all sensor strategies using cached values"""
         check_sensor = self._inspecting_client.future_check_sensor
-        for sensor_name, strategy in self._strategy_cache.items():
+        for sensor_name, strategy in list(self._strategy_cache.items()):
             try:
                 sensor_exists = yield check_sensor(sensor_name)
                 if not sensor_exists:
@@ -823,7 +830,7 @@ class KATCPClientResourceSensorsManager(object):
                     continue
 
                 result = yield self.set_sampling_strategy(sensor_name, strategy)
-            except KATCPSensorError, e:
+            except KATCPSensorError as e:
                 self._logger.error('Error reapplying strategy for sensor {0}: {1!s}'
                                    .format(sensor_name, e))
             except Exception:
@@ -975,9 +982,14 @@ class GroupResults(dict):
     should work as expected.
 
     """
-    def __nonzero__(self):
+    def __bool__(self):
         """True if katcp request succeeded on all clients."""
-        return all(self.itervalues())
+        return all(self.values())
+
+    # Was not handled automatrically by futurize, see
+    # https://github.com/PythonCharmers/python-future/issues/282
+    if sys.version_info[0] == 2:
+        __nonzero__ = __bool__
 
     @property
     def succeeded(self):
@@ -1162,8 +1174,10 @@ class ClientGroup(object):
             """Dictionary of results that can be tested for overall success."""
             def __bool__(self):
                 return sum(self.values()) >= quorum
-            def __nonzero__(self):
-                return self.__bool__()
+            # Was not handled automatrically by futurize, see
+            # https://github.com/PythonCharmers/python-future/issues/282
+            if sys.version_info[0] == 2:
+                __nonzero__ = __bool__
         raise tornado.gen.Return(TestableDict(results))
 
 
@@ -1276,7 +1290,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def _init_groups(self):
         group_configs = self._resources_spec.get('groups', {})
         groups = AttrDict()
-        for group_name, group_client_names in group_configs.items():
+        for group_name, group_client_names in list(group_configs.items()):
             group_clients = tuple(self.children[resource.escape_name(cn)]
                                   for cn in group_client_names)
             group = ClientGroup(group_name, group_clients)
@@ -1540,7 +1554,7 @@ class AttrMappingProxy(MappingProxy):
         return self._wrapper(getattr(self._mapping, attr))
 
     def __dir__(self):
-        return self.keys()
+        return list(self.keys())
 
 
 class ThreadSafeKATCPClientGroupWrapper(ThreadSafeMethodAttrWrapper):

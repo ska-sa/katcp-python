@@ -5,6 +5,8 @@
 # BSD license - see COPYING for details
 """Clients for the KAT device control language."""
 
+from __future__ import division, print_function, absolute_import
+
 import sys
 import traceback
 import logging
