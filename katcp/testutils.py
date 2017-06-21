@@ -18,6 +18,7 @@ import functools
 import mock
 import tornado.testing
 import tornado.ioloop
+import tornado.locks
 
 from thread import get_ident
 
@@ -1808,6 +1809,39 @@ class WaitingMock(mock.Mock):
         # should be increased.
         if self.call_count >= count and len(self.call_args_list) < count:
             raise RuntimeError("call_args_list not updated within timeout.")
+
+class AsyncWaitingMock(mock.Mock):
+
+    def __init__(self, *args, **kwargs):
+        super(AsyncWaitingMock, self).__init__(*args, **kwargs)
+        self._call_event = tornado.locks.Event()
+
+    def _mock_call(self, *args, **kwargs):
+        ret = super(AsyncWaitingMock, self)._mock_call(*args, **kwargs)
+        self._call_event.set()
+        return ret
+
+    @tornado.gen.coroutine
+    def assert_wait_call_count(self, count, timeout=1.):
+        """Wait for mock to be called >= *count* times within *timeout* seconds.
+
+        Raises AssertionError if the call count is not reached.
+
+        """
+        t0 = time.time()
+        if self.call_count >= count and len(self.call_args_list) >= count:
+            raise tornado.gen.Return(True)
+        to_wait = timeout
+
+        while to_wait >= 0 and self.call_count < count:
+            try:
+                yield self._call_event.wait(timeout)
+                self._call_event.clear()
+            except gen.TimeoutError:
+                pass
+            to_wait = timeout - (time.time() - t0)
+
+        assert(self.call_count >= count)
 
 
 def mock_req(req_name, *args, **kwargs):

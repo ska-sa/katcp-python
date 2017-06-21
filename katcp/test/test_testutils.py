@@ -3,6 +3,8 @@ from __future__ import division, print_function, absolute_import
 import unittest2 as unittest
 import threading
 import time
+import tornado.testing
+import tornado.gen
 
 from katcp import Sensor
 from katcp import testutils
@@ -123,12 +125,14 @@ class test_wait_sensor(unittest.TestCase):
         self._wait_sensor(vals, 0, status=Sensor.ERROR)
 
 
-class test_WaitingMock(unittest.TestCase):
+class _test_WaitingMockBase(unittest.TestCase):
+
+    DUTClass = None
 
     def test_reset_mock(self):
         # Verify that the call_count and call_args_list variables
         # are initially zero, and get cleared by calling reset_mock
-        DUT = testutils.WaitingMock()
+        DUT = self.DUTClass()
         self.assertEqual(DUT.call_count, 0)
         self.assertEqual(len(DUT.call_args_list), 0)
         DUT()
@@ -138,26 +142,63 @@ class test_WaitingMock(unittest.TestCase):
         self.assertEqual(DUT.call_count, 0)
         self.assertEqual(len(DUT.call_args_list), 0)
 
+
+class test_WaitingMock(_test_WaitingMockBase):
+
+    DUTClass = testutils.WaitingMock
+
     def test_assert_wait_call_count_success(self):
         # Test the normal case, in which the mock was called
-        DUT = testutils.WaitingMock()
+        DUT = self.DUTClass()
         DUT(123)
         DUT.assert_wait_call_count(1, timeout=0.1)
 
     def test_assert_wait_call_count_fail_on_call_count(self):
         # Test the negative case, when the mock was not called.
         # This should cause an assertion error after the timeout.
-        DUT = testutils.WaitingMock()
+        DUT = self.DUTClass()
         with self.assertRaises(AssertionError):
-            DUT.assert_wait_call_count(1, timeout=0.1)
+            DUT.assert_wait_call_count(1, timeout=0.01)
 
     def test_assert_wait_call_count_fail_on_call_args(self):
         # Synthetic test case where the call_count is correct, but the
         # call_args_list has not been updated yet.  This might occur if
         # the mock call is done in a different thread to the unit test.
         # In this case we expect a runtime error after the timeout.
-        DUT = testutils.WaitingMock()
+        DUT = self.DUTClass()
         DUT(123)
         DUT.call_args_list = []
         with self.assertRaises(RuntimeError):
             DUT.assert_wait_call_count(1, timeout=0.1)
+
+class test_AsyncWaitingMock(
+        tornado.testing.AsyncTestCase, _test_WaitingMockBase):
+
+    DUTClass = testutils.AsyncWaitingMock
+
+    @tornado.testing.gen_test
+    def test_assert_wait_call_count_success(self):
+        # Test the normal case, in which the mock was called
+        DUT = self.DUTClass()
+        DUT(123)
+        yield DUT.assert_wait_call_count(1, timeout=0.1)
+
+    @tornado.testing.gen_test
+    def test_assert_wait_call_count_fail_on_call_count(self):
+        # Test the negative case, when the mock was not called.
+        # This should cause an assertion error after the timeout.
+        DUT = self.DUTClass()
+        with self.assertRaises(AssertionError):
+            yield DUT.assert_wait_call_count(1, timeout=0.01)
+
+    @tornado.testing.gen_test
+    def test_ioloop_hogging(self):
+        # Test implementation detail, if the waiting loop forgets to clear
+        # DUT._call_event after each call, it will go in a "busy waiting" loop
+        # that blocks the ioloop and prevents the second call (done using
+        # add_callback) from happening until after assert_wait_call_count()
+        # times out.
+        DUT = self.DUTClass()
+        DUT(1)
+        self.io_loop.add_callback(DUT, 2)
+        yield DUT.assert_wait_call_count(2, timeout=0.1)
