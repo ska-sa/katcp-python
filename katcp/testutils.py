@@ -18,10 +18,11 @@ import functools
 import mock
 import tornado.testing
 import tornado.ioloop
+import tornado.locks
+import tornado.gen
 
 from thread import get_ident
 
-from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
 
@@ -1003,7 +1004,7 @@ class DeviceTestServer(DeviceServer):
     def on_client_connect(self, client_conn):
         yield self.proceed_on_client_connect.until_set()
         rv = yield super(DeviceTestServer, self).on_client_connect(client_conn)
-        raise gen.Return(rv)
+        raise tornado.gen.Return(rv)
 
     def setup_sensors(self):
         self.restarted = False
@@ -1040,12 +1041,12 @@ class DeviceTestServer(DeviceServer):
         t0 = time.time()
         wait_time = float(msg.arguments[0])
         fut = self._slow_futures[req.client_connection] = Future()
-        @gen.coroutine
+        @tornado.gen.coroutine
         def slow_timeout():
             try:
-                yield gen.with_timeout(t0 + wait_time, fut, self.ioloop)
+                yield tornado.gen.with_timeout(t0 + wait_time, fut, self.ioloop)
                 req.reply("ok")
-            except gen.TimeoutError:
+            except tornado.gen.TimeoutError:
                 req.reply("ok")
             except Exception:
                 self._logger.exception('Unable to complete ?slow-command request')
@@ -1113,7 +1114,7 @@ class AsyncDeviceTestServer(DeviceTestServer):
     @return_reply()
     @request_timeout_hint(99)
     @concurrent_reply
-    @gen.coroutine
+    @tornado.gen.coroutine
     def request_slow_command(self, req, wait_time):
         """A slow coroutine request, waits for msg.arguments[0] seconds.
 
@@ -1130,13 +1131,13 @@ class AsyncDeviceTestServer(DeviceTestServer):
         t0 = time.time()
         fut = self._slow_futures[req.client_connection] = Future()
         try:
-            yield gen.with_timeout(t0 + wait_time, fut)
-        except gen.TimeoutError:
+            yield tornado.gen.with_timeout(t0 + wait_time, fut)
+        except tornado.gen.TimeoutError:
             pass
         finally:
             self._slow_futures.pop(req.client_connection, None)
 
-        raise gen.Return(('ok', ))
+        raise tornado.gen.Return(('ok', ))
 
 
 class DeviceTestServerWithTimeoutHints(DeviceTestServer):
@@ -1809,6 +1810,39 @@ class WaitingMock(mock.Mock):
         if self.call_count >= count and len(self.call_args_list) < count:
             raise RuntimeError("call_args_list not updated within timeout.")
 
+class AsyncWaitingMock(mock.Mock):
+
+    def __init__(self, *args, **kwargs):
+        super(AsyncWaitingMock, self).__init__(*args, **kwargs)
+        self._call_event = tornado.locks.Event()
+
+    def _mock_call(self, *args, **kwargs):
+        ret = super(AsyncWaitingMock, self)._mock_call(*args, **kwargs)
+        self._call_event.set()
+        return ret
+
+    @tornado.gen.coroutine
+    def assert_wait_call_count(self, count, timeout=1.):
+        """Wait for mock to be called >= *count* times within *timeout* seconds.
+
+        Raises AssertionError if the call count is not reached.
+
+        """
+        t0 = time.time()
+        if self.call_count >= count:
+            raise tornado.gen.Return(True)
+        to_wait = timeout
+
+        while to_wait >= 0 and self.call_count < count:
+            try:
+                yield self._call_event.wait(to_wait)
+                self._call_event.clear()
+            except tornado.gen.TimeoutError:
+                pass
+            to_wait = timeout - (time.time() - t0)
+
+        assert(self.call_count >= count)
+
 
 def mock_req(req_name, *args, **kwargs):
     """Create a mock ClientRequestConnection object.
@@ -1935,11 +1969,11 @@ def call_in_ioloop(ioloop, fn, *args, **kwargs):
     ioloop_timeout = kwargs.pop('ioloop_timeout', 5)
     f = Future()
     tf = tornado_Future()                 # for nice tracebacks
-    ioloop.add_callback(gen.chain_future, tf, f)
-    @gen.coroutine
+    ioloop.add_callback(tornado.gen.chain_future, tf, f)
+    @tornado.gen.coroutine
     def cb():
         return fn(*args, **kwargs)
-    ioloop.add_callback(lambda: gen.chain_future(cb(), tf))
+    ioloop.add_callback(lambda: tornado.gen.chain_future(cb(), tf))
     try:
         f.result(timeout=ioloop_timeout)
     except TimeoutError:
@@ -2010,7 +2044,7 @@ class TimewarpAsyncTestCaseTimeAdvancer(threading.Thread):
             self._f = f = Future()
             time.sleep(1./self.rate)
 
-    @gen.coroutine
+    @tornado.gen.coroutine
     def _advance(self, future):
         yield self.test_instance.set_ioloop_time(
             self.test_instance.ioloop_time + self.quantum)
