@@ -401,8 +401,8 @@ class InspectingClientAsync(object):
                 yield until_any(self.katcp_client.until_protocol(),
                                 self._disconnected.until_set())
                 # TODO NM 2016-10-21 The naming of this attribute is incredibly
-                # confusing, we need to think about what "initial_inspection"
-                # how supposed to be handled
+                # confusing, we need to think about what "initial_inspection" is
+                # and how it is supposed to be handled
                 if self.initial_inspection:
                     if not is_connected():
                         continue
@@ -418,6 +418,13 @@ class InspectingClientAsync(object):
                     self.initial_inspection = True
                 if not is_connected():
                     continue
+
+                # TODO NM 2017-07-21 for CB-1466 (async dev handler) we need to
+                # check if the device needs a re-sync after the state change
+                # callback, since some proxy actions can result in the device
+                # issuing an #interface-changed between _send_state() above and
+                # here.
+
                 # We waited for the previous _send_state call (and user callbacks) to
                 # complete before we change the state to synced=True
                 self._logger.debug('{}: Sending synced state'
