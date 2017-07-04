@@ -706,7 +706,6 @@ class DeviceClient(object):
             except Exception:
                 if self._stream:
                     line = ''
-                    self._logger.warn(counter)
                     self._logger.warn('Unhandled Exception while reading from {0}:'
                                       .format(self._bindaddr), exc_info=True)
                     # Prevent potential tight error loops from blocking ioloop
