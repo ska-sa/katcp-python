@@ -699,27 +699,31 @@ class DeviceMetaclass(type):
         mcs._inform_handlers = {}
         mcs._reply_handlers = {}
 
+        prefix_handlers = {"request_": mcs._request_handlers,
+                           "inform_": mcs._inform_handlers,
+                           "reply_": mcs._reply_handlers}
+
+        def handler_prefix(name):
+            match = [prefix for prefix in prefix_handlers
+                     if name.startswith(prefix)]
+            return match[0] if match else None
+
         for name in dir(mcs):
-            if not callable(getattr(mcs, name)):
+            prefix = handler_prefix(name)
+            skip = (not prefix or not callable(getattr(mcs, name)) or
+                    # There is a bit of a name colission between the reply_*
+                    # convention and the server reply_inform() method
+                    name == 'reply_inform')
+            if skip:
                 continue
+
+            handlers = prefix_handlers[prefix]
             handler = getattr(mcs, name)
-            if name.startswith("request_"):
-                request_name = convert_method_name("request_", name)
-                if mcs.check_protocol(handler):
-                    mcs._request_handlers[request_name] = handler
-                    assert(handler.__doc__ is not None)
-            elif name.startswith("inform_"):
-                inform_name = convert_method_name("inform_", name)
-                if mcs.check_protocol(handler):
-                    mcs._inform_handlers[inform_name] = handler
-                    assert(handler.__doc__ is not None)
-                # There is a bit of a name colission between the reply_*
-                # convention and the server reply_inform() method
-            elif name.startswith("reply_") and name != 'reply_inform':
-                reply_name = convert_method_name("reply_", name)
-                if mcs.check_protocol(handler):
-                    mcs._reply_handlers[reply_name] = handler
-                    assert(handler.__doc__ is not None)
+            handler_name = convert_method_name(prefix, name)
+            if mcs.check_protocol(handler):
+                handlers[handler_name] = handler
+                assert(handler.__doc__ is not None)
+
 
     def check_protocol(mcs, handler):
         """Return False if `handler` should be filtered"""
