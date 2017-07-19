@@ -17,8 +17,8 @@
  * Fixed a bug where model updates were never sent by the inspecting client
    callback when sensor sync failed
  * Changed the __str__ method for InspectingClientStateType to be more compact
- * Added a random-exponential retry backoff process to ensure that the
-   thundering herd does not continue thundering
+ * Added a random-exponential retry backoff process to the inspecting client,
+   to ensure that the thundering herd does not continue thundering
  * Properly handle errors during inspection in inspecting client
  * Added support for continuous integration using a Jenkinsfile
 
