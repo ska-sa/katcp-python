@@ -3,6 +3,17 @@
 *************
 Release Notes
 *************
+0.6.2
+=====
+* Various bug fixes
+* Docstring and code style improvements
+* Bumped the tornado dependency to at least 4.3
+* Added the ability to let ClientGroup wait for a quorum of clients
+* Added default request-timeout-hint implementation to server.py
+* Moved IOLoopThreadWrapper to ioloop_manager.py, a more sensible location
+* Added a random-exponential retry backoff process
+
+See also :download:`CHANGELOG` for more details on changes.
 
 0.6.1
 =====
@@ -264,11 +275,11 @@ your git origin.
     python setup.py register
 
 * Check the documentation by building it (should be in the `build/sphinx/html`
-  directory) ::
+  directory)::
 
-  python setup.py build_sphinx
+    python setup.py build_sphinx
 
-* Next execute ::
+* Next execute::
 
    python setup.py sdist upload
    python setup.py build_sphinx upload_sphinx --upload-dir=build/sphinx/html
