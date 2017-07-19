@@ -1,4 +1,28 @@
- (0.6.1)
+19 July 2017 (0.6.2)
+ * Bumped the tornado dependency to at least 4.3
+ * Started work to support for python3 (not production ready)
+ * Added the ability to let ClientGroup wait for a quorum of clients
+   Give ClientGroup.wait() the ability to wait until a subset of clients
+   (a 'quorum') satisfy a sensor condition.
+ * Added an until_some helper function
+ * Added timeout hints usage to the resource client
+ * Added default request-timeout-hint implementation to server.py
+   It is only activated if the server protocol is set to the (proposed) KATCP v5.1
+   spec and the timeout hint protocol flag is enabled.
+ * Moved IOLoopThreadWrapper to ioloop_manager.py, a more sensible location
+ * Improved unit test coverage and implementation in some cases
+ * Started work on implementing an async device handler
+ * Numerous docstring and code style improvements throughout
+ * Fixed a bug where the timeout parameter was not passed down in until_state()
+ * Fixed a bug where model updates were never sent by the inspecting client
+   callback when sensor sync failed
+ * Changed the __str__ method for InspectingClientStateType to be more compact
+ * Added a random-exponential retry backoff process to ensure that the
+   thundering herd does not continue thundering
+ * Properly handle errors during inspection in inspecting client
+ * Added support for continuous integration using a Jenkinsfile
+
+30 August 2016 (0.6.1)
  * Increased the maximum message size that can be received up from 128k to 2M
  * Minor docstring fixes
  * Fixed testutils
@@ -11,7 +35,7 @@
  * Better handling of malformed log lines
  * Use katversion and git tags to determine package version on install
 
- (0.6.0)
+ 15 June 2016 (0.6.0)
  * Added high level, simple to use, client API (KATCPResource) that connects to,
    inspects and presents a high level, hierarchical object oriented interface to
    multiple KATCP devices.
