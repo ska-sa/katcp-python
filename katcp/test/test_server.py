@@ -491,7 +491,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
         self._assert_msgs_like(get_msgs(), [
             (r"#log error", "KatcpSyntaxError:"
-                            "\_Bad\_type\_character\_'b'.\\n"),
+                            "\_Bad\_type\_character\_u'b'.\\n"),
             (r"!watchdog ok", ""),
         ])
 

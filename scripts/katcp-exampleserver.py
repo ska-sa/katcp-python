@@ -9,7 +9,7 @@
 
 import logging
 import sys
-import Queue
+import queue
 from optparse import OptionParser
 import katcp
 from katcp.kattypes import request, return_reply, Float, Int, Str
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     (opts, args) = parser.parse_args()
 
     print("Server listening on port %d, Ctrl-C to terminate server" % opts.port)
-    restart_queue = Queue.Queue()
+    restart_queue = queue.Queue()
     server = DeviceExampleServer(opts.host, opts.port)
     server.set_restart_queue(restart_queue)
 
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         while True:
             try:
                 device = restart_queue.get(timeout=0.5)
-            except Queue.Empty:
+            except queue.Empty:
                 device = None
             if device is not None:
                 print("Stopping ...")

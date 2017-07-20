@@ -30,6 +30,7 @@ from .core import (DeviceMetaclass, MessageParser, Message,
 from .ioloop_manager import IOLoopManager
 from .utils import get_thread_ident
 
+STR_ENCODING = 'utf-8'
 
 # logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")
@@ -405,7 +406,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
             raise KatcpClientDisconnected('Not connected to device {0}'.format(
                 self.bind_address_string))
         try:
-            return self._stream.write(data)
+            return self._stream.write(data.encode(STR_ENCODING))
         except Exception:
             self._logger.warn('Could not send message {0!r} to {1!r}'
                               .format(str(msg), self._bindaddr), exc_info=True)
@@ -695,7 +696,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
         latency_timer = LatencyTimer(self.MAX_LOOP_LATENCY)
         while self._running.isSet():
             try:
-                line_fut = self._stream.read_until_regex('\n|\r')
+                line_fut = self._stream.read_until_regex(b'\n|\r')
                 latency_timer.check_future(line_fut)
                 if latency_timer.time_to_yield():
                     yield gen.moment
@@ -715,7 +716,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
                     self._logger.warn('self._stream object seems to have disappeared.')
                     break
             try:
-                line = line.replace("\r", "\n").split("\n")[0]
+                line = line.decode(STR_ENCODING).replace("\r", "\n").split("\n")[0]
                 msg = self._parser.parse(line) if line else None
             except Exception:
                 e_type, e_value, trace = sys.exc_info()

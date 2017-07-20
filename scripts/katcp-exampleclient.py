@@ -45,7 +45,7 @@ if __name__ == "__main__":
     client.start()
     try:
         while True:
-            s = raw_input("> ")
+            s = input("> ")
             try:
                 msg = katcp_parser.parse(s)
                 client.ioloop.add_callback(client.send_message, msg)

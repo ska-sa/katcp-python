@@ -47,6 +47,8 @@ from .utils import get_thread_ident
 # does not exist at this stage
 import katcp
 
+STR_ENCODING = 'utf-8'
+
 log = logging.getLogger("katcp.server")
 
 BASE_REQUESTS = frozenset(['client-list',
@@ -524,7 +526,7 @@ class KATCPServer(object):
                         # resulting in message handlers being called with a
                         # closed connection. Exit early instead.
                         break
-                    line = yield stream.read_until_regex('\n|\r')
+                    line = yield stream.read_until_regex(b'\n|\r')
                 except iostream.StreamClosedError:
                     # Assume that _stream_closed_callback() will handle this
                     break
@@ -533,7 +535,7 @@ class KATCPServer(object):
                                           'while reading from client {0}:'
                                           .format(client_address), exc_info=True)
                 try:
-                    line = line.replace("\r", "\n").split("\n")[0]
+                    line = line.decode(STR_ENCODING).replace("\r", "\n").split("\n")[0]
                     msg = self._parser.parse(line) if line else None
                 except Exception:
                     msg = None
@@ -639,7 +641,7 @@ class KATCPServer(object):
             if stream.KATCPServer_closing:
                 raise RuntimeError('Stream is closing so we cannot '
                                    'accept any more writes')
-            return stream.write(str(msg) + '\n')
+            return stream.write((str(msg) + u'\n').encode(STR_ENCODING))
         except Exception:
             addr = self.get_address(stream)
             self._logger.warn('Could not send message {0!r} to {1}'
@@ -971,7 +973,6 @@ class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
         start(), or it will also have no effect
         """
         self._server.setDaemon(daemonic)
-
 
     def create_log_inform(self, level_name, msg, name, timestamp=None):
         """Create a katcp logging inform message.
