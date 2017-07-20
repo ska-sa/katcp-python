@@ -1941,7 +1941,7 @@ def until_some(*args, **kwargs):
     maybe_timeout = future_timeout_manager(timeout)
     results = []
     while not wait_iterator.done():
-        result = yield maybe_timeout(wait_iterator.next())
+        result = yield maybe_timeout(next(wait_iterator))
         results.append((wait_iterator.current_index, result))
         if len(results) >= done_at_least:
             break

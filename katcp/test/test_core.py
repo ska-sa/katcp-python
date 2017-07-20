@@ -19,7 +19,7 @@ import tornado
 
 import katcp
 from katcp.core import Sensor, AsyncState, AsyncEvent, until_some
-from katcp.testutils import TestLogHandler, DeviceTestSensor
+from katcp.testutils import TestLogHandler
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)

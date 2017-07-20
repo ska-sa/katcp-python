@@ -49,8 +49,8 @@ class DemoClient(ClientKatCP):
         self.avg.append(self.counter)
         if len(self.avg) > 10:
             self.avg.pop(0)
-        print "AVG: %d, LAST: %d, SENSORS: %d" % (
-            sum(self.avg)/len(self.avg), self.counter, self.no_of_sensors)
+        print("AVG: %d, LAST: %d, SENSORS: %d" % (
+            sum(self.avg)/len(self.avg), self.counter, self.no_of_sensors))
         sys.stdout.flush()
         if (not self.options.allow_sensor_creation or
             (abs(self.counter - self.no_of_sensors * 200) <=
@@ -60,7 +60,7 @@ class DemoClient(ClientKatCP):
         reactor.callLater(TIMEOUT, self.periodic_check)
 
     def connectionLost(self, failure):
-        print >>sys.stderr, "Connection lost, exiting"
+        print("Connection lost, exiting", file=sys.stderr)
         if reactor.running:
             reactor.stop()
 
@@ -70,8 +70,8 @@ def connected(protocol, options):
     protocol.sample_next_sensor()
 
 def not_connected(failure):
-    print >>sys.stderr, failure
-    print >>sys.stderr, "Exiting"
+    print(failure, file=sys.stderr)
+    print("Exiting", file=sys.stderr)
     reactor.stop()
 
 if __name__ == '__main__':

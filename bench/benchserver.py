@@ -7,7 +7,7 @@ class BenchmarkServer(DeviceServer):
     # an ugly hack
     def _bind(self, *args):
         res = DeviceServer._bind(self, *args)
-        print "RUNNING"
+        print("RUNNING")
         sys.stdout.flush()
         return res
     

@@ -11,7 +11,7 @@ logging.basicConfig(
 )
 
 def cb(*args):
-    print args
+    print(args)
 
 try:
     d = DeviceTestServer('', 0)

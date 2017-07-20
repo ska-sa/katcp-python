@@ -16,18 +16,19 @@ import tornado.tcpclient
 import tornado.iostream
 
 from functools import partial, wraps
-from thread import get_ident as get_thread_ident
 
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from tornado.util import ObjectDict
 from concurrent.futures import Future, TimeoutError
+from future.utils import with_metaclass
 
 from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
                    ProtocolFlags, AsyncEvent, until_later, LatencyTimer,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
 from .ioloop_manager import IOLoopManager
+from .utils import get_thread_ident
 
 
 # logging.basicConfig(level=logging.DEBUG)
@@ -66,7 +67,7 @@ def make_threadsafe_blocking(meth):
     return meth
 
 
-class DeviceClient(object):
+class DeviceClient(with_metaclass(DeviceMetaclass, object)):
     """Device client proxy.
 
     Subclasses should implement .reply\_*, .inform\_* and
@@ -113,7 +114,6 @@ class DeviceClient(object):
     http://tornado.readthedocs.org/en/latest/netutil.html
 
     """
-    __metaclass__ = DeviceMetaclass
 
     MAX_MSG_SIZE = 2*1024*1024
     """Maximum message size that can be received in bytes.
@@ -438,7 +438,7 @@ class DeviceClient(object):
                 self._logger.warn("Reconnected to {0}"
                                   .format(self.bind_address_string))
             self._connect_failures = 0
-        except Exception, e:
+        except Exception as e:
             if self._connect_failures % 5 == 0:
                 # warn on every fifth failure
 
@@ -663,7 +663,7 @@ class DeviceClient(object):
                     # before we could get back to this finally clause. This would result
                     # in us stopping the new ioloop. D'oh!
                     self.ioloop.add_callback(self.stop)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 if str(e) == 'IOLoop is closing':
                     # Seems the ioloop was stopped already, no worries.
                     self._running.clear()
@@ -1191,7 +1191,7 @@ class AsyncClient(DeviceClient):
 
         try:
             self.send_request(msg)
-        except KatcpClientError, e:
+        except KatcpClientError as e:
             error_reply = Message.request(msg.name, "fail", str(e))
             error_reply.mid = mid
             self.handle_reply(error_reply)

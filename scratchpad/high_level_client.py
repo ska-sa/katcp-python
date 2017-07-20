@@ -15,9 +15,9 @@ def demo():
     # Wait until the client has finished inspecting the device
     yield client.until_synced()
     help_response = yield client.req.help()
-    print "device help:\n ", help_response
+    print("device help:\n ", help_response)
     add_response = yield client.req.add(3, 6)
-    print "3 + 6 response:\n", add_response
+    print("3 + 6 response:\n", add_response)
     # By not yielding we are not waiting for the response
     pick_response_future = client.req.pick_fruit()
     # Instead we wait for the fruit.result sensor status to change to
@@ -28,10 +28,10 @@ def demo():
     yield client.sensor.fruit_result.wait(
         lambda reading: reading.status == 'nominal')
     fruit = yield client.sensor.fruit_result.get_value()
-    print 'Fruit picked: ', fruit
+    print('Fruit picked: ', fruit)
     # And see how the ?pick-fruit request responded by yielding on its future
     pick_response = yield pick_response_future
-    print 'pick response: \n', pick_response
+    print('pick response: \n', pick_response)
 
     ioloop.stop()
 

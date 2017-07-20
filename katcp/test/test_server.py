@@ -11,11 +11,8 @@ from __future__ import division, print_function, absolute_import
 import unittest2 as unittest
 import sys
 import socket
-import errno
 import time
 import logging
-import thread
-import threading
 
 import mock
 import tornado.testing
@@ -41,6 +38,7 @@ from katcp.testutils import (
 from katcp.core import FailReply
 from katcp import (kattypes,
                    __version__)
+from katcp.utils import get_thread_ident
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -186,7 +184,7 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
         self.server.VERSION_INFO = ('deviceapi', 5, 6)
         # Hack around ioloop thread asserts
-        self.server._server.ioloop_thread_id = thread.get_ident()
+        self.server._server.ioloop_thread_id = get_thread_ident()
         # Test call
         self.server.on_client_connect(mock_conn)
         # we are expecting 2 inform messages
@@ -307,7 +305,7 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
         self.server.VERSION_INFO = ('deviceapi', 5, 6)
         # Hack around ioloop thread asserts
-        self.server._server.ioloop_thread_id = thread.get_ident()
+        self.server._server.ioloop_thread_id = get_thread_ident()
         # Test call
         self.server.on_client_connect(mock_conn)
         # we are expecting 3 inform messages

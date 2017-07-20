@@ -21,11 +21,11 @@ class DeviceExampleClient(katcp.DeviceClient):
 
     def handle_reply(self, msg):
         """Called when a reply message arrives."""
-        print msg
+        print(msg)
 
     def handle_inform(self, msg):
         """Called when an inform message arrives."""
-        print msg
+        print(msg)
 
 if __name__ == "__main__":
 
@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     katcp_parser = katcp.MessageParser()
 
-    print "Client connecting to port %s:%d, Ctrl-C to terminate." % (opts.host, opts.port)
+    print("Client connecting to port %s:%d, Ctrl-C to terminate." % (opts.host, opts.port))
     client = DeviceExampleClient(opts.host, opts.port)
 
     client.start()
@@ -49,12 +49,12 @@ if __name__ == "__main__":
             try:
                 msg = katcp_parser.parse(s)
                 client.ioloop.add_callback(client.send_message, msg)
-            except Exception, e:
+            except Exception as e:
                 e_type, e_value, trace = sys.exc_info()
                 reason = "\n".join(traceback.format_exception(
                     e_type, e_value, trace, 20
                 ))
-                print reason
+                print(reason)
     finally:
         client.stop()
         client.join()

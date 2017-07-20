@@ -31,7 +31,7 @@ def main():
     parser = standard_parser()
     options, args = parser.parse_args()
     factory = BenchmarkServer(options.port, '')
-    print factory.start().getHost()
+    print(factory.start().getHost())
     sys.stdout.flush()
     reactor.run() # run the main twisted reactor
 

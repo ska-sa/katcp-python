@@ -444,7 +444,7 @@ class InspectingClientAsync(object):
                 self._interface_changed.clear()
                 continue
                 # Next loop through should cause re-inspection and handle state updates
-            except SyncError, e:
+            except SyncError as e:
                 last_sync_failed = True
                 retry_wait_time = self.resync_delay.delay
                 self.resync_delay.failed()

@@ -27,7 +27,7 @@ ioloop.add_callback(d.start)
 
 def setup_resource_client():
     global rc
-    print d.bind_address
+    print(d.bind_address)
     rc = resource_client.KATCPClientResource(dict(
         name='thething',
         address=d.bind_address,
@@ -36,13 +36,13 @@ def setup_resource_client():
     rc.start()
 
 def printy(*args):
-    print args
+    print(args)
 
 @tornado.gen.coroutine
 def setup_inspecting_client():
     global ic
     try:
-        print d.bind_address
+        print(d.bind_address)
         host, port = d.bind_address
         ic = inspecting_client.InspectingClientAsync(host, port, ioloop=ioloop)
         ic.set_state_callback(printy)
@@ -57,15 +57,15 @@ stop = threading.Event()
 
 @tornado.gen.coroutine
 def doreq(req, *args, **kwargs):
-    print 'hi'
+    print('hi')
     try:
         rep = yield req(*args, **kwargs)
-        print rep
+        print(rep)
     except Exception:
-        print 'logging'
+        print('logging')
         log.exception('oops')
     finally:
-        print 'blah'
+        print('blah')
 
 def run_ipy():
     try:
@@ -89,6 +89,6 @@ signal.signal(signal.SIGINT, ignore_signal)
 try:
     ioloop.start()
 except KeyboardInterrupt:
-    print 'Keyboard interrupt'
+    print('Keyboard interrupt')
     stop.set()
 

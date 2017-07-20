@@ -21,13 +21,13 @@ import tornado.tcpserver
 
 from functools import partial, wraps
 from collections import deque
-from thread import get_ident as get_thread_ident
 
 from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
 from tornado.concurrent import chain_future
 from tornado.util import ObjectDict
 from concurrent.futures import Future
+from future.utils import with_metaclass
 
 from .ioloop_manager import IOLoopManager, with_relative_timeout
 from .core import (DeviceServerMetaclass, Message, MessageParser,
@@ -40,6 +40,7 @@ from .kattypes import (request, return_reply,
                        minimum_katcp_version,
                        has_katcp_protocol_flags,
                        Int, Str)
+from .utils import get_thread_ident
 
 # 'import katcp' so that we can use katcp.__version__ later
 # we cannot do this: 'from . import __version__' because __version__
@@ -670,7 +671,7 @@ class KATCPServer(object):
             f = tornado_Future()
             try:
                 f.set_result(fn())
-            except Exception, e:
+            except Exception as e:
                 f.set_exception(e)
                 self._logger.exception('Error executing callback '
                                        'in ioloop thread')
@@ -684,7 +685,7 @@ class KATCPServer(object):
                 def send_message_callback():
                     try:
                         f.set_result(fn())
-                    except Exception, e:
+                    except Exception as e:
                         f.set_exception(e)
                         self._logger.exception(
                             'Error executing wrapped async callback')
@@ -791,9 +792,9 @@ class MessageHandlerThread(object):
     def __init__(self, handler, log_inform_formatter, logger=log):
         self.handler = handler
         try:
-            owner = handler.im_self.name
+            owner = handler.__self__.name
         except AttributeError:
-            owner = handler.im_self.__class__.__name__
+            owner = handler.__self__.__class__.__name__
         self.name = "{}.message_handler" .format(owner)
         self.log_inform_formatter = log_inform_formatter
         self._wake = threading.Event()
@@ -850,7 +851,7 @@ class MessageHandlerThread(object):
                                                      ready_future)
                         else:
                             ready_future.set_result(res)
-                    except Exception, e:
+                    except Exception as e:
                         err_msg = ('Error calling message '
                                    'handler for msg:\n {0!s}'.format(msg))
                         self._logger.error(err_msg, exc_info=True)
@@ -912,7 +913,7 @@ class MessageHandlerThread(object):
         return self._running.wait(timeout)
 
 
-class DeviceServerBase(object):
+class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
     """Base class for device servers.
 
     Subclasses should add .request\_* methods for dealing
@@ -942,8 +943,6 @@ class DeviceServerBase(object):
         Logger to log messages to.
 
     """
-
-    __metaclass__ = DeviceServerMetaclass
 
     ## @brief Protocol versions and flags. Default to version 5, subclasses
     ## should override PROTOCOL_INFO
@@ -1066,7 +1065,7 @@ class DeviceServerBase(object):
                             connection.reply(f.result(), msg)
                             self._logger.debug("%s FUTURE%s replied",
                                                msg.name, concurrent_str)
-                        except FailReply, e:
+                        except FailReply as e:
                             reason = str(e)
                             self._logger.error("Request %s FUTURE%s FAIL: %s",
                                                msg.name, concurrent_str, reason)
@@ -1102,10 +1101,10 @@ class DeviceServerBase(object):
                     assert (reply.mtype == Message.REPLY)
                     assert (reply.name == msg.name)
                     self._logger.debug("%s OK" % (msg.name,))
-            except AsyncReply, e:
+            except AsyncReply as e:
                 self._logger.debug("%s ASYNC OK" % (msg.name,))
                 send_reply = False
-            except FailReply, e:
+            except FailReply as e:
                 reason = str(e)
                 self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
                 reply = Message.reply(msg.name, "fail", reason)
@@ -1927,7 +1926,7 @@ class DeviceServer(DeviceServerBase):
         if msg.arguments:
             try:
                 self.log.set_log_level_by_name(msg.arguments[0])
-            except ValueError, e:
+            except ValueError as e:
                 raise FailReply(str(e))
         return req.make_reply("ok", self.log.level_name())
 
@@ -2113,7 +2112,7 @@ class DeviceServer(DeviceServerBase):
         exact, name_filter = construct_name_filter(msg.arguments[0]
                                                    if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
-                   sorted(self._sensors.iteritems()) if name_filter(name)]
+                   sorted(self._sensors.items()) if name_filter(name)]
 
         if exact and not sensors:
             return req.make_reply("fail", "Unknown sensor name.")
@@ -2178,7 +2177,7 @@ class DeviceServer(DeviceServerBase):
         exact, name_filter = construct_name_filter(msg.arguments[0]
                                                    if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
-                   sorted(self._sensors.iteritems()) if name_filter(name)]
+                   sorted(self._sensors.items()) if name_filter(name)]
 
         if exact and not sensors:
             return req.make_reply("fail", "Unknown sensor name.")

@@ -10,8 +10,6 @@ import mock
 
 import katcp
 
-from concurrent.futures import Future
-
 from katcp import Sensor, Message
 from katcp.testutils import (DeviceTestServer,
                              DeviceTestServerWithTimeoutHints,

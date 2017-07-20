@@ -22,7 +22,7 @@ class DemoClient(ClientKatCP):
             self.got_sensor_value)
 
     def periodic_check(self):
-        print self.counter
+        print(self.counter)
         sys.stdout.flush()
         reactor.callLater(TIMEOUT, self.periodic_check)
         self.counter = 0
@@ -33,8 +33,8 @@ def connected(protocol, options):
     reactor.callLater(TIMEOUT, protocol.periodic_check)
 
 def not_connected(failure):
-    print >>sys.stderr, failure
-    print >>sys.stderr, "Exiting"
+    print(failure, file=sys.stderr)
+    print("Exiting", file=sys.stderr)
     reactor.stop()
 
 if __name__ == '__main__':

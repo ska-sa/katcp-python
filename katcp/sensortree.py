@@ -425,7 +425,7 @@ class AggregateSensorTree(GenericSensorTree):
         self._registered_sensors[child_name] = child
         completed = []
         for parent, (_rule, names, sensors) in \
-                self._incomplete_aggregates.iteritems():
+                self._incomplete_aggregates.items():
             if child_name in names:
                 names.remove(child_name)
                 sensors.add(child)

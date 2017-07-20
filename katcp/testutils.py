@@ -11,17 +11,15 @@ from __future__ import division, print_function, absolute_import
 import logging
 import re
 import time
-import Queue
 import threading
 import functools
+from queue import Queue, Empty, Full
 
 import mock
 import tornado.testing
 import tornado.ioloop
 import tornado.locks
 import tornado.gen
-
-from thread import get_ident
 
 from tornado.concurrent import Future as tornado_Future
 from concurrent.futures import Future, TimeoutError
@@ -33,7 +31,6 @@ from .core import (Sensor,
                    Message,
                    AsyncReply,
                    AsyncEvent,
-                   AttrDict,
                    steal_docstring_from,
                    ProtocolFlags)
 from .server import DeviceServer, FailReply, ClientConnection
@@ -43,6 +40,7 @@ from .kattypes import (request,
                        concurrent_reply,
                        request_timeout_hint)
 from .object_proxies import ObjectWrapper
+from .utils import get_thread_ident
 
 logger = logging.getLogger(__name__)
 
@@ -337,7 +335,7 @@ class BlockingTestClient(client.BlockingClient):
             else:
                 typestr = "%r" % sensortype
                 value = sensortype(value)
-        except ValueError, e:
+        except ValueError as e:
             self.test.fail("Could not convert value %r of sensor '%s' to type "
                            "%s: %s" % (value, sensorname, typestr, e))
 
@@ -347,7 +345,7 @@ class BlockingTestClient(client.BlockingClient):
 
         try:
             timestamp = float(timestamp)
-        except ValueError, e:
+        except ValueError as e:
             self.test.fail("Could not convert timestamp %r of sensor '%s' to "
                            "type %r: %s" % (timestamp, sensorname, float, e))
 
@@ -983,7 +981,7 @@ class DeviceTestServer(DeviceServer):
         self.break_sensor_list = False
         # Set to fail string if the help request should break
         self.break_help = False
-        self.restart_queue = Queue.Queue()
+        self.restart_queue = Queue()
         self.set_restart_queue(self.restart_queue)
         # Map of ClientConnection -> futures that can be resolved to cancel command
         self._slow_futures = {}
@@ -1197,7 +1195,7 @@ class SensorComparisonMixin(object):
 
         def get_sensor_key(sensor, key):
             try: key_fn = key_fns[key]
-            except KeyError, e: raise KeyError('Unknown sensor key: ' + e.message)
+            except KeyError as e: raise KeyError('Unknown sensor key: ' + e.message)
             return key_fn(sensor)
 
         sensor_description = {}
@@ -1457,7 +1455,7 @@ def suppress_queue_repeats(queue, initial_value, read_time=None):
             next_wait = max(0, next_wait)
         try:
             next_value = queue.get(timeout=next_wait)
-        except Queue.Empty:
+        except Empty:
             break
         if next_value != cur_value:
             yield next_value
@@ -1524,7 +1522,7 @@ class SensorTransitionWaiter(object):
         self.desired_value_sequence = value_sequence
         self._torn_down = False
         self._done = False
-        self._value_queue = Queue.Queue()
+        self._value_queue = Queue()
         self.timed_out = False
         current_value = self._get_current_sensor_value()
         if value_sequence:
@@ -1605,7 +1603,7 @@ class SensorTransitionWaiter(object):
                 while True:
                     # Read values from the queue until either the timeout
                     # expires or a value different from the last is found
-                    next_value = nonrepeat_sensor_values.next()
+                    next_value = next(nonrepeat_sensor_values)
                     self.received_values.append(next_value)
                     current_pass = self._test_value(next_value, current_test)
                     next_pass = self._test_value(next_value, next_test)
@@ -1643,7 +1641,7 @@ class SensorTransitionWaiter(object):
         try:
             while True:
                 self.received_values.append(self._value_queue.get_nowait())
-        except Queue.Empty:
+        except Empty:
             pass
         received_values = self.received_values
         if reset:
@@ -1751,7 +1749,7 @@ class AtomicIaddCallback(ObjectWrapper):
 class WaitingMock(mock.Mock):
     def __init__(self, *args, **kwargs):
         super(WaitingMock, self).__init__(*args, **kwargs)
-        self._counted_queue = Queue.Queue(maxsize=1)
+        self._counted_queue = Queue(maxsize=1)
         # Replace the underlying value for self.call_count with a proxied int
         # that uses a threading.RLock to allow atomic incrementation in case
         # multiple threads are calling the mock, and does a callback as soon as
@@ -1765,7 +1763,7 @@ class WaitingMock(mock.Mock):
     def _call_count_callback(self, call_count):
         try:
             self._counted_queue.put_nowait(call_count)
-        except Queue.Full:
+        except Full:
             pass
 
     def reset_mock(self, visited=None):
@@ -1788,7 +1786,7 @@ class WaitingMock(mock.Mock):
         while to_wait >= 0 and self.call_count < count:
             try:
                 self._counted_queue.get(timeout=to_wait)
-            except Queue.Empty:
+            except Empty:
                 pass
             to_wait = timeout - (time.time() - t0)
 
@@ -1997,7 +1995,7 @@ class TimewarpAsyncTestCase(tornado.testing.AsyncTestCase):
         self.ioloop_time = 0
         ioloop.time = lambda: self.ioloop_time
         def set_ioloop_thread_id():
-            self.ioloop_thread_id = get_ident()
+            self.ioloop_thread_id = get_thread_ident()
         ioloop.add_callback(set_ioloop_thread_id)
         return ioloop
 

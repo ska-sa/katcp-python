@@ -20,13 +20,9 @@ import unittest
 import logging
 import copy
 import time
-import threading
 
 import tornado
 import mock
-
-from _thread import get_ident as get_thread_ident
-from functools import partial
 
 from concurrent.futures import TimeoutError
 
@@ -34,7 +30,7 @@ from katcp.testutils import (DeviceTestServer, DeviceTestSensor,
                              start_thread_with_cleanup, TimewarpAsyncTestCase,
                              TimewarpAsyncTestCaseTimeAdvancer)
 
-from katcp import resource, inspecting_client, ioloop_manager, Message, Sensor
+from katcp import resource, ioloop_manager, Message, Sensor
 from katcp.core import AttrDict, AsyncEvent, ProtocolFlags
 
 # module under test

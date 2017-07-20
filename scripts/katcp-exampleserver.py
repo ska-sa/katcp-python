@@ -61,17 +61,17 @@ if __name__ == "__main__":
     parser = OptionParser(usage=usage)
     parser.add_option('-a', '--host', dest='host', type="string", default="", metavar='HOST',
                       help='listen to HOST (default="" - all hosts)')
-    parser.add_option('-p', '--port', dest='port', type=long, default=1235, metavar='N',
+    parser.add_option('-p', '--port', dest='port', type=int, default=1235, metavar='N',
                       help='attach to port N (default=1235)')
     (opts, args) = parser.parse_args()
 
-    print "Server listening on port %d, Ctrl-C to terminate server" % opts.port
+    print("Server listening on port %d, Ctrl-C to terminate server" % opts.port)
     restart_queue = Queue.Queue()
     server = DeviceExampleServer(opts.host, opts.port)
     server.set_restart_queue(restart_queue)
 
     server.start()
-    print "Started."
+    print("Started.")
 
     try:
         while True:
@@ -80,13 +80,13 @@ if __name__ == "__main__":
             except Queue.Empty:
                 device = None
             if device is not None:
-                print "Stopping ..."
+                print("Stopping ...")
                 device.stop()
                 device.join()
-                print "Restarting ..."
+                print("Restarting ...")
                 device.start()
-                print "Started."
+                print("Started.")
     except KeyboardInterrupt:
-        print "Shutting down ..."
+        print("Shutting down ...")
         server.stop()
         server.join()
