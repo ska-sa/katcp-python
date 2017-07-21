@@ -295,7 +295,7 @@ class Lru(KatcpType):
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = range(2)
 
-    ## @brief Mapping from LRU value constant to LRU value name.
+    # @brief Mapping from LRU value constant to LRU value name.
     LRU_VALUES = {
         LRU_NOMINAL: "nominal",
         LRU_ERROR: "error",
@@ -304,7 +304,7 @@ class Lru(KatcpType):
     # LRU_VALUES not found by pylint
     # pylint: disable-msg = E0602
 
-    ## @brief Mapping from LRU value name to LRU value constant.
+    # @brief Mapping from LRU value name to LRU value constant.
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
 
     def encode(self, value, major):
@@ -748,39 +748,39 @@ unpack_message = partial(request, has_req=False)
 update_wrapper(unpack_message, request)
 update_wrapper.__name__ = 'unpack_message'
 unpack_message.__doc__ = (
-"""Decorator that unpacks katcp.Messages to function arguments.
+    """Decorator that unpacks katcp.Messages to function arguments.
 
-The method being decorated should take arguments matching the list of types.
-The decorator will unpack the request message into the arguments.
+    The method being decorated should take arguments matching the list of types.
+    The decorator will unpack the request message into the arguments.
 
-Parameters
-----------
-types : list of kattypes
-    The types of the request message parameters (in order). A type
-    with multiple=True has to be the last type.
+    Parameters
+    ----------
+    types : list of kattypes
+        The types of the request message parameters (in order). A type
+        with multiple=True has to be the last type.
 
-Keyword Arguments
------------------
-include_msg : bool, optional
-    Pass the request message as the third parameter to the decorated
-    request handler function (default is False).
-major : int, optional
-    Major version of KATCP to use when interpreting types.
-    Defaults to latest implemented KATCP version.
+    Keyword Arguments
+    -----------------
+    include_msg : bool, optional
+        Pass the request message as the third parameter to the decorated
+        request handler function (default is False).
+    major : int, optional
+        Major version of KATCP to use when interpreting types.
+        Defaults to latest implemented KATCP version.
 
-Examples
---------
->>> class MyClient(DeviceClient):
-...     @unpack_message(Str(), Int(), Float(), Bool())
-...     def reply_myreq(self, status, my_int, my_float, my_bool):
-...         print 'myreq replied with ', (status, my_int, my_float, my_bool)
-...
-...     @unpack_message(Str(), Int(), include_msg=True)
-...     def inform_fruit_picked(self, msg, fruit, no_picked):
-...         print no_picked, 'of fruit ', fruit, ' picked.'
-...         print 'Raw inform message: ', str(msg)
+    Examples
+    --------
+    >>> class MyClient(DeviceClient):
+    ...     @unpack_message(Str(), Int(), Float(), Bool())
+    ...     def reply_myreq(self, status, my_int, my_float, my_bool):
+    ...         print 'myreq replied with ', (status, my_int, my_float, my_bool)
+    ...
+    ...     @unpack_message(Str(), Int(), include_msg=True)
+    ...     def inform_fruit_picked(self, msg, fruit, no_picked):
+    ...         print no_picked, 'of fruit ', fruit, ' picked.'
+    ...         print 'Raw inform message: ', str(msg)
 
-""")
+    """)
 
 
 def return_reply(*types, **options):
@@ -841,7 +841,6 @@ def return_reply(*types, **options):
                 return async_make_reply(msgname, types, reply_args, major)
             else:
                 return make_reply(msgname, types, reply_args, major)
-
 
         # TODO NM 2017-01-12 Consider using the decorator module to create
         # signature preserving decorators that would avoid the need for this
@@ -985,6 +984,7 @@ def minimum_katcp_version(major, minor=0):
     """
 
     version_tuple = (major, minor)
+
     def decorator(handler):
         handler._minimum_katcp_version = version_tuple
         return handler

@@ -16,6 +16,7 @@ import tornado.tcpclient
 import tornado.iostream
 
 from functools import partial, wraps
+from threading import get_ident as get_thread_ident
 
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
@@ -26,11 +27,9 @@ from future.utils import with_metaclass
 from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
                    ProtocolFlags, AsyncEvent, until_later, LatencyTimer,
-                   SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
+                   SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC,
+                   STR_ENCODING)
 from .ioloop_manager import IOLoopManager
-from .utils import get_thread_ident
-
-STR_ENCODING = 'utf-8'
 
 # logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")
@@ -448,7 +447,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
                 # kind of exponential backoff starting at 5 times the reconnect time up to
                 # once per 5 minutes
                 self._logger.debug("Failed to connect to {0!r}: {1}"
-                                  .format(self._bindaddr, e))
+                                   .format(self._bindaddr, e))
             self._connect_failures += 1
             stream = None
             yield gen.moment
@@ -806,6 +805,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
                 return meth(*args, **kwargs)
             else:
                 f = Future()
+
                 def cb():
                     try:
                         tf = gen.maybe_future(meth(*args, **kwargs))
@@ -1269,6 +1269,7 @@ class AsyncClient(DeviceClient):
 
         f = Future()  # for thread safety
         tf = [None]   # Placeholder for tornado Future for exception tracebacks
+
         def blocking_request_callback():
             try:
                 tf[0] = frf = self.future_request(msg, timeout=timeout,

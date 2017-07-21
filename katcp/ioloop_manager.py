@@ -9,13 +9,13 @@ import textwrap
 import tornado.ioloop
 
 from functools import wraps
+from threading import get_ident as get_thread_ident
 
 from concurrent.futures import Future, TimeoutError
 from tornado.concurrent import Future as tornado_Future
 from tornado import gen
 
 from katcp.object_proxies import ObjectWrapper
-from katcp.utils import get_thread_ident
 
 
 log = logging.getLogger(__name__)

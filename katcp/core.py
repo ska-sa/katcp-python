@@ -39,6 +39,10 @@ VERSION_CONNECT_KATCP_MAJOR = 5
 # First major version to support #interface-changed informs
 INTERFACE_CHANGED_KATCP_MAJOR = 5
 
+# The string encoding to use when converting strings to bytearrays
+# before we write them to the iostream
+STR_ENCODING = 'utf-8'
+
 logger = logging.getLogger(__name__)
 
 class Reading(namedtuple('Reading', 'timestamp status value')):
@@ -198,7 +202,7 @@ class Message(object):
     # TODO: make use of reply codes in device client and server
     OK, FAIL, INVALID = "ok", "fail", "invalid"
 
-    ## @brief Mapping from message type to string name for the type.
+    # @brief Mapping from message type to string name for the type.
     TYPE_NAMES = {
         REQUEST: "REQUEST",
         REPLY: "REPLY",
@@ -616,8 +620,8 @@ class ProtocolFlags(object):
     REQUEST_TIMEOUT_HINTS_MIN_VERSION = (5, 1)
 
     def __init__(self, major, minor, flags):
-        self.major = major
-        self.minor = minor
+        self.major = major if major is not None else 0
+        self.minor = minor if minor is not None else 0
         self.flags = set(list(flags))
         self.multi_client = self.MULTI_CLIENT in self.flags
         self.message_ids = self.MESSAGE_IDS in self.flags
@@ -1941,7 +1945,7 @@ def until_some(*args, **kwargs):
     maybe_timeout = future_timeout_manager(timeout)
     results = []
     while not wait_iterator.done():
-        result = yield maybe_timeout(next(wait_iterator))
+        result = yield maybe_timeout(wait_iterator.next())
         results.append((wait_iterator.current_index, result))
         if len(results) >= done_at_least:
             break

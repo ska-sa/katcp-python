@@ -5,7 +5,7 @@ from __future__ import division, print_function, absolute_import
 
 import tornado.concurrent
 
-from thread import get_ident as get_thread_ident
+from threading import get_ident as get_thread_ident
 
 from tornado.gen import Return
 from tornado.concurrent import Future
@@ -248,7 +248,7 @@ class FakeInspectingClientManager(object):
         """For compatibility with methods stolen from server.DeviceServer"""
         return self._fkc.request_handlers
 
-    request_help = server.DeviceServer.request_help.im_func
+    request_help = server.DeviceServer.request_help
 
     def add_sensors(self, sensor_infos):
         """Add fake sensors

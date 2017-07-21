@@ -947,7 +947,7 @@ class InspectingClientAsync(object):
         timestamp = msg.arguments[0]
         num_sensors = int(msg.arguments[1])
         assert len(msg.arguments) == 2 + num_sensors * 3
-        for n in xrange(num_sensors):
+        for n in range(num_sensors):
             name = msg.arguments[2 + n * 3]
             status = msg.arguments[3 + n * 3]
             value = msg.arguments[4 + n * 3]

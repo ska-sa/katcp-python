@@ -14,9 +14,9 @@ import os
 import tornado.ioloop
 
 from functools import wraps
+from threading import get_ident as get_thread_ident
 
 from .core import Message, Sensor
-from .utils import get_thread_ident
 
 
 log = logging.getLogger("katcp.sampling")

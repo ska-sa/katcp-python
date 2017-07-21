@@ -23,6 +23,7 @@ from concurrent.futures import Future
 from collections import defaultdict
 from functools import partial, wraps
 from tornado import gen
+from threading import get_ident as get_thread_ident
 
 from katcp.testutils import (
     AsyncDeviceTestServer,

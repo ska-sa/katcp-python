@@ -13,7 +13,9 @@ import re
 import time
 import threading
 import functools
+
 from queue import Queue, Empty, Full
+from threading import get_ident as get_thread_ident
 
 import mock
 import tornado.testing
@@ -38,9 +40,10 @@ from .kattypes import (request,
                        return_reply,
                        Float, Str, Int,
                        concurrent_reply,
+                       has_katcp_protocol_flags,
                        request_timeout_hint)
 from .object_proxies import ObjectWrapper
-from .utils import get_thread_ident
+
 
 logger = logging.getLogger(__name__)
 
@@ -528,7 +531,6 @@ class BlockingTestClient(client.BlockingClient):
         msg = (msg or '') + ': timed out after {}s'.format(timeout)
         self.assert_sensors_equal(sensor_tuples, msg)
 
-
     def assert_sensors_equal(self, sensor_tuples, msg=None):
         """Assert that the values of several sensors are equal to given values.
 
@@ -576,7 +578,7 @@ class BlockingTestClient(client.BlockingClient):
         t0 = time.time()
         poll_period = kwargs.pop('poll_period', 0.02)
         cond = predicate(*args, **kwargs)
-        while not (cond or (time.time()-t0 >timeout)):
+        while not (cond or (time.time()-t0 > timeout)):
             time.sleep(poll_period)
             cond = predicate(*args, **kwargs)
         return (cond, '' if cond else 'Timed out after %s seconds' % timeout)
@@ -1039,6 +1041,7 @@ class DeviceTestServer(DeviceServer):
         t0 = time.time()
         wait_time = float(msg.arguments[0])
         fut = self._slow_futures[req.client_connection] = Future()
+
         @tornado.gen.coroutine
         def slow_timeout():
             try:
@@ -1139,11 +1142,12 @@ class AsyncDeviceTestServer(DeviceTestServer):
 
 
 class DeviceTestServerWithTimeoutHints(DeviceTestServer):
+
     PROTOCOL_INFO = ProtocolFlags(5, 1, set([
         ProtocolFlags.MULTI_CLIENT,
         ProtocolFlags.MESSAGE_IDS,
         ProtocolFlags.REQUEST_TIMEOUT_HINTS
-        ]))
+    ]))
 
     def __init__(self, *args, **kwargs):
         super(DeviceTestServerWithTimeoutHints, self).__init__(*args, **kwargs)
@@ -1153,6 +1157,7 @@ class DeviceTestServerWithTimeoutHints(DeviceTestServer):
 
     @request(Str(optional=True))
     @return_reply(Int())
+    @has_katcp_protocol_flags(ProtocolFlags.REQUEST_TIMEOUT_HINTS)
     def request_request_timeout_hint(self, req, name):
         """Return timeout hints for requests"""
         hints = ({name: self.request_timeout_hints.get(name, 0)} if name
@@ -1160,8 +1165,6 @@ class DeviceTestServerWithTimeoutHints(DeviceTestServer):
         for req_name, timeout_hint in hints.items():
             req.inform(req_name, timeout_hint)
         return ('ok', len(hints))
-
-
 
 
 class SensorComparisonMixin(object):
@@ -1187,15 +1190,17 @@ class SensorComparisonMixin(object):
         """Return a dict description of a sensor and its values"""
 
         key_fns = self.key_fns
-        if desired_keys == None:
+        if desired_keys is None:
             desired_keys = set(key_fns.keys())
         else:
             desired_keys = set(desired_keys)
         desired_keys = desired_keys - set(ignore_keys)
 
         def get_sensor_key(sensor, key):
-            try: key_fn = key_fns[key]
-            except KeyError as e: raise KeyError('Unknown sensor key: ' + e.message)
+            try:
+                key_fn = key_fns[key]
+            except KeyError as e:
+                raise KeyError('Unknown sensor key: ' + e.message)
             return key_fn(sensor)
 
         sensor_description = {}
@@ -1288,8 +1293,8 @@ class SensorComparisonMixin(object):
             actual_description_dict[name] = self._get_sensor_description(
                 actual_sensor_dict[name], desired_info.keys())
 
-        self.maxDiff = None     # Make unittest print differences even
-                                # if they are large
+        # Make unittest print differences even if they are large
+        self.maxDiff = None
         self.assertEqual(actual_description_dict, desired_description_dict)
 
     def assert_sensors_value_conditions(self, actual_sensors, value_tests):
@@ -1306,7 +1311,7 @@ class SensorComparisonMixin(object):
         actual_sensor_dict = dict((s.name, s) for s in actual_sensors)
         # Check that all the requested sensors are present
         self.assertTrue(all(name in actual_sensor_dict
-                             for name in value_tests.keys()))
+                            for name in value_tests.keys()))
 
         for name, test in value_tests.items():
             test(actual_sensor_dict[name].value())
@@ -1694,6 +1699,7 @@ def wait_sensor_async(sensor, value, status=None, ioloop=None):
     """
     ioloop = ioloop or tornado.ioloop.IOLoop.current()
     f = tornado_Future()
+
     class Observer(object):
         def update(self, sensor, reading):
             val_matched = reading.value == value
@@ -1903,12 +1909,14 @@ def mock_req(req_name, *args, **kwargs):
     req.msg = Message.request(req_name, *args)
     req.make_reply.side_effect = lambda *args: Message.reply_to_request(
         req.msg, *args)
-    f = req.reply_and_inform_msgs_future = tornado_Future()
+    req.reply_and_inform_msgs_future = tornado_Future()
+
     def reply_side_effect(*args):
         req.reply_msg = Message.reply_to_request(req.msg, *args)
         req.reply_and_inform_msgs_future.set_result((req.reply_msg, req.inform_msgs))
+
     req.reply.side_effect = reply_side_effect
-    req.inform.side_effect = lambda *args : req.inform_msgs.append(
+    req.inform.side_effect = lambda *args: req.inform_msgs.append(
         Message.reply_inform(req.msg, *args))
     return req
 
@@ -1968,6 +1976,7 @@ def call_in_ioloop(ioloop, fn, *args, **kwargs):
     f = Future()
     tf = tornado_Future()                 # for nice tracebacks
     ioloop.add_callback(tornado.gen.chain_future, tf, f)
+
     @tornado.gen.coroutine
     def cb():
         return fn(*args, **kwargs)
@@ -1994,6 +2003,7 @@ class TimewarpAsyncTestCase(tornado.testing.AsyncTestCase):
         ioloop = super(TimewarpAsyncTestCase, self).get_new_ioloop()
         self.ioloop_time = 0
         ioloop.time = lambda: self.ioloop_time
+
         def set_ioloop_thread_id():
             self.ioloop_thread_id = get_thread_ident()
         ioloop.add_callback(set_ioloop_thread_id)

@@ -21,6 +21,7 @@ import tornado.tcpserver
 
 from functools import partial, wraps
 from collections import deque
+from threading import get_ident as get_thread_ident
 
 from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
@@ -35,19 +36,24 @@ from .core import (DeviceServerMetaclass, Message, MessageParser,
 from .sampling import SampleStrategy, SampleNone
 from .sampling import format_inform_v5, format_inform_v4
 from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
-                   VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR)
+                   VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR,
+                   STR_ENCODING)
 from .kattypes import (request, return_reply,
                        minimum_katcp_version,
                        has_katcp_protocol_flags,
                        Int, Str)
-from .utils import get_thread_ident
 
 # 'import katcp' so that we can use katcp.__version__ later
 # we cannot do this: 'from . import __version__' because __version__
 # does not exist at this stage
 import katcp
 
-STR_ENCODING = 'utf-8'
+
+# python 2 and 3 compatibility
+try:
+    basestring
+except NameError:
+    basestring = str
 
 log = logging.getLogger("katcp.server")
 
@@ -946,12 +952,12 @@ class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
 
     """
 
-    ## @brief Protocol versions and flags. Default to version 5, subclasses
-    ## should override PROTOCOL_INFO
+    # @brief Protocol versions and flags. Default to version 5, subclasses
+    # should override PROTOCOL_INFO
     PROTOCOL_INFO = ProtocolFlags(DEFAULT_KATCP_MAJOR, 0, set([
         ProtocolFlags.MULTI_CLIENT,
         ProtocolFlags.MESSAGE_IDS,
-        ]))
+    ]))
 
     def __init__(self, host, port, tb_limit=20, logger=log):
         self._server = KATCPServer(self, host, port, tb_limit, logger)
@@ -1061,6 +1067,7 @@ class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
                     concurrent_str = ' CONCURRENT' if concurrent else ''
 
                     done_future = Future()
+
                     def async_reply(f):
                         try:
                             connection.reply(f.result(), msg)
@@ -1492,10 +1499,10 @@ class DeviceServer(DeviceServerBase):
     # used outside this module
     # pylint: disable-msg = R0904
 
-    ## @brief Interface version information.
+    # @brief Interface version information.
     VERSION_INFO = ("device_stub", 0, 1)
 
-    ## @brief Device server build / instance information.
+    # @brief Device server build / instance information.
     BUILD_INFO = ("name", 0, 1, "")
 
     UNSUPPORTED_REQUESTS_BY_MAJOR_VERSION = {
@@ -1504,7 +1511,7 @@ class DeviceServer(DeviceServerBase):
 
     SUPPORTED_PROTOCOL_MAJOR_VERSIONS = (4, 5)
 
-    ## @var log
+    # @var log
     # @brief DeviceLogger instance for sending log messages to the client.
 
     # * and ** magic fine here
@@ -1605,6 +1612,7 @@ class DeviceServer(DeviceServerBase):
 
         """
         f = tornado_Future()
+
         @gen.coroutine
         def remove_strategies():
             self.clear_strategies(client_conn, remove_client=True)
@@ -1754,6 +1762,7 @@ class DeviceServer(DeviceServerBase):
 
         """
         f = Future()
+
         @gen.coroutine
         def _halt():
             req.reply("ok")
@@ -1999,7 +2008,6 @@ class DeviceServer(DeviceServerBase):
             addr = conn.address
             req.inform(addr)
         return req.make_reply('ok', str(num_clients))
-
 
     @minimum_katcp_version(5, 0)
     def request_version_list(self, req, msg):
@@ -2335,6 +2343,7 @@ class DeviceServer(DeviceServerBase):
 
         """
         f = Future()
+
         @gen.coroutine
         def _clear_strategies():
             self.clear_strategies(req.client_connection)
@@ -2398,11 +2407,11 @@ class DeviceLogger(object):
     # so these to lists should be in the same order
     ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF = range(8)
 
-    ## @brief List of logging level names.
+    # @brief List of logging level names.
     LEVELS = ["all", "trace", "debug", "info", "warn",
               "error", "fatal", "off"]
 
-    ## @brief Map of Python logging level to corresponding to KATCP levels
+    # @brief Map of Python logging level to corresponding to KATCP levels
     PYTHON_LEVEL = {
         TRACE: 0,
         DEBUG: logging.DEBUG,
@@ -2410,7 +2419,7 @@ class DeviceLogger(object):
         WARN: logging.WARN,
         ERROR: logging.ERROR,
         FATAL: logging.FATAL,
-        OFF: logging.FATAL + 10 # OFF is the highest possible logging level
+        OFF: logging.FATAL + 10  # OFF is the highest possible logging level
     }
 
     def __init__(self, device_server, root_logger="root", python_logger=None):
@@ -2474,7 +2483,7 @@ class DeviceLogger(object):
         if self._python_logger:
             try:
                 level = self.PYTHON_LEVEL.get(level)
-            except ValueError as err:
+            except ValueError:
                 raise FailReply("Unknown logging level '%s'" % (level))
             self._python_logger.setLevel(level)
 
