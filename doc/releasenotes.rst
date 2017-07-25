@@ -299,7 +299,7 @@ your git origin.
 * Automatically updated when you push to GitHub
 
   6. On GitHub, navigate to your repository and click on "Settings".
-  7. In the sidebar, click on "Web Hooks & Services", then find and click on
+  7. In the sidebar, click on "Integrations & services", then find and click on
      the "ReadTheDocs service".
   8. Check the "Active" setting and click "Update Settings".
 
