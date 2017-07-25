@@ -297,10 +297,12 @@ your git origin.
   5. The click "Build"
 
 * Automatically updated when you push to GitHub
+
   6. On GitHub, navigate to your repository and click on "Settings".
-  7. In the sidebar, click on "Web Hooks & Services", then find and click on the
-     ReadTheDocs service.
+  7. In the sidebar, click on "Web Hooks & Services", then find and click on
+     the "ReadTheDocs service".
   8. Check the "Active" setting and click "Update Settings".
 
 * Good, it seems you have managed to release katcp!
+
   - All done. Commit away and your project will auto-update.
