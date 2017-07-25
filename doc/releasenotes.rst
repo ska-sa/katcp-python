@@ -292,15 +292,15 @@ your git origin.
      email address which you should accept within 7 days.
   2. Log in and click on "Import".
   3. Give your project a name, add the HTTPS link for your GitHub project, and
-    select Git as your repository type.
+     select Git as your repository type.
   4. Fill in the rest of the form as needed and click "Create".
   5. The click "Build"
 
 * Automatically updated when you push to GitHub
   6. On GitHub, navigate to your repository and click on "Settings".
   7. In the sidebar, click on "Web Hooks & Services", then find and click on the
-     "ReadTheDocs" service.
+     ReadTheDocs service.
   8. Check the "Active" setting and click "Update Settings".
 
 * Good, it seems you have managed to release katcp!
-  All done. Commit away and your project will auto-update.
+  - All done. Commit away and your project will auto-update.
