@@ -294,7 +294,7 @@ your git origin.
   3. Give your project a name, add the HTTPS link for your GitHub project, and
      select Git as your repository type.
   4. Fill in the rest of the form as needed and click "Create".
-  5. The click "Build"
+  5. Then click "Build"
 
 * Automatically updated when you push to GitHub
 
