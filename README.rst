@@ -3,7 +3,7 @@ katcp-python
 ============
 
 |Doc Status|
-|Pypi Version|
+|PyPI Version|
 |Python Versions|
 
 Python client and server library for the Karoo Array Telescope Control Protocol
@@ -15,7 +15,7 @@ documentation of the latest release, `read the katcp-python documentation
                 :target: http://katcp-python.readthedocs.io/en/latest
                 :alt:
 
-.. |Pypi Version| image:: https://img.shields.io/pypi/v/katcp.svg
+.. |PyPI Version| image:: https://img.shields.io/pypi/v/katcp.svg
                   :target: https://pypi.python.org/pypi/katcp
                   :alt:
 
