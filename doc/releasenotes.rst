@@ -286,4 +286,23 @@ your git origin.
 
 * Check the pypi page to see that the upload and doc build was successful.
 
+* Host package docs on `http://readthedocs.org`
+
+  1. Create an account on Read the Docs. You will get an email verifying your
+     email address which you should accept within 7 days.
+  2. Log in and click on "Import".
+  3. Give your project a name, add the HTTPS link for your GitHub project, and
+     select Git as your repository type.
+  4. Fill in the rest of the form as needed and click "Create".
+  5. Then click "Build"
+
+* Automatically updated when you push to GitHub
+
+  6. On GitHub, navigate to your repository and click on "Settings".
+  7. In the sidebar, click on "Integrations & services", then find and click on
+     the "ReadTheDocs service".
+  8. Check the "Active" setting and click "Update Settings".
+
 * Good, it seems you have managed to release katcp!
+
+  - All done. Commit away and your project will auto-update.
