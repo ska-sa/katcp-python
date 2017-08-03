@@ -175,13 +175,14 @@ class TestMessageParser(unittest.TestCase):
         if isinstance(val, six.binary_type):
             return val
         elif isinstance(val, six.text_type):
-            return six.binary_type(val.encode('utf-8'))
+            return six.binary_type(
+                val.encode('ascii', errors='xmlcharrefreplace'))
         else:
             return six.binary_type(val)
 
     def test_units(self):
         # #sensor-list rmyoung.temp RM\_Youngs\_Temperature °C float
-        test_units = ['C', '°C', u'\xb0C', u'\xc2\xb0C']
+        test_units = ['C', '°C', u'\xb0C', u'\xc2\xb0C', chr(176)]
         for unit in test_units:
             msg_list = ["sensor-list", "thing.temp", "Temperature",
                         unit, "float"]

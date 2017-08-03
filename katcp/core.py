@@ -298,7 +298,8 @@ class Message(object):
         if isinstance(val, six.binary_type):
             return val
         elif isinstance(val, six.text_type):
-            return six.binary_type(val.encode('utf-8'))
+            return six.binary_type(
+                val.encode('ascii', errors='xmlcharrefreplace'))
         else:
             return six.binary_type(val)
 
@@ -307,9 +308,13 @@ class Message(object):
         if isinstance(arg, float):
             return repr(arg)
         elif isinstance(arg, bool):
-            return self.dd(int(arg))
+            return six.binary_type(int(arg))
         else:
-            return self.dd(arg)
+            try:
+                return six.binary_type(int(arg))
+            except Exception:
+                # Now try our Custom parser.
+                return self.dd(arg)
 
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
