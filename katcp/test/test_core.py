@@ -16,6 +16,7 @@ import unittest
 #
 
 import tornado
+import six
 
 import katcp
 from katcp.core import Sensor, AsyncState, AsyncEvent, until_some
@@ -169,6 +170,34 @@ class TestMessageParser(unittest.TestCase):
         self.assertEqual(m.arguments,
                          ['1', repr(float_val), '1', '0', 'string'])
 
+    def dd(self, val):
+        # return str(val)
+        if isinstance(val, six.binary_type):
+            return val
+        elif isinstance(val, six.text_type):
+            return six.binary_type(val.encode('utf-8'))
+        else:
+            return six.binary_type(val)
+
+    def test_units(self):
+        # #sensor-list rmyoung.temp RM\_Youngs\_Temperature °C float
+        test_units = ['C', '°C', u'\xb0C', u'\xc2\xb0C']
+        for unit in test_units:
+            msg_list = ["sensor-list", "thing.temp", "Temperature",
+                        unit, "float"]
+            msg = katcp.Message.inform(*msg_list)
+            print(msg)
+
+            msg_line = "#" + ' '.join(msg_list)
+            print(msg_line)
+            m = self.p.parse(msg_line)
+            self.assertEqual(m.mtype, m.INFORM)
+            self.assertEqual(m.name, "sensor-list")
+            print(m.arguments)
+            self.assertEqual(map(self.dd, m.arguments),
+                             map(self.dd, msg_list[1:]))
+
+
 class TestProtocolFlags(unittest.TestCase):
     def test_parse_version(self):
         PF = katcp.ProtocolFlags
@@ -216,6 +245,15 @@ class TestSensor(unittest.TestCase):
         s = Sensor(Sensor.FLOAT, 'fsens', None, 'microseconds', params=[0,10])
         self.assertEqual(s.description,
                          "Float sensor 'fsens' in unit microseconds")
+
+    def test_unit(self):
+        """Test the unit of a sensor."""
+        test_units = ['C', '°C', u'\xc2\xb0C', '']
+        for unit in test_units:
+            s = Sensor(Sensor.INTEGER, "an.int_temperature",
+                       "An temperature sensor.", unit, [-20, 20])
+            self.assertEquals(s.value(), 0)
+            self.assertEqual(s.units, unit)
 
     def test_int_sensor(self):
         """Test integer sensor."""

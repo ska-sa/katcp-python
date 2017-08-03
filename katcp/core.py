@@ -6,7 +6,7 @@
 
 """Utilities for dealing with KAT device control language messages."""
 
-from __future__ import division, print_function, absolute_import
+from __future__ import division, print_function, absolute_import#, unicode_literals
 
 import re
 import sys
@@ -15,6 +15,7 @@ import warnings
 import logging
 
 import tornado
+import six
 
 from collections import namedtuple, defaultdict
 from functools import wraps, partial
@@ -292,14 +293,23 @@ class Message(object):
                                    "alphabetic character (got %r)."
                                    % (name,))
 
+    def dd(self, val):
+        # return str(val)
+        if isinstance(val, six.binary_type):
+            return val
+        elif isinstance(val, six.text_type):
+            return six.binary_type(val.encode('utf-8'))
+        else:
+            return six.binary_type(val)
+
     def format_argument(self, arg):
         """Format a Message argument to a string"""
         if isinstance(arg, float):
             return repr(arg)
         elif isinstance(arg, bool):
-            return str(int(arg))
+            return self.dd(int(arg))
         else:
-            return str(arg)
+            return self.dd(arg)
 
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
