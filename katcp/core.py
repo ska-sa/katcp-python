@@ -305,7 +305,8 @@ class Message(object):
                 # unicode characters will break the str cast, so
                 # try to encode to ascii and replace the offending characters
                 # with a '?' character
-                logger.exception("Error casting message argument to str!")
+                logger.error("Error casting message argument to str! "
+                             "Trying to encode argument to ascii.")
                 try:
                     if not isinstance(arg, unicode):
                         arg = arg.decode('utf-8')
