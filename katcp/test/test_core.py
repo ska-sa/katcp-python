@@ -173,7 +173,6 @@ class TestMessageParser(unittest.TestCase):
         self.assertEqual(m.arguments, ['Kl??f', 'skr??m', 'inf??', 'f??d??ral', '??lecto'])
 
 
-
 class TestProtocolFlags(unittest.TestCase):
     def test_parse_version(self):
         PF = katcp.ProtocolFlags
