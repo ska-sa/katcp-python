@@ -307,16 +307,9 @@ class Message(object):
                 # with a '?' character
                 logger.error("Error casting message argument to str! "
                              "Trying to encode argument to ascii.")
-                try:
-                    if not isinstance(arg, unicode):
-                        arg = arg.decode('utf-8')
-                    return arg.encode('ascii', 'replace')
-                except Exception:
-                    # If all else fails, ignore the string completely
-                    logger.exception(
-                        "Error formatting argument as str, "
-                        "ignoring message and returning ''")
-                    return ''
+                if not isinstance(arg, unicode):
+                    arg = arg.decode('utf-8')
+                return arg.encode('ascii', 'replace')
 
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
