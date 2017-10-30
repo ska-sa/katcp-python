@@ -1,9 +1,8 @@
 # test_katcp.py
-# -*- coding: utf8 -*-
-# vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
+# -*- coding: utf-8 -*-
+# vim:fileencoding=utf-8 ai ts=4 sts=4 et sw=4
 # Copyright 2009 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
-
 """Tests for the katcp utilities module.
    """
 from __future__ import division, print_function, absolute_import
@@ -169,6 +168,12 @@ class TestMessageParser(unittest.TestCase):
         self.assertEqual(m.arguments,
                          ['1', repr(float_val), '1', '0', 'string'])
 
+    def test_unicode_message_handling(self):
+        m = self.p.parse(u'!baz[1] Kl\xc3\xbcf skr\xc3\xa4m inf\xc3\xb6 f\xc3\xa9d\xc3\xa9ral \xc3\xa9lecto')
+        self.assertEqual(m.arguments, ['Kl??f', 'skr??m', 'inf??', 'f??d??ral', '??lecto'])
+
+
+
 class TestProtocolFlags(unittest.TestCase):
     def test_parse_version(self):
         PF = katcp.ProtocolFlags
@@ -196,7 +201,6 @@ class TestProtocolFlags(unittest.TestCase):
                                            PF.REQUEST_TIMEOUT_HINTS]))),
                          "5.1-IMT")
 
-
     def test_incompatible_options(self):
         PF = katcp.ProtocolFlags
         # Katcp v4 and below don't support message ids
@@ -211,9 +215,9 @@ class TestProtocolFlags(unittest.TestCase):
 class TestSensor(unittest.TestCase):
 
     def test_default_descriptions(self):
-        s = Sensor(Sensor.INTEGER, 'a sens', params=[0,10])
+        s = Sensor(Sensor.INTEGER, 'a sens', params=[0, 10])
         self.assertEqual(s.description, "Integer sensor 'a sens' with no unit")
-        s = Sensor(Sensor.FLOAT, 'fsens', None, 'microseconds', params=[0,10])
+        s = Sensor(Sensor.FLOAT, 'fsens', None, 'microseconds', params=[0, 10])
         self.assertEqual(s.description,
                          "Float sensor 'fsens' in unit microseconds")
 
@@ -265,7 +269,6 @@ class TestSensor(unittest.TestCase):
                          initial_status=Sensor.WARN)
         self.assertEquals(s.status(), Sensor.WARN)
 
-
     def test_boolean_sensor(self):
         """Test boolean sensor."""
         s = Sensor.boolean("a.boolean", "A boolean.", "on/off", None)
@@ -297,13 +300,13 @@ class TestSensor(unittest.TestCase):
         self.assertEquals(s.parse_value("on"), "on")
         self.assertRaises(ValueError, s.parse_value, "fish")
         s = Sensor.discrete("a.discrete", "A discrete sensor.", "state",
-                             ["on", "off"], default='on')
+                            ["on", "off"], default='on')
         self.assertEqual(s._value, 'on')
         s = Sensor.discrete("a.discrete", "A discrete sensor.", "state",
-                             ["on", "off"], default='off')
+                            ["on", "off"], default='off')
         self.assertEqual(s._value, 'off')
         s = Sensor.discrete("a.discrete", "A discrete sensor.", "state",
-                             ["on", "off"], initial_status=Sensor.UNREACHABLE)
+                            ["on", "off"], initial_status=Sensor.UNREACHABLE)
         self.assertEquals(s.status(), Sensor.UNREACHABLE)
 
     def test_lru_sensor(self):
@@ -419,7 +422,7 @@ class TestSensor(unittest.TestCase):
     def test_statuses(self):
         # Test that the status constants are all good
         valid_statuses = set(['unknown', 'nominal', 'warn', 'error',
-                               'failure', 'unreachable', 'inactive'])
+                              'failure', 'unreachable', 'inactive'])
         status_vals_set = set()
         status_vals_dict = {}
         for st in valid_statuses:
