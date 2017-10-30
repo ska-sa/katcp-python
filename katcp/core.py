@@ -301,19 +301,19 @@ class Message(object):
         else:
             try:
                 return str(arg)
-            except Exception:
+            except UnicodeEncodeError:
                 # unicode characters will break the str cast, so
                 # try to encode to ascii and replace the offending characters
                 # with a '?' character
                 logger.exception("Error casting message argument to str!")
                 try:
-                    if type(arg) != unicode:
+                    if not isinstance(arg, unicode):
                         arg = arg.decode('utf-8')
                     return arg.encode('ascii', 'replace')
                 except Exception:
                     # If all else fails, ignore the string completely
                     logger.exception(
-                        "Error decoding message argument from utf-8, "
+                        "Error formatting argument as str, "
                         "ignoring message and returning ''")
                     return ''
 
