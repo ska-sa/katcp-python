@@ -195,8 +195,8 @@ class InspectingClientAsync(object):
     # TODO (NM 2016-10-21) sync_timeout should be 5 seconds, but until we deal
     # with the thundering herd at startup when connecting to a large number of
     # clients concurrently in a single process, see Jira CB-1609
-    sync_timeout = 8
-    initial_resync_timeout = 1
+    sync_timeout = 20
+    initial_resync_timeout = 5
     max_resync_timeout = 90
 
     def __init__(self, host, port, ioloop=None, initial_inspection=None,
