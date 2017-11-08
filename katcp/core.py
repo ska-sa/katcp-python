@@ -299,7 +299,17 @@ class Message(object):
         elif isinstance(arg, bool):
             return str(int(arg))
         else:
-            return str(arg)
+            try:
+                return str(arg)
+            except UnicodeEncodeError:
+                # unicode characters will break the str cast, so
+                # try to encode to ascii and replace the offending characters
+                # with a '?' character
+                logger.error("Error casting message argument to str! "
+                             "Trying to encode argument to ascii.")
+                if not isinstance(arg, unicode):
+                    arg = arg.decode('utf-8')
+                return arg.encode('ascii', 'replace')
 
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
@@ -611,7 +621,7 @@ class ProtocolFlags(object):
     STRATEGIES_ALLOWED_BY_MAJOR_VERSION = {
         4: STRATEGIES_V4,
         5: STRATEGIES_V5
-        }
+    }
 
     REQUEST_TIMEOUT_HINTS_MIN_VERSION = (5, 1)
 
@@ -638,8 +648,8 @@ class ProtocolFlags(object):
     def __eq__(self, other):
         if not isinstance(other, ProtocolFlags):
             return NotImplemented
-        return (self.major == other.major and self.minor == other.minor
-                and self.flags == other.flags)
+        return (self.major == other.major and self.minor == other.minor and
+                self.flags == other.flags)
 
     def __str__(self):
         flag_str = self.flags and ("-" + "".join(sorted(self.flags))) or ""
@@ -756,7 +766,6 @@ class DeviceServerMetaclass(DeviceMetaclass):
                 for flag in required_katcp_protocol_flags))
 
         return protocol_version_ok and protocol_flags_ok
-
 
 
 class KatcpDeviceError(Exception):
@@ -1006,7 +1015,7 @@ class Sensor(object):
             description = '%(type)s sensor %(name)r %(unit_description)s' % (
                           dict(type=self.stype.capitalize(), name=self.name,
                                unit_description=('in unit '+units if units else
-                                                 'with no unit')) )
+                                                 'with no unit')))
 
         self.description = description
         self.units = units
@@ -1243,7 +1252,6 @@ class Sensor(object):
         """
         return cls(cls.ADDRESS, name, description, unit, None,
                    default, initial_status)
-
 
     def attach(self, observer):
         """Attach an observer to this sensor.
@@ -1607,6 +1615,7 @@ class AsyncEvent(object):
 
         """
         f = Future()
+
         def cb():
             return gen.chain_future(self.until_set(), f)
         ioloop.add_callback(cb)
@@ -1620,11 +1629,13 @@ class AsyncEvent(object):
 class AsyncCallbackEvent(AsyncEvent):
     # Wanted to use @steal_docstring_from() here, but aparently Classes have read-only
     # __doc__ attributes... Apparently this is fixed in Python 3.3
-    __doc__ = '\n\n'.join((AsyncEvent.__doc__,
-    """Extend AsyncEvent with a callback on event state change
+    __doc__ = '\n\n'.join((
+        AsyncEvent.__doc__,
+        """Extend AsyncEvent with a callback on event state change
 
-    callback is called with "True" if the event is set, "False" if it is cleared
-    """))
+        callback is called with "True" if the event is set, "False" if it is cleared
+        """))
+
     def __init__(self, callback=lambda x: x):
         self._callback = callback
         super(AsyncCallbackEvent, self).__init__()
@@ -1801,6 +1812,7 @@ def hashable_identity(obj):
 def until_later(delay, ioloop=None):
     ioloop = ioloop or tornado.ioloop.IOLoop.current()
     f = tornado_Future()
+
     def _done():
         f.set_result(None)
     ioloop.call_later(delay, _done)
@@ -1817,6 +1829,7 @@ def until_any(*futures, **kwargs):
     timeout = kwargs.get('timeout', None)
     ioloop = kwargs.get('ioloop', None) or tornado.ioloop.IOLoop.current()
     any_future = tornado_Future()
+
     def handle_done(done_future):
         if not any_future.done():
             try:
