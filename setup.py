@@ -30,7 +30,7 @@ setup(
     use_katversion=True,
     install_requires=[
         "ply",
-        "tornado>=4.3",
+        "tornado>=4.3, <5",
         "futures",
         "future"
     ],
