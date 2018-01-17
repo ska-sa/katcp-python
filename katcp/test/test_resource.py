@@ -104,6 +104,60 @@ class test_KATCPSensor(TimewarpAsyncTestCase):
         # Check that no stray listeners are left behind
         self.assertFalse(DUT._listeners)
 
+    @tornado.testing.gen_test
+    def test_sampling_strategy_property(self):
+        sensor_name = 'test.int'
+        strategy = 'testing 123'
+        sensor_manager = mock.Mock()
+        sensor_manager.get_sampling_strategy.return_value = strategy
+        DUT = resource.KATCPSensor(dict(sensor_type=Sensor.INTEGER,
+                                        name=sensor_name),
+                                   sensor_manager)
+        self.assertEqual(DUT.sampling_strategy, strategy)
+
+    @tornado.testing.gen_test
+    def test_set_strategy(self):
+        sensor_name = 'test.int'
+        sensor_manager = mock.Mock()
+        DUT = resource.KATCPSensor(dict(sensor_type=Sensor.INTEGER,
+                                        name=sensor_name),
+                                   sensor_manager)
+        DUT.set_strategy('none')
+        DUT.set_strategy('period', 0.5)
+        DUT.set_strategy('event-rate', '1.1 1.2')
+        DUT.set_strategy('event-rate', [2.1, 2.2])
+
+        sensor_manager.set_sampling_strategy.assert_has_calls([
+            mock.call(sensor_name, 'none'),
+            mock.call(sensor_name, 'period 0.5'),
+            mock.call(sensor_name, 'event-rate 1.1 1.2'),
+            mock.call(sensor_name, 'event-rate 2.1 2.2'),
+        ])
+
+    @tornado.testing.gen_test
+    def test_set_sampling_strategy(self):
+        sensor_name = 'test.int'
+        strategy = 'period 2.5'
+        sensor_manager = mock.Mock()
+        DUT = resource.KATCPSensor(dict(sensor_type=Sensor.INTEGER,
+                                        name=sensor_name),
+                                   sensor_manager)
+        DUT.set_sampling_strategy(strategy)
+        sensor_manager.set_sampling_strategy.assert_called_once_with(
+            sensor_name, strategy)
+
+    @tornado.testing.gen_test
+    def test_drop_sampling_strategy(self):
+        sensor_name = 'test.int'
+        sensor_manager = mock.Mock()
+        DUT = resource.KATCPSensor(dict(sensor_type=Sensor.INTEGER,
+                                        name=sensor_name),
+                                   sensor_manager)
+        DUT.drop_sampling_strategy()
+        sensor_manager.drop_sampling_strategy.assert_called_once_with(
+            sensor_name)
+
+
 class ConcreteKATCPRequest(resource.KATCPRequest):
     def issue_request(self, *args, **kwargs):
         pass
