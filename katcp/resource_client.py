@@ -525,6 +525,26 @@ class KATCPClientResource(resource.KATCPResource):
         # Otherwise, depend on self._add_sensors() to handle it from the cache when the sensor appears
         raise tornado.gen.Return(sensor_dict)
 
+    def drop_sampling_strategy(self, sensor_name):
+        """Drop the sampling strategy for the named sensor from the cache
+
+        Calling :meth:`set_sampling_strategy` requires the requested strategy to
+        be memorised so that it can automatically be reapplied.  This method
+        causes the strategy to be forgotten.  There is no change to the current
+        strategy.  No error is raised if there is no strategy to drop.
+
+        Parameters
+        ----------
+
+        sensor_name : str
+            Name of the sensor
+
+        """
+        sensor_name = resource.escape_name(sensor_name)
+        # drop from both the internal cache, and the sensor manager's cache
+        self._sensor_strategy_cache.pop(sensor_name, None)
+        self._sensor_manager.drop_sampling_strategy(sensor_name)
+
     @tornado.gen.coroutine
     def set_sensor_listener(self, sensor_name, listener):
         """Set a sensor listener for a sensor even if it is not yet known
@@ -740,6 +760,33 @@ class KATCPClientResourceSensorsManager(object):
         self._resource_name = resource_name
         self._logger = logger
 
+    def _get_strategy_cache_key(self, sensor_name):
+        """Lookup sensor name in cache, allowing names in escaped form
+
+        The strategy cache uses the normal KATCP sensor names as the keys.
+        In order to allow access using an escaped sensor name, this method
+        tries to find the normal form of the name.
+
+        Returns
+        -------
+
+        key : str
+            If there is a match, the cache key is returned.
+            If no match, then the sensor_name is returned unchanged.
+
+        """
+        # try for a direct match first, otherwise do full comparison
+        if sensor_name in self._strategy_cache:
+            return sensor_name
+        else:
+            escaped_name = resource.escape_name(sensor_name)
+            for key in self._strategy_cache:
+                escaped_key = resource.escape_name(key)
+                if escaped_key == escaped_name:
+                    return key
+        # no match
+        return sensor_name
+
     @property
     def resource_name(self):
         return self._resource_name
@@ -761,7 +808,7 @@ class KATCPClientResourceSensorsManager(object):
         ----------
 
         sensor_name : str
-            Name of the sensor
+            Name of the sensor (normal or escaped form)
 
         Returns
         -------
@@ -770,7 +817,8 @@ class KATCPClientResourceSensorsManager(object):
             contains (<strat_name>, [<strat_parm1>, ...]) where the strategy names and
             parameters are as defined by the KATCP spec
         """
-        cached = self._strategy_cache.get(sensor_name)
+        cache_key = self._get_strategy_cache_key(sensor_name)
+        cached = self._strategy_cache.get(cache_key)
         if not cached:
             return resource.normalize_strategy_parameters('none')
         else:
@@ -817,6 +865,26 @@ class KATCPClientResourceSensorsManager(object):
             sensor_strategy = (False, str(e))
         raise tornado.gen.Return(sensor_strategy)
 
+    def drop_sampling_strategy(self, sensor_name):
+        """Drop the sampling strategy for the named sensor from the cache
+
+        Calling :meth:`set_sampling_strategy` requires the sensor manager to
+        memorise the requested strategy so that it can automatically be reapplied.
+        If the client is no longer interested in the sensor, or knows the sensor
+        may be removed from the server, then it can use this method to ensure the
+        manager forgets about the strategy.  This method will not change the current
+        strategy.  No error is raised if there is no strategy to drop.
+
+        Parameters
+        ----------
+
+        sensor_name : str
+            Name of the sensor (normal or escaped form)
+
+        """
+        cache_key = self._get_strategy_cache_key(sensor_name)
+        self._strategy_cache.pop(cache_key, None)
+
     @tornado.gen.coroutine
     def reapply_sampling_strategies(self):
         """Reapply all sensor strategies using cached values"""
@@ -826,7 +894,7 @@ class KATCPClientResourceSensorsManager(object):
                 sensor_exists = yield check_sensor(sensor_name)
                 if not sensor_exists:
                     self._logger.warn('Did not set strategy for non-existing sensor {}'
-                             .format(sensor_name))
+                                      .format(sensor_name))
                     continue
 
                 result = yield self.set_sampling_strategy(sensor_name, strategy)

@@ -515,7 +515,7 @@ class KATCPSensorsManager(object):
         ----------
 
         sensor_name : str
-            Name of the sensor
+            Name of the sensor (normal or escaped form)
 
         Returns
         -------
@@ -558,6 +558,25 @@ class KATCPSensorsManager(object):
         non-existing sensor, it should still cache the strategy and ensure that is applied
         whenever said sensor comes into existance. This allows an applications to pre-set
         strategies for sensors before synced / connected to a device.
+
+        """
+
+    @abc.abstractmethod
+    def drop_sampling_strategy(self, sensor_name):
+        """Drop the sampling strategy for the named sensor from the cache
+
+        Calling :meth:`set_sampling_strategy` requires the sensor manager to
+        memorise the requested strategy so that it can automatically be reapplied.
+        If the client is no longer interested in the sensor, or knows the sensor
+        may be removed from the server, then it can use this method to ensure the
+        manager forgets about the strategy.  This method will not change the current
+        strategy.  No error is raised if there is no strategy to drop.
+
+        Parameters
+        ----------
+
+        sensor_name : str
+            Name of the sensor (normal or escaped form)
 
         """
 
@@ -729,6 +748,15 @@ class KATCPSensor(object):
 
         """
         return self._manager.set_sampling_strategy(self.name, strategy)
+
+    def drop_sampling_strategy(self):
+        """Drop memorised sampling strategy for sensor, if any
+
+        Calling this method ensures that the sensor manager does not attempt
+        to reapply a sampling strategy.  It will not raise an error if no strategy
+        has been set.  Use :meth:`set_sampling_strategy` to memorise a strategy again.
+        """
+        self._manager.drop_sampling_strategy(self.name)
 
     def register_listener(self, listener, reading=False):
         """Add a callback function that is called when sensor value is updated.

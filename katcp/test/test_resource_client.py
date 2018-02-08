@@ -583,6 +583,57 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         self.assertEqual(DUT._sensor_strategy_cache['an_int'], ('event',))
 
     @tornado.testing.gen_test(timeout=1000)
+    def test_drop_sampling_strategy(self):
+        self.server.stop()
+        self.server.join()
+        DUT = resource_client.KATCPClientResource(self.default_resource_spec)
+        DUT.start()
+        yield tornado.gen.moment
+
+        # Check no error for a non-existant sensor
+        DUT.drop_sampling_strategy('not_a_valid_sensor')
+
+        test_strategy = ('period', '2.5')
+        yield DUT.set_sampling_strategy('an_int', test_strategy)
+        self.assertEqual(DUT._sensor_strategy_cache['an_int'], test_strategy)
+
+        # Now drop the strategy from the cache
+        DUT.drop_sampling_strategy('an_int')
+        self.assertNotIn('an_int', DUT._sensor_strategy_cache)
+        self.assertNotIn('an.int', DUT._sensor_manager._strategy_cache)
+
+        # Strategy was dropped before starting server, so expect NO match
+        self.server.start()
+        self.server.wait_running(timeout=1)
+        advancer = TimewarpAsyncTestCaseTimeAdvancer(self, quantum=0.55)
+        advancer.start()
+        yield DUT.until_synced()
+        self.assertNotEqual(DUT.sensor.an_int.sampling_strategy, test_strategy)
+
+        # set strategy while running - it must be cached in two places
+        # the DUT, and the DUT's sensor manager
+        test_strategy = ('period', '3.5')
+        yield DUT.set_sampling_strategy('an_int', test_strategy)
+        self.assertEqual(DUT._sensor_strategy_cache['an_int'], test_strategy)
+        self.assertEqual(DUT._sensor_manager._strategy_cache['an.int'], test_strategy)
+        self.assertEqual(DUT.sensor.an_int.sampling_strategy, test_strategy)
+
+        # Disconnect the device
+        self.server.stop()
+        self.server.join(timeout=1)
+        yield DUT.until_state('disconnected')
+
+        # Drop the strategy from the cache
+        DUT.drop_sampling_strategy('an_int')
+        self.assertNotIn('an_int', DUT._sensor_strategy_cache)
+        self.assertNotIn('an.int', DUT._sensor_manager._strategy_cache)
+
+        # restart server and check that strategy was NOT applied
+        self.server.start()
+        yield DUT.until_synced()
+        self.assertNotEqual(DUT.sensor.an_int.sampling_strategy, test_strategy)
+
+    @tornado.testing.gen_test(timeout=1000)
     def test_set_sensor_listener(self):
         self.server.stop()
         self.server.join()
