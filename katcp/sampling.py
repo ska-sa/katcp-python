@@ -87,6 +87,17 @@ class SampleStrategy(object):
         DIFFERENTIAL_RATE: "differential-rate",
     }
 
+    ## @brief Mapping from strategy constant to number of parameters.
+    SAMPLING_NUM_PARAMS_LOOKUP = {
+        NONE: 0,
+        AUTO: 0,
+        PERIOD: 1,
+        EVENT: 0,
+        DIFFERENTIAL: 1,
+        EVENT_RATE: 2,
+        DIFFERENTIAL_RATE: 3,
+    }
+
     # SAMPLING_LOOKUP not found by pylint
     #
     # pylint: disable-msg = E0602

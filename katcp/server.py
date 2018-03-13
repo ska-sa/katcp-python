@@ -2197,8 +2197,16 @@ class DeviceServer(DeviceServerBase):
 
         Parameters
         ----------
-        name : str
-            Name of the sensor whose sampling strategy to query or configure.
+        names : list of str
+            One or more names of sensors whose sampling strategy will be queried
+            or configured.
+            A query can only be done on a single sensor.  However, configuration
+            can be done on many sensors with a single request, as long as they
+            all use the same strategy.
+            Note:  prior to KATCP v5.1 only a single sensor could be configured.
+            Multiple sensors are only allowed if the device server sets the protocol
+            version to KATCP v5.1 or higher and enables the BULK_SET_SENSOR_SAMPLING
+            flag in its PROTOCOL_INFO class attribute.
         strategy : {'none', 'auto', 'event', 'differential', \
                     'period', 'event-rate'}, optional
             Type of strategy to use to report the sensor value. The
@@ -2224,10 +2232,10 @@ class DeviceServer(DeviceServerBase):
         -------
         success : {'ok', 'fail'}
             Whether the sensor-sampling request succeeded.
-        name : str
-            Name of the sensor queried or configured.
+        names : list str
+            Name(s) of the sensor queried or configured.
         strategy : {'none', 'auto', 'event', 'differential', 'period'}
-            Name of the new or current sampling strategy for the sensor.
+            Name(s) of the new or current sampling strategy for the sensor(s).
         params : list of str
             Additional strategy parameters (see description under Parameters).
 
@@ -2241,10 +2249,22 @@ class DeviceServer(DeviceServerBase):
             ?sensor-sampling cpu.power.on period 500
             !sensor-sampling ok cpu.power.on period 500
 
+            if BULK_SET_SENSOR_SAMPLING is enabled then:
+
+            ?sensor-sampling cpu.power.on fan.speed
+            !sensor-sampling fail Cannot\_query\_multiple\_sensors
+
+            ?sensor-sampling cpu.power.on fan.speed period 500
+            !sensor-sampling ok cpu.power.on fan.speed period 500
+
         """
+        if self.PROTOCOL_INFO.bulk_set_sensor_sampling and len(msg.arguments) > 1:
+            handler = self._handle_bulk_set_sensor_sampling
+        else:
+            handler = self._handle_sensor_sampling
         f = Future()
         self.ioloop.add_callback(lambda: chain_future(
-            self._handle_sensor_sampling(req, msg), f))
+            handler(req, msg), f))
         return f
 
     @gen.coroutine
@@ -2317,6 +2337,99 @@ class DeviceServer(DeviceServerBase):
         # this behaviour, less effort to fix it here :-/
         yield gen.moment
         raise gen.Return(req.make_reply("ok", name, strategy, *params))
+
+    @gen.coroutine
+    def _handle_bulk_set_sensor_sampling(self, req, msg):
+        if not msg.arguments:
+            raise FailReply("No sensor name given.")
+
+        # Arguments start with one or more sensor names.  Check the first one now.
+        # A sensor object is required for testing the sampling strategies, so
+        # the first one is as good as any.
+        name = msg.arguments[0]
+        if name not in self._sensors:
+            raise FailReply("Unknown sensor name: %s." % name)
+        sensor = self._sensors[name]
+
+        # The client connection that is not specific to this request context
+        client = req.client_connection
+        katcp_version = self.PROTOCOL_INFO.major
+        format_inform = (format_inform_v5
+                         if katcp_version >= SEC_TS_KATCP_MAJOR
+                         else format_inform_v4)
+
+        def inform_callback(sensor, reading):
+            """Inform callback for sensor strategy."""
+            timestamp, status, value = reading
+            cb_msg = format_inform(sensor, timestamp, status, value)
+            client.inform(cb_msg)
+
+        # Parse arguments from the back, trying all possible strategies until
+        # a valid one is found.  The number of arguments to define a strategy
+        # is one for the name, plus the number of params expected for that type
+        # of strategy.
+        # E.g., for 'none', only 1 argument.  For 'event-rate 5 60', 3 arguments.
+        requested_strategy = None
+        min_args = 1
+        max_args = 1 + max(SampleStrategy.SAMPLING_NUM_PARAMS_LOOKUP.values())
+        for num_strategy_args in range(min_args, max_args + 1):
+            args = msg.arguments[-num_strategy_args:]
+            try:
+                strategy = args[0]
+                params = args[1:]
+                if self.PROTOCOL_INFO.strategy_allowed(strategy):
+                    if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
+                        # Slightly nasty hack, but since period is the only v4 strategy
+                        # involving timestamps it's not _too_ nasty :)
+                        params = [float(params[0]) * MS_TO_SEC_FAC] + params[1:]
+                    requested_strategy = SampleStrategy.get_strategy(
+                        strategy, inform_callback, sensor, *params, ioloop=self.ioloop)
+                    if requested_strategy:
+                        break
+            except Exception:
+                pass
+
+        if not requested_strategy:
+            raise FailReply("No valid strategy provided: %s." % msg.arguments)
+
+        # with known strategy, remaining arguments are sensor names
+        names = msg.arguments[0:-num_strategy_args]
+        invalid_names = []
+        for name in names:
+            if name not in self._sensors:
+                invalid_names.append(name)
+        if invalid_names:
+            raise FailReply("Unknown sensor names: %s." % " ".join(invalid_names))
+
+        for name in names:
+            sensor = self._sensors[name]
+
+            # attempt to set sampling strategy
+            new_strategy = SampleStrategy.get_strategy(
+                strategy, inform_callback, sensor, *params, ioloop=self.ioloop)
+
+            # Remove and cancel old strategy
+            old_strategy = self._strategies[client].pop(sensor, None)
+            if old_strategy:
+                old_strategy.cancel()
+
+            # todo: replace isinstance check with something better
+            if not isinstance(new_strategy, SampleNone):
+                self._strategies[client][sensor] = new_strategy
+                new_strategy.start()
+
+        strategy, params = requested_strategy.get_sampling_formatted()
+        if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
+            # Another slightly nasty hack, but since period is the only
+            # v4 strategy involving timestamps it's not _too_ nasty :)
+            params = [int(float(params[0]) * SEC_TO_MS_FAC)] + params[1:]
+
+        # Let the ioloop run so that the #sensor-status informs are sent before
+        # the reply. Not strictly neccesary, but a number of tests depend on
+        # this behaviour, less effort to fix it here :-/
+        yield gen.moment
+        reply_args = names + [strategy] + params
+        raise gen.Return(req.make_reply("ok", *reply_args))
 
     @request()
     @return_reply()
