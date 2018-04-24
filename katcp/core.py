@@ -717,19 +717,22 @@ class DeviceMetaclass(type):
                 request_name = convert_method_name("request_", name)
                 if mcs.check_protocol(handler):
                     mcs._request_handlers[request_name] = handler
-                    assert(handler.__doc__ is not None)
+                    error_msg = "Request '{}' has no docstring.".format(request_name)
+                    assert(handler.__doc__ is not None), error_msg
             elif name.startswith("inform_"):
                 inform_name = convert_method_name("inform_", name)
                 if mcs.check_protocol(handler):
                     mcs._inform_handlers[inform_name] = handler
-                    assert(handler.__doc__ is not None)
-                # There is a bit of a name colission between the reply_*
+                    error_msg = "Inform '{}' has no docstring.".format(inform_name)
+                    assert(handler.__doc__ is not None), error_msg
+                # There is a bit of a name collision between the reply_*
                 # convention and the server reply_inform() method
             elif name.startswith("reply_") and name != 'reply_inform':
                 reply_name = convert_method_name("reply_", name)
                 if mcs.check_protocol(handler):
                     mcs._reply_handlers[reply_name] = handler
-                    assert(handler.__doc__ is not None)
+                    error_msg = "Reply '{}' has no docstring.".format(reply_name)
+                    assert(handler.__doc__ is not None), error_msg
 
     def check_protocol(mcs, handler):
         """Return False if `handler` should be filtered"""
