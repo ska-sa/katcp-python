@@ -723,15 +723,15 @@ class DeviceMetaclass(type):
                 inform_name = convert_method_name("inform_", name)
                 if mcs.check_protocol(handler):
                     mcs._inform_handlers[inform_name] = handler
-                    error_msg = "Inform '{}' has no doctring.".format(inform_name)
+                    error_msg = "Inform '{}' has no docstring.".format(inform_name)
                     assert(handler.__doc__ is not None), error_msg
-                # There is a bit of a name colission between the reply_*
+                # There is a bit of a name collision between the reply_*
                 # convention and the server reply_inform() method
             elif name.startswith("reply_") and name != 'reply_inform':
                 reply_name = convert_method_name("reply_", name)
                 if mcs.check_protocol(handler):
                     mcs._reply_handlers[reply_name] = handler
-                    error_msg = "Reply '{}' has no doctring.".format(reply_name)
+                    error_msg = "Reply '{}' has no docstring.".format(reply_name)
                     assert(handler.__doc__ is not None), error_msg
 
     def check_protocol(mcs, handler):
