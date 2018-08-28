@@ -820,7 +820,7 @@ class MessageHandlerThread(object):
         *on_message* should not be called again until *ready* has resolved.
 
         """
-        MAX_QUEUE_SIZE = 30
+        MAX_QUEUE_SIZE = 300
         if len(self._msg_queue) >= MAX_QUEUE_SIZE:
             # This should never happen if callers to handle_message wait
             # for its futures to resolve before sending another message.
