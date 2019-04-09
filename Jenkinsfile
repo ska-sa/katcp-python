@@ -18,7 +18,7 @@ pipeline {
             }
         }
 
-        stage ('Install & Unit Tests')
+        stage ('Install & Unit Tests') {
             options {
                 timestamps()
                 timeout(time: 30, unit: 'MINUTES') 
@@ -34,6 +34,7 @@ pipeline {
                     archiveArtifacts 'nosetests.xml'
                 }
             }
+        }
 
         stage ('Build .whl & .deb') {
             steps {
