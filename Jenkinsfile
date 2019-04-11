@@ -24,7 +24,7 @@ pipeline {
                 timeout(time: 30, unit: 'MINUTES') 
             }
             steps {
-                sh 'pip install . -U --pre'
+                sh 'pip install . -U --pre --user'
                 sh 'python setup.py nosetests --with-xunit'
             } 
             
