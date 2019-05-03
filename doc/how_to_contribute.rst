@@ -1,11 +1,5 @@
 .. _How to Contribute:
 
-********
-Tutorial
-********
-
- .. module:: katcp
-
 *****************
 How to Contribute
 *****************
