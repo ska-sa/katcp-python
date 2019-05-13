@@ -3,6 +3,20 @@
 *************
 Release Notes
 *************
+0.6.3
+=====
+* Put docs on readthedocs.
+* Better error handling for messages with non-ASCII characters (invalid).
+* Increase container sync time to better support large containers.
+* Limit tornado version to <5.
+* Allow sampling strategy to be removed from cache.
+* Improve error messages for DeviceMetaClass assertions.
+* Increase server's message queue length handle more simultaneous client connections.
+* Improve Jenkins pipeline configuration.
+* Add information on how to contribute to the project.
+
+See also :download:`CHANGELOG` for more details on changes.
+
 0.6.2
 =====
 * Various bug fixes
@@ -119,7 +133,7 @@ a number of backward incompatible changes, and hence requires care. This library
 implements support for both KATCP v5 and for the older dialect. Some API changes
 have also been made, mainly in aid of fool-proof support of the Message ID
 feature of KATCP v5. The changes do, however, also eliminate a category of
-potential bugs for older versions of the spec. 
+potential bugs for older versions of the spec.
 
 Important API changes
 ---------------------

@@ -1,3 +1,21 @@
+14 May 2019 (0.6.3)
+* Put docs on readthedocs (PR #192).
+* Added error handling when parsing Message arguments that include non-ASCII
+  characters (not following KATCP specification).  Invalid characters are replaced
+  with question marks, possibly breaking functionality (PR #193).
+* Increase container sync time from 8 sec to 20 sec, and initial resync
+  timeout from 1 sec to 5 sec, to better support large containers (PR #194).
+* Limit tornado version to <5 because the openssl version on Ubuntu 14.04
+  is not compatible (PR #195).
+* Allow sampling strategy to be removed from cache, to better support clients
+  working with devices that dynamically remove sensors (PR #196).
+* Provide a meaningful error message for the DeviceMetaClass assert statements
+  (PR #198).
+* Increase server's MAX_QUEUE_SIZE from 30 to 300 to handle more simultaneous
+  client connections (PR #199).
+* Updates to Jenkinsfile for pipeline improvements (PR #200, #201, #202).
+* Add information on how to contribute to the project (PR #203).
+
 19 July 2017 (0.6.2)
  * Bumped the tornado dependency to at least 4.3
  * Started work to support for python3 (not production ready)
@@ -228,7 +246,7 @@
  * Created 0.3.x branch.
 
 22 Oct 2010:
- * Add a NullHandler for katcp library logging as recommended by Python logging 
+ * Add a NullHandler for katcp library logging as recommended by Python logging
    documentation.
 
 12 Oct 2010:
@@ -290,7 +308,7 @@
 26 Oct 2009
  * Add include_msg option to request decorator to give decorated
    requests a means to access the original message and the message id.
- * Add support for msg ids to callback client. 
+ * Add support for msg ids to callback client.
 
 23 Oct 2009
  * Add support for message ids to server and client request handling.
@@ -340,6 +358,6 @@
  * Update version to 0.2.x.
  * Fix download url and license in setup.py.
  * Have Sphinx read the version number from katcp.VERSION and katcp.VERSION_STR.
- 
+
 29 Jun 2009
  * Start of CHANGELOG in preparation for 0.1.0 release.
