@@ -9,7 +9,6 @@
 from __future__ import division, print_function, absolute_import
 
 import unittest2 as unittest
-import socket
 import mock
 import time
 import logging
@@ -24,9 +23,14 @@ from tornado import gen
 
 from katcp.core import ProtocolFlags, Message
 
-from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
-                             counting_callback, start_thread_with_cleanup,
-                             WaitingMock, TimewarpAsyncTestCase)
+from katcp.testutils import (DeviceTestServer,
+                             TestLogHandler,
+                             TestUtilMixin,
+                             TimewarpAsyncTestCase,
+                             WaitingMock,
+                             assert_no_memory_leaks,
+                             counting_callback,
+                             start_thread_with_cleanup)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -309,6 +313,30 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.assertTrue(stream is not self.client._stream,
                         "Expected %r to not be %r" % (stream, self.client._stream))
         self.assertEqual(sockname, self.client._stream.socket.getpeername())
+
+
+class TestDeviceClientMemoryLeaks(unittest.TestCase):
+
+    def setUp(self):
+        self.server = DeviceTestServer('', 0)
+        start_thread_with_cleanup(self, self.server, start_timeout=1)
+        self.host, self.port = self.server.bind_address
+
+    def test_no_memory_leak_after_init(self):
+        with assert_no_memory_leaks():
+            client = katcp.DeviceClient(self.host, self.port)
+            client = None  # noqa: F841
+
+    def test_no_memory_leak_after_usage(self):
+        with assert_no_memory_leaks():
+            client = katcp.DeviceClient(self.host, self.port)
+            client.enable_thread_safety()
+            client.start()
+            client.wait_connected(timeout=1)
+            client.stop()
+            client.join()
+            client = None
+
 
 class TestBlockingClient(unittest.TestCase):
     def setUp(self):

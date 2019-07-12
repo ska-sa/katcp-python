@@ -24,6 +24,7 @@ def get_sensor(sensor_type, name=None):
 
     return sensor
 
+
 class test_SensorTransitionWaiter(unittest.TestCase):
     def test_wait_float_timeout(self):
         timeout = 0.1
@@ -202,3 +203,26 @@ class test_AsyncWaitingMock(
         DUT(1)
         self.io_loop.add_callback(DUT, 2)
         yield DUT.assert_wait_call_count(2, timeout=0.1)
+
+
+class test_AssertNoMemoryLeaks(unittest.TestCase):
+
+    def test_non_leaky_object(self):
+
+        class NonLeaky(object):
+            pass
+
+        with testutils.assert_no_memory_leaks():
+            obj = NonLeaky()
+            obj = None  # noqa: F841
+
+    def test_leaky_object(self):
+
+        class Leaky(dict):
+            def __init__(self):
+                self.__dict__ = self
+
+        with self.assertRaises(AssertionError):
+            with testutils.assert_no_memory_leaks():
+                obj = Leaky()
+                obj = None  # noqa: F841

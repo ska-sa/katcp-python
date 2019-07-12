@@ -30,9 +30,12 @@ from functools import partial
 
 from concurrent.futures import TimeoutError
 
-from katcp.testutils import (DeviceTestServer, DeviceTestSensor,
-                             start_thread_with_cleanup, TimewarpAsyncTestCase,
-                             TimewarpAsyncTestCaseTimeAdvancer)
+from katcp.testutils import (DeviceTestSensor,
+                             DeviceTestServer,
+                             TimewarpAsyncTestCase,
+                             TimewarpAsyncTestCaseTimeAdvancer,
+                             assert_no_memory_leaks,
+                             start_thread_with_cleanup)
 
 from katcp import resource, inspecting_client, ioloop_manager, Message, Sensor
 from katcp.core import AttrDict, AsyncEvent, ProtocolFlags
@@ -453,6 +456,18 @@ class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
         # Check if sensor/request was removed
         self.assertEqual(set(DUT.sensor), sensors_before)
         self.assertEqual(set(DUT.req), reqs_before)
+
+    def test_no_memory_leak_after_init(self):
+        with assert_no_memory_leaks():
+            DUT = resource_client.KATCPClientResource(self.default_resource_spec)
+            DUT = None  # noqa: F841
+
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_usage(self):
+        with assert_no_memory_leaks():
+            DUT = yield self._get_DUT_and_sync(self.default_resource_spec)
+            DUT.stop()
+            DUT = None
 
 
 class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
@@ -1219,6 +1234,20 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
                 self.assertTrue(result[client.name])
             else:
                 self.assertFalse(result[client.name])
+
+    def test_no_memory_leak_after_init(self):
+        with assert_no_memory_leaks():
+            DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+            DUT = None  # noqa: F841
+
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_usage(self):
+        with assert_no_memory_leaks():
+            DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+            DUT.start()
+            yield DUT.until_synced()
+            DUT.stop()
+            DUT = None
 
 
 class test_AttrMappingProxy(unittest.TestCase):

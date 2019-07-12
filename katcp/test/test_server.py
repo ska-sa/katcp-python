@@ -32,12 +32,13 @@ from katcp.testutils import (
     BlockingTestClient,
     ClientConnectionTest,
     DeviceTestServer,
-    handle_mock_req,
-    mock_req,
     TestLogHandler,
     TestUtilMixin,
-    start_thread_with_cleanup,
-    WaitingMock)
+    WaitingMock,
+    assert_no_memory_leaks,
+    handle_mock_req,
+    mock_req,
+    start_thread_with_cleanup)
 from katcp.core import FailReply
 from katcp import (kattypes,
                    __version__)
@@ -47,6 +48,7 @@ logging.getLogger("katcp").addHandler(log_handler)
 logger = logging.getLogger(__name__)
 
 NO_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
+
 
 class test_ClientConnection(unittest.TestCase):
     def test_init(self):
@@ -355,6 +357,24 @@ class test_DeviceServerAsync(test_DeviceServer):
         super(test_DeviceServerAsync, self).setUp()
         self.server.set_concurrency_options(
             thread_safe=False, handler_thread=False)
+
+
+class test_DeviceServerMemoryLeaks(unittest.TestCase):
+
+    def test_no_memory_leak_after_init(self):
+        with assert_no_memory_leaks():
+            server = DeviceTestServer('', 0)
+            server = None  # noqa: F841
+
+    def test_no_memory_leak_after_usage(self):
+        with assert_no_memory_leaks():
+            server = DeviceTestServer('', 0)
+            server.start()
+            server.wait_running(timeout=1)
+            server.stop()
+            server.join()
+            server = None
+
 
 class test_DeviceServer51(test_DeviceServer):
     """Proposed additional tests for Verion 5.1 server"""

@@ -13,10 +13,11 @@ import katcp
 from concurrent.futures import Future
 
 from katcp import Sensor, Message
-from katcp.testutils import (DeviceTestServer,
+from katcp.testutils import (DeviceTestSensor,
+                             DeviceTestServer,
                              DeviceTestServerWithTimeoutHints,
-                             start_thread_with_cleanup,
-                             DeviceTestSensor)
+                             assert_no_memory_leaks,
+                             start_thread_with_cleanup)
 from katcp import inspecting_client
 from katcp.inspecting_client import InspectingClientAsync
 
@@ -429,6 +430,24 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         self.assertIs(req, rf.return_value)
         rf.assert_called_once_with(
             name='watchdog', description=mock.ANY, timeout_hint=None)
+
+    def test_no_memory_leak_after_init(self):
+        with assert_no_memory_leaks():
+            client = InspectingClientAsync(self.host, self.port,
+                                           ioloop=self.io_loop)
+            client = None  # noqa: F841
+
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_usage(self):
+        with assert_no_memory_leaks():
+            client = InspectingClientAsync(self.host, self.port,
+                                           ioloop=self.io_loop)
+            yield client.connect()
+            yield client.until_synced()
+            client.stop()
+            client.join()
+            client = None
+
 
 class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
     longMessage = True
