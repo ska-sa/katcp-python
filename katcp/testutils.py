@@ -14,7 +14,6 @@ import time
 import Queue
 import threading
 import functools
-import gc
 
 import mock
 import tornado.testing
@@ -22,7 +21,6 @@ import tornado.ioloop
 import tornado.locks
 import tornado.gen
 
-from contextlib import contextmanager
 from thread import get_ident
 
 from tornado.concurrent import Future as tornado_Future
@@ -2051,41 +2049,3 @@ class TimewarpAsyncTestCaseTimeAdvancer(threading.Thread):
         yield self.test_instance.set_ioloop_time(
             self.test_instance.ioloop_time + self.quantum)
         future.set_result(None)
-
-
-@contextmanager
-def assert_no_memory_leaks():
-    """Context handler that asserts no memory is leaking within.
-
-    Example
-    -------
-
-    Creating object, then releasing reference:
-
-        >>> with assert_no_memory_leaks():
-        >>>     my_obj = MyClass()
-        >>>     my_obj.optionally_do_stuff()
-        >>>     my_obj = None
-
-    Raises
-    ------
-    AssertionError
-        If the garbage collector finds any unreachable objects when
-        exiting the context handler.
-
-    """
-    old_config = gc.get_debug()
-    gc.set_debug(gc.DEBUG_SAVEALL)
-    try:
-        # check for initial garbage (e.g., test framework may have other leaks)
-        gc.collect()
-        initial_garbage = set(id(g) for g in gc.garbage)
-        yield
-        # collect again and see if there is any new garbage
-        gc.collect()
-        final_garbage = set(id(g) for g in gc.garbage)
-        new_garbage = final_garbage.difference(initial_garbage)
-        unreachable = len(new_garbage)
-        assert unreachable == 0, "{} unreachable objects found".format(unreachable)
-    finally:
-        gc.set_debug(old_config)
