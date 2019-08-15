@@ -171,7 +171,7 @@ class DeviceClient(object):
         # Last used unique message id counter
         self._last_msg_id = 0
 
-        self.ioloop = None
+        self._ioloop = None
         "The Tornado IOloop to use, set by self.set_ioloop()"
         # ID of Thread that hosts the IOLoop.
         # Used to check that we are running in the ioloop.
@@ -222,6 +222,10 @@ class DeviceClient(object):
     @property
     def threadsafe(self):
         return self._threadsafe
+
+    @property
+    def ioloop(self):
+        return self._ioloop
 
     def convert_seconds(self, time_seconds):
         """Convert a time in seconds to the device timestamp units.
@@ -644,7 +648,6 @@ class DeviceClient(object):
     def _install(self):
         self._stopped.clear()
         try:
-            ioloop_before = self.ioloop
             # Do stuff to put us on the IOLoop
             self._logger.debug("Starting client loop for {0!r}"
                                .format(self._bindaddr))
@@ -662,13 +665,8 @@ class DeviceClient(object):
             finally:
                 try:
                     # Make sure everything is torn down properly
-                    if ioloop_before == self.ioloop:
-                        # But only if we are still using the same ioloop. If the ioloop has
-                        # changed that means this client has been stopped and re-started
-                        # before we could get back to this finally clause. This would result
-                        # in us stopping the new ioloop. D'oh!
-                        if self.running():
-                            self.stop()
+                    if self.running():
+                        self.stop()
                 except RuntimeError, e:
                     if str(e) == 'IOLoop is closing':
                         # Seems the ioloop was stopped already, no worries.
@@ -759,7 +757,7 @@ class DeviceClient(object):
 
         """
         self._ioloop_manager.set_ioloop(ioloop, managed=False)
-        self.ioloop = ioloop
+        self._ioloop = ioloop
 
     def enable_thread_safety(self):
         """Enable thread-safety features.
@@ -843,7 +841,7 @@ class DeviceClient(object):
         if self._running.isSet():
             raise RuntimeError("Device client already started.")
         # Make sure we have an ioloop
-        self.ioloop = self._ioloop_manager.get_ioloop()
+        self._ioloop = self._ioloop_manager.get_ioloop()
         if timeout:
             t0 = self.ioloop.time()
         self._ioloop_manager.start(timeout)
