@@ -357,6 +357,38 @@ class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
         gc.collect()
         self.assertIsNone(wr())
 
+    @tornado.testing.gen_test
+    def test_no_memory_leak_change_ioloop(self):
+        client = katcp.DeviceClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        # start and stop client with managed ioloop
+        client.start(timeout=0.1)
+        client.wait_protocol(timeout=0.1)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # repeat with managed ioloop (new ioloop instance created)
+        client.start(timeout=0.1)
+        client.wait_protocol(timeout=0.1)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # change to unmanaged ioloop
+        client.set_ioloop(self.io_loop)
+        client.start(timeout=0.1)
+        yield client.until_protocol(timeout=0.1)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=0.1)
+        yield client.until_stopped(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
     def test_no_memory_leak_async_client(self):
         client = katcp.AsyncClient(self.host, self.port)
         wr = weakref.ref(client)
