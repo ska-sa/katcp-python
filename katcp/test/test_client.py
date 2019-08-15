@@ -8,13 +8,14 @@
 
 from __future__ import division, print_function, absolute_import
 
-import unittest2 as unittest
-import socket
-import mock
-import time
+import gc
 import logging
+import mock
 import threading
+import time
 import tornado.testing
+import unittest2 as unittest
+import weakref
 
 import katcp
 
@@ -24,9 +25,13 @@ from tornado import gen
 
 from katcp.core import ProtocolFlags, Message
 
-from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
-                             counting_callback, start_thread_with_cleanup,
-                             WaitingMock, TimewarpAsyncTestCase)
+from katcp.testutils import (DeviceTestServer,
+                             TestLogHandler,
+                             TestUtilMixin,
+                             TimewarpAsyncTestCase,
+                             WaitingMock,
+                             counting_callback,
+                             start_thread_with_cleanup)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -309,6 +314,150 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.assertTrue(stream is not self.client._stream,
                         "Expected %r to not be %r" % (stream, self.client._stream))
         self.assertEqual(sockname, self.client._stream.socket.getpeername())
+
+
+class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
+
+    def setUp(self):
+        super(TestDeviceClientMemoryLeaks, self).setUp()
+        self.server = DeviceTestServer('', 0)
+        start_thread_with_cleanup(self, self.server, start_timeout=0.1)
+        self.host, self.port = self.server.bind_address
+
+    def test_no_memory_leak_managed_ioloop(self):
+        client = katcp.DeviceClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        client.start(timeout=0.1)
+        client.wait_protocol(timeout=0.1)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    @tornado.testing.gen_test
+    def test_no_memory_leak_unmanaged_ioloop(self):
+        client = katcp.DeviceClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        # use test's ioloop, so client does not create its own (i.e., unmanaged)
+        client.set_ioloop(self.io_loop)
+        client.start(timeout=0.1)
+        yield client.until_protocol(timeout=0.1)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=0.1)
+        yield client.until_stopped(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_async_client(self):
+        client = katcp.AsyncClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        client.start(timeout=0.1)
+        client.wait_protocol(timeout=0.1)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_callback_client(self):
+        client = katcp.CallbackClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        client.start(timeout=0.1)
+        client.wait_protocol(timeout=0.1)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_already_disconnected(self):
+        client = katcp.DeviceClient(self.host, self.port, auto_reconnect=False)
+        wr = weakref.ref(client)
+
+        client.start(timeout=0.1)
+        client.wait_protocol(timeout=0.1)
+        self.assertTrue(client.protocol_flags)
+        # disconnect client before stopping
+        client.disconnect()
+        client.wait_disconnected(timeout=0.1)
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_stopped_server(self):
+        client = katcp.DeviceClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        client.auto_reconnect_delay = 0.01
+        client.start(timeout=0.1)
+        client.wait_protocol(timeout=0.1)
+        self.assertTrue(client.protocol_flags)
+        # stop server before client
+        self.server.stop()
+        client.wait_disconnected(timeout=0.1)
+        self.assertFalse(client.is_connected())
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_invalid_server_no_reconnect(self):
+        bad_port = 0
+        client = katcp.DeviceClient(self.host, bad_port, auto_reconnect=False)
+        wr = weakref.ref(client)
+
+        client.start(timeout=0.1)
+        client.wait_connected(timeout=0.1)
+        self.assertFalse(client.is_connected())
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_invalid_server_auto_reconnect(self):
+        bad_port = 0
+        client = katcp.DeviceClient(self.host, bad_port, auto_reconnect=True)
+        wr = weakref.ref(client)
+
+        client.auto_reconnect_delay = 0.01  # speed up test
+        client.start(timeout=0.1)
+        client.wait_connected(timeout=2 * client.auto_reconnect_delay)
+        self.assertFalse(client.is_connected())
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
 
 class TestBlockingClient(unittest.TestCase):
     def setUp(self):

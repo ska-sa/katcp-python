@@ -740,6 +740,14 @@ class KATCPClientResource(resource.KATCPResource):
     def stop(self):
         self._inspecting_client.stop()
 
+    def until_stopped(self, timeout=None):
+        """Return future that resolves when the inspecting client has stopped
+
+        See the `DeviceClient.until_stopped` docstring for parameter
+        definitions and more info.
+        """
+        return self._inspecting_client.until_stopped(timeout)
+
     def __repr__(self):
         return '<{module}.{classname}(name={name}) at 0x{id:x}>'.format(
             module=self.__class__.__module__,
@@ -1548,6 +1556,17 @@ class KATCPClientResourceContainer(resource.KATCPResource):
             except Exception:
                 self._logger.exception('Exception stopping child {!r}'
                                        .format(child_name))
+
+    def until_stopped(self, timeout=None):
+        """Return dict of futures that resolve when each child resource has stopped
+
+        See the `DeviceClient.until_stopped` docstring for parameter
+        definitions and more info.
+        """
+        futures = {}
+        for child_name, child in dict.items(self.children):
+            futures[child_name] = child.until_stopped(timeout)
+        return futures
 
     @steal_docstring_from(resource.KATCPResource.wait)
     def wait(self, sensor_name, condition_or_value, timeout=5):

@@ -147,6 +147,9 @@ class DeviceClient(object):
         self._bindaddr = (host, port)
         self._tb_limit = tb_limit
         self._logger = logger
+        # Indicate that client's main coroutine is not running
+        self._stopped = AsyncEvent()
+        self._stopped.set()
         # Indicate that client is running and ready connect
         self._running = AsyncEvent()
         # Indicate that the client is waiting for a reconnect. Purely for testing.
@@ -639,36 +642,41 @@ class DeviceClient(object):
 
     @gen.coroutine
     def _install(self):
-        ioloop_before = self.ioloop
-        # Do stuff to put us on the IOLoop
-        self._logger.debug("Starting client loop for {0!r}"
-                           .format(self._bindaddr))
-        self.ioloop_thread_id = get_thread_ident()
-        self._tcp_client = tornado.tcpclient.TCPClient()
-        self._running.set()
-        yield self._connect()
-        if self._stream is None and not self._auto_reconnect:
-            raise KatcpClientError("Failed to connect to {0!r}"
-                                   .format(self._bindaddr))
+        self._stopped.clear()
         try:
-            yield self._connect_loop()
-        except Exception:
-            self._logger.exception('Unhandled exception in _connect_loop()')
-        finally:
+            ioloop_before = self.ioloop
+            # Do stuff to put us on the IOLoop
+            self._logger.debug("Starting client loop for {0!r}"
+                               .format(self._bindaddr))
+            self.ioloop_thread_id = get_thread_ident()
+            self._tcp_client = tornado.tcpclient.TCPClient()
+            self._running.set()
+            yield self._connect()
+            if self._stream is None and not self._auto_reconnect:
+                raise KatcpClientError("Failed to connect to {0!r}"
+                                       .format(self._bindaddr))
             try:
-                # Make sure everything is torn down properly
-                if ioloop_before == self.ioloop:
-                    # But only if we are still using the same ioloop. If the ioloop has
-                    # changed that means this client has been stopped and re-started
-                    # before we could get back to this finally clause. This would result
-                    # in us stopping the new ioloop. D'oh!
-                    self.ioloop.add_callback(self.stop)
-            except RuntimeError, e:
-                if str(e) == 'IOLoop is closing':
-                    # Seems the ioloop was stopped already, no worries.
-                    self._running.clear()
-            self._logger.info("Client connect loop for {0!r} finished."
-                              .format(self._bindaddr))
+                yield self._connect_loop()
+            except Exception:
+                self._logger.exception('Unhandled exception in _connect_loop()')
+            finally:
+                try:
+                    # Make sure everything is torn down properly
+                    if ioloop_before == self.ioloop:
+                        # But only if we are still using the same ioloop. If the ioloop has
+                        # changed that means this client has been stopped and re-started
+                        # before we could get back to this finally clause. This would result
+                        # in us stopping the new ioloop. D'oh!
+                        if self.running():
+                            self.stop()
+                except RuntimeError, e:
+                    if str(e) == 'IOLoop is closing':
+                        # Seems the ioloop was stopped already, no worries.
+                        self._running.clear()
+                self._logger.info("Client connect loop for {0!r} finished."
+                                  .format(self._bindaddr))
+        finally:
+            self._stopped.set()
 
     @gen.coroutine
     def _connect_loop(self):
@@ -682,7 +690,9 @@ class DeviceClient(object):
                 self.ioloop.add_callback(self._waiting_to_retry.set)
                 yield until_later(self.auto_reconnect_delay)
                 self._waiting_to_retry.clear()
-                yield self._connect()
+                # client may have been stopped while waiting on reconnect delay
+                if self.running():
+                    yield self._connect()
             else:
                 break
             # Allow stream-close handlers etc to run
@@ -852,32 +862,81 @@ class DeviceClient(object):
 
         Notes
         -----
-        Does nothing if the ioloop is not managed.
+        Does nothing if the ioloop is not managed.  Use until_stopped() instead.
 
         """
         self._ioloop_manager.join(timeout)
 
     def stop(self, timeout=None):
-        """Stop a running client (from another thread).
+        """Stop a running client.
+
+        If using a managed ioloop, this must be called from a different
+        thread to the ioloop's.  This method only returns once the client's
+        main coroutine, `_install()`, has completed.
+
+        If using an unmanaged ioloop, this can be called from the
+        same thread as the ioloop.  The `until_stopped()` method can be
+        used to wait on completion of the main coroutine, `_install()`.
 
         Parameters
         ----------
         timeout : float in seconds
-           Seconds to wait for client thread to have *started*.
+           Seconds to wait for both client thread to have *started*, and
+           for stopping.
 
         """
         ioloop = getattr(self, 'ioloop', None)
         if not ioloop:
             raise RuntimeError('Call start() before stop()')
-        if timeout:
-            if get_thread_ident() == self.ioloop_thread_id:
-                raise RuntimeError('Cannot block inside ioloop')
-            self._running.wait_with_ioloop(self.ioloop, timeout)
 
-        def _cleanup():
+        def _stop_from_non_ioloop_thread():
+            if timeout:
+                self._running.wait_with_ioloop(self.ioloop, timeout)
+            # clear _running before disconecting to allow line_read_loop
+            # and connect_loop to exit
             self._running.clear()
             self._disconnect()
-        self._ioloop_manager.stop(timeout=timeout, callback=_cleanup)
+            self._stopped.wait_with_ioloop(self.ioloop, timeout)
+
+        @tornado.gen.coroutine
+        def _stop_from_ioloop_thread():
+            if timeout:
+                yield self._running.until_set(timeout)
+            self._running.clear()
+            self._disconnect()
+            # Note:  caller should yield on until_stopped()
+
+        if get_thread_ident() == self.ioloop_thread_id:
+            callback = _stop_from_ioloop_thread
+        else:
+            _stop_from_non_ioloop_thread()
+            callback = None
+        res = self._ioloop_manager.stop(timeout=timeout, callback=callback)
+
+    def until_stopped(self, timeout=None):
+        """Return future that resolves when the client has stopped.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for the client to stop.
+
+        Notes
+        -----
+
+        If already running, `stop()` must be called before this.
+
+        Must be called from the same ioloop as the client.
+        If using a different thread, or a managed ioloop, this
+        method should not be used.  Use `join()` instead.
+
+        Also note that stopped != not running.  Stopped means the
+        main coroutine has ended, or was never started.  When stopping,
+        the running flag is cleared some time before stopped is set.
+
+        """
+        assert get_thread_ident() == self.ioloop_thread_id
+        return self._stopped.until_set(timeout=timeout)
 
     def running(self):
         """Whether the client is running.
@@ -967,6 +1026,26 @@ class DeviceClient(object):
 
         """
         return self._connected.wait_with_ioloop(self.ioloop, timeout)
+
+    def wait_disconnected(self, timeout=None):
+        """Wait until the client is disconnected.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for the client to disconnect.
+
+        Returns
+        -------
+        disconnected : bool
+            Whether the client is disconnected.
+
+        Notes
+        -----
+        Do not call this from the ioloop, use until_disconnected().
+
+        """
+        return self._disconnected.wait_with_ioloop(self.ioloop, timeout)
 
     @tornado.gen.coroutine
     def until_protocol(self, timeout=None):

@@ -510,14 +510,22 @@ class InspectingClientAsync(object):
 
     def start(self, timeout=None):
         """
-        Note: always call stop() when you are done with the container
-        to make sure the container cleans up correctly.
+        Note: always call stop() and wait until_stopped() when you are done
+        with the container to make sure the container cleans up correctly.
         """
         return self.connect(timeout)
 
     def stop(self, timeout=None):
         self._running = False
         self.katcp_client.stop(timeout)
+
+    def until_stopped(self, timeout=None):
+        """Return future that resolves when the client has stopped
+
+        See the `DeviceClient.until_stopped` docstring for parameter
+        definitions and more info.
+        """
+        return self.katcp_client.until_stopped(timeout)
 
     def join(self, timeout=None):
         self.katcp_client.join(timeout)
@@ -1050,4 +1058,3 @@ class InspectingClientAsync(object):
                 added_keys.add(key)
 
         return added_keys, removed_keys
-

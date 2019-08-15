@@ -1,9 +1,11 @@
 from __future__ import division
 
+import collections
+import gc
 import logging
 import time
-import collections
 import unittest2 as unittest
+import weakref
 
 import tornado
 import mock
@@ -15,8 +17,8 @@ from concurrent.futures import Future
 from katcp import Sensor, Message
 from katcp.testutils import (DeviceTestServer,
                              DeviceTestServerWithTimeoutHints,
-                             start_thread_with_cleanup,
-                             DeviceTestSensor)
+                             DeviceTestSensor,
+                             start_thread_with_cleanup)
 from katcp import inspecting_client
 from katcp.inspecting_client import InspectingClientAsync
 
@@ -430,6 +432,23 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         rf.assert_called_once_with(
             name='watchdog', description=mock.ANY, timeout_hint=None)
 
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_usage(self):
+        client = InspectingClientAsync(self.host, self.port, ioloop=self.io_loop)
+        wr = weakref.ref(client)
+
+        yield client.connect()
+        yield client.until_synced()
+        client.stop()
+        yield client.until_stopped()
+        client.join()
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+
 class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
     longMessage = True
     maxDiff = None
@@ -513,7 +532,6 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
             sensors=dict(added=set(server_sensors), removed=set()),
             requests=dict(added=set(server_requests), removed=set())))
 
-
     @tornado.testing.gen_test(timeout=1)
     def test_reconnect(self):
         self.client.connect()
@@ -559,8 +577,6 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self._test_expected_model_changes(model_changes)
         yield self.client.until_synced()
         self.assertTrue(self.client.synced)
-
-
 
     @tornado.testing.gen_test(timeout=1)
     def test_help_inspection_error(self):

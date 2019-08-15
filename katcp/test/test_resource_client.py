@@ -1,4 +1,3 @@
-from __future__ import print_function, division, absolute_import
 ###############################################################################
 # SKA South Africa (http://ska.ac.za/)                                        #
 # Author: cam@ska.ac.za                                                       #
@@ -16,11 +15,13 @@ from builtins import str
 from builtins import object
 #
 
-import unittest
-import logging
 import copy
-import time
+import gc
+import logging
 import threading
+import time
+import unittest
+import weakref
 
 import tornado
 import mock
@@ -30,9 +31,11 @@ from functools import partial
 
 from concurrent.futures import TimeoutError
 
-from katcp.testutils import (DeviceTestServer, DeviceTestSensor,
-                             start_thread_with_cleanup, TimewarpAsyncTestCase,
-                             TimewarpAsyncTestCaseTimeAdvancer)
+from katcp.testutils import (DeviceTestSensor,
+                             DeviceTestServer,
+                             TimewarpAsyncTestCase,
+                             TimewarpAsyncTestCaseTimeAdvancer,
+                             start_thread_with_cleanup)
 
 from katcp import resource, inspecting_client, ioloop_manager, Message, Sensor
 from katcp.core import AttrDict, AsyncEvent, ProtocolFlags
@@ -453,6 +456,19 @@ class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
         # Check if sensor/request was removed
         self.assertEqual(set(DUT.sensor), sensors_before)
         self.assertEqual(set(DUT.req), reqs_before)
+
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_usage(self):
+        DUT = yield self._get_DUT_and_sync(self.default_resource_spec)
+        wr = weakref.ref(DUT)
+
+        DUT.stop()
+        yield DUT.until_stopped()
+
+        # clear strong reference and check if object can be garbage collected
+        DUT = None
+        gc.collect()
+        self.assertIsNone(wr())
 
 
 class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
@@ -1219,6 +1235,21 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
                 self.assertTrue(result[client.name])
             else:
                 self.assertFalse(result[client.name])
+
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_usage(self):
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        wr = weakref.ref(DUT)
+
+        DUT.start()
+        yield DUT.until_synced()
+        DUT.stop()
+        yield DUT.until_stopped()
+
+        # clear strong reference and check if object can be garbage collected
+        DUT = None
+        gc.collect()
+        self.assertIsNone(wr())
 
 
 class test_AttrMappingProxy(unittest.TestCase):
