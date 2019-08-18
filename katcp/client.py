@@ -909,7 +909,7 @@ class DeviceClient(object):
         else:
             _stop_from_non_ioloop_thread()
             callback = None
-        res = self._ioloop_manager.stop(timeout=timeout, callback=callback)
+        self._ioloop_manager.stop(timeout=timeout, callback=callback)
 
     def until_stopped(self, timeout=None):
         """Return future that resolves when the client has stopped.

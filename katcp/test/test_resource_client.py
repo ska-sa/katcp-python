@@ -23,8 +23,8 @@ import time
 import unittest
 import weakref
 
-import tornado
 import mock
+import tornado
 
 from _thread import get_ident as get_thread_ident
 from functools import partial
@@ -372,7 +372,7 @@ class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
 
     @tornado.gen.coroutine
     def _get_DUT_and_sync(self, resource_spec):
-        DUT = resource_client.KATCPClientResource(self.default_resource_spec)
+        DUT = resource_client.KATCPClientResource(resource_spec)
         DUT.start()
         yield DUT.until_state('synced')
         raise tornado.gen.Return(DUT)

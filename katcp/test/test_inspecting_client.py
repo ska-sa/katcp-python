@@ -4,23 +4,22 @@ import collections
 import gc
 import logging
 import time
-import unittest2 as unittest
 import weakref
 
-import tornado
 import mock
+import tornado
+import unittest2 as unittest
 
 import katcp
 
 from concurrent.futures import Future
 
-from katcp import Sensor, Message
-from katcp.testutils import (DeviceTestServer,
-                             DeviceTestServerWithTimeoutHints,
-                             DeviceTestSensor,
-                             start_thread_with_cleanup)
-from katcp import inspecting_client
+from katcp import Message, Sensor, inspecting_client
 from katcp.inspecting_client import InspectingClientAsync
+from katcp.testutils import (DeviceTestSensor,
+                             DeviceTestServer,
+                             DeviceTestServerWithTimeoutHints,
+                             start_thread_with_cleanup)
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@
 
 """Tests for the server module.
    """
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
 
 import errno
 import gc
@@ -16,17 +16,18 @@ import sys
 import thread
 import threading
 import time
-import unittest2 as unittest
 import weakref
 
 import mock
 import tornado.testing
+import unittest2 as unittest
 
 import katcp
 
-from concurrent.futures import Future
 from collections import defaultdict
 from functools import partial, wraps
+
+from concurrent.futures import Future
 from tornado import gen
 
 from katcp.testutils import (

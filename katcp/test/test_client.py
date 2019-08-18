@@ -6,16 +6,17 @@
 
 """Tests for client module."""
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
 
 import gc
 import logging
-import mock
 import threading
 import time
+import weakref
+
+import mock
 import tornado.testing
 import unittest2 as unittest
-import weakref
 
 import katcp
 
@@ -23,8 +24,7 @@ from concurrent.futures import Future
 
 from tornado import gen
 
-from katcp.core import ProtocolFlags, Message
-
+from katcp.core import Message, ProtocolFlags
 from katcp.testutils import (DeviceTestServer,
                              TestLogHandler,
                              TestUtilMixin,
@@ -324,15 +324,27 @@ class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
         start_thread_with_cleanup(self, self.server, start_timeout=0.1)
         self.host, self.port = self.server.bind_address
 
+    def use_on_managed_ioloop(self, client, timeout=0.1):
+        client.start(timeout=timeout)
+        client.wait_protocol(timeout=timeout)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=timeout)
+        client.join(timeout=timeout)
+
+    @gen.coroutine
+    def use_on_unmanaged_ioloop(self, client, timeout=0.1):
+        client.set_ioloop(self.io_loop)
+        client.start(timeout=timeout)
+        yield client.until_protocol(timeout=timeout)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=timeout)
+        yield client.until_stopped(timeout=timeout)
+
     def test_no_memory_leak_managed_ioloop(self):
         client = katcp.DeviceClient(self.host, self.port)
         wr = weakref.ref(client)
 
-        client.start(timeout=0.1)
-        client.wait_protocol(timeout=0.1)
-        self.assertTrue(client.protocol_flags)
-        client.stop(timeout=0.1)
-        client.join(timeout=0.1)
+        self.use_on_managed_ioloop(client)
 
         # clear strong reference and check if object can be garbage collected
         client = None
@@ -345,12 +357,7 @@ class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
         wr = weakref.ref(client)
 
         # use test's ioloop, so client does not create its own (i.e., unmanaged)
-        client.set_ioloop(self.io_loop)
-        client.start(timeout=0.1)
-        yield client.until_protocol(timeout=0.1)
-        self.assertTrue(client.protocol_flags)
-        client.stop(timeout=0.1)
-        yield client.until_stopped(timeout=0.1)
+        yield self.use_on_unmanaged_ioloop(client)
 
         # clear strong reference and check if object can be garbage collected
         client = None
@@ -363,26 +370,13 @@ class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
         wr = weakref.ref(client)
 
         # start and stop client with managed ioloop
-        client.start(timeout=0.1)
-        client.wait_protocol(timeout=0.1)
-        self.assertTrue(client.protocol_flags)
-        client.stop(timeout=0.1)
-        client.join(timeout=0.1)
+        self.use_on_managed_ioloop(client)
 
         # repeat with managed ioloop (new ioloop instance created)
-        client.start(timeout=0.1)
-        client.wait_protocol(timeout=0.1)
-        self.assertTrue(client.protocol_flags)
-        client.stop(timeout=0.1)
-        client.join(timeout=0.1)
+        self.use_on_managed_ioloop(client)
 
         # change to unmanaged ioloop
-        client.set_ioloop(self.io_loop)
-        client.start(timeout=0.1)
-        yield client.until_protocol(timeout=0.1)
-        self.assertTrue(client.protocol_flags)
-        client.stop(timeout=0.1)
-        yield client.until_stopped(timeout=0.1)
+        yield self.use_on_unmanaged_ioloop(client)
 
         # clear strong reference and check if object can be garbage collected
         client = None
@@ -393,11 +387,7 @@ class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
         client = katcp.AsyncClient(self.host, self.port)
         wr = weakref.ref(client)
 
-        client.start(timeout=0.1)
-        client.wait_protocol(timeout=0.1)
-        self.assertTrue(client.protocol_flags)
-        client.stop(timeout=0.1)
-        client.join(timeout=0.1)
+        self.use_on_managed_ioloop(client)
 
         # clear strong reference and check if object can be garbage collected
         client = None
@@ -408,11 +398,7 @@ class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
         client = katcp.CallbackClient(self.host, self.port)
         wr = weakref.ref(client)
 
-        client.start(timeout=0.1)
-        client.wait_protocol(timeout=0.1)
-        self.assertTrue(client.protocol_flags)
-        client.stop(timeout=0.1)
-        client.join(timeout=0.1)
+        self.use_on_managed_ioloop(client)
 
         # clear strong reference and check if object can be garbage collected
         client = None
