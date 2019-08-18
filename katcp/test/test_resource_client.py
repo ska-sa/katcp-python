@@ -1251,6 +1251,50 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         gc.collect()
         self.assertIsNone(wr())
 
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_until_not_synced(self):
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        wr = weakref.ref(DUT)
+
+        DUT.start()
+        yield DUT.until_synced()
+        # call, but don't yield on until_not_synced - we are testing if
+        # stopping cleans up the futures it is waiting on
+        DUT.until_not_synced()
+        DUT.stop()
+        yield DUT.until_stopped()
+
+        # clear strong reference and check if object can be garbage collected
+        DUT = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    @unittest.skip('TODO: (AJ) Fix clean exit while syncing')
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_until_synced(self):
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        wr = weakref.ref(DUT)
+
+        DUT.start()
+        yield DUT.until_synced()
+        self.servers['resource1'].mass_inform(Message.inform('interface-changed'))
+        yield DUT.until_not_synced()
+        # call, but don't yield on until_synced - we are testing if
+        # stopping cleans up the futures it is waiting on
+        DUT.until_synced()
+        # TODO: (AJ)  Additional note:
+        # This test is skipped because the fix hasn't been found.
+        # The test fails regardless of whether `until_synced` is called.
+        # The problem is to do with stopping while sync is in progress - the
+        # container keeps references to the children.
+        DUT.stop()
+        yield DUT.until_stopped()
+
+        # clear strong reference and check if object can be garbage collected
+        DUT = None
+        gc.collect()
+        self.assertIsNone(wr())
+
 
 class test_AttrMappingProxy(unittest.TestCase):
     def test_wrapping(self):

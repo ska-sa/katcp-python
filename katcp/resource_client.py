@@ -1738,7 +1738,11 @@ def monitor_resource_sync_state(resource, callback, exit_event=None):
 
     Calls callback(True/False) whenever the resource becomes synced or unsynced. Will
     always do an initial callback(False) call. Exits without calling callback() if
-    exit_event is set
+    exit_event is set.
+
+    Warning:  set the monitor's exit_event before stopping the resources being
+    monitored, otherwise it could result in a memory leak.  The `until_synced()` or
+    `until_not_synced()` methods could keep a reference to the resource alive.
     """
     exit_event = exit_event or AsyncEvent()
     callback(False)        # Initial condition, assume resource is not connected

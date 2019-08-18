@@ -471,6 +471,13 @@ class InspectingClientAsync(object):
                 continue
             else:
                 self.resync_delay.success()
+        try:
+            self._logger.debug('{}: Sending final state - loop ended'
+                               .format(self.bind_address_string))
+            yield self._send_state(connected=False, synced=False,
+                                   model_changed=False, data_synced=False)
+        except Exception:
+            self._logger.exception('Unhandled exception after client-sync loop ended.')
 
     @tornado.gen.coroutine
     def _send_state(self, connected, synced, model_changed, data_synced,

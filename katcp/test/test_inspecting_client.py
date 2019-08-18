@@ -547,6 +547,24 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self.assertIs(model_changes, None)
         yield self._check_cb_count(num_calls_before + 1)
 
+    @tornado.testing.gen_test(timeout=1)
+    def test_stop(self):
+        self.client.connect()
+        yield self.client.until_synced()
+        yield tornado.gen.moment   # Make sure the ioloop is 'caught up'
+
+        # stop and check that the callback is called
+        num_calls_before = len(self.done_state_cb_futures)
+        next_state_cb_future = self.state_cb_future
+        self.client.stop()
+        yield self.client.until_stopped()
+        self.client.join()
+        state, model_changes = yield next_state_cb_future
+        self.assertEqual(state, inspecting_client.InspectingClientStateType(
+            connected=False, synced=False, model_changed=False, data_synced=False))
+        self.assertIs(model_changes, None)
+        yield self._check_cb_count(num_calls_before + 1)
+
     @tornado.gen.coroutine
     def _test_inspection_error(self, break_var, break_message):
         # Test that the client retries if there is an error in the inspection
