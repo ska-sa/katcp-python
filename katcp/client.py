@@ -886,30 +886,21 @@ class DeviceClient(object):
         ioloop = getattr(self, 'ioloop', None)
         if not ioloop:
             raise RuntimeError('Call start() before stop()')
+        stopped_from_ioloop_thread = get_thread_ident() == self.ioloop_thread_id
 
-        def _stop_from_non_ioloop_thread():
+        @tornado.gen.coroutine
+        def _stop():
             if timeout:
-                self._running.wait_with_ioloop(self.ioloop, timeout)
+                yield self._running.until_set(timeout)
             # clear _running before disconecting to allow line_read_loop
             # and connect_loop to exit
             self._running.clear()
             self._disconnect()
-            self._stopped.wait_with_ioloop(self.ioloop, timeout)
+            if not stopped_from_ioloop_thread:
+                yield self._stopped.until_set(timeout)
+            # else unmanaged ioloop, so caller should yield on until_stopped()
 
-        @tornado.gen.coroutine
-        def _stop_from_ioloop_thread():
-            if timeout:
-                yield self._running.until_set(timeout)
-            self._running.clear()
-            self._disconnect()
-            # Note:  caller should yield on until_stopped()
-
-        if get_thread_ident() == self.ioloop_thread_id:
-            callback = _stop_from_ioloop_thread
-        else:
-            _stop_from_non_ioloop_thread()
-            callback = None
-        self._ioloop_manager.stop(timeout=timeout, callback=callback)
+        self._ioloop_manager.stop(timeout=timeout, callback=_stop)
 
     def until_stopped(self, timeout=None):
         """Return future that resolves when the client has stopped.
