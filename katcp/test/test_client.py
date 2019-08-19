@@ -405,24 +405,6 @@ class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
         gc.collect()
         self.assertIsNone(wr())
 
-    def test_no_memory_leak_already_disconnected(self):
-        client = katcp.DeviceClient(self.host, self.port, auto_reconnect=False)
-        wr = weakref.ref(client)
-
-        client.start(timeout=0.1)
-        client.wait_protocol(timeout=0.1)
-        self.assertTrue(client.protocol_flags)
-        # disconnect client before stopping
-        client.disconnect()
-        client.wait_disconnected(timeout=0.1)
-        client.stop(timeout=0.1)
-        client.join(timeout=0.1)
-
-        # clear strong reference and check if object can be garbage collected
-        client = None
-        gc.collect()
-        self.assertIsNone(wr())
-
     def test_no_memory_leak_stopped_server(self):
         client = katcp.DeviceClient(self.host, self.port)
         wr = weakref.ref(client)
