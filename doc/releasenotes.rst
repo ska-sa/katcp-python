@@ -10,6 +10,35 @@ Release Notes
 
 See also :download:`CHANGELOG` for more details on changes.
 
+Important API changes
+---------------------
+
+Stopping KATCP clients
+^^^^^^^^^^^^^^^^^^^^^^
+
+When stopping KATCP client classes that use a *managed* ioloop (i.e., create their
+own in a new thread), the traditional semantics are to call ``stop()`` followed by
+``join()`` from another thread.  This is unchanged.  In the case of an *unmanaged*
+ioloop (i.e., an existing ioloop instance is provided to the client), we typically
+stop from the same thread, and calling ``join()`` does nothing.  For the case of
+*unmanaged* ioloops, a new method, ``until_stopped()``, has been added.  It returns a
+future that resolves when the client has stopped.  The caller can ``yield`` on this
+future to be sure that the client has completed all its coroutines.  Using this new
+method is not required.  If the ioloop will keep running, the stopped client's
+coroutines will eventually exit.  However, it is useful in some cases, e.g., to
+verify correct clean up in unit tests.
+
+The new method is available on :class:`katcp.DeviceClient` and derived classes, on
+:class:`katcp.inspecting_client.InspectingClientAsync`, and on the high-level
+clients :class:`katcp.KATCPClientResource` and
+:class:`katcp.KATCPClientResourceContainer`.
+
+An additional change is that the inspecting client now sends a state update
+(indicating that it is disconnected and not synced) when stopping.  This means
+high-level clients that were waiting on ``until_not_synced`` when the client was
+stopped will now be notified.  Previously, this was not the case.
+
+
 0.6.3
 =====
 * Put docs on readthedocs.
