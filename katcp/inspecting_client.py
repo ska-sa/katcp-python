@@ -471,6 +471,13 @@ class InspectingClientAsync(object):
                 continue
             else:
                 self.resync_delay.success()
+        try:
+            self._logger.debug('{}: Sending final state - loop ended'
+                               .format(self.bind_address_string))
+            yield self._send_state(connected=False, synced=False,
+                                   model_changed=False, data_synced=False)
+        except Exception:
+            self._logger.exception('Unhandled exception after client-sync loop ended.')
 
     @tornado.gen.coroutine
     def _send_state(self, connected, synced, model_changed, data_synced,
@@ -510,14 +517,22 @@ class InspectingClientAsync(object):
 
     def start(self, timeout=None):
         """
-        Note: always call stop() when you are done with the container
-        to make sure the container cleans up correctly.
+        Note: always call stop() and wait until_stopped() when you are done
+        with the container to make sure the container cleans up correctly.
         """
         return self.connect(timeout)
 
     def stop(self, timeout=None):
         self._running = False
         self.katcp_client.stop(timeout)
+
+    def until_stopped(self, timeout=None):
+        """Return future that resolves when the client has stopped
+
+        See the `DeviceClient.until_stopped` docstring for parameter
+        definitions and more info.
+        """
+        return self.katcp_client.until_stopped(timeout)
 
     def join(self, timeout=None):
         self.katcp_client.join(timeout)
@@ -1050,4 +1065,3 @@ class InspectingClientAsync(object):
                 added_keys.add(key)
 
         return added_keys, removed_keys
-

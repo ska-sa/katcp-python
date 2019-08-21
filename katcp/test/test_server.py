@@ -6,25 +6,28 @@
 
 """Tests for the server module.
    """
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
 
-import unittest2 as unittest
-import sys
-import socket
 import errno
-import time
+import gc
 import logging
+import socket
+import sys
 import thread
 import threading
+import time
+import weakref
 
 import mock
 import tornado.testing
+import unittest2 as unittest
 
 import katcp
 
-from concurrent.futures import Future
 from collections import defaultdict
 from functools import partial, wraps
+
+from concurrent.futures import Future
 from tornado import gen
 
 from katcp.testutils import (
@@ -355,6 +358,24 @@ class test_DeviceServerAsync(test_DeviceServer):
         super(test_DeviceServerAsync, self).setUp()
         self.server.set_concurrency_options(
             thread_safe=False, handler_thread=False)
+
+
+class test_DeviceServerMemoryLeaks(unittest.TestCase):
+
+    def test_no_memory_leak_after_usage(self):
+        server = DeviceTestServer('', 0)
+        wr = weakref.ref(server)
+
+        server.start()
+        server.wait_running(timeout=1)
+        server.stop()
+        server.join()
+
+        # clear strong reference and check if object can be garbage collected
+        server = None
+        gc.collect()
+        self.assertIsNone(wr())
+
 
 class test_DeviceServer51(test_DeviceServer):
     """Proposed additional tests for Verion 5.1 server"""
