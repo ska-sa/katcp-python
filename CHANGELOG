@@ -1,3 +1,8 @@
+22 August 2019 (0.6.4)
+* Fix some client memory leaks, and add `until_stopped` methods (PR #206).
+* Increase server's MAX_QUEUE_SIZE from 30 to 300 to handle more simultaneous
+  client connections (PR #208).
+
 14 May 2019 (0.6.3)
 * Put docs on readthedocs (PR #192).
 * Added error handling when parsing Message arguments that include non-ASCII
@@ -12,7 +17,8 @@
 * Provide a meaningful error message for the DeviceMetaClass assert statements
   (PR #198).
 * Increase server's MAX_QUEUE_SIZE from 30 to 300 to handle more simultaneous
-  client connections (PR #199).
+  client connections (PR #199).  (Not in release 0.6.3 - it was only on the
+  release/karoocamv20 branch)
 * Updates to Jenkinsfile for pipeline improvements (PR #200, #201, #202).
 * Add information on how to contribute to the project (PR #203).
 

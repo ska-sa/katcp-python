@@ -3,6 +3,13 @@
 *************
 Release Notes
 *************
+0.6.4
+=====
+* Fix some client memory leaks, and add `until_stopped` methods.
+* Increase server MAX_QUEUE_SIZE to handle more clients.
+
+See also :download:`CHANGELOG` for more details on changes.
+
 0.6.3
 =====
 * Put docs on readthedocs.
