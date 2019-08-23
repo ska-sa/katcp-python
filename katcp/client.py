@@ -147,46 +147,63 @@ class DeviceClient(object):
         self._bindaddr = (host, port)
         self._tb_limit = tb_limit
         self._logger = logger
-        # Indicate that client's main coroutine is not running
-        self._stopped = AsyncEvent()
-        self._stopped.set()
-        # Indicate that client is running and ready connect
-        self._running = AsyncEvent()
-        # Indicate that the client is waiting for a reconnect. Purely for testing.
-        self._waiting_to_retry = AsyncEvent()
-        # Indicate that client is connected to its server
-        self._connected = AsyncEvent()
-        # Indicate that the client is disconnected
-        self._disconnected = AsyncEvent()
-        self._disconnected.set()
-        # Indicate that client has received KATCP protocol info from its server
-        self._received_protocol_info = AsyncEvent()
         self._auto_reconnect = auto_reconnect
         # Number of seconds to wait before retrying a connection
         self.auto_reconnect_delay = 0.5
         self._connect_failures = 0
-        self._server_supports_ids = False
-        self._protocol_flags = None
         self._static_protocol_configuration = False
+        self._static_protocol_flags = None
         # Last used unique message id counter
         self._last_msg_id = 0
-
+        # The Tornado IOloop to use, set by self.set_ioloop()
         self._ioloop = None
-        "The Tornado IOloop to use, set by self.set_ioloop()"
         # ID of Thread that hosts the IOLoop.
         # Used to check that we are running in the ioloop.
         self.ioloop_thread_id = None
         self._ioloop_manager = IOLoopManager(managed_default=True)
+        # Indicate thread safety. Managed by self.enable_thread_safety()
+        self._threadsafe = False
+        # Last time a connection was made in seconds since Unix Epoch
+        self.last_connect_time = None
+        self._init_state_per_run(ioloop=None)
+
+    def _init_state_per_run(self, ioloop):
+        """Initialise all state that can change per start..stop run.
+
+        The client can be started and stopped multiple times.  This method
+        initialises all the variables that keep client state related to a
+        single run.
+
+        This method must only be called from `__init__()`, and `start()` as
+        it modifies the overall state of the client.
+
+        """
+        # Indicate that client's main coroutine is not running
+        self._stopped = AsyncEvent(ioloop=ioloop)
+        self._stopped.set()
+        # Indicate that client is running and ready connect
+        self._running = AsyncEvent(ioloop=ioloop)
+        # Indicate that the client is waiting for a reconnect. Purely for testing.
+        self._waiting_to_retry = AsyncEvent(ioloop=ioloop)
+        # Indicate that client is connected to its server
+        self._connected = AsyncEvent(ioloop=ioloop)
+        # Indicate that the client is disconnected
+        self._disconnected = AsyncEvent(ioloop=ioloop)
+        self._disconnected.set()
+
+        # Indicate that client has received KATCP protocol info from its server
+        self._received_protocol_info = AsyncEvent(ioloop=ioloop)
+        self._server_supports_ids = False
+        self._protocol_flags = None
+        if self._static_protocol_configuration:
+            self.preset_protocol_flags(self._static_protocol_flags)
+
         # Current iostream instance, set by _connect()
         self._stream = None
         # tornado.tcpclient.TCPClient TCP connection factory, set by _install()
         self._tcp_client = None
-        # Indicate thread safety. Managed by self.enable_thread_safety()
-        self._threadsafe = False
         # Version information as received from the server
         self.versions = ObjectDict()
-        # Last time a connection was made in seconds since Unix Epoch
-        self.last_connect_time = None
 
     @property
     def protocol_flags(self):
@@ -263,6 +280,7 @@ class DeviceClient(object):
 
         """
         self._static_protocol_configuration = True
+        self._static_protocol_flags = protocol_flags
         self.protocol_flags = protocol_flags
 
     def inform_version_connect(self, msg):
@@ -845,6 +863,8 @@ class DeviceClient(object):
         if timeout:
             t0 = self.ioloop.time()
         self._ioloop_manager.start(timeout)
+        # update state variables before starting `_install()`
+        self._init_state_per_run(ioloop=self.ioloop)
         self.ioloop.add_callback(self._install)
         if timeout:
             remaining_timeout = timeout - (self.ioloop.time() - t0)

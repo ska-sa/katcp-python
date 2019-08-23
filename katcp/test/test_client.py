@@ -15,6 +15,7 @@ import time
 import weakref
 
 import mock
+import tornado
 import tornado.testing
 import unittest2 as unittest
 
@@ -315,6 +316,18 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
                         "Expected %r to not be %r" % (stream, self.client._stream))
         self.assertEqual(sockname, self.client._stream.socket.getpeername())
 
+    def test_async_events_on_correct_ioloop(self):
+        client = self.client
+        # for managed ioloop, client must be using a different ioloop
+        self.assertNotEqual(client.ioloop, tornado.ioloop.IOLoop.current())
+        # check AsyncEvents (test is a little brittle)
+        self.assertEqual(client.ioloop, client._stopped._ioloop)
+        self.assertEqual(client.ioloop, client._running._ioloop)
+        self.assertEqual(client.ioloop, client._waiting_to_retry._ioloop)
+        self.assertEqual(client.ioloop, client._connected._ioloop)
+        self.assertEqual(client.ioloop, client._disconnected._ioloop)
+        self.assertEqual(client.ioloop, client._received_protocol_info._ioloop)
+
 
 class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
 
@@ -334,7 +347,7 @@ class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
     @gen.coroutine
     def use_on_unmanaged_ioloop(self, client, timeout=0.1):
         client.set_ioloop(self.io_loop)
-        client.start(timeout=timeout)
+        client.start()  # no timeout if starting from ioloop thread
         yield client.until_protocol(timeout=timeout)
         self.assertTrue(client.protocol_flags)
         client.stop(timeout=timeout)
@@ -377,6 +390,28 @@ class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
 
         # change to unmanaged ioloop
         yield self.use_on_unmanaged_ioloop(client)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_stop_current_ioloop(self):
+        # The DeviceClient may use the current ioloop during initialisation.
+        # Similarly, the DeviceTestServer created in setUp() may have references to
+        # the current ioloop.  We make a new instance to replace the current
+        # ioloop, which we can stop without affecting the server.  This test aims
+        # to verify that the client is not dependent on the ioloop that was
+        # current at the time the client was initialised.  This is only for
+        # the "managed" ioloop case.
+        ioloop = tornado.ioloop.IOLoop()
+        tornado.ioloop.IOLoop.make_current(ioloop)
+
+        client = katcp.DeviceClient(self.host, self.port)
+        wr = weakref.ref(client)
+        # close ioloop that was current when client created
+        ioloop.close()
+        self.use_on_managed_ioloop(client)
 
         # clear strong reference and check if object can be garbage collected
         client = None
