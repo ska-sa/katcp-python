@@ -3,6 +3,43 @@
 *************
 Release Notes
 *************
+0.6.4
+=====
+* Fix some client memory leaks, and add `until_stopped` methods.
+* Increase server MAX_QUEUE_SIZE to handle more clients.
+* Use correct ioloop for client AsyncEvent objects.
+
+See also :download:`CHANGELOG` for more details on changes.
+
+Important API changes
+---------------------
+
+Stopping KATCP clients
+^^^^^^^^^^^^^^^^^^^^^^
+
+When stopping KATCP client classes that use a *managed* ioloop (i.e., create their
+own in a new thread), the traditional semantics are to call ``stop()`` followed by
+``join()`` from another thread.  This is unchanged.  In the case of an *unmanaged*
+ioloop (i.e., an existing ioloop instance is provided to the client), we typically
+stop from the same thread, and calling ``join()`` does nothing.  For the case of
+*unmanaged* ioloops, a new method, ``until_stopped()``, has been added.  It returns a
+future that resolves when the client has stopped.  The caller can ``yield`` on this
+future to be sure that the client has completed all its coroutines.  Using this new
+method is not required.  If the ioloop will keep running, the stopped client's
+coroutines will eventually exit.  However, it is useful in some cases, e.g., to
+verify correct clean up in unit tests.
+
+The new method is available on :class:`katcp.DeviceClient` and derived classes, on
+:class:`katcp.inspecting_client.InspectingClientAsync`, and on the high-level
+clients :class:`katcp.KATCPClientResource` and
+:class:`katcp.KATCPClientResourceContainer`.
+
+An additional change is that the inspecting client now sends a state update
+(indicating that it is disconnected and not synced) when stopping.  This means
+high-level clients that were waiting on ``until_not_synced`` when the client was
+stopped will now be notified.  Previously, this was not the case.
+
+
 0.6.3
 =====
 * Put docs on readthedocs.
@@ -261,62 +298,3 @@ This release implements the majority of the KATCP v5 spec; excluded parts are:
 
 * Support for optional warning/error range meta-information on sensors.
 * Differential-rate sensor strategy.
-
-Releasing
----------
-
-Notes for whomever becomes the release manager in the future. This assumes that
-you have `git@github.com:ska-sa/katcp-python.git` (or the https equivalent) as
-your git origin.
-
-* Edit CHANGELOG with the details of the changes, and doc/releasenotes.rst (this
-  file) with the change summary. Consider more detailed document updates /
-  examples.
-
-* Be aware that `https://pypi.python.org/pypi/katversion` generates the version
-  string. katversion looks at git tags to figure out the version number, so we
-  need to add a tag and push that to github.
-
-* Commit and tag the final changes::
-
-    git commit -a -m "Final updates for release 0.X.Y"
-    git tag -a v0.X.Y -m "Version 0.X.Y Stable"
-    git push --tags
-
-* Execute this the first time you do a release::
-
-    pip install sphinx-pypi-upload Sphinx
-    python setup.py register
-
-* Check the documentation by building it (should be in the `build/sphinx/html`
-  directory)::
-
-    python setup.py build_sphinx
-
-* Next execute::
-
-   python setup.py sdist upload
-   python setup.py build_sphinx upload_sphinx --upload-dir=build/sphinx/html
-
-* Check the pypi page to see that the upload and doc build was successful.
-
-* Host package docs on `http://readthedocs.org`
-
-  1. Create an account on Read the Docs. You will get an email verifying your
-     email address which you should accept within 7 days.
-  2. Log in and click on "Import".
-  3. Give your project a name, add the HTTPS link for your GitHub project, and
-     select Git as your repository type.
-  4. Fill in the rest of the form as needed and click "Create".
-  5. Then click "Build"
-
-* Automatically updated when you push to GitHub
-
-  6. On GitHub, navigate to your repository and click on "Settings".
-  7. In the sidebar, click on "Integrations & services", then find and click on
-     the "ReadTheDocs service".
-  8. Check the "Active" setting and click "Update Settings".
-
-* Good, it seems you have managed to release katcp!
-
-  - All done. Commit away and your project will auto-update.
