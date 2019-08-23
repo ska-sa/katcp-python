@@ -7,6 +7,7 @@ Release Notes
 =====
 * Fix some client memory leaks, and add `until_stopped` methods.
 * Increase server MAX_QUEUE_SIZE to handle more clients.
+* Use correct ioloop for client AsyncEvent objects.
 
 See also :download:`CHANGELOG` for more details on changes.
 
