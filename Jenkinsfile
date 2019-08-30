@@ -1,5 +1,4 @@
 pipeline {
-
     agent {
         label 'cambuilder'
     }
@@ -9,7 +8,7 @@ pipeline {
     }
 
     stages {
-        stage ('Checkout SCM') {
+        stage('Checkout SCM') {
             steps {
                 checkout([
                     $class: 'GitSCM',
@@ -26,6 +25,7 @@ pipeline {
             steps {
                 sh "pylint ./${KATPACKAGE} --output-format=parseable --exit-zero > pylint.out"
             }
+
             post {
                 always {
                     recordIssues(tool: pyLint(pattern: 'pylint.out'))
@@ -33,19 +33,35 @@ pipeline {
             }
         }
 
-        stage ('Install & Unit Tests') {
+        stage('Install & Unit Tests') {
             options {
                 timestamps()
-                timeout(time: 30, unit: 'MINUTES') 
+                timeout(time: 30, unit: 'MINUTES')
             }
-            steps {
-                sh 'pip install . -U --user'
-                sh "python setup.py nosetests --with-xunit --with-xcoverage --cover-package=${KATPACKAGE} --cover-inclusive"
-            } 
-            
+
+            environment {
+                test_flags = "--with-xunit --with-xcoverage --cover-package=${KATPACKAGE} --cover-inclusive"
+            }
+
+            parallel {
+                stage('py27') {
+                    steps {
+                        echo "Running nosetests on Python 2.7"
+                        sh 'tox -e py27'
+                    }
+                }
+
+                stage('py36') {
+                    steps {
+                        echo "Running nosetests on Python 3.6"
+                        sh 'tox -e py36'
+                    }
+                }
+            }
+
             post {
                 always {
-                    junit 'nosetests.xml'
+                    junit 'nosetests_*.xml'
                     cobertura coberturaReportFile: 'coverage.xml'
                     archiveArtifacts '*.xml'
                 }
@@ -70,5 +86,4 @@ pipeline {
             }
         }
     }
-
 }
