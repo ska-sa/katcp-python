@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 
 this_directory = os.path.abspath(os.path.dirname(__file__))
 
-files = {"Readme": "README.rst", "Changelog": "CHANGELOG.md"}
+files = {"Readme": "README.md", "Changelog": "CHANGELOG.md"}
 
 long_description = ""
 for name, filename in files.items():
