@@ -5,7 +5,13 @@
 # BSD license - see LICENSE for details
 
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import range
+from builtins import *
+from builtins import object
 import logging
 import random
 import copy
@@ -275,12 +281,12 @@ class InspectingClientAsync(object):
     @property
     def sensors(self):
         """A list of known sensors."""
-        return self._sensors_index.keys()
+        return list(self._sensors_index.keys())
 
     @property
     def requests(self):
         """A list of possible requests."""
-        return self._requests_index.keys()
+        return list(self._requests_index.keys())
 
     @property
     def connected(self):
@@ -542,7 +548,7 @@ class InspectingClientAsync(object):
             index[name] = data
         else:
             orig_data = index[name]
-            for key, value in data.items():
+            for key, value in list(data.items()):
                 if orig_data.get(key) != value:
                     orig_data[key] = value
                     orig_data['_changed'] = True
@@ -962,7 +968,7 @@ class InspectingClientAsync(object):
         timestamp = msg.arguments[0]
         num_sensors = int(msg.arguments[1])
         assert len(msg.arguments) == 2 + num_sensors * 3
-        for n in xrange(num_sensors):
+        for n in range(num_sensors):
             name = msg.arguments[2 + n * 3]
             status = msg.arguments[3 + n * 3]
             value = msg.arguments[4 + n * 3]

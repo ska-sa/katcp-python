@@ -2,7 +2,11 @@
 # BSD license - see LICENSE for details
 
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
 import unittest
 import logging
 import mock
@@ -23,7 +27,7 @@ class test_escape_name(unittest.TestCase):
             'blah-bal' : 'blah_bal',
             'bief_bof.ba32f-blief' : 'bief_bof_ba32f_blief',
             'already_escape_name' : 'already_escape_name'}
-        for input, expected_output in desired_mappings.items():
+        for input, expected_output in list(desired_mappings.items()):
             self.assertEqual(resource.escape_name(input), expected_output)
 
 class test_KATCPSensor(TimewarpAsyncTestCase):

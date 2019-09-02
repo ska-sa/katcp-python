@@ -10,7 +10,12 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import input
+from builtins import *
 import logging
 import sys
 import traceback
@@ -49,7 +54,7 @@ if __name__ == "__main__":
     client.start()
     try:
         while True:
-            s = raw_input("> ")
+            s = eval(input("> "))
             try:
                 msg = katcp_parser.parse(s)
                 client.ioloop.add_callback(client.send_message, msg)

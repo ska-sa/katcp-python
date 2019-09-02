@@ -4,7 +4,14 @@
 from __future__ import division
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import range
+from builtins import *
+from builtins import object
 import collections
 import gc
 import logging
@@ -194,7 +201,7 @@ class TestInspectingClientInspect(tornado.testing.AsyncTestCase):
         """
         hints = getattr(server, 'request_timeout_hints', {})
         expected = {}
-        for req, handler in server._request_handlers.items():
+        for req, handler in list(server._request_handlers.items()):
             expected[req] = {'name': req,
                              'description': handler.__doc__,
                              'timeout_hint': hints.get(req)}
@@ -530,8 +537,8 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
     def _test_expected_model_changes(self, model_changes):
         # Check that the model_changes reflect the sensors and requests of the
         # test sever (self.server)
-        server_sensors = self.server._sensors.keys()
-        server_requests = self.server._request_handlers.keys()
+        server_sensors = list(self.server._sensors.keys())
+        server_requests = list(self.server._request_handlers.keys())
         self.assertEqual(model_changes, dict(
             sensors=dict(added=set(server_sensors), removed=set()),
             requests=dict(added=set(server_requests), removed=set())))

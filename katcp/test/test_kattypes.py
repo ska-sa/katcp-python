@@ -8,7 +8,13 @@
    """
 
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import *
+from builtins import object
 import unittest2 as unittest
 import mock
 from katcp import Message, FailReply, AsyncReply

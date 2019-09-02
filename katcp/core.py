@@ -7,7 +7,16 @@
 """Utilities for dealing with KAT device control language messages."""
 
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import next
+from builtins import str
+from builtins import range
+from past.builtins import basestring
+from builtins import *
+from builtins import object
 import re
 import sys
 import time
@@ -192,7 +201,7 @@ class Message(object):
 
     """
     # Message types
-    REQUEST, REPLY, INFORM = range(3)
+    REQUEST, REPLY, INFORM = list(range(3))
 
     # Reply codes
     # TODO: make use of reply codes in device client and server
@@ -216,7 +225,7 @@ class Message(object):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from type code character to message type.
-    TYPE_SYMBOL_LOOKUP = dict((v, k) for k, v in TYPE_SYMBOLS.items())
+    TYPE_SYMBOL_LOOKUP = dict((v, k) for k, v in list(TYPE_SYMBOLS.items()))
 
     # pylint: enable-msg = E0602
 
@@ -236,7 +245,7 @@ class Message(object):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from unescaped string to corresponding escape character.
-    REVERSE_ESCAPE_LOOKUP = dict((v, k) for k, v in ESCAPE_LOOKUP.items())
+    REVERSE_ESCAPE_LOOKUP = dict((v, k) for k, v in list(ESCAPE_LOOKUP.items()))
 
     # pylint: enable-msg = E0602
 
@@ -307,7 +316,7 @@ class Message(object):
                 # with a '?' character
                 logger.error("Error casting message argument to str! "
                              "Trying to encode argument to ascii.")
-                if not isinstance(arg, unicode):
+                if not isinstance(arg, str):
                     arg = arg.decode('utf-8')
                 return arg.encode('ascii', 'replace')
 
@@ -887,7 +896,7 @@ class Sensor(object):
     #
     # type -> (name, formatter, parser)
     (INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE, STRING, TIMESTAMP,
-     ADDRESS) = range(8)
+     ADDRESS) = list(range(8))
 
     ## @brief Mapping from sensor type to tuple containing the type name,
     #  a kattype with functions to format and parse a value and a
@@ -911,10 +920,10 @@ class Sensor(object):
     }
 
     # map type strings to types
-    SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
+    SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in list(SENSOR_TYPES.items()))
 
     # Sensor status constants
-    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE, INACTIVE = range(7)
+    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE, INACTIVE = list(range(7))
 
     ## @brief Mapping from sensor status to status name.
     STATUSES = {
@@ -928,7 +937,7 @@ class Sensor(object):
     }
 
     ## @brief Mapping from status name to sensor status.
-    STATUS_NAMES = dict((v, k) for k, v in STATUSES.items())
+    STATUS_NAMES = dict((v, k) for k, v in list(STATUSES.items()))
 
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = Lru.LRU_NOMINAL, Lru.LRU_ERROR
@@ -940,7 +949,7 @@ class Sensor(object):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from LRU value name to LRU value constant.
-    LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
+    LRU_CONSTANTS = dict((v, k) for k, v in list(LRU_VALUES.items()))
 
     # pylint: enable-msg = E0602
 
@@ -1807,7 +1816,7 @@ def hashable_identity(obj):
         return (id(obj.__func__), id(obj.__self__))
     elif hasattr(obj, 'im_func'):
         return (id(obj.im_func), id(obj.im_func))
-    elif isinstance(obj, (basestring, unicode)):
+    elif isinstance(obj, (basestring, str)):
         return obj
     else:
         return id(obj)

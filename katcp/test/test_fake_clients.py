@@ -2,7 +2,13 @@
 # BSD license - see COPYING for details
 
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import *
+from builtins import object
 import unittest2 as unittest
 import logging
 import copy
@@ -160,7 +166,7 @@ class test_FakeKATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         # FakeInspectingClientManager implements more requests.
         standard_requests = ('help', 'sensor_list')
         controlled_clients = [
-            escape_name(c_name) for c_name, c in self.resources_spec['clients'].items()
+            escape_name(c_name) for c_name, c in list(self.resources_spec['clients'].items())
             if c.get('controlled')]
         desired_requests = sorted(
             escape_name(c)+'_'+r for c in controlled_clients for r in standard_requests)

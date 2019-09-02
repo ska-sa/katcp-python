@@ -1,10 +1,15 @@
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import object
 import unittest
 
-from thread import get_ident as get_thread_ident
+from _thread import get_ident as get_thread_ident
 
 from concurrent.futures import Future
 

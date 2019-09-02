@@ -8,8 +8,12 @@
 # allows us to copy, modify and redistribute this code.
 
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
 
 # Python 2/3 compatibility stuff
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
 from builtins import object
 #
 

@@ -1,9 +1,13 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+from __future__ import unicode_literals
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
 import os
 from setuptools import setup, find_packages
 
@@ -13,7 +17,7 @@ this_directory = os.path.abspath(os.path.dirname(__file__))
 files = {"Readme": "README.md", "Changelog": "CHANGELOG.md"}
 
 long_description = ""
-for name, filename in files.items():
+for name, filename in list(files.items()):
     long_description += "## {}\n".format(name)
     with open(os.path.join(this_directory, filename)) as _f:
         file_contents = _f.read()

@@ -8,18 +8,22 @@
    """
 
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
 import unittest2 as unittest
 import threading
 import time
 import logging
 import katcp
 import mock
-import Queue
+import queue
 import tornado.testing
 import concurrent.futures
 
-from thread import get_ident
+from _thread import get_ident
 from tornado import gen
 from katcp import sampling, Sensor
 from katcp.testutils import (TestLogHandler, DeviceTestSensor, TimewarpAsyncTestCase)

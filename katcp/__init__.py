@@ -6,7 +6,11 @@
 
 """Root of katcp package."""
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
 from .core import (Message, KatcpSyntaxError, MessageParser,
                    DeviceMetaclass, FailReply,
                    AsyncReply, KatcpDeviceError, KatcpClientError,
