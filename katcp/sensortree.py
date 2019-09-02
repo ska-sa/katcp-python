@@ -27,7 +27,7 @@ that the update chain eventually terminates. It is not enforced.
 """
 
 from __future__ import division, print_function, absolute_import
-from __future__ import unicode_literals
+
 
 from future import standard_library
 standard_library.install_aliases()

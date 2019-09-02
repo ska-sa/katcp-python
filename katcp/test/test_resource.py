@@ -2,7 +2,7 @@
 # BSD license - see LICENSE for details
 
 from __future__ import division, print_function, absolute_import
-from __future__ import unicode_literals
+
 
 from future import standard_library
 standard_library.install_aliases()

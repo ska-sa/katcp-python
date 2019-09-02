@@ -7,7 +7,7 @@
 """Tests for the katcp utilities module.
    """
 from __future__ import division, print_function, absolute_import
-from __future__ import unicode_literals
+
 
 # Python 2/3 compatibility stuff
 from future import standard_library
