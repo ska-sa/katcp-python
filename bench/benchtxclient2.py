@@ -1,3 +1,5 @@
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """ This is a benchmark client for scenario 2, which cooperate with
 benchtxserver or benchserver
@@ -15,7 +17,7 @@ TIMEOUT = 0.2
 
 class DemoClient(ClientKatCP):
     counter = 0
-    
+
     def got_sensor_value(self, v):
         self.counter += 1
         self.send_request('sensor-value', 'int_sensor').addCallback(

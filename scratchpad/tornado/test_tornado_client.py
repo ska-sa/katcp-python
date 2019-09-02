@@ -1,3 +1,6 @@
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 from tornado.util import ObjectDict
 from tornado.concurrent import Future as tornado_Future
 from katcp import Sensor

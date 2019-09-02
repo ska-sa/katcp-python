@@ -1,3 +1,6 @@
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 import tornado
 
 from tornado.ioloop import IOLoop

@@ -1,3 +1,6 @@
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 import math
 import json
 
@@ -27,7 +30,7 @@ def compute_all(all):
     colors = ['green', 'red', 'yellow', 'brown']
 
     retval = {}
-    
+
     for ii, result in enumerate(all):
         d = {}
         max_clients = max([i for v, i in result.result])

@@ -1,3 +1,5 @@
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 import sys
 from katcp import DeviceServer, Message, Sensor
@@ -10,7 +12,7 @@ class BenchmarkServer(DeviceServer):
         print "RUNNING"
         sys.stdout.flush()
         return res
-    
+
     def setup_sensors(self):
         pass
 

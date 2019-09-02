@@ -1,8 +1,8 @@
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 import logging
-logging.basicConfig(
-    format="%(asctime)s %(name)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d)%(message)s",
-    level=logging.DEBUG
-)
+
 
 import time
 import threading
@@ -15,6 +15,10 @@ from katcp.testutils import DeviceTestServer
 
 from katcp import resource_client, inspecting_client
 
+logging.basicConfig(
+    format="%(asctime)s %(name)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d)%(message)s",
+    level=logging.DEBUG
+)
 
 log = logging.getLogger(__name__)
 

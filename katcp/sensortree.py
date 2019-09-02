@@ -1,3 +1,6 @@
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 """Sensor tree implementation.
 
 A sensor tree is a DAG (directed acyclic graph) of sensor objects

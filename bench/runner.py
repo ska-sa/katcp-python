@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
