@@ -2,6 +2,9 @@
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
 from optparse import OptionParser
@@ -34,9 +37,9 @@ class Master(object):
                 self.current_iteration += 1
             self.clients = []
             self.run()
-            print "next run"
+            print("next run")
         else:
-            print self.totals
+            print(self.totals)
             reactor.stop()
 
     def notify_connection_made(self, pid):
@@ -99,7 +102,7 @@ class BenchmarkClient(ProcessProtocol):
             if diff < 0.30*avg:
                 self.master.stop()
             else:
-                print diff/avg
+                print(diff/avg)
 
     def errReceived(self, err):
         sys.stdout.write("ERR: " + err)
@@ -144,7 +147,7 @@ class BenchmarkServer(ProcessProtocol):
         self.master.notify_server_lost()
 
     def errReceived(self, err):
-        print "ERR:", err
+        print("ERR:", err)
 
 def main(python=sys.executable):
     parser = OptionParser()

@@ -670,7 +670,7 @@ class KATCPServer(object):
             f = tornado_Future()
             try:
                 f.set_result(fn())
-            except Exception, e:
+            except Exception as e:
                 f.set_exception(e)
                 self._logger.exception('Error executing callback '
                                        'in ioloop thread')
@@ -684,7 +684,7 @@ class KATCPServer(object):
                 def send_message_callback():
                     try:
                         f.set_result(fn())
-                    except Exception, e:
+                    except Exception as e:
                         f.set_exception(e)
                         self._logger.exception(
                             'Error executing wrapped async callback')
@@ -791,9 +791,9 @@ class MessageHandlerThread(object):
     def __init__(self, handler, log_inform_formatter, logger=log):
         self.handler = handler
         try:
-            owner = handler.im_self.name
+            owner = handler.__self__.name
         except AttributeError:
-            owner = handler.im_self.__class__.__name__
+            owner = handler.__self__.__class__.__name__
         self.name = "{}.message_handler" .format(owner)
         self.log_inform_formatter = log_inform_formatter
         self._wake = threading.Event()
@@ -850,7 +850,7 @@ class MessageHandlerThread(object):
                                                      ready_future)
                         else:
                             ready_future.set_result(res)
-                    except Exception, e:
+                    except Exception as e:
                         err_msg = ('Error calling message '
                                    'handler for msg:\n {0!s}'.format(msg))
                         self._logger.error(err_msg, exc_info=True)
@@ -1066,7 +1066,7 @@ class DeviceServerBase(object):
                             connection.reply(f.result(), msg)
                             self._logger.debug("%s FUTURE%s replied",
                                                msg.name, concurrent_str)
-                        except FailReply, e:
+                        except FailReply as e:
                             reason = str(e)
                             self._logger.error("Request %s FUTURE%s FAIL: %s",
                                                msg.name, concurrent_str, reason)
@@ -1102,10 +1102,10 @@ class DeviceServerBase(object):
                     assert (reply.mtype == Message.REPLY)
                     assert (reply.name == msg.name)
                     self._logger.debug("%s OK" % (msg.name,))
-            except AsyncReply, e:
+            except AsyncReply as e:
                 self._logger.debug("%s ASYNC OK" % (msg.name,))
                 send_reply = False
-            except FailReply, e:
+            except FailReply as e:
                 reason = str(e)
                 self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
                 reply = Message.reply(msg.name, "fail", reason)
@@ -1927,7 +1927,7 @@ class DeviceServer(DeviceServerBase):
         if msg.arguments:
             try:
                 self.log.set_log_level_by_name(msg.arguments[0])
-            except ValueError, e:
+            except ValueError as e:
                 raise FailReply(str(e))
         return req.make_reply("ok", self.log.level_name())
 

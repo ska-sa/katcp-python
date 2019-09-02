@@ -1806,7 +1806,7 @@ def hashable_identity(obj):
     if hasattr(obj, '__func__'):
         return (id(obj.__func__), id(obj.__self__))
     elif hasattr(obj, 'im_func'):
-        return (id(obj.im_func), id(obj.im_self))
+        return (id(obj.__func__), id(obj.__self__))
     elif isinstance(obj, (basestring, unicode)):
         return obj
     else:
@@ -1957,7 +1957,7 @@ def until_some(*args, **kwargs):
     maybe_timeout = future_timeout_manager(timeout)
     results = []
     while not wait_iterator.done():
-        result = yield maybe_timeout(wait_iterator.next())
+        result = yield maybe_timeout(next(wait_iterator))
         results.append((wait_iterator.current_index, result))
         if len(results) >= done_at_least:
             break

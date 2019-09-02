@@ -422,7 +422,7 @@ class test_DeviceServer51(test_DeviceServer):
         # cannot add a new attribute to an instance method. For Python 2 we need
         # to make a copy of the original handler function using partial and then
         # mess with that copy.
-        handler_original = self.server._request_handlers['help'].im_func
+        handler_original = self.server._request_handlers['help'].__func__
         handler_updated = wraps(handler_original)(partial(handler_original,
                                                           self.server))
         self.server._request_handlers[

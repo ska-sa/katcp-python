@@ -15,6 +15,9 @@ It will:
 .. [1] http://projects.scipy.org/numpy/wiki/CodingStyleGuidelines#docstring-standard
 
 """
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
 import os, re, pydoc
 from docscrape_sphinx import get_doc_object, SphinxDocString
@@ -107,7 +110,7 @@ def monkeypatch_sphinx_ext_autodoc():
     if sphinx.ext.autodoc.format_signature is our_format_signature:
         return
 
-    print "[numpydoc] Monkeypatching sphinx.ext.autodoc ..."
+    print("[numpydoc] Monkeypatching sphinx.ext.autodoc ...")
     _original_format_signature = sphinx.ext.autodoc.format_signature
     sphinx.ext.autodoc.format_signature = our_format_signature
 

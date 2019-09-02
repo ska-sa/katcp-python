@@ -536,7 +536,7 @@ class TestBlockingClient(unittest.TestCase):
         def blocking_request(*args, **kwargs):
             try:
                 return self.client.blocking_request(*args, **kwargs)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 if not e.args[0].startswith('Request '):
                     raise
 

@@ -4,6 +4,9 @@
 """ This is a benchmark client for scenario 1, which cooperate with
 benchtxserver or benchserver
 """
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
 import time
 import sys
@@ -40,7 +43,8 @@ class DemoClient(ClientKatCP):
             self.sampling = True
             self.send_request('sensor-list').addCallback(self.check_sensor_list)
 
-    def check_sensor_list(self, ((informs, reply))):
+    def check_sensor_list(self, xxx_todo_changeme):
+        ((informs, reply)) = xxx_todo_changeme
         sensor_no = len(informs)
         if self.no_of_sensors < len(informs):
             self.start_sampling(None)
@@ -51,8 +55,8 @@ class DemoClient(ClientKatCP):
         self.avg.append(self.counter)
         if len(self.avg) > 10:
             self.avg.pop(0)
-        print "AVG: %d, LAST: %d, SENSORS: %d" % (
-            sum(self.avg)/len(self.avg), self.counter, self.no_of_sensors)
+        print("AVG: %d, LAST: %d, SENSORS: %d" % (
+            sum(self.avg)/len(self.avg), self.counter, self.no_of_sensors))
         sys.stdout.flush()
         if (not self.options.allow_sensor_creation or
             (abs(self.counter - self.no_of_sensors * 200) <=
@@ -62,7 +66,7 @@ class DemoClient(ClientKatCP):
         reactor.callLater(TIMEOUT, self.periodic_check)
 
     def connectionLost(self, failure):
-        print >>sys.stderr, "Connection lost, exiting"
+        print("Connection lost, exiting", file=sys.stderr)
         if reactor.running:
             reactor.stop()
 
@@ -72,8 +76,8 @@ def connected(protocol, options):
     protocol.sample_next_sensor()
 
 def not_connected(failure):
-    print >>sys.stderr, failure
-    print >>sys.stderr, "Exiting"
+    print(failure, file=sys.stderr)
+    print("Exiting", file=sys.stderr)
     reactor.stop()
 
 if __name__ == '__main__':

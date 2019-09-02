@@ -248,7 +248,7 @@ class FakeInspectingClientManager(object):
         """For compatibility with methods stolen from server.DeviceServer"""
         return self._fkc.request_handlers
 
-    request_help = server.DeviceServer.request_help.im_func
+    request_help = server.DeviceServer.request_help.__func__
 
     def add_sensors(self, sensor_infos):
         """Add fake sensors

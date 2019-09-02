@@ -337,7 +337,7 @@ class BlockingTestClient(client.BlockingClient):
             else:
                 typestr = "%r" % sensortype
                 value = sensortype(value)
-        except ValueError, e:
+        except ValueError as e:
             self.test.fail("Could not convert value %r of sensor '%s' to type "
                            "%s: %s" % (value, sensorname, typestr, e))
 
@@ -347,7 +347,7 @@ class BlockingTestClient(client.BlockingClient):
 
         try:
             timestamp = float(timestamp)
-        except ValueError, e:
+        except ValueError as e:
             self.test.fail("Could not convert timestamp %r of sensor '%s' to "
                            "type %r: %s" % (timestamp, sensorname, float, e))
 
@@ -1197,7 +1197,7 @@ class SensorComparisonMixin(object):
 
         def get_sensor_key(sensor, key):
             try: key_fn = key_fns[key]
-            except KeyError, e: raise KeyError('Unknown sensor key: ' + e.message)
+            except KeyError as e: raise KeyError('Unknown sensor key: ' + e.message)
             return key_fn(sensor)
 
         sensor_description = {}
@@ -1605,7 +1605,7 @@ class SensorTransitionWaiter(object):
                 while True:
                     # Read values from the queue until either the timeout
                     # expires or a value different from the last is found
-                    next_value = nonrepeat_sensor_values.next()
+                    next_value = next(nonrepeat_sensor_values)
                     self.received_values.append(next_value)
                     current_pass = self._test_value(next_value, current_test)
                     next_pass = self._test_value(next_value, next_test)

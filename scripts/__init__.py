@@ -6,3 +6,6 @@
    @author Robert Crida <robert.crida@ska.ac.za>
    @date 2008-10-10
    """
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import

@@ -3,6 +3,9 @@
 
 """ This is a benchmark device server using twisted katcp impl
 """
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
 from twisted.internet import reactor
 from katcp.tx import DeviceServer, DeviceProtocol
@@ -33,7 +36,7 @@ def main():
     parser = standard_parser()
     options, args = parser.parse_args()
     factory = BenchmarkServer(options.port, '')
-    print factory.start().getHost()
+    print(factory.start().getHost())
     sys.stdout.flush()
     reactor.run() # run the main twisted reactor
 

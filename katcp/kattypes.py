@@ -461,14 +461,14 @@ class Struct(KatcpType):
     def encode(self, value, major):
         try:
             return struct.pack(self._fmt, *value)
-        except struct.error, e:
+        except struct.error as e:
             raise ValueError("Could not pack %s into struct with format "
                              "%s: %s" % (value, self._fmt, e))
 
     def decode(self, value, major):
         try:
             return struct.unpack(self._fmt, value)
-        except struct.error, e:
+        except struct.error as e:
             raise ValueError("Could not unpack %s from struct with format "
                              "%s: %s" % (value, self._fmt, e))
 
@@ -600,7 +600,7 @@ class Parameter(object):
         # Wrap errors in FailReplies with information identifying the parameter
         try:
             return self._kattype.unpack(value, self.major)
-        except ValueError, message:
+        except ValueError as message:
             raise FailReply("Error in parameter %s (%s): %s" %
                             (self.position, self.name, message))
 

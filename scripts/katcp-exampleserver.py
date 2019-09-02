@@ -7,6 +7,9 @@
    @author Robert Crida <robert.crida@ska.ac.za>
    @date 2008-10-10
    """
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
 
 import logging
 import sys
@@ -66,13 +69,13 @@ if __name__ == "__main__":
                       help='attach to port N (default=1235)')
     (opts, args) = parser.parse_args()
 
-    print "Server listening on port %d, Ctrl-C to terminate server" % opts.port
+    print("Server listening on port %d, Ctrl-C to terminate server" % opts.port)
     restart_queue = Queue.Queue()
     server = DeviceExampleServer(opts.host, opts.port)
     server.set_restart_queue(restart_queue)
 
     server.start()
-    print "Started."
+    print("Started.")
 
     try:
         while True:
@@ -81,13 +84,13 @@ if __name__ == "__main__":
             except Queue.Empty:
                 device = None
             if device is not None:
-                print "Stopping ..."
+                print("Stopping ...")
                 device.stop()
                 device.join()
-                print "Restarting ..."
+                print("Restarting ...")
                 device.start()
-                print "Started."
+                print("Started.")
     except KeyboardInterrupt:
-        print "Shutting down ..."
+        print("Shutting down ...")
         server.stop()
         server.join()
