@@ -17,7 +17,6 @@ import threading
 import time
 import weakref
 
-from builtins import range
 from concurrent.futures import Future
 
 import mock
@@ -25,6 +24,7 @@ import tornado
 import tornado.testing
 import unittest2 as unittest
 
+from builtins import range
 from tornado import gen
 
 import katcp
@@ -39,16 +39,6 @@ from katcp.testutils import (
     counting_callback,
     start_thread_with_cleanup,
 )
-
-
-
-
-
-
-
-
-
-
 
 
 log_handler = TestLogHandler()
