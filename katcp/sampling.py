@@ -7,13 +7,20 @@
 """Strategies for sampling sensor values."""
 
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import range
+from builtins import *
+from builtins import object
 import logging
 import os
 
 import tornado.ioloop
 
-from thread import get_ident as get_thread_ident
+from _thread import get_ident as get_thread_ident
 from functools import wraps
 
 from .core import Message, Sensor
@@ -74,7 +81,7 @@ class SampleStrategy(object):
     """
 
     # Sampling strategy constants
-    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL, EVENT_RATE, DIFFERENTIAL_RATE = range(7)
+    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL, EVENT_RATE, DIFFERENTIAL_RATE = list(range(7))
 
     ## @brief Mapping from strategy constant to strategy name.
     SAMPLING_LOOKUP = {
@@ -92,7 +99,7 @@ class SampleStrategy(object):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from strategy name to strategy constant.
-    SAMPLING_LOOKUP_REV = dict((v, k) for k, v in SAMPLING_LOOKUP.items())
+    SAMPLING_LOOKUP_REV = dict((v, k) for k, v in list(SAMPLING_LOOKUP.items()))
 
     # pylint: enable-msg = E0602
 
@@ -135,7 +142,7 @@ class SampleStrategy(object):
         if strategyName not in cls.SAMPLING_LOOKUP_REV:
             raise ValueError("Unknown sampling strategy '%s'. "
                              "Known strategies are %s."
-                             % (strategyName, cls.SAMPLING_LOOKUP.values()))
+                             % (strategyName, list(cls.SAMPLING_LOOKUP.values())))
 
         strategyType = cls.SAMPLING_LOOKUP_REV[strategyName]
         if strategyType == cls.NONE:
