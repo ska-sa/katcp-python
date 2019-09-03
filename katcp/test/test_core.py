@@ -7,6 +7,7 @@
 """Tests for the katcp utilities module.
    """
 from __future__ import absolute_import, division, print_function
+
 from future import standard_library
 
 standard_library.install_aliases()
@@ -14,7 +15,7 @@ standard_library.install_aliases()
 import logging
 import unittest
 
-from builtins import object, str
+from builtins import object
 
 import tornado
 
@@ -23,9 +24,6 @@ import katcp
 
 from katcp.core import AsyncEvent, AsyncState, Sensor, until_some
 from katcp.testutils import DeviceTestSensor, TestLogHandler
-
-
-
 
 
 log_handler = TestLogHandler()
@@ -177,7 +175,8 @@ class TestMessageParser(unittest.TestCase):
                          ['1', repr(float_val), '1', '0', 'string'])
 
     def test_unicode_message_handling(self):
-        m = self.p.parse(u'!baz[1] Kl\xc3\xbcf skr\xc3\xa4m inf\xc3\xb6 f\xc3\xa9d\xc3\xa9ral \xc3\xa9lecto')
+        unicode_str = u'!baz[1] Kl\xc3\xbcf skr\xc3\xa4m inf\xc3\xb6 f\xc3\xa9d\xc3\xa9ral \xc3\xa9lecto'
+        m = self.p.parse(unicode_str)
         self.assertEqual(m.arguments, ['Kl??f', 'skr??m', 'inf??', 'f??d??ral', '??lecto'])
 
 
@@ -527,7 +526,7 @@ class TestUntilSome(tornado.testing.AsyncTestCase):
         self.assertEqual(sorted(results), [(0, 24), (1, 42), (2, 84)],
                          'Results differ for until_some (3 arg futures)')
 
-    @unittest.skip("Test fails when ran using TOX, MM to investigate.")
+    # @unittest.skip("Test fails when ran using TOX, MM to investigate.")
     @tornado.testing.gen_test
     def test_until_some_kwargs(self):
         f1 = tornado.concurrent.Future()
