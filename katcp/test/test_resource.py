@@ -1,19 +1,28 @@
 # Copyright 2013 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
 
-import unittest
+standard_library.install_aliases()
+
 import logging
-import mock
+import unittest
 
+import mock
 import tornado.testing
 
-from katcp import Sensor
+# Module under test
+from katcp import Sensor, resource
 from katcp.testutils import TimewarpAsyncTestCase
 
-# Module under test
-from katcp import resource
+
+
+
+
+
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +32,7 @@ class test_escape_name(unittest.TestCase):
             'blah-bal' : 'blah_bal',
             'bief_bof.ba32f-blief' : 'bief_bof_ba32f_blief',
             'already_escape_name' : 'already_escape_name'}
-        for input, expected_output in desired_mappings.items():
+        for input, expected_output in list(desired_mappings.items()):
             self.assertEqual(resource.escape_name(input), expected_output)
 
 class test_KATCPSensor(TimewarpAsyncTestCase):

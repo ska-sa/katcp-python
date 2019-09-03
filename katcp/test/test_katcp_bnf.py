@@ -35,12 +35,22 @@
     Uses the ply library from http://www.dabeaz.com/ply/.
     """
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+
+standard_library.install_aliases()
+
+import unittest
+
+from builtins import object
 
 import ply.lex as lex
 import ply.yacc as yacc
+
 import katcp
-import unittest
+
+
+
 
 
 class DclLexer(object):

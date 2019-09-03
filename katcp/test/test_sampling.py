@@ -7,22 +7,34 @@
 """Tests for the katcp.sampling module.
    """
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
 
-import unittest2 as unittest
+standard_library.install_aliases()
+
+import concurrent.futures
+import logging
+import queue
 import threading
 import time
-import logging
-import katcp
-import mock
-import Queue
-import tornado.testing
-import concurrent.futures
 
-from thread import get_ident
+import mock
+import tornado.testing
+import unittest2 as unittest
+
+from _thread import get_ident
 from tornado import gen
-from katcp import sampling, Sensor
-from katcp.testutils import (TestLogHandler, DeviceTestSensor, TimewarpAsyncTestCase)
+
+import katcp
+
+from katcp import Sensor, sampling
+from katcp.testutils import DeviceTestSensor, TestLogHandler, TimewarpAsyncTestCase
+
+
+
+
+
+
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -427,6 +439,3 @@ class TestSampling(TimewarpAsyncTestCase):
         yield self.set_ioloop_time(self.ioloop_time + 5*longest)
         self.sensor.set(self.ioloop_time, Sensor.WARN, value + 3)
         self.assertEqual(len(self.calls), 0)
-
-
-

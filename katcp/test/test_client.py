@@ -7,6 +7,9 @@
 """Tests for client module."""
 
 from __future__ import absolute_import, division, print_function
+from future import standard_library
+
+standard_library.install_aliases()
 
 import gc
 import logging
@@ -14,25 +17,39 @@ import threading
 import time
 import weakref
 
+from builtins import range
+from concurrent.futures import Future
+
 import mock
 import tornado
 import tornado.testing
 import unittest2 as unittest
 
-import katcp
-
-from concurrent.futures import Future
-
 from tornado import gen
 
+import katcp
+
 from katcp.core import Message, ProtocolFlags
-from katcp.testutils import (DeviceTestServer,
-                             TestLogHandler,
-                             TestUtilMixin,
-                             TimewarpAsyncTestCase,
-                             WaitingMock,
-                             counting_callback,
-                             start_thread_with_cleanup)
+from katcp.testutils import (
+    DeviceTestServer,
+    TestLogHandler,
+    TestUtilMixin,
+    TimewarpAsyncTestCase,
+    WaitingMock,
+    counting_callback,
+    start_thread_with_cleanup,
+)
+
+
+
+
+
+
+
+
+
+
+
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)

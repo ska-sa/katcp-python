@@ -1,15 +1,24 @@
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
 
-import unittest2 as unittest
+standard_library.install_aliases()
+
 import threading
 import time
-import tornado.testing
-import tornado.gen
 
-from katcp import Sensor
-from katcp import testutils
+import tornado.gen
+import tornado.testing
+import unittest2 as unittest
+
+from katcp import Sensor, testutils
+
+
+
+
+
+
 
 
 def get_sensor(sensor_type, name=None):

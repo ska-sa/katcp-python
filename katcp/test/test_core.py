@@ -6,20 +6,27 @@
 
 """Tests for the katcp utilities module.
    """
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
 
-# Python 2/3 compatibility stuff
-from builtins import str
-from builtins import object
+standard_library.install_aliases()
+
 import logging
 import unittest
-#
+
+from builtins import object, str
 
 import tornado
 
+# Python 2/3 compatibility stuff
 import katcp
-from katcp.core import Sensor, AsyncState, AsyncEvent, until_some
-from katcp.testutils import TestLogHandler, DeviceTestSensor
+
+from katcp.core import AsyncEvent, AsyncState, Sensor, until_some
+from katcp.testutils import DeviceTestSensor, TestLogHandler
+
+
+
+
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
