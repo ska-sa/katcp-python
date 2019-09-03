@@ -8,6 +8,9 @@
 
 from __future__ import division, print_function, absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+
 import sys
 import traceback
 import logging
@@ -17,8 +20,10 @@ import tornado.tcpclient
 import tornado.iostream
 
 from functools import partial, wraps
-from thread import get_ident as get_thread_ident
+from _thread import get_ident as get_thread_ident
 
+from builtins import object
+from future.utils import with_metaclass
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from tornado.util import ObjectDict
@@ -67,7 +72,7 @@ def make_threadsafe_blocking(meth):
     return meth
 
 
-class DeviceClient(object):
+class DeviceClient(with_metaclass(DeviceMetaclass, object)):
     """Device client proxy.
 
     Subclasses should implement .reply\_*, .inform\_* and
@@ -114,7 +119,6 @@ class DeviceClient(object):
     http://tornado.readthedocs.org/en/latest/netutil.html
 
     """
-    __metaclass__ = DeviceMetaclass
 
     MAX_MSG_SIZE = 2*1024*1024
     """Maximum message size that can be received in bytes.
@@ -1532,7 +1536,7 @@ class AsyncClient(DeviceClient):
 
     def _fail_waiting_requests(self, reason):
         # Fail all requests that have not yet received their replies
-        for request_data in self._async_queue.values():
+        for request_data in list(self._async_queue.values()):
             # Last one should be timeout handle
             timeout_handle = request_data[-1]
             if timeout_handle is not None:
