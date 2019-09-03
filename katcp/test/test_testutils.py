@@ -1,5 +1,6 @@
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
+
 from __future__ import absolute_import, division, print_function
 from future import standard_library
 
@@ -13,12 +14,6 @@ import tornado.testing
 import unittest2 as unittest
 
 from katcp import Sensor, testutils
-
-
-
-
-
-
 
 
 def get_sensor(sensor_type, name=None):
