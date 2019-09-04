@@ -4,9 +4,9 @@
 
 from __future__ import division, print_function, absolute_import
 
-from builtins import str
-from past.builtins import basestring
-from builtins import object
+from future import standard_library
+standard_library.install_aliases()
+#from future.moves.builtins import dict
 
 import abc
 import sys
@@ -15,6 +15,8 @@ import logging
 
 import tornado
 
+from builtins import object
+from past.builtins import basestring
 from tornado.gen import Return, with_timeout
 from tornado.concurrent import Future
 

@@ -7,13 +7,10 @@
 """Servers for the KAT device control language."""
 
 from __future__ import division, print_function, absolute_import
+
 from future import standard_library
 standard_library.install_aliases()
-from future.utils import with_metaclass
-#from builtins import str
-from builtins import range
-from past.builtins import basestring
-from builtins import object
+
 
 import socket
 import threading
@@ -30,6 +27,9 @@ from functools import partial, wraps
 from collections import deque
 from _thread import get_ident as get_thread_ident
 
+from builtins import range, object
+from future.utils import with_metaclass
+from past.builtins import basestring
 from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
 from tornado.concurrent import chain_future
@@ -2184,7 +2184,7 @@ class DeviceServer(DeviceServerBase):
         exact, name_filter = construct_name_filter(msg.arguments[0]
                                                    if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
-                   sorted(self._sensors.iteritems()) if name_filter(name)]
+                   sorted(self._sensors.items()) if name_filter(name)]
 
         if exact and not sensors:
             return req.make_reply("fail", "Unknown sensor name.")

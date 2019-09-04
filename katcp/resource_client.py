@@ -2,14 +2,10 @@
 # BSD license - see LICENSE for details
 
 from __future__ import division, print_function, absolute_import
-from __future__ import unicode_literals
 
 # Python 2/3 compatibility stuff
 from future import standard_library
 standard_library.install_aliases()
-from builtins import str
-from past.utils import old_div
-from builtins import object
 #
 
 import logging
@@ -24,6 +20,10 @@ import tornado
 from functools import partial
 
 from concurrent.futures import Future
+from builtins import object, dict
+# from future.moves.builtins import dict
+
+from past.utils import old_div
 from tornado.concurrent import Future as tornado_Future
 from tornado.gen import Return, maybe_future, with_timeout
 
@@ -1066,6 +1066,7 @@ class GroupResults(dict):
         """True if katcp request succeeded on all clients."""
         return all(self.values())
 
+    # MM Investigate this
     # Was not handled automatrically by futurize, see
     # https://github.com/PythonCharmers/python-future/issues/282
     if sys.version_info[0] == 2:
@@ -1254,6 +1255,7 @@ class ClientGroup(object):
             """Dictionary of results that can be tested for overall success."""
             def __bool__(self):
                 return sum(self.values()) >= quorum
+            # MM investigate this
             # Was not handled automatrically by futurize, see
             # https://github.com/PythonCharmers/python-future/issues/282
             if sys.version_info[0] == 2:

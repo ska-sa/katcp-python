@@ -15,7 +15,7 @@ import unittest
 import weakref
 
 # Python 2/3 compatibility stuff
-from builtins import object, str
+from builtins import object
 from concurrent.futures import TimeoutError
 from functools import partial
 
@@ -503,6 +503,7 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         self.server.stop()
         self.server.join(timeout=1)
         yield DUT.until_state('disconnected')
+        self.assertEqual(DUT.state, 'disconnected')
 
         # Test that requests fail
         rep = yield DUT.req.watchdog()
