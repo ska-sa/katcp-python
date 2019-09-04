@@ -6,7 +6,8 @@ from __future__ import division, print_function, absolute_import
 # Python 2/3 compatibility stuff
 from future import standard_library
 standard_library.install_aliases()
-#
+from future.moves.builtins import dict
+
 
 import logging
 import sys
@@ -20,8 +21,7 @@ import tornado
 from functools import partial
 
 from concurrent.futures import Future
-from builtins import object, dict
-# from future.moves.builtins import dict
+from builtins import object
 
 from past.utils import old_div
 from tornado.concurrent import Future as tornado_Future

@@ -6,7 +6,7 @@ from __future__ import division, print_function, absolute_import
 
 from future import standard_library
 standard_library.install_aliases()
-#from future.moves.builtins import dict
+from future.moves.builtins import dict
 
 import abc
 import sys
