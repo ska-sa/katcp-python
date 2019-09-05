@@ -55,7 +55,6 @@ import katcp
 
 class DclLexer(object):
     """Lexer definition for the DCL."""
-
     states = (
         ('argument', 'exclusive'),
     )
@@ -101,7 +100,7 @@ class DclLexer(object):
 
     # argument state
 
-    t_argument_PLAIN = r'[^ \t\e\n\r\\\0]'
+    t_argument_PLAIN = r'[^\t\n\r\\\0]'
 
     t_argument_ESCAPE = r'\\[\\_0nret@]'
 
