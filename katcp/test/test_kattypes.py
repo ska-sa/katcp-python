@@ -12,10 +12,10 @@ from future import standard_library
 
 standard_library.install_aliases()
 
-from builtins import object, str
-
 import mock
 import unittest2 as unittest
+
+from builtins import object
 
 from katcp import AsyncReply, FailReply, Message
 from katcp.kattypes import (
@@ -37,8 +37,6 @@ from katcp.kattypes import (
     return_reply,
     send_reply,
 )
-
-
 
 
 MS_TO_SEC_FAC = 1/1000.
@@ -577,14 +575,14 @@ class TestDecorator(unittest.TestCase):
         with self.assertRaises(TypeError) as ex:
             request(Bool(multiple=True), Int())
         self.assertEqual(
-            ex.exception.message,
+            str(ex.exception),
             'Only the last parameter type can accept multiple arguments.')
 
     def test_return_reply_multi(self):
         with self.assertRaises(TypeError) as ex:
             return_reply(Bool(multiple=True), Int())
         self.assertEqual(
-            ex.exception.message,
+            str(ex.exception),
             'Only the last parameter type can accept multiple arguments.')
 
     def test_katcpv4(self):
@@ -711,5 +709,5 @@ class TestDecorator(unittest.TestCase):
         with self.assertRaises(FailReply) as ex:
             req('req', Message.request('int-multifloat', desired_i, 1.2, 'abc'))
         self.assertEqual(
-            ex.exception.message,
+            str(ex.exception),
             "Error in parameter 3 (): Could not parse value 'abc' as float.")

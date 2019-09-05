@@ -7,7 +7,6 @@
 """Utilities for dealing with KAT device control language messages."""
 
 from __future__ import division, print_function, absolute_import
-from __future__ import unicode_literals
 
 from future import standard_library
 standard_library.install_aliases()
@@ -135,7 +134,7 @@ def log_future_exceptions(logger, f, ignore=()):
 
 def convert_method_name(prefix, name):
     """Convert a method name to the corresponding KATCP message name."""
-    return name[len(prefix):].replace("_", "-")
+    return str(name[len(prefix):].replace("_", "-"))
 
 
 def steal_docstring_from(obj):
