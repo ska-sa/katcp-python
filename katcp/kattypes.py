@@ -446,7 +446,7 @@ class StrictTimestamp(KatcpType):
         Raise a ValueError if it is not.
 
         """
-        if value < 0:
+        if int(value) < 0:
             raise ValueError("Strict timestamps may not be negative.")
 
 

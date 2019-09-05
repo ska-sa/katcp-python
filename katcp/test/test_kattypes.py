@@ -393,26 +393,26 @@ class TestStruct(TestType):
 
     def setUp(self):
         basic = Struct(">isf")
-        default = Struct(">isf", default=(1, "f", 3.4))
+        default = Struct(">isf", default=(1, b"f", 3.4))
         optional = Struct(">isf", optional=True)
-        default_optional = Struct(">isf", default=(1, "f", 3.4), optional=True)
+        default_optional = Struct(">isf", default=(1, b"f", 3.4), optional=True)
 
         self._pack = [
-            (basic, (5, "s", 2.5), "\x00\x00\x00\x05s@ \x00\x00"),
-            (basic, ("s", 5, 2.5), ValueError),
-            (basic, (5, "s"), ValueError),
+            (basic, (5, b"s", 2.5), b"\x00\x00\x00\x05s@ \x00\x00"),
+            (basic, (b"s", 5, 2.5), ValueError),
+            (basic, (5, b"s"), ValueError),
             (basic, None, ValueError),
-            (default, None, "\x00\x00\x00\x01f@Y\x99\x9a"),
-            (default_optional, None, "\x00\x00\x00\x01f@Y\x99\x9a"),
+            (default, None, b"\x00\x00\x00\x01f@Y\x99\x9a"),
+            (default_optional, None, b"\x00\x00\x00\x01f@Y\x99\x9a"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "\x00\x00\x00\x05s@ \x00\x00", (5, "s", 2.5)),
-            (basic, "asdfgasdfas", ValueError),
+            (basic, b"\x00\x00\x00\x05s@ \x00\x00", (5, b"s", 2.5)),
+            (basic, b"asdfgasdfas", ValueError),
             (basic, None, ValueError),
-            (default, None, (1, "f", 3.4)),
-            (default_optional, None, (1, "f", 3.4)),
+            (default, None, (1, b"f", 3.4)),
+            (default_optional, None, (1, b"f", 3.4)),
             (optional, None, None),
         ]
 
