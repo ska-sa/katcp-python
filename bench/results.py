@@ -1,9 +1,14 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import object
 import math
 import json
 
@@ -41,7 +46,7 @@ def compute_all(all):
         errors = [None] * max_clients
         for no, clients in result.result:
             d.setdefault(clients, []).append(no)
-        for clients, v in d.items():
+        for clients, v in list(d.items()):
             s = sum(v)/len(v)
             df = math.sqrt(sum([(s - i)*(s - i) for i in v]) / (len(v) - 1))
             res[clients - 1] = s

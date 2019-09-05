@@ -11,7 +11,6 @@ from __future__ import division, print_function, absolute_import
 from future import standard_library
 standard_library.install_aliases()
 
-
 import socket
 import threading
 import traceback
@@ -52,6 +51,7 @@ from .kattypes import (request, return_reply,
 # we cannot do this: 'from . import __version__' because __version__
 # does not exist at this stage
 import katcp
+from future.utils import with_metaclass
 
 log = logging.getLogger("katcp.server")
 
@@ -920,7 +920,6 @@ class MessageHandlerThread(object):
 
 
 class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
-
     """Base class for device servers.
 
     Subclasses should add .request\_* methods for dealing

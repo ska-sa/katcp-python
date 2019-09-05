@@ -23,14 +23,6 @@ from katcp.resource import escape_name
 from katcp.testutils import SensorComparisonMixin
 
 
-
-
-
-
-
-
-
-
 class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                                 SensorComparisonMixin):
     def setUp(self):

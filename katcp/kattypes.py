@@ -13,10 +13,8 @@ from future import standard_library
 standard_library.install_aliases()
 
 # Uncommenting this as it breaks our python 2 tests
-#from builtins import map
-from builtins import zip
-from builtins import range
-from builtins import object
+# from builtins import map
+from builtins import object, range, zip
 import inspect
 import struct
 import re

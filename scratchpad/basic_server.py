@@ -1,9 +1,14 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+
 # Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import *
 from katcp import DeviceServer, Sensor, ProtocolFlags, AsyncReply
 from katcp.kattypes import (Str, Float, Timestamp, Discrete,
                             request, return_reply)

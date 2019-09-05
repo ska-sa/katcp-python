@@ -11,7 +11,7 @@ from __future__ import division, print_function, absolute_import
 from future import standard_library
 standard_library.install_aliases()
 
-from builtins import next, object, str, zip
+from builtins import next, object, zip
 
 import logging
 import re
@@ -987,7 +987,7 @@ class DeviceTestServer(DeviceServer):
         self.break_sensor_list = False
         # Set to fail string if the help request should break
         self.break_help = False
-        self.restart_queue = Queue.Queue()
+        self.restart_queue = queue.Queue()
         self.set_restart_queue(self.restart_queue)
         # Map of ClientConnection -> futures that can be resolved to cancel command
         self._slow_futures = {}
@@ -1528,7 +1528,7 @@ class SensorTransitionWaiter(object):
         self.desired_value_sequence = value_sequence
         self._torn_down = False
         self._done = False
-        self._value_queue = Queue.Queue()
+        self._value_queue = queue.Queue()
         self.timed_out = False
         current_value = self._get_current_sensor_value()
         if value_sequence:
@@ -1647,7 +1647,7 @@ class SensorTransitionWaiter(object):
         try:
             while True:
                 self.received_values.append(self._value_queue.get_nowait())
-        except Queue.Empty:
+        except queue.Empty:
             pass
         received_values = self.received_values
         if reset:
@@ -1755,7 +1755,7 @@ class AtomicIaddCallback(ObjectWrapper):
 class WaitingMock(mock.Mock):
     def __init__(self, *args, **kwargs):
         super(WaitingMock, self).__init__(*args, **kwargs)
-        self._counted_queue = Queue.Queue(maxsize=1)
+        self._counted_queue = queue.Queue(maxsize=1)
         # Replace the underlying value for self.call_count with a proxied int
         # that uses a threading.RLock to allow atomic incrementation in case
         # multiple threads are calling the mock, and does a callback as soon as
@@ -1769,7 +1769,7 @@ class WaitingMock(mock.Mock):
     def _call_count_callback(self, call_count):
         try:
             self._counted_queue.put_nowait(call_count)
-        except Queue.Full:
+        except queue.Full:
             pass
 
     def reset_mock(self, visited=None):
@@ -1792,7 +1792,7 @@ class WaitingMock(mock.Mock):
         while to_wait >= 0 and self.call_count < count:
             try:
                 self._counted_queue.get(timeout=to_wait)
-            except Queue.Empty:
+            except queue.Empty:
                 pass
             to_wait = timeout - (time.time() - t0)
 

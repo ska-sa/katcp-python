@@ -1,6 +1,10 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
 import re, inspect, textwrap, pydoc
 import sphinx
 from docscrape import NumpyDocString, FunctionDoc, ClassDoc
@@ -129,7 +133,7 @@ class SphinxDocString(NumpyDocString):
             return out
 
         out += ['.. index:: %s' % idx.get('default','')]
-        for section, references in idx.iteritems():
+        for section, references in idx.items():
             if section == 'default':
                 continue
             elif section == 'refguide':

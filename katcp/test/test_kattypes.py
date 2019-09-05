@@ -4,15 +4,13 @@
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
-"""Tests for the kattypes module.
-   """
-
+"""Tests for the kattypes module."""
 from __future__ import absolute_import, division, print_function
-from future import standard_library
 
+from future import standard_library
 standard_library.install_aliases()
 
-from builtins import object, str
+from builtins import object
 
 import mock
 import unittest2 as unittest
@@ -37,8 +35,6 @@ from katcp.kattypes import (
     return_reply,
     send_reply,
 )
-
-
 
 
 MS_TO_SEC_FAC = 1/1000.

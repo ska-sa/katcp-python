@@ -34,6 +34,7 @@ from .core import (DeviceMetaclass, MessageParser, Message,
                    ProtocolFlags, AsyncEvent, until_later, LatencyTimer,
                    SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
 from .ioloop_manager import IOLoopManager
+from future.utils import with_metaclass
 
 
 # logging.basicConfig(level=logging.DEBUG)

@@ -6,6 +6,13 @@ from future import standard_library
 
 standard_library.install_aliases()
 
+
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import range
+from builtins import *
+from builtins import object
 import collections
 import gc
 import logging

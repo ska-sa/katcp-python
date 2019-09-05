@@ -11,9 +11,13 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
 import logging
 import sys
-import Queue
+import queue
 from optparse import OptionParser
 import katcp
 from katcp.kattypes import request, return_reply, Float, Int, Str
@@ -65,12 +69,12 @@ if __name__ == "__main__":
     parser = OptionParser(usage=usage)
     parser.add_option('-a', '--host', dest='host', type="string", default="", metavar='HOST',
                       help='listen to HOST (default="" - all hosts)')
-    parser.add_option('-p', '--port', dest='port', type=long, default=1235, metavar='N',
+    parser.add_option('-p', '--port', dest='port', type=int, default=1235, metavar='N',
                       help='attach to port N (default=1235)')
     (opts, args) = parser.parse_args()
 
     print("Server listening on port %d, Ctrl-C to terminate server" % opts.port)
-    restart_queue = Queue.Queue()
+    restart_queue = queue.Queue()
     server = DeviceExampleServer(opts.host, opts.port)
     server.set_restart_queue(restart_queue)
 
@@ -81,7 +85,7 @@ if __name__ == "__main__":
         while True:
             try:
                 device = restart_queue.get(timeout=0.5)
-            except Queue.Empty:
+            except queue.Empty:
                 device = None
             if device is not None:
                 print("Stopping ...")

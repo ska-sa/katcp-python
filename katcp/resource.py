@@ -99,7 +99,6 @@ def escape_name(name):
 
 
 class KATCPResource(with_metaclass(abc.ABCMeta, object)):
-
     """Base class to serve as the definition of the KATCPResource API.
 
     A class `C` implementing the KATCPResource API should register itself using
@@ -358,7 +357,6 @@ class KATCPResource(with_metaclass(abc.ABCMeta, object)):
 
 
 class KATCPRequest(with_metaclass(abc.ABCMeta, object)):
-
     """Abstract Base class to serve as the definition of the KATCPRequest API.
 
     Wrapper around a specific KATCP request to a given KATCP device.  Each
@@ -500,7 +498,6 @@ class KATCPSensorReading(collections.namedtuple(
 
 
 class KATCPSensorsManager(with_metaclass(abc.ABCMeta, object)):
-
     """Sensor management class used by KATCPSensor. Abstracts communications details.
 
     This class should arrange:

@@ -2,8 +2,8 @@
 # BSD license - see LICENSE for details
 
 from __future__ import absolute_import, division, print_function
-from future import standard_library
 
+from future import standard_library
 standard_library.install_aliases()
 
 import copy
@@ -14,7 +14,6 @@ import time
 import unittest
 import weakref
 
-# Python 2/3 compatibility stuff
 from builtins import object
 from concurrent.futures import TimeoutError
 from functools import partial
@@ -41,11 +40,6 @@ from katcp.testutils import (
     TimewarpAsyncTestCaseTimeAdvancer,
     start_thread_with_cleanup,
 )
-
-
-
-
-
 
 
 logger = logging.getLogger(__name__)

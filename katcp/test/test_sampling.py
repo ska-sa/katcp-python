@@ -4,12 +4,10 @@
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
-"""Tests for the katcp.sampling module.
-   """
-
+"""Tests for the katcp.sampling module."""
 from __future__ import absolute_import, division, print_function
-from future import standard_library
 
+from future import standard_library
 standard_library.install_aliases()
 
 import concurrent.futures
@@ -29,11 +27,6 @@ import katcp
 
 from katcp import Sensor, sampling
 from katcp.testutils import DeviceTestSensor, TestLogHandler, TimewarpAsyncTestCase
-
-
-
-
-
 
 
 log_handler = TestLogHandler()

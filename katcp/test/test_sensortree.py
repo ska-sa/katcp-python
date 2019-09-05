@@ -7,6 +7,13 @@ from future import standard_library
 
 standard_library.install_aliases()
 
+
+from future import standard_library
+standard_library.install_aliases()
+from builtins import zip
+from builtins import range
+from builtins import *
+from builtins import object
 import unittest
 
 from builtins import object, range, zip
