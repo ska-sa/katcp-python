@@ -1,23 +1,34 @@
 # Copyright 2015 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
 
-import unittest2 as unittest
-import logging
+standard_library.install_aliases()
+
 import copy
+import logging
 
-import tornado.testing
+from builtins import object, str
+
 import tornado.gen
-
-from katcp import Sensor, resource_client
-from katcp.kattypes import request, return_reply, Int, Float
-from katcp.testutils import SensorComparisonMixin
-from katcp.inspecting_client import InspectingClientAsync
-from katcp.resource import escape_name
+import tornado.testing
+import unittest2 as unittest
 
 # module under test
-from katcp import fake_clients
+from katcp import Sensor, fake_clients, resource_client
+from katcp.inspecting_client import InspectingClientAsync
+from katcp.kattypes import Float, Int, request, return_reply
+from katcp.resource import escape_name
+from katcp.testutils import SensorComparisonMixin
+
+
+
+
+
+
+
+
 
 
 class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
@@ -160,7 +171,7 @@ class test_FakeKATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         # FakeInspectingClientManager implements more requests.
         standard_requests = ('help', 'sensor_list')
         controlled_clients = [
-            escape_name(c_name) for c_name, c in self.resources_spec['clients'].items()
+            escape_name(c_name) for c_name, c in list(self.resources_spec['clients'].items())
             if c.get('controlled')]
         desired_requests = sorted(
             escape_name(c)+'_'+r for c in controlled_clients for r in standard_requests)
@@ -178,4 +189,3 @@ class test_FakeKATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         self.assertEqual(len(informs), 1)
         self.assertEqual(str(informs[0]), '#add-test[1233] 2 15')
         self.assertEqual(str(reply), '!add-test[1233] ok 6')
-

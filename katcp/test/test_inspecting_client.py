@@ -1,4 +1,10 @@
-from __future__ import division
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+
+standard_library.install_aliases()
 
 import collections
 import gc
@@ -6,20 +12,28 @@ import logging
 import time
 import weakref
 
+from builtins import object, range, str
+from concurrent.futures import Future
+
 import mock
 import tornado
 import unittest2 as unittest
 
 import katcp
 
-from concurrent.futures import Future
-
 from katcp import Message, Sensor, inspecting_client
 from katcp.inspecting_client import InspectingClientAsync
-from katcp.testutils import (DeviceTestSensor,
-                             DeviceTestServer,
-                             DeviceTestServerWithTimeoutHints,
-                             start_thread_with_cleanup)
+from katcp.testutils import (
+    DeviceTestSensor,
+    DeviceTestServer,
+    DeviceTestServerWithTimeoutHints,
+    start_thread_with_cleanup,
+)
+
+
+
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +203,7 @@ class TestInspectingClientInspect(tornado.testing.AsyncTestCase):
         """
         hints = getattr(server, 'request_timeout_hints', {})
         expected = {}
-        for req, handler in server._request_handlers.items():
+        for req, handler in list(server._request_handlers.items()):
             expected[req] = {'name': req,
                              'description': handler.__doc__,
                              'timeout_hint': hints.get(req)}
@@ -525,8 +539,8 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
     def _test_expected_model_changes(self, model_changes):
         # Check that the model_changes reflect the sensors and requests of the
         # test sever (self.server)
-        server_sensors = self.server._sensors.keys()
-        server_requests = self.server._request_handlers.keys()
+        server_sensors = list(self.server._sensors.keys())
+        server_requests = list(self.server._request_handlers.keys())
         self.assertEqual(model_changes, dict(
             sensors=dict(added=set(server_sensors), removed=set()),
             requests=dict(added=set(server_requests), removed=set())))

@@ -1,3 +1,9 @@
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 from tornado.util import ObjectDict
 from tornado.concurrent import Future as tornado_Future
 from katcp import Sensor
@@ -11,7 +17,7 @@ logging.basicConfig(
 )
 
 def cb(*args):
-    print args
+    print(args)
 
 try:
     d = DeviceTestServer('', 0)

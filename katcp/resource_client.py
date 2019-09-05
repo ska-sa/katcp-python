@@ -1,12 +1,13 @@
-# Copyright 2014 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 from __future__ import division, print_function, absolute_import
 
 # Python 2/3 compatibility stuff
-from builtins import str
-from past.utils import old_div
-from builtins import object
-#
+from future import standard_library
+standard_library.install_aliases()
+from future.moves.builtins import dict
+
 
 import logging
 import sys
@@ -20,6 +21,9 @@ import tornado
 from functools import partial
 
 from concurrent.futures import Future
+from builtins import object
+
+from past.utils import old_div
 from tornado.concurrent import Future as tornado_Future
 from tornado.gen import Return, maybe_future, with_timeout
 
@@ -655,7 +659,7 @@ class KATCPClientResource(resource.KATCPResource):
         request_instances = yield request_instance_fut
 
         added_names = []
-        for r_name, r_obj in request_instances.items():
+        for r_name, r_obj in list(request_instances.items()):
             r_name_escaped = resource.escape_name(r_name)
             if r_name_escaped in self.always_excluded_requests:
                 continue
@@ -1062,6 +1066,7 @@ class GroupResults(dict):
         """True if katcp request succeeded on all clients."""
         return all(self.values())
 
+    # MM Investigate this
     # Was not handled automatrically by futurize, see
     # https://github.com/PythonCharmers/python-future/issues/282
     if sys.version_info[0] == 2:
@@ -1250,6 +1255,7 @@ class ClientGroup(object):
             """Dictionary of results that can be tested for overall success."""
             def __bool__(self):
                 return sum(self.values()) >= quorum
+            # MM investigate this
             # Was not handled automatrically by futurize, see
             # https://github.com/PythonCharmers/python-future/issues/282
             if sys.version_info[0] == 2:
@@ -1345,7 +1351,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def _init_resources(self):
         resources = self._resources_spec['clients']
         children = AttrDict()
-        for res_name, res_spec in resources.items():
+        for res_name, res_spec in list(resources.items()):
             # Make a copy since we'll be modifying the dict
             res_spec = dict(res_spec)
             res_spec['name'] = res_name

@@ -1,12 +1,16 @@
 # katcp.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Utilities for dealing with KAT device control language messages."""
 
 from __future__ import division, print_function, absolute_import
+from __future__ import unicode_literals
+
+from future import standard_library
+standard_library.install_aliases()
 
 import re
 import sys
@@ -16,6 +20,8 @@ import logging
 
 import tornado
 
+from builtins import next, object, range
+from past.builtins import basestring
 from collections import namedtuple, defaultdict
 from functools import wraps, partial
 
@@ -192,7 +198,7 @@ class Message(object):
 
     """
     # Message types
-    REQUEST, REPLY, INFORM = range(3)
+    REQUEST, REPLY, INFORM = list(range(3))
 
     # Reply codes
     # TODO: make use of reply codes in device client and server
@@ -216,7 +222,7 @@ class Message(object):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from type code character to message type.
-    TYPE_SYMBOL_LOOKUP = dict((v, k) for k, v in TYPE_SYMBOLS.items())
+    TYPE_SYMBOL_LOOKUP = dict((v, k) for k, v in list(TYPE_SYMBOLS.items()))
 
     # pylint: enable-msg = E0602
 
@@ -236,7 +242,7 @@ class Message(object):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from unescaped string to corresponding escape character.
-    REVERSE_ESCAPE_LOOKUP = dict((v, k) for k, v in ESCAPE_LOOKUP.items())
+    REVERSE_ESCAPE_LOOKUP = dict((v, k) for k, v in list(ESCAPE_LOOKUP.items()))
 
     # pylint: enable-msg = E0602
 
@@ -307,8 +313,8 @@ class Message(object):
                 # with a '?' character
                 logger.error("Error casting message argument to str! "
                              "Trying to encode argument to ascii.")
-                if not isinstance(arg, unicode):
-                    arg = arg.decode('utf-8')
+                if not isinstance(arg, str):
+                    arg = arg.encode('utf-8', errors='ignore').decode('utf-8')
                 return arg.encode('ascii', 'replace')
 
     def copy(self):
@@ -520,7 +526,7 @@ class MessageParser(object):
         """Parse an argument."""
         match = self.SPECIAL_RE.search(arg)
         if match:
-            raise KatcpSyntaxError("Unescaped special %r." % (match.group(),))
+            raise KatcpSyntaxError("Un-escaped special %r." % (match.group(),))
         return self.UNESCAPE_RE.sub(self._unescape_match, arg)
 
     def parse(self, line):
@@ -887,7 +893,7 @@ class Sensor(object):
     #
     # type -> (name, formatter, parser)
     (INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE, STRING, TIMESTAMP,
-     ADDRESS) = range(8)
+     ADDRESS) = list(range(8))
 
     ## @brief Mapping from sensor type to tuple containing the type name,
     #  a kattype with functions to format and parse a value and a
@@ -911,10 +917,10 @@ class Sensor(object):
     }
 
     # map type strings to types
-    SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
+    SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in list(SENSOR_TYPES.items()))
 
     # Sensor status constants
-    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE, INACTIVE = range(7)
+    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE, INACTIVE = list(range(7))
 
     ## @brief Mapping from sensor status to status name.
     STATUSES = {
@@ -928,7 +934,7 @@ class Sensor(object):
     }
 
     ## @brief Mapping from status name to sensor status.
-    STATUS_NAMES = dict((v, k) for k, v in STATUSES.items())
+    STATUS_NAMES = dict((v, k) for k, v in list(STATUSES.items()))
 
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = Lru.LRU_NOMINAL, Lru.LRU_ERROR
@@ -940,7 +946,7 @@ class Sensor(object):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from LRU value name to LRU value constant.
-    LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
+    LRU_CONSTANTS = dict((v, k) for k, v in list(LRU_VALUES.items()))
 
     # pylint: enable-msg = E0602
 
@@ -1806,8 +1812,8 @@ def hashable_identity(obj):
     if hasattr(obj, '__func__'):
         return (id(obj.__func__), id(obj.__self__))
     elif hasattr(obj, 'im_func'):
-        return (id(obj.im_func), id(obj.im_self))
-    elif isinstance(obj, (basestring, unicode)):
+        return (id(obj.im_func), id(obj.im_func))
+    elif isinstance(obj, (basestring, str)):
         return obj
     else:
         return id(obj)
@@ -1957,7 +1963,7 @@ def until_some(*args, **kwargs):
     maybe_timeout = future_timeout_manager(timeout)
     results = []
     while not wait_iterator.done():
-        result = yield maybe_timeout(wait_iterator.next())
+        result = yield maybe_timeout(next(wait_iterator))
         results.append((wait_iterator.current_index, result))
         if len(results) >= done_at_least:
             break

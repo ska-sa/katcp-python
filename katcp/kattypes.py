@@ -1,14 +1,22 @@
 # kattypes.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Utilities for dealing with KATCP types.
    """
 
 from __future__ import division, print_function, absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+
+# Uncommenting this as it breaks our python 2 tests
+#from builtins import map
+from builtins import zip
+from builtins import range
+from builtins import object
 import inspect
 import struct
 import re
@@ -293,7 +301,7 @@ class Lru(KatcpType):
     name = "lru"
 
     # LRU sensor values
-    LRU_NOMINAL, LRU_ERROR = range(2)
+    LRU_NOMINAL, LRU_ERROR = list(range(2))
 
     ## @brief Mapping from LRU value constant to LRU value name.
     LRU_VALUES = {
@@ -305,7 +313,7 @@ class Lru(KatcpType):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from LRU value name to LRU value constant.
-    LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
+    LRU_CONSTANTS = dict((v, k) for k, v in list(LRU_VALUES.items()))
 
     def encode(self, value, major):
         if value not in Lru.LRU_VALUES:
@@ -461,14 +469,14 @@ class Struct(KatcpType):
     def encode(self, value, major):
         try:
             return struct.pack(self._fmt, *value)
-        except struct.error, e:
+        except struct.error as e:
             raise ValueError("Could not pack %s into struct with format "
                              "%s: %s" % (value, self._fmt, e))
 
     def decode(self, value, major):
         try:
             return struct.unpack(self._fmt, value)
-        except struct.error, e:
+        except struct.error as e:
             raise ValueError("Could not unpack %s from struct with format "
                              "%s: %s" % (value, self._fmt, e))
 
@@ -600,7 +608,7 @@ class Parameter(object):
         # Wrap errors in FailReplies with information identifying the parameter
         try:
             return self._kattype.unpack(value, self.major)
-        except ValueError, message:
+        except ValueError as message:
             raise FailReply("Error in parameter %s (%s): %s" %
                             (self.position, self.name, message))
 
@@ -653,7 +661,7 @@ def request(*types, **options):
     check_req = options.pop('_check_req', True)
     if len(options) > 0:
         raise TypeError('does not take keyword argument(s) %r.'
-                        % options.keys())
+                        % list(options.keys()))
     # Check that only the last type has multiple=True
     if len(types) > 1:
         for type_ in types[:-1]:
@@ -818,7 +826,7 @@ def return_reply(*types, **options):
     major = options.pop('major', DEFAULT_KATCP_MAJOR)
     if len(options) > 0:
         raise TypeError('return_reply does not take keyword argument(s) %r.'
-                        % options.keys())
+                        % list(options.keys()))
 
     # Check that only the last type has multiple=True
     if len(types) > 1:
@@ -894,7 +902,7 @@ def send_reply(*types, **options):
     major = options.pop('major', DEFAULT_KATCP_MAJOR)
     if len(options) > 0:
         raise TypeError('send_reply does not take keyword argument(s) %r.'
-                        % options.keys())
+                        % list(options.keys()))
 
     def decorator(handler):
         @wraps(handler)
@@ -1102,7 +1110,7 @@ def unpack_types(types, args, argnames, major):
             params.append(Parameter(i+1, name, kattype, major))
 
     # if len(args) < len(types) this passes in None for missing args
-    return map(lambda param, arg: param.unpack(arg), params, args)
+    return list(map(lambda param, arg: param.unpack(arg), params, args))
 
 
 def pack_types(types, args, major):
@@ -1128,8 +1136,8 @@ def pack_types(types, args, major):
 
     if len(args) < len(types):
         # this passes in None for missing args
-        retvals = map(lambda ktype, arg: ktype.pack(arg, major=major),
-                      types, args)
+        retvals = list(map(lambda ktype, arg: ktype.pack(arg, major=major),
+                      types, args))
     else:
         retvals = [ktype.pack(arg, major=major)
                    for ktype, arg in zip(types, args)]

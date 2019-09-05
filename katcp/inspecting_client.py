@@ -1,11 +1,15 @@
 # inspect_client.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2014 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 from __future__ import division, print_function, absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import range
+from builtins import object
 import logging
 import random
 import copy
@@ -275,12 +279,12 @@ class InspectingClientAsync(object):
     @property
     def sensors(self):
         """A list of known sensors."""
-        return self._sensors_index.keys()
+        return list(self._sensors_index.keys())
 
     @property
     def requests(self):
         """A list of possible requests."""
-        return self._requests_index.keys()
+        return list(self._requests_index.keys())
 
     @property
     def connected(self):
@@ -444,7 +448,7 @@ class InspectingClientAsync(object):
                 self._interface_changed.clear()
                 continue
                 # Next loop through should cause re-inspection and handle state updates
-            except SyncError, e:
+            except SyncError as e:
                 last_sync_failed = True
                 retry_wait_time = self.resync_delay.delay
                 self.resync_delay.failed()
@@ -542,7 +546,7 @@ class InspectingClientAsync(object):
             index[name] = data
         else:
             orig_data = index[name]
-            for key, value in data.items():
+            for key, value in list(data.items()):
                 if orig_data.get(key) != value:
                     orig_data[key] = value
                     orig_data['_changed'] = True
@@ -962,7 +966,7 @@ class InspectingClientAsync(object):
         timestamp = msg.arguments[0]
         num_sensors = int(msg.arguments[1])
         assert len(msg.arguments) == 2 + num_sensors * 3
-        for n in xrange(num_sensors):
+        for n in range(num_sensors):
             name = msg.arguments[2 + n * 3]
             status = msg.arguments[3 + n * 3]
             value = msg.arguments[4 + n * 3]

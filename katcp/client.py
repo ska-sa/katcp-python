@@ -1,11 +1,15 @@
 # client.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 """Clients for the KAT device control language."""
 
 from __future__ import division, print_function, absolute_import
+
+from future import standard_library
+standard_library.install_aliases()
 
 import sys
 import traceback
@@ -16,8 +20,10 @@ import tornado.tcpclient
 import tornado.iostream
 
 from functools import partial, wraps
-from thread import get_ident as get_thread_ident
+from _thread import get_ident as get_thread_ident
 
+from builtins import object
+from future.utils import with_metaclass
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from tornado.util import ObjectDict
@@ -66,7 +72,7 @@ def make_threadsafe_blocking(meth):
     return meth
 
 
-class DeviceClient(object):
+class DeviceClient(with_metaclass(DeviceMetaclass, object)):
     """Device client proxy.
 
     Subclasses should implement .reply\_*, .inform\_* and
@@ -113,7 +119,6 @@ class DeviceClient(object):
     http://tornado.readthedocs.org/en/latest/netutil.html
 
     """
-    __metaclass__ = DeviceMetaclass
 
     MAX_MSG_SIZE = 2*1024*1024
     """Maximum message size that can be received in bytes.
@@ -463,7 +468,7 @@ class DeviceClient(object):
                 self._logger.warn("Reconnected to {0}"
                                   .format(self.bind_address_string))
             self._connect_failures = 0
-        except Exception, e:
+        except Exception as e:
             if self._connect_failures % 5 == 0:
                 # warn on every fifth failure
 
@@ -685,7 +690,7 @@ class DeviceClient(object):
                     # Make sure everything is torn down properly
                     if self.running():
                         self.stop()
-                except RuntimeError, e:
+                except RuntimeError as e:
                     if str(e) == 'IOLoop is closing':
                         # Seems the ioloop was stopped already, no worries.
                         self._running.clear()
@@ -1279,7 +1284,7 @@ class AsyncClient(DeviceClient):
 
         try:
             self.send_request(msg)
-        except KatcpClientError, e:
+        except KatcpClientError as e:
             error_reply = Message.request(msg.name, "fail", str(e))
             error_reply.mid = mid
             self.handle_reply(error_reply)
@@ -1531,7 +1536,7 @@ class AsyncClient(DeviceClient):
 
     def _fail_waiting_requests(self, reason):
         # Fail all requests that have not yet received their replies
-        for request_data in self._async_queue.values():
+        for request_data in list(self._async_queue.values()):
             # Last one should be timeout handle
             timeout_handle = request_data[-1]
             if timeout_handle is not None:

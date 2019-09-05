@@ -1,21 +1,45 @@
 # test_kattypes.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Tests for the kattypes module.
    """
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
 
-import unittest2 as unittest
+standard_library.install_aliases()
+
+from builtins import object, str
+
 import mock
-from katcp import Message, FailReply, AsyncReply
-from katcp.kattypes import request, inform, return_reply, send_reply,  \
-                           Bool, Discrete, Float, Int, Lru, Timestamp, \
-                           Str, Struct, Regex, DiscreteMulti, TimestampOrNow, \
-                           StrictTimestamp, Address
+import unittest2 as unittest
+
+from katcp import AsyncReply, FailReply, Message
+from katcp.kattypes import (
+    Address,
+    Bool,
+    Discrete,
+    DiscreteMulti,
+    Float,
+    Int,
+    Lru,
+    Regex,
+    Str,
+    StrictTimestamp,
+    Struct,
+    Timestamp,
+    TimestampOrNow,
+    inform,
+    request,
+    return_reply,
+    send_reply,
+)
+
+
+
 
 MS_TO_SEC_FAC = 1/1000.
 SEC_TO_MS_FAC = 1000

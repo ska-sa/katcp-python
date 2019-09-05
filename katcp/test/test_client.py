@@ -1,12 +1,15 @@
 # test_client.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Tests for client module."""
 
 from __future__ import absolute_import, division, print_function
+from future import standard_library
+
+standard_library.install_aliases()
 
 import gc
 import logging
@@ -14,25 +17,29 @@ import threading
 import time
 import weakref
 
+from concurrent.futures import Future
+
 import mock
 import tornado
 import tornado.testing
 import unittest2 as unittest
 
-import katcp
-
-from concurrent.futures import Future
-
+from builtins import range
 from tornado import gen
 
+import katcp
+
 from katcp.core import Message, ProtocolFlags
-from katcp.testutils import (DeviceTestServer,
-                             TestLogHandler,
-                             TestUtilMixin,
-                             TimewarpAsyncTestCase,
-                             WaitingMock,
-                             counting_callback,
-                             start_thread_with_cleanup)
+from katcp.testutils import (
+    DeviceTestServer,
+    TestLogHandler,
+    TestUtilMixin,
+    TimewarpAsyncTestCase,
+    WaitingMock,
+    counting_callback,
+    start_thread_with_cleanup,
+)
+
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -536,7 +543,7 @@ class TestBlockingClient(unittest.TestCase):
         def blocking_request(*args, **kwargs):
             try:
                 return self.client.blocking_request(*args, **kwargs)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 if not e.args[0].startswith('Request '):
                     raise
 

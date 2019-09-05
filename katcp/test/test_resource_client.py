@@ -1,19 +1,10 @@
-###############################################################################
-# SKA South Africa (http://ska.ac.za/)                                        #
-# Author: cam@ska.ac.za                                                       #
-# Copyright @ 2013 SKA SA. All rights reserved.                               #
-#                                                                             #
-# THIS SOFTWARE MAY NOT BE COPIED OR DISTRIBUTED IN ANY FORM WITHOUT THE      #
-# WRITTEN PERMISSION OF SKA SA.                                               #
-###############################################################################
-from __future__ import division, print_function, absolute_import
+# Copyright 2013 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
-# Python 2/3 compatibility stuff
+from __future__ import absolute_import, division, print_function
 from future import standard_library
+
 standard_library.install_aliases()
-from builtins import str
-from builtins import object
-#
 
 import copy
 import gc
@@ -23,25 +14,39 @@ import time
 import unittest
 import weakref
 
+# Python 2/3 compatibility stuff
+from builtins import object
+from concurrent.futures import TimeoutError
+from functools import partial
+
 import mock
 import tornado
 
 from _thread import get_ident as get_thread_ident
-from functools import partial
-
-from concurrent.futures import TimeoutError
-
-from katcp.testutils import (DeviceTestSensor,
-                             DeviceTestServer,
-                             TimewarpAsyncTestCase,
-                             TimewarpAsyncTestCaseTimeAdvancer,
-                             start_thread_with_cleanup)
-
-from katcp import resource, inspecting_client, ioloop_manager, Message, Sensor
-from katcp.core import AttrDict, AsyncEvent, ProtocolFlags
 
 # module under test
-from katcp import resource_client
+from katcp import (
+    Message,
+    Sensor,
+    inspecting_client,
+    ioloop_manager,
+    resource,
+    resource_client,
+)
+from katcp.core import AsyncEvent, AttrDict, ProtocolFlags
+from katcp.testutils import (
+    DeviceTestSensor,
+    DeviceTestServer,
+    TimewarpAsyncTestCase,
+    TimewarpAsyncTestCaseTimeAdvancer,
+    start_thread_with_cleanup,
+)
+
+
+
+
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -498,6 +503,7 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         self.server.stop()
         self.server.join(timeout=1)
         yield DUT.until_state('disconnected')
+        self.assertEqual(DUT.state, 'disconnected')
 
         # Test that requests fail
         rep = yield DUT.req.watchdog()

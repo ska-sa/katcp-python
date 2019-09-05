@@ -1,8 +1,8 @@
 # test_katcp_bnf.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Test the KAT device communication language BNF.
 
@@ -35,12 +35,22 @@
     Uses the ply library from http://www.dabeaz.com/ply/.
     """
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+
+standard_library.install_aliases()
+
+import unittest
+
+from builtins import object
 
 import ply.lex as lex
 import ply.yacc as yacc
+
 import katcp
-import unittest
+
+
+
 
 
 class DclLexer(object):

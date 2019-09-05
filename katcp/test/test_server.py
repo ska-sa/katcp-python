@@ -1,49 +1,62 @@
 # test_server.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Tests for the server module.
    """
 from __future__ import absolute_import, division, print_function
+from future import standard_library
+
+standard_library.install_aliases()
 
 import errno
 import gc
 import logging
 import socket
 import sys
-import thread
 import threading
 import time
 import weakref
 
+from builtins import str
+from collections import defaultdict
+from concurrent.futures import Future
+from functools import partial, wraps
+
+import _thread
 import mock
 import tornado.testing
 import unittest2 as unittest
 
-import katcp
-
-from collections import defaultdict
-from functools import partial, wraps
-
-from concurrent.futures import Future
 from tornado import gen
 
+import katcp
+
+from katcp import __version__, kattypes
+from katcp.core import FailReply
 from katcp.testutils import (
     AsyncDeviceTestServer,
     BlockingTestClient,
     ClientConnectionTest,
     DeviceTestServer,
-    handle_mock_req,
-    mock_req,
     TestLogHandler,
     TestUtilMixin,
+    WaitingMock,
+    handle_mock_req,
+    mock_req,
     start_thread_with_cleanup,
-    WaitingMock)
-from katcp.core import FailReply
-from katcp import (kattypes,
-                   __version__)
+)
+
+
+
+
+
+
+
+
+
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -189,7 +202,7 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
         self.server.VERSION_INFO = ('deviceapi', 5, 6)
         # Hack around ioloop thread asserts
-        self.server._server.ioloop_thread_id = thread.get_ident()
+        self.server._server.ioloop_thread_id = _thread.get_ident()
         # Test call
         self.server.on_client_connect(mock_conn)
         # we are expecting 2 inform messages
@@ -310,7 +323,7 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self.server.BUILD_INFO = ('buildy', 1, 2, 'g')
         self.server.VERSION_INFO = ('deviceapi', 5, 6)
         # Hack around ioloop thread asserts
-        self.server._server.ioloop_thread_id = thread.get_ident()
+        self.server._server.ioloop_thread_id = _thread.get_ident()
         # Test call
         self.server.on_client_connect(mock_conn)
         # we are expecting 3 inform messages
@@ -422,7 +435,7 @@ class test_DeviceServer51(test_DeviceServer):
         # cannot add a new attribute to an instance method. For Python 2 we need
         # to make a copy of the original handler function using partial and then
         # mess with that copy.
-        handler_original = self.server._request_handlers['help'].im_func
+        handler_original = self.server._request_handlers['help'].__func__
         handler_updated = wraps(handler_original)(partial(handler_original,
                                                           self.server))
         self.server._request_handlers[
@@ -903,7 +916,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         # close client stream while the server isn't looking then wait for the server to
         # notice
 
-        stream, client_conn = self.server._server._connections.items()[0]
+        stream, client_conn = list(self.server._server._connections.items())[0]
         # Wait for the client to disconnect
         self.client.notify_connected = WaitingMock()
         self.server.ioloop.add_callback(stream.close)

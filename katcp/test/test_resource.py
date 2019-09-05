@@ -1,24 +1,28 @@
-###############################################################################
-# SKA South Africa (http://ska.ac.za/)                                        #
-# Author: cam@ska.ac.za                                                       #
-# Copyright @ 2013 SKA SA. All rights reserved.                               #
-#                                                                             #
-# THIS SOFTWARE MAY NOT BE COPIED OR DISTRIBUTED IN ANY FORM WITHOUT THE      #
-# WRITTEN PERMISSION OF SKA SA.                                               #
-###############################################################################
-from __future__ import division, print_function, absolute_import
+# Copyright 2013 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
-import unittest
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+
+standard_library.install_aliases()
+
 import logging
-import mock
+import unittest
 
+import mock
 import tornado.testing
 
-from katcp import Sensor
+# Module under test
+from katcp import Sensor, resource
 from katcp.testutils import TimewarpAsyncTestCase
 
-# Module under test
-from katcp import resource
+
+
+
+
+
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +32,7 @@ class test_escape_name(unittest.TestCase):
             'blah-bal' : 'blah_bal',
             'bief_bof.ba32f-blief' : 'bief_bof_ba32f_blief',
             'already_escape_name' : 'already_escape_name'}
-        for input, expected_output in desired_mappings.items():
+        for input, expected_output in list(desired_mappings.items()):
             self.assertEqual(resource.escape_name(input), expected_output)
 
 class test_KATCPSensor(TimewarpAsyncTestCase):

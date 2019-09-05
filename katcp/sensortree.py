@@ -1,3 +1,6 @@
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 """Sensor tree implementation.
 
 A sensor tree is a DAG (directed acyclic graph) of sensor objects
@@ -25,6 +28,9 @@ that the update chain eventually terminates. It is not enforced.
 
 from __future__ import division, print_function, absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import object
 class GenericSensorTree(object):
     """A tree of generic sensors."""
     # TODO: consider adding detection of cycles.
@@ -425,7 +431,7 @@ class AggregateSensorTree(GenericSensorTree):
         self._registered_sensors[child_name] = child
         completed = []
         for parent, (_rule, names, sensors) in \
-                self._incomplete_aggregates.iteritems():
+                list(self._incomplete_aggregates.items()):
             if child_name in names:
                 names.remove(child_name)
                 sensors.add(child)

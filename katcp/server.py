@@ -1,12 +1,16 @@
 # servers.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Servers for the KAT device control language."""
 
 from __future__ import division, print_function, absolute_import
+
+from future import standard_library
+standard_library.install_aliases()
+
 
 import socket
 import threading
@@ -21,8 +25,11 @@ import tornado.tcpserver
 
 from functools import partial, wraps
 from collections import deque
-from thread import get_ident as get_thread_ident
+from _thread import get_ident as get_thread_ident
 
+from builtins import range, object
+from future.utils import with_metaclass
+from past.builtins import basestring
 from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
 from tornado.concurrent import chain_future
@@ -463,7 +470,7 @@ class KATCPServer(object):
         assert get_thread_ident() == self.ioloop_thread_id
         try:
             self._tcp_server.stop()
-            for stream, conn in self._connections.items():
+            for stream, conn in list(self._connections.items()):
                 yield self._disconnect_client(stream, conn,
                                               'Device server shutting down.')
         finally:
@@ -670,7 +677,7 @@ class KATCPServer(object):
             f = tornado_Future()
             try:
                 f.set_result(fn())
-            except Exception, e:
+            except Exception as e:
                 f.set_exception(e)
                 self._logger.exception('Error executing callback '
                                        'in ioloop thread')
@@ -684,7 +691,7 @@ class KATCPServer(object):
                 def send_message_callback():
                     try:
                         f.set_result(fn())
-                    except Exception, e:
+                    except Exception as e:
                         f.set_exception(e)
                         self._logger.exception(
                             'Error executing wrapped async callback')
@@ -724,7 +731,7 @@ class KATCPServer(object):
         This method can only be called in the IOLoop thread.
 
         """
-        for stream in self._connections.keys():
+        for stream in list(self._connections.keys()):
             if not stream.closed():
                 # Don't cause noise by trying to write to already closed streams
                 self.send_message(stream, msg)
@@ -791,9 +798,9 @@ class MessageHandlerThread(object):
     def __init__(self, handler, log_inform_formatter, logger=log):
         self.handler = handler
         try:
-            owner = handler.im_self.name
+            owner = handler.__self__.name
         except AttributeError:
-            owner = handler.im_self.__class__.__name__
+            owner = handler.__self__.__class__.__name__
         self.name = "{}.message_handler" .format(owner)
         self.log_inform_formatter = log_inform_formatter
         self._wake = threading.Event()
@@ -850,7 +857,7 @@ class MessageHandlerThread(object):
                                                      ready_future)
                         else:
                             ready_future.set_result(res)
-                    except Exception, e:
+                    except Exception as e:
                         err_msg = ('Error calling message '
                                    'handler for msg:\n {0!s}'.format(msg))
                         self._logger.error(err_msg, exc_info=True)
@@ -912,7 +919,8 @@ class MessageHandlerThread(object):
         return self._running.wait(timeout)
 
 
-class DeviceServerBase(object):
+class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
+
     """Base class for device servers.
 
     Subclasses should add .request\_* methods for dealing
@@ -942,8 +950,6 @@ class DeviceServerBase(object):
         Logger to log messages to.
 
     """
-
-    __metaclass__ = DeviceServerMetaclass
 
     ## @brief Protocol versions and flags. Default to version 5, subclasses
     ## should override PROTOCOL_INFO
@@ -1066,7 +1072,7 @@ class DeviceServerBase(object):
                             connection.reply(f.result(), msg)
                             self._logger.debug("%s FUTURE%s replied",
                                                msg.name, concurrent_str)
-                        except FailReply, e:
+                        except FailReply as e:
                             reason = str(e)
                             self._logger.error("Request %s FUTURE%s FAIL: %s",
                                                msg.name, concurrent_str, reason)
@@ -1102,10 +1108,10 @@ class DeviceServerBase(object):
                     assert (reply.mtype == Message.REPLY)
                     assert (reply.name == msg.name)
                     self._logger.debug("%s OK" % (msg.name,))
-            except AsyncReply, e:
+            except AsyncReply as e:
                 self._logger.debug("%s ASYNC OK" % (msg.name,))
                 send_reply = False
-            except FailReply, e:
+            except FailReply as e:
                 reason = str(e)
                 self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
                 reply = Message.reply(msg.name, "fail", reason)
@@ -1663,7 +1669,7 @@ class DeviceServer(DeviceServerBase):
         sensor = self._sensors.pop(sensor_name)
 
         def cancel_sensor_strategies():
-            for conn_strategies in self._strategies.values():
+            for conn_strategies in list(self._strategies.values()):
                 strategy = conn_strategies.pop(sensor, None)
                 if strategy:
                     strategy.cancel()
@@ -1697,7 +1703,7 @@ class DeviceServer(DeviceServerBase):
             The list of sensors registered with the device server.
 
         """
-        return self._sensors.values()
+        return list(self._sensors.values())
 
     def set_restart_queue(self, restart_queue):
         """Set the restart queue.
@@ -1884,7 +1890,7 @@ class DeviceServer(DeviceServerBase):
             timeout_hint = timeout_hint or 0
             timeout_hints[request] = timeout_hint
         else:
-            for request_, handler in self._request_handlers.items():
+            for request_, handler in list(self._request_handlers.items()):
                 timeout_hint = getattr(handler, 'request_timeout_hint', None)
                 if timeout_hint:
                     timeout_hints[request_] = timeout_hint
@@ -1927,7 +1933,7 @@ class DeviceServer(DeviceServerBase):
         if msg.arguments:
             try:
                 self.log.set_log_level_by_name(msg.arguments[0])
-            except ValueError, e:
+            except ValueError as e:
                 raise FailReply(str(e))
         return req.make_reply("ok", self.log.level_name())
 
@@ -2113,7 +2119,7 @@ class DeviceServer(DeviceServerBase):
         exact, name_filter = construct_name_filter(msg.arguments[0]
                                                    if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
-                   sorted(self._sensors.iteritems()) if name_filter(name)]
+                   sorted(self._sensors.items()) if name_filter(name)]
 
         if exact and not sensors:
             return req.make_reply("fail", "Unknown sensor name.")
@@ -2178,7 +2184,7 @@ class DeviceServer(DeviceServerBase):
         exact, name_filter = construct_name_filter(msg.arguments[0]
                                                    if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
-                   sorted(self._sensors.iteritems()) if name_filter(name)]
+                   sorted(self._sensors.items()) if name_filter(name)]
 
         if exact and not sensors:
             return req.make_reply("fail", "Unknown sensor name.")
@@ -2396,7 +2402,7 @@ class DeviceLogger(object):
 
     # level values are used as indexes into the LEVELS list
     # so these to lists should be in the same order
-    ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF = range(8)
+    ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF = list(range(8))
 
     ## @brief List of logging level names.
     LEVELS = ["all", "trace", "debug", "info", "warn",

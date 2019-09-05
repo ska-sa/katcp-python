@@ -3,10 +3,14 @@
 
 from __future__ import division, print_function, absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+
 import tornado.concurrent
 
-from thread import get_ident as get_thread_ident
+from _thread import get_ident as get_thread_ident
 
+from builtins import object
 from tornado.gen import Return
 from tornado.concurrent import Future
 
@@ -233,7 +237,7 @@ class FakeInspectingClientManager(object):
             if name not in self.fake_sensor_infos:
                 return ("fail", "Unknown sensor name.")
         else:
-            keys = self.fake_sensor_infos.keys()
+            keys = list(self.fake_sensor_infos.keys())
 
         num_informs = 0
         for sensor_name in keys:
@@ -248,7 +252,7 @@ class FakeInspectingClientManager(object):
         """For compatibility with methods stolen from server.DeviceServer"""
         return self._fkc.request_handlers
 
-    request_help = server.DeviceServer.request_help.im_func
+    request_help = server.DeviceServer.request_help.__func__
 
     def add_sensors(self, sensor_infos):
         """Add fake sensors
@@ -262,7 +266,7 @@ class FakeInspectingClientManager(object):
 
         """
         # Check sensor validity. parse_type() and parse_params should raise if not OK
-        for s_name, s_info in sensor_infos.items():
+        for s_name, s_info in list(sensor_infos.items()):
             s_type = Sensor.parse_type(s_info[2])
             s_params = Sensor.parse_params(s_type, s_info[3:])
         self.fake_sensor_infos.update(sensor_infos)
@@ -297,7 +301,7 @@ class FakeInspectingClientManager(object):
 
         """
         # Check that all the callables have docstrings as strings
-        for req_func in rh_dict.values():
+        for req_func in list(rh_dict.values()):
             assert req_func.__doc__, "Even fake request handlers must have docstrings"
         self._fkc.request_handlers.update(rh_dict)
         self._fic._interface_changed.set()

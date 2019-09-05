@@ -1,5 +1,10 @@
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 from __future__ import division, print_function, absolute_import
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import object
 import sys
 import time
 import logging
@@ -9,7 +14,7 @@ import textwrap
 import tornado.ioloop
 
 from functools import wraps
-from thread import get_ident as get_thread_ident
+from _thread import get_ident as get_thread_ident
 
 from concurrent.futures import Future, TimeoutError
 from tornado.concurrent import Future as tornado_Future
