@@ -235,21 +235,21 @@ class TestSensor(unittest.TestCase):
         # test both read_formatted and format_reading
         self.assertEqual(s.format_reading(s.read()), ("12345.000000", "nominal", "3"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "nominal", "3"))
-        self.assertEquals(s.parse_value("3"), 3)
-        self.assertEquals(s.parse_value("4"), 4)
-        self.assertEquals(s.parse_value("-10"), -10)
+        self.assertEqual(s.parse_value("3"), 3)
+        self.assertEqual(s.parse_value("4"), 4)
+        self.assertEqual(s.parse_value("-10"), -10)
         self.assertRaises(ValueError, s.parse_value, "asd")
 
         s = Sensor(Sensor.INTEGER, "an.int", "An integer.", "count", [-20, 20])
-        self.assertEquals(s.value(), 0)
+        self.assertEqual(s.value(), 0)
         s = Sensor(Sensor.INTEGER, "an.int", "An integer.", "count", [2, 20])
-        self.assertEquals(s.value(), 2)
+        self.assertEqual(s.value(), 2)
         s = Sensor.integer("an.int", "An integer.", "count", [2, 20], default=5)
-        self.assertEquals(s.value(), 5)
-        self.assertEquals(s.status(), Sensor.UNKNOWN)
+        self.assertEqual(s.value(), 5)
+        self.assertEqual(s.status(), Sensor.UNKNOWN)
         s = Sensor.integer("an.int", "An integer.", "count", [2, 20],
                            initial_status=Sensor.NOMINAL)
-        self.assertEquals(s.status(), Sensor.NOMINAL)
+        self.assertEqual(s.status(), Sensor.NOMINAL)
 
     def test_float_sensor(self):
         """Test float sensor."""
@@ -259,21 +259,21 @@ class TestSensor(unittest.TestCase):
         # test both read_formatted and format_reading
         self.assertEqual(s.format_reading(s.read()), ("12345.000000", "warn", "3"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "warn", "3"))
-        self.assertEquals(s.parse_value("3"), 3.0)
-        self.assertEquals(s.parse_value("10"), 10.0)
-        self.assertEquals(s.parse_value("-10"), -10.0)
+        self.assertEqual(s.parse_value("3"), 3.0)
+        self.assertEqual(s.parse_value("10"), 10.0)
+        self.assertEqual(s.parse_value("-10"), -10.0)
         self.assertRaises(ValueError, s.parse_value, "asd")
 
         s = Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "", [-20.0, 20.0])
-        self.assertEquals(s.value(), 0.0)
+        self.assertEqual(s.value(), 0.0)
         s = Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "", [2.0, 20.0])
-        self.assertEquals(s.value(), 2.0)
+        self.assertEqual(s.value(), 2.0)
         s = Sensor.float("a.float", "A float.", "", [2.0, 20.0], default=5.0)
-        self.assertEquals(s.value(), 5.0)
-        self.assertEquals(s.status(), Sensor.UNKNOWN)
+        self.assertEqual(s.value(), 5.0)
+        self.assertEqual(s.status(), Sensor.UNKNOWN)
         s = Sensor.float("a.float", "A float.", "", [2.0, 20.0],
                          initial_status=Sensor.WARN)
-        self.assertEquals(s.status(), Sensor.WARN)
+        self.assertEqual(s.status(), Sensor.WARN)
 
     def test_boolean_sensor(self):
         """Test boolean sensor."""
@@ -283,8 +283,8 @@ class TestSensor(unittest.TestCase):
         # test both read_formatted and format_reading
         self.assertEqual(s.format_reading(s.read()), ("12345.000000", "unknown", "1"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "unknown", "1"))
-        self.assertEquals(s.parse_value("1"), True)
-        self.assertEquals(s.parse_value("0"), False)
+        self.assertEqual(s.parse_value("1"), True)
+        self.assertEqual(s.parse_value("0"), False)
         self.assertRaises(ValueError, s.parse_value, "asd")
         s = Sensor.boolean("a.boolean", "A boolean.", "on/off", default=True)
         self.assertEqual(s._value, True)
@@ -292,7 +292,7 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s._value, False)
         s = Sensor.boolean("a.boolean", "A boolean.", "on/off",
                            initial_status=Sensor.ERROR)
-        self.assertEquals(s.status(), Sensor.ERROR)
+        self.assertEqual(s.status(), Sensor.ERROR)
 
     def test_discrete_sensor(self):
         """Test discrete sensor."""
@@ -303,7 +303,7 @@ class TestSensor(unittest.TestCase):
         # test both read_formatted and format_reading
         self.assertEqual(s.format_reading(s.read()), ("12345.000000", "error", "on"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "error", "on"))
-        self.assertEquals(s.parse_value("on"), "on")
+        self.assertEqual(s.parse_value("on"), "on")
         self.assertRaises(ValueError, s.parse_value, "fish")
         s = Sensor.discrete("a.discrete", "A discrete sensor.", "state",
                             ["on", "off"], default='on')
@@ -313,7 +313,7 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s._value, 'off')
         s = Sensor.discrete("a.discrete", "A discrete sensor.", "state",
                             ["on", "off"], initial_status=Sensor.UNREACHABLE)
-        self.assertEquals(s.status(), Sensor.UNREACHABLE)
+        self.assertEqual(s.status(), Sensor.UNREACHABLE)
 
     def test_lru_sensor(self):
         """Test LRU sensor."""
@@ -323,7 +323,7 @@ class TestSensor(unittest.TestCase):
         # test both read_formatted and format_reading
         self.assertEqual(s.format_reading(s.read()), ("12345.000000", "failure", "error"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "failure", "error"))
-        self.assertEquals(s.parse_value("nominal"), katcp.Sensor.LRU_NOMINAL)
+        self.assertEqual(s.parse_value("nominal"), katcp.Sensor.LRU_NOMINAL)
         self.assertRaises(ValueError, s.parse_value, "fish")
         s = Sensor.lru(
             "an.lru", "An LRU sensor.", "state", default=Sensor.LRU_ERROR)
@@ -333,7 +333,7 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s._value, Sensor.LRU_NOMINAL)
         s = Sensor.lru(
             "an.lru", "An LRU sensor.", "state", initial_status=Sensor.FAILURE)
-        self.assertEquals(s.status(), Sensor.FAILURE)
+        self.assertEqual(s.status(), Sensor.FAILURE)
 
     def test_string_sensor(self):
         """Test string sensor."""
@@ -343,13 +343,13 @@ class TestSensor(unittest.TestCase):
         # test both read_formatted and format_reading
         self.assertEqual(s.format_reading(s.read()), ("12345.000000", "nominal", "zwoop"))
         self.assertEqual(s.read_formatted(), ("12345.000000", "nominal", "zwoop"))
-        self.assertEquals(s.parse_value("bar foo"), "bar foo")
+        self.assertEqual(s.parse_value("bar foo"), "bar foo")
         s = Sensor.string(
             "a.string", "A string sensor.", "filename", default='baz')
         self.assertEqual(s._value, 'baz')
         s = Sensor.string("a.string", "A string sensor.", "filename",
                           initial_status=Sensor.WARN)
-        self.assertEquals(s.status(), Sensor.WARN)
+        self.assertEqual(s.status(), Sensor.WARN)
 
     def test_timestamp_sensor(self):
         """Test timestamp sensor."""
@@ -381,7 +381,7 @@ class TestSensor(unittest.TestCase):
 
         s = Sensor.timestamp("a.timestamp", "A timestamp sensor.", "",
                              initial_status=Sensor.NOMINAL)
-        self.assertEquals(s.status(), Sensor.NOMINAL)
+        self.assertEqual(s.status(), Sensor.NOMINAL)
 
     def test_address_sensor(self):
         """Test address sensor."""
@@ -400,7 +400,7 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s._value, ('192.168.101.1', 81))
         s = Sensor.address("a.address", "An address sensor.", "",
                            initial_status=Sensor.NOMINAL)
-        self.assertEquals(s.status(), Sensor.NOMINAL)
+        self.assertEqual(s.status(), Sensor.NOMINAL)
 
     def test_set_and_get_value(self):
         """Test getting and setting a sensor value."""

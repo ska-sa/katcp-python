@@ -1122,7 +1122,7 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         t, status, value = (t0+2.5, Sensor.NOMINAL, 3)
         katcp_sensor.set(t, status, value)
         print("listener.mock_calls", listener.mock_calls)
-        self.assertEquals(len(listener.mock_calls), 6)
+        self.assertEqual(len(listener.mock_calls), 6)
         return
 
     def get_expected(self, testserv_attr):

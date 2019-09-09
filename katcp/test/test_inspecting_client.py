@@ -273,7 +273,7 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         yield self.client.until_synced()
         reply, informs = yield self.client.simple_request('help', 'watchdog')
         self.assertIn('ok', str(reply))
-        self.assertEquals(len(informs), 1)
+        self.assertEqual(len(informs), 1)
 
     @tornado.testing.gen_test
     def test_sensor(self):
@@ -281,8 +281,8 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         yield self.client.until_synced()
         sensor_name = 'an.int'
         sensor = yield self.client.future_get_sensor(sensor_name)
-        self.assertEquals(sensor.name, sensor_name)
-        self.assertEquals(sensor.stype, 'integer')
+        self.assertEqual(sensor.name, sensor_name)
+        self.assertEqual(sensor.stype, 'integer')
 
         # Unknown sensor requests return a None.
         sensor_name = 'thing.unknown_sensor'
@@ -384,9 +384,9 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         yield client.connect()
         yield client.until_connected()
         yield client.until_synced()
-        self.assertEquals(len(client.sensors), 0)
+        self.assertEqual(len(client.sensors), 0)
 
-        self.assertEquals(len(client.requests), 0)
+        self.assertEqual(len(client.requests), 0)
         self.assertTrue(client.synced)
         self.assertTrue(client.is_connected())
         self.assertTrue(client.connected)
@@ -394,9 +394,9 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         # Wait for sync and check if the sensor was automaticaly added.
         # Get the sensor object and see if it has data.
         sensor = yield client.future_get_sensor('an.int')
-        self.assertEquals(len(client.sensors), 1)
+        self.assertEqual(len(client.sensors), 1)
         self.assertTrue(sensor.read())
-        self.assertEquals(len(client.requests), 0)
+        self.assertEqual(len(client.requests), 0)
 
     @tornado.testing.gen_test
     def test_handle_sensor_value(self):

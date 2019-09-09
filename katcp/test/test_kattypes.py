@@ -52,14 +52,14 @@ class TestType(unittest.TestCase):
             if type(result) is type and issubclass(result, Exception):
                 self.assertRaises(result, t.pack, value)
             else:
-                self.assertEquals(t.pack(value), result)
+                self.assertEqual(t.pack(value), result)
 
     def test_unpack(self):
         for t, value, result in self._unpack:
             if type(result) is type and issubclass(result, Exception):
                 self.assertRaises(result, t.unpack, value)
             else:
-                self.assertEquals(t.unpack(value), result)
+                self.assertEqual(t.unpack(value), result)
 
 
 class TestInt(TestType):
