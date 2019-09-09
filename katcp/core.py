@@ -636,8 +636,10 @@ class ProtocolFlags(object):
     REQUEST_TIMEOUT_HINTS_MIN_VERSION = (5, 1)
 
     def __init__(self, major, minor, flags):
-        self.major = major
-        self.minor = minor
+        # PY2 and Py3 compatibility.
+        # Why? go here: https://docs.python.org/3/whatsnew/3.0.html#ordering-comparisons
+        self.major = major if major is not None else 0
+        self.minor = minor if minor is not None else 0
         self.flags = set(list(flags))
         self.multi_client = self.MULTI_CLIENT in self.flags
         self.message_ids = self.MESSAGE_IDS in self.flags
