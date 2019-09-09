@@ -15,7 +15,7 @@ standard_library.install_aliases()
 import logging
 import unittest
 
-from builtins import object
+from builtins import object, str
 
 import tornado
 

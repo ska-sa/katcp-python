@@ -19,7 +19,7 @@ import logging
 
 import tornado
 
-from builtins import next, object, range
+from builtins import bytes, next, object, range, str
 from past.builtins import basestring
 from collections import namedtuple, defaultdict
 from functools import wraps, partial
@@ -305,7 +305,7 @@ class Message(object):
             return str(int(arg))
         else:
             try:
-                return str(arg)
+                arg = str(arg)
             except UnicodeEncodeError:
                 # unicode characters will break the str cast, so
                 # try to encode to ascii and replace the offending characters
@@ -314,7 +314,9 @@ class Message(object):
                              "Trying to encode argument to ascii.")
                 if not isinstance(arg, str):
                     arg = arg.encode('utf-8', errors='ignore').decode('utf-8')
-                return arg.encode('ascii', 'replace')
+            finally:
+                arg = arg.encode('ascii', 'replace')
+                return arg if not isinstance(arg, bytes) else arg.decode()
 
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
@@ -355,7 +357,7 @@ class Message(object):
     def __repr__(self):
         """ Return message displayed in a readable form."""
         tp = self.TYPE_NAMES[self.mtype].lower()
-        name = self.name
+        name = str(self.name)
         if self.arguments:
             escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
                             for x in self.arguments]
@@ -547,6 +549,9 @@ class MessageParser(object):
         if not line:
             raise KatcpSyntaxError("Empty message received.")
 
+        if not isinstance(line, str):
+            line = str(line, 'utf-8')
+
         type_char = line[0]
         if type_char not in self.TYPE_SYMBOL_LOOKUP:
             raise KatcpSyntaxError("Bad type character %r." % (type_char,))
@@ -687,11 +692,11 @@ class ProtocolFlags(object):
 class DeviceMetaclass(type):
     """Metaclass for DeviceServer and DeviceClient classes.
 
-    Collects up methods named request\_* and adds
+    Collects up methods named request\\_* and adds
     them to a dictionary of supported methods on the class.
-    All request\_* methods must have a doc string so that help
-    can be generated.  The same is done for inform\_* and
-    reply\_* methods.
+    All request\\_* methods must have a doc string so that help
+    can be generated.  The same is done for inform\\_* and
+    reply\\_* methods.
 
     """
     def __init__(mcs, name, bases, dct):
