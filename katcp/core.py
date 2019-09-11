@@ -17,6 +17,7 @@ import time
 import warnings
 import logging
 
+import future
 import tornado
 
 from builtins import bytes, next, object, range, str
@@ -28,6 +29,7 @@ from concurrent.futures import Future, TimeoutError
 from tornado import gen
 from tornado.gen import with_timeout
 from tornado.concurrent import Future as tornado_Future
+
 
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
@@ -45,6 +47,7 @@ VERSION_CONNECT_KATCP_MAJOR = 5
 INTERFACE_CHANGED_KATCP_MAJOR = 5
 
 logger = logging.getLogger(__name__)
+
 
 class Reading(namedtuple('Reading', 'timestamp status value')):
     """Sensor reading as a (timestamp, status, value) tuple.
@@ -728,7 +731,9 @@ class DeviceMetaclass(type):
             if name.startswith("request_"):
                 request_name = convert_method_name("request_", name)
                 if mcs.check_protocol(handler):
-                    mcs._request_handlers[request_name] = handler
+                    mcs._request_handlers[request_name] = (
+                        handler if future.utils.PY3 else handler.__func__
+                    )
                     error_msg = "Request '{}' has no docstring.".format(request_name)
                     assert(handler.__doc__ is not None), error_msg
             elif name.startswith("inform_"):
