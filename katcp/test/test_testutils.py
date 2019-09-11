@@ -30,6 +30,7 @@ def get_sensor(sensor_type, name=None):
 
     return sensor
 
+
 class test_SensorTransitionWaiter(unittest.TestCase):
     def test_wait_float_timeout(self):
         timeout = 0.1

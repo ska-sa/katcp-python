@@ -20,6 +20,7 @@ import queue as Queue
 import threading
 import functools
 
+import future
 import mock
 import tornado.testing
 import tornado.ioloop
@@ -47,6 +48,7 @@ from .kattypes import (request,
                        concurrent_reply,
                        request_timeout_hint)
 from .object_proxies import ObjectWrapper
+
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +219,7 @@ class BlockingTestClient(client.BlockingClient):
     @client.make_threadsafe
     def raw_send(self, chunk):
         """Send a raw chunk of data to the server."""
+        chunk = bytes(chunk) if future.utils.PY2 else bytes(chunk, 'utf-8')
         self._stream.write(chunk)
 
     def _sensor_lag(self):

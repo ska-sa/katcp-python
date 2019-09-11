@@ -4,8 +4,7 @@
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
-"""Tests for the server module.
-   """
+"""Tests for the server module."""
 from __future__ import absolute_import, division, print_function
 from future import standard_library
 
@@ -50,19 +49,12 @@ from katcp.testutils import (
 )
 
 
-
-
-
-
-
-
-
-
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 logger = logging.getLogger(__name__)
 
 NO_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
+
 
 class test_ClientConnection(unittest.TestCase):
     def test_init(self):
@@ -435,7 +427,7 @@ class test_DeviceServer51(test_DeviceServer):
         # cannot add a new attribute to an instance method. For Python 2 we need
         # to make a copy of the original handler function using partial and then
         # mess with that copy.
-        handler_original = self.server._request_handlers['help'].__func__
+        handler_original = self.server._request_handlers['help']
         handler_updated = wraps(handler_original)(partial(handler_original,
                                                           self.server))
         self.server._request_handlers[
@@ -545,7 +537,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         # Send a bunch of request to the server, but don't read anything from
         # the server
         try:
-            slow_sock.sendall('?help\n'*1000000)
+            slow_sock.sendall(b'?help\n'*1000000)
         except (socket.error, socket.timeout):
             pass
 
