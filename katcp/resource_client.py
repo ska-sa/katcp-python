@@ -1116,8 +1116,9 @@ class ClientGroup(object):
                 self._req = DefaultAttrDict(DummyRequest)
             else:
                 self._req = AttrDict()
+
             for client in self.clients:
-                for name, request in dict.iteritems(client.req):
+                for name, request in dict.items(client.req):
                     if name not in self._req:
                         self._req[name] = GroupRequest(self, name,
                                                        request.description)
