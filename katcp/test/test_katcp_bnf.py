@@ -33,7 +33,7 @@
             <plain> ::= character / <special>
 
     Uses the ply library from http://www.dabeaz.com/ply/.
-    """
+"""
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
@@ -48,9 +48,6 @@ import ply.lex as lex
 import ply.yacc as yacc
 
 import katcp
-
-
-
 
 
 class DclLexer(object):

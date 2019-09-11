@@ -10,14 +10,13 @@ from __future__ import division, print_function, absolute_import
 
 from future import standard_library
 standard_library.install_aliases()
-from builtins import str
-from builtins import range
-from builtins import object
+
 import logging
 import os
 
 import tornado.ioloop
 
+from builtins import str, range, object
 from _thread import get_ident as get_thread_ident
 from functools import wraps
 

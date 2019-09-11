@@ -14,8 +14,6 @@ from builtins import object, range, zip
 import katcp
 
 
-
-
 class BaseTreeTest(unittest.TestCase):
 
     def assertSensorValues(self, sensors, values):

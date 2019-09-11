@@ -31,14 +31,10 @@ from katcp import Sensor, sampling
 from katcp.testutils import DeviceTestSensor, TestLogHandler, TimewarpAsyncTestCase
 
 
-
-
-
-
-
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 logger = logging.getLogger(__name__)
+
 
 class TestSampling(TimewarpAsyncTestCase):
     # TODO Also test explicit ioloop passing

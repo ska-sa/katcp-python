@@ -3,11 +3,8 @@
 
 from __future__ import division, print_function, absolute_import
 
-# Python 2/3 compatibility stuff
 from future import standard_library
 standard_library.install_aliases()
-from future.moves.builtins import dict
-
 
 import logging
 import sys
@@ -22,10 +19,10 @@ from functools import partial
 
 from concurrent.futures import Future
 from builtins import object
-
-from past.utils import old_div
+from future.moves.builtins import dict
 from tornado.concurrent import Future as tornado_Future
 from tornado.gen import Return, maybe_future, with_timeout
+from past.utils import old_div
 
 from katcp import resource, inspecting_client, Message
 from katcp.resource import KATCPReply, KATCPSensorError
@@ -41,6 +38,7 @@ from katcp.ioloop_manager import (ThreadSafeMethodAttrWrapper,
                                   IOLoopThreadWrapper)
 
 log = logging.getLogger(__name__)
+
 
 def _normalise_request_name_set(reqs):
     return set(resource.escape_name(r) for r in reqs)

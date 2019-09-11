@@ -17,13 +17,6 @@ from katcp import Sensor, resource
 from katcp.testutils import TimewarpAsyncTestCase
 
 
-
-
-
-
-
-
-
 logger = logging.getLogger(__name__)
 
 class test_escape_name(unittest.TestCase):

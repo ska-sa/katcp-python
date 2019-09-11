@@ -8,25 +8,27 @@ from __future__ import division, print_function, absolute_import
 
 from future import standard_library
 standard_library.install_aliases()
-from builtins import range
-from builtins import object
+
 import logging
 import random
 import copy
 
-import tornado
-
-import katcp.core
-
 from collections import namedtuple, defaultdict
 
+import tornado
+
+from builtins import range, object
 from tornado.gen import maybe_future, Return
+
+import katcp.core
 
 from katcp.core import (AttrDict, until_any, future_timeout_manager,
                         steal_docstring_from)
 
+
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', 'name description timeout_hint')
+
 
 class ExponentialRandomBackoff(object):
 

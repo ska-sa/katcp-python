@@ -14,7 +14,6 @@ import time
 import unittest
 import weakref
 
-# Python 2/3 compatibility stuff
 from builtins import object
 from concurrent.futures import TimeoutError
 from functools import partial

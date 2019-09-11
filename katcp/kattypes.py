@@ -12,9 +12,6 @@ from __future__ import division, print_function, absolute_import
 from future import standard_library
 standard_library.install_aliases()
 
-# Uncommenting this as it breaks our python 2 tests
-#from builtins import map
-
 import inspect
 import itertools
 import struct

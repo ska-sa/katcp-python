@@ -19,7 +19,6 @@ from builtins import object, str
 
 import tornado
 
-# Python 2/3 compatibility stuff
 import katcp
 
 from katcp.core import AsyncEvent, AsyncState, Sensor, until_some

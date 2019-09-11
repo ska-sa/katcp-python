@@ -542,7 +542,7 @@ class KATCPServer(object):
                 try:
                     line = line.decode('utf-8') if isinstance(line, bytes) else str(line)
                     line = line.replace("\r", "\n").split("\n")[0]
-                    msg = self._parser.parse(line) if line else None
+                    msg = self._parser.parse(str(line)) if line else None
                 except Exception:
                     msg = None
                     e_type, e_value, trace = sys.exc_info()

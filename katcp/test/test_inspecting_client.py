@@ -31,10 +31,6 @@ from katcp.testutils import (
 )
 
 
-
-
-
-
 logger = logging.getLogger(__name__)
 
 class TestExponentialRandomBackoff(unittest.TestCase):
