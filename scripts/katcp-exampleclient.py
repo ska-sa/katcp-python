@@ -6,16 +6,22 @@
 
    @author Simon Cross <simon.cross@ska.ac.za>
    @date 2008-10-29
-   """
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
+"""
+from __future__ import absolute_import, division, print_function
+
+from future import standard_library
+standard_library.install_aliases()
 
 import logging
 import sys
 import traceback
+
 from optparse import OptionParser
+
+from builtins import input
+
 import katcp
+
 
 logging.basicConfig(level=logging.INFO,
                     stream=sys.stderr,
@@ -49,7 +55,7 @@ if __name__ == "__main__":
     client.start()
     try:
         while True:
-            s = raw_input("> ")
+            s = str(input("> "))
             try:
                 msg = katcp_parser.parse(s)
                 client.ioloop.add_callback(client.send_message, msg)
