@@ -380,7 +380,7 @@ class FakeAsyncClient(client.AsyncClient):
 
     @tornado.gen.coroutine
     def future_request(self, msg, timeout=None, use_mid=None):
-        """Send a request messsage, with future replies.
+        """Send a request message, with future replies.
 
         Parameters
         ----------

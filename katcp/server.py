@@ -20,6 +20,7 @@ import sys
 import re
 import time
 
+import future
 import tornado.ioloop
 import tornado.tcpserver
 
@@ -28,7 +29,7 @@ from collections import deque
 from _thread import get_ident as get_thread_ident
 
 from builtins import range, object
-from future.utils import with_metaclass
+
 from past.builtins import basestring
 from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
@@ -509,7 +510,7 @@ class KATCPServer(object):
                     e_type, e_value, trace, self._tb_limit))
                 log_msg = 'Device error initialising connection {0}'.format(reason)
                 self._logger.error(log_msg)
-                stream.write(str(Message.inform('log', log_msg)))
+                stream.write(bytes(str(Message.inform('log', log_msg)), 'utf-8'))
                 stream.close(exc_info=True)
             else:
                 self._line_read_loop(stream, client_conn)
@@ -530,7 +531,7 @@ class KATCPServer(object):
                         # resulting in message handlers being called with a
                         # closed connection. Exit early instead.
                         break
-                    line = yield stream.read_until_regex('\n|\r')
+                    line = yield stream.read_until_regex(b'\n|\r')
                 except iostream.StreamClosedError:
                     # Assume that _stream_closed_callback() will handle this
                     break
@@ -539,6 +540,7 @@ class KATCPServer(object):
                                           'while reading from client {0}:'
                                           .format(client_address), exc_info=True)
                 try:
+                    line = line.decode('utf-8') if isinstance(line, bytes) else str(line)
                     line = line.replace("\r", "\n").split("\n")[0]
                     msg = self._parser.parse(line) if line else None
                 except Exception:
@@ -640,12 +642,15 @@ class KATCPServer(object):
         bytes are queued for sending, implying that client is falling behind.
 
         """
+        msg = str(msg) + '\n'
+        msg = bytes(msg) if future.utils.PY2 else bytes(msg, 'utf-8')
+
         assert get_thread_ident() == self.ioloop_thread_id
         try:
-            if stream.KATCPServer_closing:
-                raise RuntimeError('Stream is closing so we cannot '
-                                   'accept any more writes')
-            return stream.write(str(msg) + '\n')
+            if stream.KATCPServer_closing or stream.closed():
+                raise RuntimeError(
+                    'Stream is closing so we cannot accept any more writes')
+            return stream.write(msg)
         except Exception:
             addr = self.get_address(stream)
             self._logger.warn('Could not send message {0!r} to {1}'
@@ -662,7 +667,7 @@ class KATCPServer(object):
         # Prevent futher writes
         stream.KATCPServer_closing = True
         # Write empty message to get future that resolves when buffer is flushed
-        return stream.write('\n')
+        return stream.write(b'\n')
 
     def call_from_thread(self, fn):
         """Allow thread-safe calls to ioloop functions.
@@ -919,24 +924,24 @@ class MessageHandlerThread(object):
         return self._running.wait(timeout)
 
 
-class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
+class DeviceServerBase(future.utils.with_metaclass(DeviceServerMetaclass, object)):
 
     """Base class for device servers.
 
-    Subclasses should add .request\_* methods for dealing
+    Subclasses should add .request\\_* methods for dealing
     with request messages. These methods each take the client
     request connection and msg objects as arguments and should return
     the reply message or raise an exception as a result.
 
-    Subclasses can also add .inform\_* and reply\_* methods to handle
+    Subclasses can also add .inform\\_* and reply\\_* methods to handle
     those types of messages.
 
     Should a subclass need to generate inform messages it should
-    do so using either the .inform() or .mass_inform() methods.
+    do so using either the .inform() or .mass\\_inform() methods.
 
     Finally, this class should probably not be subclassed directly
     but rather via subclassing DeviceServer itself which implements
-    common .request\_* methods.
+    common .request\\_* methods.
 
     Parameters
     ----------
@@ -2101,18 +2106,18 @@ class DeviceServer(DeviceServerBase):
         ::
 
             ?sensor-list
-            #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
-            #sensor-list cpu.status CPU\_status. \@ discrete on off error
+            #sensor-list psu.voltage PSU\\_voltage. V float 0.0 5.0
+            #sensor-list cpu.status CPU\\_status. \\@ discrete on off error
             ...
             !sensor-list ok 5
 
             ?sensor-list cpu.power.on
-            #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
+            #sensor-list cpu.power.on Whether\\_CPU\\_hase\\_power. \\@ boolean
             !sensor-list ok 1
 
             ?sensor-list /voltage/
-            #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
-            #sensor-list cpu.voltage CPU\_voltage. V float 0.0 3.0
+            #sensor-list psu.voltage PSU\\_voltage. V float 0.0 5.0
+            #sensor-list cpu.voltage CPU\\_voltage. V float 0.0 3.0
             !sensor-list ok 2
 
         """
