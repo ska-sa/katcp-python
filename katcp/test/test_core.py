@@ -29,14 +29,6 @@ log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 
 
-def tornado_exception_handler(error_exception):
-    """Helper function for handling Tornado TimeoutError exceptions on version -+6"""
-    try:
-        return isinstance(error_exception, tornado.util.TimeoutError)
-    except AttributeError:
-        return isinstance(error_exception, tornado.gen.TimeoutError),
-
-
 class TestMessage(unittest.TestCase):
     def test_reply_ok(self):
         """Test reply checking."""
@@ -487,10 +479,9 @@ class TestAsyncState(tornado.testing.AsyncTestCase):
         def set_state_floating():
             self._state.set_state('floating')
         # Test for timing out
-        with self.assertRaises(BaseException) as err:
+        with self.assertRaises(tornado.gen.TimeoutError):
             yield self._state.until_state_in('on', 'floating', timeout=0.1)
 
-        self.assertTrue(tornado_exception_handler(err.exception))
         # Test for NOT timing out
         self.io_loop.add_callback(set_state_floating)
         yield self._state.until_state_in('on', 'floating', timeout=0.1)

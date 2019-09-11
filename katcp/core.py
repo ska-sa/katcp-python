@@ -1854,10 +1854,7 @@ def until_any(*futures, **kwargs):
         if not any_future.done():
             try:
                 any_future.set_result(done_future.result())
-            except BaseException as err: # Debugging
-                # TODO: MM
-                # Note that this breaks on new tornado, as `set_exc_info` doesn't exist
-                # Find alternative ways to fix this bug on test `test_core.py.TestAsyncState:test_timeout_of_until_state_in`
+            except Exception:
                 any_future.set_exc_info(done_future.exc_info())
             # (NM) Nasty hack to remove handle_done from the callback list to prevent a
             # memory leak where one of the futures resolves quickly, particularly when
