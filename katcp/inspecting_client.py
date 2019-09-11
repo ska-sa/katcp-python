@@ -370,7 +370,8 @@ class InspectingClientAsync(object):
         try:
             yield maybe_timeout(self.katcp_client.until_running())
             self._logger.debug('Katcp client running')
-        except tornado.gen.TimeoutError:
+        except Exception as err:
+            self._logger.error("Failed to start katcp_client: %s", str(err))
             self.katcp_client.stop()
             raise
 
@@ -642,6 +643,7 @@ class InspectingClientAsync(object):
             msg = katcp.Message.request('help', name)
         reply, informs = yield self.katcp_client.future_request(
             msg, timeout=maybe_timeout.remaining())
+
         if not reply.reply_ok():
             # If an unknown request is specified the desired result is to return
             # an empty list even though the request will fail
@@ -649,7 +651,6 @@ class InspectingClientAsync(object):
                 raise SyncError(
                     'Error reply during sync process for {}: {}'
                     .format(self.bind_address_string, reply))
-
         # Get recommended timeouts hints for slow requests if the server
         # provides them
         timeout_hints_available = (
