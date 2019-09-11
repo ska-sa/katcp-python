@@ -17,6 +17,7 @@ from tornado.concurrent import Future
 from katcp import client, server, kattypes, resource, Sensor
 from katcp.core import AttrDict, ProtocolFlags, Message, convert_method_name
 
+
 def fake_KATCP_client_resource_factory(
         KATCPClientResourceClass, fake_options, resource_spec, *args, **kwargs):
     """Create a fake KATCPClientResource-like class and a fake-manager
@@ -160,6 +161,7 @@ class FakeKATCPClientResourceManager(object):
         """
         return self._fic_manager.add_request_handlers_dict(rh_dict)
 
+
 class FakeKATCPClientResourceContainerManager(object):
     def __init__(self, fake_katcp_resource_container):
         self._fkcrc = fake_katcp_resource_container
@@ -221,7 +223,11 @@ def fake_inspecting_client_factory(InspectingClass, fake_options, host, port,
     fic_manager = FakeInspectingClientManager(fic)
     return (fic, fic_manager)
 
+
 class FakeInspectingClientManager(object):
+
+    request_help = server.DeviceServer.__dict__["request_help"]
+
     def __init__(self, fake_inspecting_client):
         self._fic = fake_inspecting_client
         self._fkc = fake_inspecting_client.katcp_client
@@ -251,8 +257,6 @@ class FakeInspectingClientManager(object):
     def _request_handlers(self):
         """For compatibility with methods stolen from server.DeviceServer"""
         return self._fkc.request_handlers
-
-    request_help = server.DeviceServer.request_help.__func__
 
     def add_sensors(self, sensor_infos):
         """Add fake sensors
@@ -306,8 +310,10 @@ class FakeInspectingClientManager(object):
         self._fkc.request_handlers.update(rh_dict)
         self._fic._interface_changed.set()
 
+
 class FakeKATCPServerError(Exception):
     """Raised if a FakeKATCPServer is used in an unsupported way"""
+
 
 class FakeKATCPServer(object):
     """Fake the parts of a KATCP server used by katcp.server.ClientConnection"""
@@ -327,6 +333,7 @@ class FakeKATCPServer(object):
         f.set_result(None)
         return f
 
+
 class FakeClientRequestConnection(server.ClientRequestConnection):
     def __init__(self, *args, **kwargs):
         super(FakeClientRequestConnection, self).__init__(*args, **kwargs)
@@ -335,6 +342,7 @@ class FakeClientRequestConnection(server.ClientRequestConnection):
     def inform(self, *args):
         inf_msg = Message.reply_inform(self.msg, *args)
         self.informs_sent.append(inf_msg)
+
 
 class FakeAsyncClient(client.AsyncClient):
     """Fake version of :class:`katcp.client.AsyncClient`
