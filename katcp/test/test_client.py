@@ -22,7 +22,7 @@ from concurrent.futures import Future
 import mock
 import tornado
 import tornado.testing
-import unittest2 as unittest
+import unittest
 
 from builtins import range
 from tornado import gen

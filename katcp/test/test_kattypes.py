@@ -13,7 +13,7 @@ from future import standard_library
 standard_library.install_aliases()
 
 import mock
-import unittest2 as unittest
+import unittest
 
 from builtins import object
 

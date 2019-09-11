@@ -17,7 +17,7 @@ from concurrent.futures import Future
 
 import mock
 import tornado
-import unittest2 as unittest
+import unittest
 
 import katcp
 

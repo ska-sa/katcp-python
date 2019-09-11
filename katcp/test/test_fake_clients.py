@@ -13,7 +13,7 @@ from builtins import object, str
 
 import tornado.gen
 import tornado.testing
-import unittest2 as unittest
+import unittest
 
 # module under test
 from katcp import Sensor, fake_clients, resource_client

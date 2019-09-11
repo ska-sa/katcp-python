@@ -11,7 +11,7 @@ import time
 
 import tornado.gen
 import tornado.testing
-import unittest2 as unittest
+import unittest
 
 from katcp import Sensor, testutils
 

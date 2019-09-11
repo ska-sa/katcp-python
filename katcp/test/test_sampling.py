@@ -20,7 +20,7 @@ import time
 
 import mock
 import tornado.testing
-import unittest2 as unittest
+import unittest
 
 from _thread import get_ident
 from tornado import gen

@@ -27,7 +27,7 @@ from functools import partial, wraps
 import _thread
 import mock
 import tornado.testing
-import unittest2 as unittest
+import unittest
 
 from tornado import gen
 
