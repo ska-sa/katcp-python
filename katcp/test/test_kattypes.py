@@ -12,10 +12,10 @@ from future import standard_library
 
 standard_library.install_aliases()
 
-from builtins import object, str
-
 import mock
-import unittest2 as unittest
+import unittest
+
+from builtins import object
 
 from katcp import AsyncReply, FailReply, Message
 from katcp.kattypes import (
@@ -39,8 +39,6 @@ from katcp.kattypes import (
 )
 
 
-
-
 MS_TO_SEC_FAC = 1/1000.
 SEC_TO_MS_FAC = 1000
 
@@ -54,14 +52,14 @@ class TestType(unittest.TestCase):
             if type(result) is type and issubclass(result, Exception):
                 self.assertRaises(result, t.pack, value)
             else:
-                self.assertEquals(t.pack(value), result)
+                self.assertEqual(t.pack(value), result)
 
     def test_unpack(self):
         for t, value, result in self._unpack:
             if type(result) is type and issubclass(result, Exception):
                 self.assertRaises(result, t.unpack, value)
             else:
-                self.assertEquals(t.unpack(value), result)
+                self.assertEqual(t.unpack(value), result)
 
 
 class TestInt(TestType):
@@ -395,26 +393,26 @@ class TestStruct(TestType):
 
     def setUp(self):
         basic = Struct(">isf")
-        default = Struct(">isf", default=(1, "f", 3.4))
+        default = Struct(">isf", default=(1, b"f", 3.4))
         optional = Struct(">isf", optional=True)
-        default_optional = Struct(">isf", default=(1, "f", 3.4), optional=True)
+        default_optional = Struct(">isf", default=(1, b"f", 3.4), optional=True)
 
         self._pack = [
-            (basic, (5, "s", 2.5), "\x00\x00\x00\x05s@ \x00\x00"),
-            (basic, ("s", 5, 2.5), ValueError),
-            (basic, (5, "s"), ValueError),
+            (basic, (5, b"s", 2.5), b"\x00\x00\x00\x05s@ \x00\x00"),
+            (basic, (b"s", 5, 2.5), ValueError),
+            (basic, (5, b"s"), ValueError),
             (basic, None, ValueError),
-            (default, None, "\x00\x00\x00\x01f@Y\x99\x9a"),
-            (default_optional, None, "\x00\x00\x00\x01f@Y\x99\x9a"),
+            (default, None, b"\x00\x00\x00\x01f@Y\x99\x9a"),
+            (default_optional, None, b"\x00\x00\x00\x01f@Y\x99\x9a"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "\x00\x00\x00\x05s@ \x00\x00", (5, "s", 2.5)),
-            (basic, "asdfgasdfas", ValueError),
+            (basic, b"\x00\x00\x00\x05s@ \x00\x00", (5, b"s", 2.5)),
+            (basic, b"asdfgasdfas", ValueError),
             (basic, None, ValueError),
-            (default, None, (1, "f", 3.4)),
-            (default_optional, None, (1, "f", 3.4)),
+            (default, None, (1, b"f", 3.4)),
+            (default_optional, None, (1, b"f", 3.4)),
             (optional, None, None),
         ]
 
@@ -577,14 +575,14 @@ class TestDecorator(unittest.TestCase):
         with self.assertRaises(TypeError) as ex:
             request(Bool(multiple=True), Int())
         self.assertEqual(
-            ex.exception.message,
+            str(ex.exception),
             'Only the last parameter type can accept multiple arguments.')
 
     def test_return_reply_multi(self):
         with self.assertRaises(TypeError) as ex:
             return_reply(Bool(multiple=True), Int())
         self.assertEqual(
-            ex.exception.message,
+            str(ex.exception),
             'Only the last parameter type can accept multiple arguments.')
 
     def test_katcpv4(self):
@@ -711,5 +709,5 @@ class TestDecorator(unittest.TestCase):
         with self.assertRaises(FailReply) as ex:
             req('req', Message.request('int-multifloat', desired_i, 1.2, 'abc'))
         self.assertEqual(
-            ex.exception.message,
+            str(ex.exception),
             "Error in parameter 3 (): Could not parse value 'abc' as float.")

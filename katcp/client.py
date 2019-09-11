@@ -427,6 +427,9 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
         """
         assert get_thread_ident() == self.ioloop_thread_id
         data = str(msg) + "\n"
+        # Convert unicode str to bytes before sending via sockets.
+        data = bytes(data, 'utf-8') if not isinstance(data, bytes) else data
+
         # Log all sent messages here so no one else has to.
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug("Sending to {}: {}"
@@ -726,7 +729,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
         latency_timer = LatencyTimer(self.MAX_LOOP_LATENCY)
         while self._running.isSet():
             try:
-                line_fut = self._stream.read_until_regex('\n|\r')
+                line_fut = self._stream.read_until_regex(b'\n|\r')
                 latency_timer.check_future(line_fut)
                 if latency_timer.time_to_yield():
                     yield gen.moment
@@ -746,6 +749,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
                     self._logger.warn('self._stream object seems to have disappeared.')
                     break
             try:
+                line = line.decode('utf-8') if isinstance(line, bytes) else str(line)
                 line = line.replace("\r", "\n").split("\n")[0]
                 msg = self._parser.parse(line) if line else None
             except Exception:
@@ -1245,7 +1249,7 @@ class AsyncClient(DeviceClient):
     @make_threadsafe
     def callback_request(self, msg, reply_cb=None, inform_cb=None,
                          user_data=None, timeout=None, use_mid=None):
-        """Send a request messsage.
+        """Send a request message.
 
         Parameters
         ----------
@@ -1290,7 +1294,7 @@ class AsyncClient(DeviceClient):
             self.handle_reply(error_reply)
 
     def future_request(self, msg, timeout=None, use_mid=None):
-        """Send a request messsage, with future replies.
+        """Send a request message, with future replies.
 
         Parameters
         ----------

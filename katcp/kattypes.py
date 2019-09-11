@@ -12,17 +12,15 @@ from __future__ import division, print_function, absolute_import
 from future import standard_library
 standard_library.install_aliases()
 
-# Uncommenting this as it breaks our python 2 tests
-#from builtins import map
-from builtins import zip
-from builtins import range
-from builtins import object
 import inspect
+import itertools
 import struct
 import re
 import logging
 
 from functools import partial, wraps, update_wrapper
+
+from builtins import object
 
 from tornado import gen
 
@@ -445,7 +443,7 @@ class StrictTimestamp(KatcpType):
         Raise a ValueError if it is not.
 
         """
-        if value < 0:
+        if int(value) < 0:
             raise ValueError("Strict timestamps may not be negative.")
 
 
@@ -1109,7 +1107,11 @@ def unpack_types(types, args, argnames, major):
         for i in range(len(types), len(args)):
             params.append(Parameter(i+1, name, kattype, major))
 
-    # if len(args) < len(types) this passes in None for missing args
+    if len(args) < len(types):
+        # if len(args) < len(types) this passes in None for missing args
+        repeat_val = abs(len(types) - len(args))
+        args += list(itertools.repeat(None, repeat_val))
+
     return list(map(lambda param, arg: param.unpack(arg), params, args))
 
 
@@ -1136,6 +1138,8 @@ def pack_types(types, args, major):
 
     if len(args) < len(types):
         # this passes in None for missing args
+        repeat_val = abs(len(types) - len(args))
+        args = tuple(list(args) + list(itertools.repeat(None, repeat_val)))
         retvals = list(map(lambda ktype, arg: ktype.pack(arg, major=major),
                       types, args))
     else:

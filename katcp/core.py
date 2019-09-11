@@ -7,7 +7,6 @@
 """Utilities for dealing with KAT device control language messages."""
 
 from __future__ import division, print_function, absolute_import
-from __future__ import unicode_literals
 
 from future import standard_library
 standard_library.install_aliases()
@@ -18,9 +17,10 @@ import time
 import warnings
 import logging
 
+import future
 import tornado
 
-from builtins import next, object, range
+from builtins import bytes, next, object, range, str
 from past.builtins import basestring
 from collections import namedtuple, defaultdict
 from functools import wraps, partial
@@ -29,6 +29,7 @@ from concurrent.futures import Future, TimeoutError
 from tornado import gen
 from tornado.gen import with_timeout
 from tornado.concurrent import Future as tornado_Future
+
 
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
@@ -46,6 +47,7 @@ VERSION_CONNECT_KATCP_MAJOR = 5
 INTERFACE_CHANGED_KATCP_MAJOR = 5
 
 logger = logging.getLogger(__name__)
+
 
 class Reading(namedtuple('Reading', 'timestamp status value')):
     """Sensor reading as a (timestamp, status, value) tuple.
@@ -135,7 +137,7 @@ def log_future_exceptions(logger, f, ignore=()):
 
 def convert_method_name(prefix, name):
     """Convert a method name to the corresponding KATCP message name."""
-    return name[len(prefix):].replace("_", "-")
+    return str(name[len(prefix):].replace("_", "-"))
 
 
 def steal_docstring_from(obj):
@@ -306,7 +308,7 @@ class Message(object):
             return str(int(arg))
         else:
             try:
-                return str(arg)
+                arg = str(arg)
             except UnicodeEncodeError:
                 # unicode characters will break the str cast, so
                 # try to encode to ascii and replace the offending characters
@@ -315,7 +317,9 @@ class Message(object):
                              "Trying to encode argument to ascii.")
                 if not isinstance(arg, str):
                     arg = arg.encode('utf-8', errors='ignore').decode('utf-8')
-                return arg.encode('ascii', 'replace')
+            finally:
+                arg = arg.encode('ascii', 'replace')
+                return arg if not isinstance(arg, bytes) else arg.decode()
 
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
@@ -356,7 +360,7 @@ class Message(object):
     def __repr__(self):
         """ Return message displayed in a readable form."""
         tp = self.TYPE_NAMES[self.mtype].lower()
-        name = self.name
+        name = str(self.name)
         if self.arguments:
             escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
                             for x in self.arguments]
@@ -548,6 +552,9 @@ class MessageParser(object):
         if not line:
             raise KatcpSyntaxError("Empty message received.")
 
+        if not isinstance(line, str):
+            line = str(line, 'utf-8')
+
         type_char = line[0]
         if type_char not in self.TYPE_SYMBOL_LOOKUP:
             raise KatcpSyntaxError("Bad type character %r." % (type_char,))
@@ -632,8 +639,10 @@ class ProtocolFlags(object):
     REQUEST_TIMEOUT_HINTS_MIN_VERSION = (5, 1)
 
     def __init__(self, major, minor, flags):
-        self.major = major
-        self.minor = minor
+        # PY2 and Py3 compatibility.
+        # Why? go here: https://docs.python.org/3/whatsnew/3.0.html#ordering-comparisons
+        self.major = major if major is not None else 0
+        self.minor = minor if minor is not None else 0
         self.flags = set(list(flags))
         self.multi_client = self.MULTI_CLIENT in self.flags
         self.message_ids = self.MESSAGE_IDS in self.flags
@@ -688,11 +697,11 @@ class ProtocolFlags(object):
 class DeviceMetaclass(type):
     """Metaclass for DeviceServer and DeviceClient classes.
 
-    Collects up methods named request\_* and adds
+    Collects up methods named request\\_* and adds
     them to a dictionary of supported methods on the class.
-    All request\_* methods must have a doc string so that help
-    can be generated.  The same is done for inform\_* and
-    reply\_* methods.
+    All request\\_* methods must have a doc string so that help
+    can be generated.  The same is done for inform\\_* and
+    reply\\_* methods.
 
     """
     def __init__(mcs, name, bases, dct):
@@ -722,7 +731,9 @@ class DeviceMetaclass(type):
             if name.startswith("request_"):
                 request_name = convert_method_name("request_", name)
                 if mcs.check_protocol(handler):
-                    mcs._request_handlers[request_name] = handler
+                    mcs._request_handlers[request_name] = (
+                        handler if future.utils.PY3 else handler.__func__
+                    )
                     error_msg = "Request '{}' has no docstring.".format(request_name)
                     assert(handler.__doc__ is not None), error_msg
             elif name.startswith("inform_"):
@@ -1843,7 +1854,10 @@ def until_any(*futures, **kwargs):
         if not any_future.done():
             try:
                 any_future.set_result(done_future.result())
-            except Exception:
+            except BaseException as err: # Debugging
+                # TODO: MM
+                # Note that this breaks on new tornado, as `set_exc_info` doesn't exist
+                # Find alternative ways to fix this bug on test `test_core.py.TestAsyncState:test_timeout_of_until_state_in`
                 any_future.set_exc_info(done_future.exc_info())
             # (NM) Nasty hack to remove handle_done from the callback list to prevent a
             # memory leak where one of the futures resolves quickly, particularly when
@@ -1963,7 +1977,7 @@ def until_some(*args, **kwargs):
     maybe_timeout = future_timeout_manager(timeout)
     results = []
     while not wait_iterator.done():
-        result = yield maybe_timeout(next(wait_iterator))
+        result = yield maybe_timeout(wait_iterator.next())
         results.append((wait_iterator.current_index, result))
         if len(results) >= done_at_least:
             break

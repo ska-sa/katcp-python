@@ -60,8 +60,7 @@ setup(
         "ply",
         "future",
         "futures; python_version<'3'",
-        "tornado>=4.3, <5.0; python_version<'3'",
-        "tornado>=4.3, <7.0; python_version>='3'",
+        "tornado==4.5.3",
     ],
     # install extras by running pip install .[doc,<another_extra>]
     extras_require={

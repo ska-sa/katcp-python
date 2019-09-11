@@ -4,7 +4,7 @@ from __future__ import division, print_function, absolute_import
 
 from future import standard_library
 standard_library.install_aliases()
-from builtins import object
+
 import sys
 import time
 import logging
@@ -16,6 +16,7 @@ import tornado.ioloop
 from functools import wraps
 from _thread import get_ident as get_thread_ident
 
+from builtins import object
 from concurrent.futures import Future, TimeoutError
 from tornado.concurrent import Future as tornado_Future
 from tornado import gen

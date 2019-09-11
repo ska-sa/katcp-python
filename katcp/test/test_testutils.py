@@ -11,7 +11,7 @@ import time
 
 import tornado.gen
 import tornado.testing
-import unittest2 as unittest
+import unittest
 
 from katcp import Sensor, testutils
 
@@ -29,6 +29,7 @@ def get_sensor(sensor_type, name=None):
         params)
 
     return sensor
+
 
 class test_SensorTransitionWaiter(unittest.TestCase):
     def test_wait_float_timeout(self):
@@ -131,11 +132,11 @@ class test_wait_sensor(unittest.TestCase):
         self._wait_sensor(vals, 0, status=Sensor.ERROR)
 
 
-class _test_WaitingMockBase(unittest.TestCase):
+class WaitingMockBase(unittest.TestCase):
 
     DUTClass = None
 
-    def test_reset_mock(self):
+    def _test_reset_mock(self):
         # Verify that the call_count and call_args_list variables
         # are initially zero, and get cleared by calling reset_mock
         DUT = self.DUTClass()
@@ -149,7 +150,7 @@ class _test_WaitingMockBase(unittest.TestCase):
         self.assertEqual(len(DUT.call_args_list), 0)
 
 
-class test_WaitingMock(_test_WaitingMockBase):
+class test_WaitingMock(WaitingMockBase):
 
     DUTClass = testutils.WaitingMock
 
@@ -178,7 +179,7 @@ class test_WaitingMock(_test_WaitingMockBase):
             DUT.assert_wait_call_count(1, timeout=0.1)
 
 class test_AsyncWaitingMock(
-        tornado.testing.AsyncTestCase, _test_WaitingMockBase):
+        tornado.testing.AsyncTestCase, WaitingMockBase):
 
     DUTClass = testutils.AsyncWaitingMock
 

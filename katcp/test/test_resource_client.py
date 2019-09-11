@@ -14,7 +14,6 @@ import time
 import unittest
 import weakref
 
-# Python 2/3 compatibility stuff
 from builtins import object
 from concurrent.futures import TimeoutError
 from functools import partial
@@ -41,11 +40,6 @@ from katcp.testutils import (
     TimewarpAsyncTestCaseTimeAdvancer,
     start_thread_with_cleanup,
 )
-
-
-
-
-
 
 
 logger = logging.getLogger(__name__)
@@ -146,6 +140,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_dummy_requests(self):
+
         resource_spec_nodummy = dict(
             name='testdev',
             description='resource for testing',
@@ -268,6 +263,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_list_sensors(self):
+
         resource_spec = dict(
             name='testdev',
             address=('testhost', 12345))
@@ -315,12 +311,19 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
         # Now get all the sensors
         result = yield DUT.list_sensors('')
-        expected_result = sorted(resource.SensorResultTuple(
-            test_sensors[s_id], test_sensors_info[s_id].name,
-            s_id, test_sensors_info[s_id].description, 'integer', '',
-            test_sensors[s_id].reading)
-                                 for s_id in test_sensors_info)
-        self.assertEqual(sorted(result), expected_result)
+        # built-in `sorted()` uses __cmp__ to sort out the order in Python2.
+        # However, this breaks compatibility on Python3 due to https://docs.python.org/3/whatsnew/3.0.html#ordering-comparisons
+        result = sorted(result, key=lambda obj: obj.name)
+        expected_result = sorted([
+            resource.SensorResultTuple(
+                test_sensors[s_id], test_sensors_info[s_id].name,
+                s_id, test_sensors_info[s_id].description, 'integer', '',
+                test_sensors[s_id].reading
+            )
+            for s_id in test_sensors_info
+            ], key=lambda obj: obj.name)
+
+        self.assertEqual(result, expected_result)
 
         # Test that all sensors are found using their Python identifiers
         result = yield DUT.list_sensors('sens_two')
@@ -1122,7 +1125,7 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         t, status, value = (t0+2.5, Sensor.NOMINAL, 3)
         katcp_sensor.set(t, status, value)
         print("listener.mock_calls", listener.mock_calls)
-        self.assertEquals(len(listener.mock_calls), 6)
+        self.assertEqual(len(listener.mock_calls), 6)
         return
 
     def get_expected(self, testserv_attr):

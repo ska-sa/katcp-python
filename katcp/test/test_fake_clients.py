@@ -13,7 +13,7 @@ from builtins import object, str
 
 import tornado.gen
 import tornado.testing
-import unittest2 as unittest
+import unittest
 
 # module under test
 from katcp import Sensor, fake_clients, resource_client
@@ -21,14 +21,6 @@ from katcp.inspecting_client import InspectingClientAsync
 from katcp.kattypes import Float, Int, request, return_reply
 from katcp.resource import escape_name
 from katcp.testutils import SensorComparisonMixin
-
-
-
-
-
-
-
-
 
 
 class test_FakeInspectingClient(tornado.testing.AsyncTestCase,

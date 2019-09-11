@@ -17,8 +17,6 @@ from katcp import ioloop_manager
 from katcp.testutils import start_thread_with_cleanup
 
 
-
-
 class test_ThreadsafeMethodAttrWrapper(unittest.TestCase):
     def setUp(self):
         self.ioloop_manager = ioloop_manager.IOLoopManager(managed_default=True)
