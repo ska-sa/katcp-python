@@ -21,17 +21,17 @@ pipeline {
             }
         }
 
-        // stage ('Static analysis') {
-        //     steps {
-        //         sh "pylint ./${KATPACKAGE} --output-format=parseable --exit-zero > pylint.out"
-        //     }
+        stage ('Static analysis') {
+            steps {
+                sh "pylint ./${KATPACKAGE} --output-format=parseable --exit-zero > pylint.out"
+            }
 
-        //     post {
-        //         always {
-        //             recordIssues(tool: pyLint(pattern: 'pylint.out'))
-        //         }
-        //     }
-        // }
+            post {
+                always {
+                    recordIssues(tool: pyLint(pattern: 'pylint.out'))
+                }
+            }
+        }
 
         stage('Install & Unit Tests') {
             options {
