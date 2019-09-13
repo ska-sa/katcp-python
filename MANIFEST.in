@@ -1,1 +1,17 @@
 include *.md
+# added by check_manifest.py
+include LICENSE
+include tox.ini
+recursive-include bench *.css
+recursive-include bench *.html
+recursive-include bench *.js
+recursive-include bench *.json
+recursive-include bench *.py
+recursive-include bench *.rst
+recursive-include doc *.md
+recursive-include doc *.pdf
+recursive-include doc *.py
+recursive-include doc *.rst
+recursive-include doc *.txt
+recursive-include doc Makefile
+recursive-include scratchpad *.py
