@@ -1,28 +1,26 @@
 # Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
 
-import sys
-import time
 import logging
-import threading
+import sys
 import textwrap
-
-import tornado.ioloop
-
-from functools import wraps
-from _thread import get_ident as get_thread_ident
+import threading
+import time
 
 from builtins import object
 from concurrent.futures import Future, TimeoutError
-from tornado.concurrent import Future as tornado_Future
+from functools import wraps
+
+import tornado.ioloop
+from _thread import get_ident as get_thread_ident
 from tornado import gen
+from tornado.concurrent import Future as tornado_Future
 
 from katcp.object_proxies import ObjectWrapper
 
+standard_library.install_aliases()
 
 log = logging.getLogger(__name__)
 

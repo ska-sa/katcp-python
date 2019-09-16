@@ -4,26 +4,30 @@
 # Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
 
+import copy
 import logging
 import random
-import copy
 
-from collections import namedtuple, defaultdict
+from builtins import object, range
+from collections import defaultdict, namedtuple
 
 import tornado
-
-from builtins import range, object
-from tornado.gen import maybe_future, Return
+from tornado.gen import Return, maybe_future
 
 import katcp.core
+from katcp.core import (AttrDict, future_timeout_manager, steal_docstring_from,
+                        until_any)
 
-from katcp.core import (AttrDict, until_any, future_timeout_manager,
-                        steal_docstring_from)
+standard_library.install_aliases()
+
+
+
+
+
+
 
 
 ic_logger = logging.getLogger("katcp.inspect_client")

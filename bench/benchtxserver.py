@@ -3,20 +3,18 @@
 
 """ This is a benchmark device server using twisted katcp impl
 """
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-
-from twisted.internet import reactor
-from katcp.tx import DeviceServer, DeviceProtocol
-from katcp import Sensor, Message
-from twisted.internet.protocol import Factory
-from twisted.python import log
-from katcp import Message
-from katcp.tx.test.testserver import IntSensor, FloatSensor
-from util import standard_parser
+from __future__ import absolute_import, division, print_function
 
 import sys
+
+from katcp import Message, Sensor
+from katcp.tx import DeviceProtocol, DeviceServer
+from katcp.tx.test.testserver import FloatSensor, IntSensor
+from twisted.internet import reactor
+from twisted.internet.protocol import Factory
+from twisted.python import log
+from util import standard_parser
+
 
 class BenchmarkProtocol(DeviceProtocol):
     def request_add_sensor(self, msg):

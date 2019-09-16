@@ -4,8 +4,6 @@
 from __future__ import absolute_import, division, print_function
 from future import standard_library
 
-standard_library.install_aliases()
-
 import logging
 import unittest
 
@@ -16,6 +14,7 @@ import tornado.testing
 from katcp import Sensor, resource
 from katcp.testutils import TimewarpAsyncTestCase
 
+standard_library.install_aliases()
 
 logger = logging.getLogger(__name__)
 

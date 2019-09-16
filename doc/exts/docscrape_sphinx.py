@@ -1,9 +1,13 @@
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-import re, inspect, textwrap, pydoc
+from __future__ import absolute_import, division, print_function
+
+import inspect
+import pydoc
+import re
+import textwrap
+
 import sphinx
-from docscrape import NumpyDocString, FunctionDoc, ClassDoc
+
+from docscrape import ClassDoc, FunctionDoc, NumpyDocString
 
 class SphinxDocString(NumpyDocString):
     use_plots = False

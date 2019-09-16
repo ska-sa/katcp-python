@@ -3,8 +3,6 @@
 from __future__ import absolute_import, division, print_function
 from future import standard_library
 
-standard_library.install_aliases()
-
 import unittest
 
 from builtins import object
@@ -16,6 +14,7 @@ from _thread import get_ident as get_thread_ident
 from katcp import ioloop_manager
 from katcp.testutils import start_thread_with_cleanup
 
+standard_library.install_aliases()
 
 class test_ThreadsafeMethodAttrWrapper(unittest.TestCase):
     def setUp(self):

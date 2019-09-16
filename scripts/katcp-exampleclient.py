@@ -8,20 +8,18 @@
    @date 2008-10-29
 """
 from __future__ import absolute_import, division, print_function
-
 from future import standard_library
-standard_library.install_aliases()
 
 import logging
 import sys
 import traceback
 
-from optparse import OptionParser
-
 from builtins import input
+from optparse import OptionParser
 
 import katcp
 
+standard_library.install_aliases()
 
 logging.basicConfig(level=logging.INFO,
                     stream=sys.stderr,

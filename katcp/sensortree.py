@@ -25,14 +25,12 @@ The acyclic requirement on the graph structure is required to ensure
 that the update chain eventually terminates. It is not enforced.
 
 """
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
 
 from builtins import object
 
-
+standard_library.install_aliases()
 class GenericSensorTree(object):
     """A tree of generic sensors."""
     # TODO: consider adding detection of cycles.

@@ -1,22 +1,18 @@
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
 # Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
+from __future__ import absolute_import, division, print_function
+
 import logging
-
-
-import time
-import threading
 import signal
+import threading
+import time
 
-import tornado
 import IPython
+import tornado
 
+from katcp import inspecting_client, resource_client
 from katcp.testutils import DeviceTestServer
-
-from katcp import resource_client, inspecting_client
 
 logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d)%(message)s",
@@ -98,4 +94,3 @@ try:
 except KeyboardInterrupt:
     print('Keyboard interrupt')
     stop.set()
-

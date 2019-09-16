@@ -4,17 +4,16 @@
 from __future__ import absolute_import, division, print_function
 from future import standard_library
 
-standard_library.install_aliases()
-
 import threading
 import time
+import unittest
 
 import tornado.gen
 import tornado.testing
-import unittest
 
 from katcp import Sensor, testutils
 
+standard_library.install_aliases()
 
 def get_sensor(sensor_type, name=None):
     if name is None:

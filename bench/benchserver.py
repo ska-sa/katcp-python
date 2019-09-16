@@ -4,8 +4,10 @@
 from __future__ import absolute_import, division, print_function
 
 import sys
+
 from katcp import DeviceServer, Message, Sensor
 from util import standard_parser
+
 
 class BenchmarkServer(DeviceServer):
     # an ugly hack

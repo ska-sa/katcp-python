@@ -6,22 +6,21 @@
 
 """Strategies for sampling sensor values."""
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
 
 import logging
 import os
 
-import tornado.ioloop
-
-from builtins import str, range, object
-from _thread import get_ident as get_thread_ident
+from builtins import object, range, str
 from functools import wraps
+
+import tornado.ioloop
+from _thread import get_ident as get_thread_ident
 
 from .core import Message, Sensor
 
+standard_library.install_aliases()
 
 log = logging.getLogger("katcp.sampling")
 

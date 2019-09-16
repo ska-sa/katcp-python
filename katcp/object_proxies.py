@@ -7,14 +7,12 @@
 # ZPL (Zope Public License if I' not mistaken). The PSF license is BSD style and
 # allows us to copy, modify and redistribute this code.
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
 
 from builtins import object
 
-
+standard_library.install_aliases()
 class AbstractProxy(object):
     """Delegates all operations (except ``.__subject__``) to another object"""
     __slots__ = ()

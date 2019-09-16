@@ -5,14 +5,13 @@
 from __future__ import absolute_import, division, print_function
 from future import standard_library
 
-standard_library.install_aliases()
-
 import unittest
 
 from builtins import object, range, zip
 
 import katcp
 
+standard_library.install_aliases()
 
 class BaseTreeTest(unittest.TestCase):
 

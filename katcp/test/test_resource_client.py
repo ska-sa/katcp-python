@@ -4,8 +4,6 @@
 from __future__ import absolute_import, division, print_function
 from future import standard_library
 
-standard_library.install_aliases()
-
 import copy
 import gc
 import logging
@@ -20,27 +18,18 @@ from functools import partial
 
 import mock
 import tornado
-
 from _thread import get_ident as get_thread_ident
 
 # module under test
-from katcp import (
-    Message,
-    Sensor,
-    inspecting_client,
-    ioloop_manager,
-    resource,
-    resource_client,
-)
+from katcp import (Message, Sensor, inspecting_client, ioloop_manager,
+                   resource, resource_client)
 from katcp.core import AsyncEvent, AttrDict, ProtocolFlags
-from katcp.testutils import (
-    DeviceTestSensor,
-    DeviceTestServer,
-    TimewarpAsyncTestCase,
-    TimewarpAsyncTestCaseTimeAdvancer,
-    start_thread_with_cleanup,
-)
+from katcp.testutils import (DeviceTestSensor, DeviceTestServer,
+                             TimewarpAsyncTestCase,
+                             TimewarpAsyncTestCaseTimeAdvancer,
+                             start_thread_with_cleanup)
 
+standard_library.install_aliases()
 
 logger = logging.getLogger(__name__)
 

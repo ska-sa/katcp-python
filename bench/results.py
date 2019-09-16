@@ -3,8 +3,9 @@
 
 from __future__ import absolute_import, division, print_function
 
-import math
 import json
+import math
+
 
 class Result(object):
     def __init__(self, scenario, interpreter, lib, result):

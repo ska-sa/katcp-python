@@ -6,30 +6,31 @@
 
 """Utilities for dealing with KAT device control language messages."""
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
+import future
 from future import standard_library
-standard_library.install_aliases()
 
+import logging
 import re
 import sys
 import time
 import warnings
-import logging
-
-import future
-import tornado
 
 from builtins import bytes, next, object, range, str
-from past.builtins import basestring
-from collections import namedtuple, defaultdict
-from functools import wraps, partial
-
+from collections import defaultdict, namedtuple
 from concurrent.futures import Future, TimeoutError
-from tornado import gen
-from tornado.gen import with_timeout
-from tornado.concurrent import Future as tornado_Future
+from functools import partial, wraps
 
+import tornado
+from past.builtins import basestring
+from tornado import gen
+from tornado.concurrent import Future as tornado_Future
+from tornado.gen import with_timeout
+
+# Only Imported here to prevent circular import issues.
+from .kattypes import Address, Bool, Discrete, Float, Int, Lru, Str, Timestamp
+
+standard_library.install_aliases()
 
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
@@ -841,8 +842,6 @@ class AsyncReply(Exception):
     pass
 
 
-# Only Imported here to prevent circular import issues.
-from .kattypes import Int, Float, Bool, Discrete, Lru, Str, Timestamp, Address
 
 class Sensor(object):
     """Instantiate a new sensor object.
