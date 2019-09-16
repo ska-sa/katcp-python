@@ -4,6 +4,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 import abc
 import collections
@@ -21,8 +22,6 @@ from tornado.gen import Return, with_timeout
 from katcp import Message, Sensor
 from katcp.core import AttrDict, hashable_identity
 from katcp.sampling import SampleStrategy
-
-standard_library.install_aliases()
 
 logger = logging.getLogger(__name__)
 

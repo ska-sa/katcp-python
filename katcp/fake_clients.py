@@ -3,6 +3,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 from builtins import object
 
@@ -13,8 +14,6 @@ from tornado.gen import Return
 
 from katcp import Sensor, client, kattypes, resource, server
 from katcp.core import AttrDict, Message, ProtocolFlags, convert_method_name
-
-standard_library.install_aliases()
 
 def fake_KATCP_client_resource_factory(
         KATCPClientResourceClass, fake_options, resource_spec, *args, **kwargs):

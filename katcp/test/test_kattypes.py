@@ -9,6 +9,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 import unittest
 
@@ -21,8 +22,6 @@ from katcp.kattypes import (Address, Bool, Discrete, DiscreteMulti, Float, Int,
                             Lru, Regex, Str, StrictTimestamp, Struct,
                             Timestamp, TimestampOrNow, inform, request,
                             return_reply, send_reply)
-
-standard_library.install_aliases()
 
 MS_TO_SEC_FAC = 1/1000.
 SEC_TO_MS_FAC = 1000

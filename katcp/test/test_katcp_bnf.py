@@ -37,6 +37,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 import unittest
 
@@ -46,8 +47,6 @@ import ply.lex as lex
 import ply.yacc as yacc
 
 import katcp
-
-standard_library.install_aliases()
 
 class DclLexer(object):
     """Lexer definition for the DCL."""

@@ -9,10 +9,10 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 from builtins import object
 
-standard_library.install_aliases()
 class AbstractProxy(object):
     """Delegates all operations (except ``.__subject__``) to another object"""
     __slots__ = ()

@@ -2,6 +2,7 @@
 # BSD license - see LICENSE for details
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 import logging
 import sys
@@ -20,10 +21,7 @@ from tornado.concurrent import Future as tornado_Future
 
 from katcp.object_proxies import ObjectWrapper
 
-standard_library.install_aliases()
-
 log = logging.getLogger(__name__)
-
 
 def with_relative_timeout(timeout, future, io_loop=None):
     return gen.with_timeout(timeout + time.time(), future, io_loop)

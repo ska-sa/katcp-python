@@ -9,6 +9,7 @@
 from __future__ import absolute_import, division, print_function
 import future
 from future import standard_library
+standard_library.install_aliases()
 
 import logging
 import re
@@ -29,8 +30,6 @@ from tornado.gen import with_timeout
 
 # Only Imported here to prevent circular import issues.
 from .kattypes import Address, Bool, Discrete, Float, Int, Lru, Str, Timestamp
-
-standard_library.install_aliases()
 
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000

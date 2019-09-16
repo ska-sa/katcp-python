@@ -8,6 +8,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 import logging
 import sys
@@ -32,8 +33,6 @@ from .core import (FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC, SEC_TS_KATCP_MAJOR,
                    KatcpClientError, KatcpVersionError, LatencyTimer, Message,
                    MessageParser, ProtocolFlags, until_later)
 from .ioloop_manager import IOLoopManager
-
-standard_library.install_aliases()
 
 # logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")

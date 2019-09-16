@@ -8,6 +8,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 import gc
 import logging
@@ -29,8 +30,6 @@ from katcp.core import Message, ProtocolFlags
 from katcp.testutils import (DeviceTestServer, TestLogHandler, TestUtilMixin,
                              TimewarpAsyncTestCase, WaitingMock,
                              counting_callback, start_thread_with_cleanup)
-
-standard_library.install_aliases()
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)

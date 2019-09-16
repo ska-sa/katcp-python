@@ -8,6 +8,7 @@
    """
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 import logging
 import unittest
@@ -19,8 +20,6 @@ import tornado
 import katcp
 from katcp.core import AsyncEvent, AsyncState, Sensor, until_some
 from katcp.testutils import DeviceTestSensor, TestLogHandler
-
-standard_library.install_aliases()
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)

@@ -9,6 +9,7 @@
 from __future__ import absolute_import, division, print_function
 import future
 from future import standard_library
+standard_library.install_aliases()
 
 import logging
 import re
@@ -46,8 +47,6 @@ from .kattypes import (Int, Str, has_katcp_protocol_flags,
                        minimum_katcp_version, request, return_reply)
 from .sampling import (SampleNone, SampleStrategy, format_inform_v4,
                        format_inform_v5)
-
-standard_library.install_aliases()
 
 log = logging.getLogger("katcp.server")
 

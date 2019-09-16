@@ -7,6 +7,7 @@
 """Tests for the server module."""
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 import errno
 import gc
@@ -36,8 +37,6 @@ from katcp.testutils import (AsyncDeviceTestServer, BlockingTestClient,
                              TestLogHandler, TestUtilMixin, WaitingMock,
                              handle_mock_req, mock_req,
                              start_thread_with_cleanup)
-
-standard_library.install_aliases()
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)

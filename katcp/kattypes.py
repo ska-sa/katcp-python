@@ -9,6 +9,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 import inspect
 import itertools
@@ -23,8 +24,6 @@ from tornado import gen
 
 from .core import (DEFAULT_KATCP_MAJOR, MS_TO_SEC_FAC, SEC_TO_MS_FAC,
                    SEC_TS_KATCP_MAJOR, FailReply, Message, convert_method_name)
-
-standard_library.install_aliases()
 
 logger = logging.getLogger(__name__)
 

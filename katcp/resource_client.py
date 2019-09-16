@@ -3,6 +3,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()
 
 import collections
 import logging
@@ -30,8 +31,6 @@ from katcp.core import (AsyncCallbackEvent, AsyncEvent, AsyncState, AttrDict,
 from katcp.ioloop_manager import (IOLoopThreadWrapper,
                                   ThreadSafeMethodAttrWrapper)
 from katcp.resource import KATCPReply, KATCPSensorError
-
-standard_library.install_aliases()
 
 log = logging.getLogger(__name__)
 
