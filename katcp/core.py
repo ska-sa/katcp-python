@@ -28,9 +28,6 @@ from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from tornado.gen import with_timeout
 
-# Only Imported here to prevent circular import issues.
-from .kattypes import Address, Bool, Discrete, Float, Int, Lru, Str, Timestamp
-
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
 # The major version of the katcp protocol that is used by default
@@ -840,6 +837,8 @@ class AsyncReply(Exception):
     """
     pass
 
+# Only Imported here to prevent circular import issues.
+from .kattypes import Address, Bool, Discrete, Float, Int, Lru, Str, Timestamp
 
 
 class Sensor(object):
