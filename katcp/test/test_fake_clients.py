@@ -1,5 +1,5 @@
-# Copyright 2015 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2015 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library

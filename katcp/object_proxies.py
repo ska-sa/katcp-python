@@ -1,6 +1,3 @@
-# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
-# BSD license - see LICENSE for details
-
 # Copied from peak.util.proxies https://pypi.python.org/pypi/ProxyTypes/0.9
 # to allow translation to python 2/3 compatible code # According to the pypi
 # index record this code is distributed under PSF (Python Software License) or
