@@ -17,6 +17,7 @@ import unittest
 
 from builtins import object, str
 
+import future
 import tornado
 
 import katcp
@@ -57,10 +58,13 @@ class TestMessage(unittest.TestCase):
     def test_inform(self):
         """Test inform method."""
         self.assertEqual(str(katcp.Message.inform("foo")), "#foo")
+        self.assertEqual(katcp.Message.inform("foo").arguments, [])
         self.assertEqual(str(katcp.Message.inform("foo", mid=123)),
                          "#foo[123]")
         self.assertEqual(str(katcp.Message.inform("foo", "a", "b", mid=123)),
                          "#foo[123] a b")
+        self.assertRaises(katcp.KatcpSyntaxError, katcp.Message.inform, '')
+        self.assertRaises(katcp.KatcpSyntaxError, katcp.Message.inform, '123')
 
     def test_equality(self):
         class AlwaysEqual(object):
@@ -337,7 +341,12 @@ class TestSensor(unittest.TestCase):
     def test_string_sensor(self):
         """Test string sensor."""
         s = Sensor.string("a.string", "A string sensor.", "filename", None)
+
         self.assertEqual(s.stype, 'string')
+        self.assertEqual(s.STRING, 5)
+        reversed_sensor_shortcuts = dict(map(reversed, s.SENSOR_SHORTCUTS.items()))
+        self.assertEqual(reversed_sensor_shortcuts[s.STRING], future.types.newstr)
+
         s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value="zwoop")
         # test both read_formatted and format_reading
         self.assertEqual(s.format_reading(s.read()), ("12345.000000", "nominal", "zwoop"))
