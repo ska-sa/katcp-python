@@ -1,27 +1,21 @@
 # __init__.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# Copyright 2008 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
 """Root of katcp package."""
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
 
-from .core import (Message, KatcpSyntaxError, MessageParser,
-                   DeviceMetaclass, FailReply,
-                   AsyncReply, KatcpDeviceError, KatcpClientError,
-                   Sensor, ProtocolFlags, AttrDict)
-
-from .server import (DeviceServerBase, DeviceServer, AsyncDeviceServer,
-                     DeviceLogger)
-
-from .client import (DeviceClient, AsyncClient, CallbackClient,
-                     BlockingClient)
-
-from .resource_client import (KATCPClientResource, KATCPClientResourceContainer)
-
-from .sensortree import (GenericSensorTree, BooleanSensorTree,
-                         AggregateSensorTree)
+from .client import AsyncClient, BlockingClient, CallbackClient, DeviceClient
+from .core import (AsyncReply, AttrDict, DeviceMetaclass, FailReply,
+                   KatcpClientError, KatcpDeviceError, KatcpSyntaxError,
+                   Message, MessageParser, ProtocolFlags, Sensor)
+from .resource_client import KATCPClientResource, KATCPClientResourceContainer
+from .sensortree import (AggregateSensorTree, BooleanSensorTree,
+                         GenericSensorTree)
+from .server import (AsyncDeviceServer, DeviceLogger, DeviceServer,
+                     DeviceServerBase)
 
 # BEGIN VERSION CHECK
 # Get package version when locally imported from repo or via -e develop install

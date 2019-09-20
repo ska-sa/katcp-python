@@ -1,22 +1,19 @@
 # Copyright 2015 SKA South Africa (http://ska.ac.za/)
 # BSD license - see COPYING for details
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
 standard_library.install_aliases()
 
-import tornado.concurrent
-
-from _thread import get_ident as get_thread_ident
-
 from builtins import object
-from tornado.gen import Return
+
+import tornado.concurrent
+from _thread import get_ident as get_thread_ident
 from tornado.concurrent import Future
+from tornado.gen import Return
 
-from katcp import client, server, kattypes, resource, Sensor
-from katcp.core import AttrDict, ProtocolFlags, Message, convert_method_name
-
+from katcp import Sensor, client, kattypes, resource, server
+from katcp.core import AttrDict, Message, ProtocolFlags, convert_method_name
 
 def fake_KATCP_client_resource_factory(
         KATCPClientResourceClass, fake_options, resource_spec, *args, **kwargs):
@@ -416,4 +413,3 @@ class FakeAsyncClient(client.AsyncClient):
 
         reply_msg.mid = mid
         raise Return((reply_msg, reply_informs))
-

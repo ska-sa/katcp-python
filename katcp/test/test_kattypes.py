@@ -9,35 +9,19 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-
 standard_library.install_aliases()
 
-import mock
 import unittest
 
 from builtins import object
 
-from katcp import AsyncReply, FailReply, Message
-from katcp.kattypes import (
-    Address,
-    Bool,
-    Discrete,
-    DiscreteMulti,
-    Float,
-    Int,
-    Lru,
-    Regex,
-    Str,
-    StrictTimestamp,
-    Struct,
-    Timestamp,
-    TimestampOrNow,
-    inform,
-    request,
-    return_reply,
-    send_reply,
-)
+import mock
 
+from katcp import AsyncReply, FailReply, Message
+from katcp.kattypes import (Address, Bool, Discrete, DiscreteMulti, Float, Int,
+                            Lru, Regex, Str, StrictTimestamp, Struct,
+                            Timestamp, TimestampOrNow, inform, request,
+                            return_reply, send_reply)
 
 MS_TO_SEC_FAC = 1/1000.
 SEC_TO_MS_FAC = 1000

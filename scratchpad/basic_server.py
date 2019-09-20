@@ -1,16 +1,15 @@
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# Copyright 2016 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
-from katcp import DeviceServer, Sensor, ProtocolFlags, AsyncReply
-from katcp.kattypes import (Str, Float, Timestamp, Discrete,
-                            request, return_reply)
+from __future__ import absolute_import, division, print_function
 
+import random
 import threading
 import time
-import random
+
+from katcp import AsyncReply, DeviceServer, ProtocolFlags, Sensor
+from katcp.kattypes import (Discrete, Float, Str, Timestamp, request,
+                            return_reply)
 
 server_host = ""
 server_port = 5000

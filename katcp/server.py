@@ -6,53 +6,47 @@
 
 """Servers for the KAT device control language."""
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
+import future
 from future import standard_library
 standard_library.install_aliases()
 
-
-import socket
-import threading
-import traceback
 import logging
-import sys
 import re
+import socket
+import sys
+import threading
 import time
+import traceback
 
-import future
+from builtins import object, range
+from collections import deque
+from concurrent.futures import Future
+from functools import partial, wraps
+
 import tornado.ioloop
 import tornado.tcpserver
-
-from functools import partial, wraps
-from collections import deque
 from _thread import get_ident as get_thread_ident
-
-from builtins import range, object
-
 from past.builtins import basestring
 from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
 from tornado.concurrent import chain_future
 from tornado.util import ObjectDict
-from concurrent.futures import Future
-
-from .ioloop_manager import IOLoopManager, with_relative_timeout
-from .core import (DeviceServerMetaclass, Message, MessageParser,
-                   FailReply, AsyncReply, ProtocolFlags)
-from .sampling import SampleStrategy, SampleNone
-from .sampling import format_inform_v5, format_inform_v4
-from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
-                   VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR)
-from .kattypes import (request, return_reply,
-                       minimum_katcp_version,
-                       has_katcp_protocol_flags,
-                       Int, Str)
 
 # 'import katcp' so that we can use katcp.__version__ later
 # we cannot do this: 'from . import __version__' because __version__
 # does not exist at this stage
 import katcp
+
+from .core import (DEFAULT_KATCP_MAJOR, MS_TO_SEC_FAC, SEC_TO_MS_FAC,
+                   SEC_TS_KATCP_MAJOR, VERSION_CONNECT_KATCP_MAJOR, AsyncReply,
+                   DeviceServerMetaclass, FailReply, Message, MessageParser,
+                   ProtocolFlags)
+from .ioloop_manager import IOLoopManager, with_relative_timeout
+from .kattypes import (Int, Str, has_katcp_protocol_flags,
+                       minimum_katcp_version, request, return_reply)
+from .sampling import (SampleNone, SampleStrategy, format_inform_v4,
+                       format_inform_v5)
 
 log = logging.getLogger("katcp.server")
 

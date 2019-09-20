@@ -1,15 +1,15 @@
-# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# Copyright 2016 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-
 standard_library.install_aliases()
 
 import collections
 import gc
 import logging
 import time
+import unittest
 import weakref
 
 from builtins import object, range, str
@@ -17,19 +17,13 @@ from concurrent.futures import Future
 
 import mock
 import tornado
-import unittest
 
 import katcp
-
 from katcp import Message, Sensor, inspecting_client
 from katcp.inspecting_client import InspectingClientAsync
-from katcp.testutils import (
-    DeviceTestSensor,
-    DeviceTestServer,
-    DeviceTestServerWithTimeoutHints,
-    start_thread_with_cleanup,
-)
-
+from katcp.testutils import (DeviceTestSensor, DeviceTestServer,
+                             DeviceTestServerWithTimeoutHints,
+                             start_thread_with_cleanup)
 
 logger = logging.getLogger(__name__)
 

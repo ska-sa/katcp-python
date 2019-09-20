@@ -1,20 +1,19 @@
-# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# Copyright 2010 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
 """ This is a benchmark client for scenario 1, which cooperate with
 benchtxserver or benchserver
 """
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function
 
-import time
 import sys
+import time
 from optparse import OptionParser
-from katcp.tx.core import run_client, ClientKatCP
+
+from katcp.tx.core import ClientKatCP, run_client
 from twisted.internet import reactor
-from util import standard_parser
 from twisted.python import log
+from util import standard_parser
 
 TIMEOUT = 0.2
 

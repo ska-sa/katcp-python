@@ -1,41 +1,36 @@
 # Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
 standard_library.install_aliases()
 
-import logging
-import sys
-import re
 import collections
+import logging
 import math
+import re
+import sys
 import time
-
-import tornado
-
+from builtins import object
+from concurrent.futures import Future
 from functools import partial
 
-from concurrent.futures import Future
-from builtins import object
+import tornado
 from future.moves.builtins import dict
+from past.utils import old_div
 from tornado.concurrent import Future as tornado_Future
 from tornado.gen import Return, maybe_future, with_timeout
-from past.utils import old_div
 
-from katcp import resource, inspecting_client, Message
-from katcp.resource import KATCPReply, KATCPSensorError
-from katcp.core import (AttrDict, DefaultAttrDict, AsyncCallbackEvent,
-                        steal_docstring_from,
-                        AsyncState, AsyncEvent, LatencyTimer,
-                        until_any, until_some, log_future_exceptions)
-
+from katcp import Message, inspecting_client, resource
+from katcp.core import (AsyncCallbackEvent, AsyncEvent, AsyncState, AttrDict,
+                        DefaultAttrDict, LatencyTimer, log_future_exceptions,
+                        steal_docstring_from, until_any, until_some)
 # TODO NM 2017-04-13 Importing IOLoopThreadwrapper here for backwards
 # compatibility, user code should be changed to import it from the more logical
 # katcp.ioloop_manager module.
-from katcp.ioloop_manager import (ThreadSafeMethodAttrWrapper,
-                                  IOLoopThreadWrapper)
+from katcp.ioloop_manager import (IOLoopThreadWrapper,
+                                  ThreadSafeMethodAttrWrapper)
+from katcp.resource import KATCPReply, KATCPSensorError
 
 log = logging.getLogger(__name__)
 

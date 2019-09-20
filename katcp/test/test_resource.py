@@ -1,9 +1,8 @@
-# Copyright 2013 National Research Foundation (South African Radio Astronomy Observatory)
+# Copyright 2015 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-
 standard_library.install_aliases()
 
 import logging
@@ -15,7 +14,6 @@ import tornado.testing
 # Module under test
 from katcp import Sensor, resource
 from katcp.testutils import TimewarpAsyncTestCase
-
 
 logger = logging.getLogger(__name__)
 

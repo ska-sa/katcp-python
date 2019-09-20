@@ -1,19 +1,18 @@
-# Copyright 2015 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2015 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-
 standard_library.install_aliases()
 
 import copy
 import logging
+import unittest
 
 from builtins import object, str
 
 import tornado.gen
 import tornado.testing
-import unittest
 
 # module under test
 from katcp import Sensor, fake_clients, resource_client
@@ -21,7 +20,6 @@ from katcp.inspecting_client import InspectingClientAsync
 from katcp.kattypes import Float, Int, request, return_reply
 from katcp.resource import escape_name
 from katcp.testutils import SensorComparisonMixin
-
 
 class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                                 SensorComparisonMixin):

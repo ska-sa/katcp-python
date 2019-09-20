@@ -9,7 +9,6 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-
 standard_library.install_aliases()
 
 import concurrent.futures
@@ -17,19 +16,17 @@ import logging
 import queue
 import threading
 import time
+import unittest
 
 import mock
 import tornado.testing
-import unittest
-
 from _thread import get_ident
 from tornado import gen
 
 import katcp
-
 from katcp import Sensor, sampling
-from katcp.testutils import DeviceTestSensor, TestLogHandler, TimewarpAsyncTestCase
-
+from katcp.testutils import (DeviceTestSensor, TestLogHandler,
+                             TimewarpAsyncTestCase)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)

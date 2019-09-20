@@ -1,19 +1,14 @@
-# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
-# BSD license - see LICENSE for details
-
 # Copied from peak.util.proxies https://pypi.python.org/pypi/ProxyTypes/0.9
 # to allow translation to python 2/3 compatible code # According to the pypi
 # index record this code is distributed under PSF (Python Software License) or
 # ZPL (Zope Public License if I' not mistaken). The PSF license is BSD style and
 # allows us to copy, modify and redistribute this code.
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
 standard_library.install_aliases()
 
 from builtins import object
-
 
 class AbstractProxy(object):
     """Delegates all operations (except ``.__subject__``) to another object"""
