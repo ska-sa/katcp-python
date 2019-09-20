@@ -10,7 +10,7 @@ from __future__ import division, print_function, absolute_import
 from .core import (Message, KatcpSyntaxError, MessageParser,
                    DeviceMetaclass, FailReply,
                    AsyncReply, KatcpDeviceError, KatcpClientError,
-                   Sensor, ProtocolFlags, AttrDict)
+                   Sensor, ProtocolFlags, AttrDict, KatcpTypeError)
 
 from .server import (DeviceServerBase, DeviceServer, AsyncDeviceServer,
                      DeviceLogger)

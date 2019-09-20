@@ -16,11 +16,12 @@ import sys
 import time
 import warnings
 import logging
+import numbers
 
 import future
 import tornado
 
-from builtins import bytes, next, object, range, str
+from builtins import range
 from past.builtins import basestring
 from collections import namedtuple, defaultdict
 from functools import wraps, partial
@@ -137,7 +138,7 @@ def log_future_exceptions(logger, f, ignore=()):
 
 def convert_method_name(prefix, name):
     """Convert a method name to the corresponding KATCP message name."""
-    return str(name[len(prefix):].replace("_", "-"))
+    return name[len(prefix):].replace("_", "-")
 
 
 def steal_docstring_from(obj):
@@ -169,6 +170,8 @@ def steal_docstring_from(obj):
 class KatcpSyntaxError(ValueError):
     """Raised by parsers when encountering a syntax error."""
 
+class KatcpTypeError(TypeError):
+    """Raised by parsers when encountering invalid types."""
 
 class KatcpClientError(Exception):
     """Raised by KATCP clients when an error occurs."""
@@ -191,9 +194,9 @@ class Message(object):
         The message type (request, reply or inform).
     name : str
         The message name.
-    arguments : list of strings
+    arguments : list of objects (float, int, bool, bytes, or str)
         The message arguments.
-    mid : str, digits only
+    mid : str or bytes, digits only
         The message identifier. Replies and informs that
         are part of the reply to a request should have the
         same id as the request did.
@@ -204,7 +207,7 @@ class Message(object):
 
     # Reply codes
     # TODO: make use of reply codes in device client and server
-    OK, FAIL, INVALID = "ok", "fail", "invalid"
+    OK, FAIL, INVALID = b"ok", b"fail", b"invalid"
 
     ## @brief Mapping from message type to string name for the type.
     TYPE_NAMES = {
@@ -215,41 +218,41 @@ class Message(object):
 
     ## @brief Mapping from message type to type code character.
     TYPE_SYMBOLS = {
-        REQUEST: "?",
-        REPLY: "!",
-        INFORM: "#",
+        REQUEST: b"?",
+        REPLY: b"!",
+        INFORM: b"#",
     }
 
     # pylint fails to realise TYPE_SYMBOLS is defined
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from type code character to message type.
-    TYPE_SYMBOL_LOOKUP = dict((v, k) for k, v in list(TYPE_SYMBOLS.items()))
+    TYPE_SYMBOL_LOOKUP = dict((v, k) for k, v in TYPE_SYMBOLS.items())
 
     # pylint: enable-msg = E0602
 
     ## @brief Mapping from escape character to corresponding unescaped string.
     ESCAPE_LOOKUP = {
-        "\\": "\\",
-        "_": " ",
-        "0": "\0",
-        "n": "\n",
-        "r": "\r",
-        "e": "\x1b",
-        "t": "\t",
-        "@": "",
+        b"\\": b"\\",
+        b"_": b" ",
+        b"0": b"\0",
+        b"n": b"\n",
+        b"r": b"\r",
+        b"e": b"\x1b",
+        b"t": b"\t",
+        b"@": b"",
     }
 
     # pylint fails to realise ESCAPE_LOOKUP is defined
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from unescaped string to corresponding escape character.
-    REVERSE_ESCAPE_LOOKUP = dict((v, k) for k, v in list(ESCAPE_LOOKUP.items()))
+    REVERSE_ESCAPE_LOOKUP = dict((v, k) for k, v in ESCAPE_LOOKUP.items())
 
     # pylint: enable-msg = E0602
 
     ## @brief Regular expression matching all unescaped character.
-    ESCAPE_RE = re.compile(r"[\\ \0\n\r\x1b\t]")
+    ESCAPE_RE = re.compile(br"[\\ \0\n\r\x1b\t]")
 
     ## @var mtype
     # @brief Message type.
@@ -270,7 +273,10 @@ class Message(object):
         if mid is None:
             self.mid = None
         else:
-            self.mid = str(mid)
+            if not future.utils.isbytes(mid):
+                self.mid = str(mid).encode('ascii')
+            else:
+                self.mid = mid
 
         if arguments is None:
             self.arguments = []
@@ -301,25 +307,25 @@ class Message(object):
                                    % (name,))
 
     def format_argument(self, arg):
-        """Format a Message argument to a string"""
-        if isinstance(arg, float):
-            return repr(arg)
+        """Format a Message argument to a byte string"""
+        if isinstance(arg, numbers.Integral):
+            return str(int(arg)).encode('ascii')
+        elif isinstance(arg, numbers.Real):
+            return repr(float(arg)).encode('ascii')
         elif isinstance(arg, bool):
-            return str(int(arg))
+            return b'1' if arg else b'0'
+        elif future.utils.isbytes(arg):
+            return arg
         else:
             try:
-                arg = str(arg)
+                return arg.encode('utf-8')
             except UnicodeEncodeError:
                 # unicode characters will break the str cast, so
                 # try to encode to ascii and replace the offending characters
                 # with a '?' character
-                logger.error("Error casting message argument to str! "
-                             "Trying to encode argument to ascii.")
-                if not isinstance(arg, str):
-                    arg = arg.encode('utf-8', errors='ignore').decode('utf-8')
-            finally:
-                arg = arg.encode('ascii', 'replace')
-                return arg if not isinstance(arg, bytes) else arg.decode()
+                logger.error("Error encoding message argument to byte str! "
+                             "Replacing bad characters with '?'.")
+                return arg.encode('ascii', 'replace')
 
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
@@ -332,41 +338,61 @@ class Message(object):
         """
         return Message(self.mtype, self.name, self.arguments)
 
-    def __str__(self):
-        """ Return Message serialized for transmission.
+    def __bytes__(self):
+        """Return Message serialized for transmission.
 
         Returns
         -------
-        msg : str
-           The message encoded as a ASCII string.
+        msg : bytes
+           The raw bytes of the serialised message, excluding terminating newline.
 
         """
         if self.arguments:
             escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
                             for x in self.arguments]
-            escaped_args = [x or "\\@" for x in escaped_args]
-            arg_str = " " + " ".join(escaped_args)
+            escaped_args = [x or b"\\@" for x in escaped_args]
+            arg_str = b" " + b" ".join(escaped_args)
         else:
-            arg_str = ""
+            arg_str = b""
 
         if self.mid is not None:
-            mid_str = "[%s]" % self.mid
+            mid_str = b"[%s]" % self.mid
         else:
-            mid_str = ""
+            mid_str = b""
 
-        return "%s%s%s%s" % (self.TYPE_SYMBOLS[self.mtype], self.name,
-                             mid_str, arg_str)
+        return b"%s%s%s%s" % (self.TYPE_SYMBOLS[self.mtype], self.name.encode('ascii'),
+                              mid_str, arg_str)
+
+    def __str__(self):
+        """Return Message serialized for transmission as native string.
+
+        Returns
+        -------
+        msg : byte string in PY2, unicode string in PY3
+           - In PY2, this string of bytes can be transmitted on the wire.
+           - In PY3, the native string type is unicode, we need to decode
+             the raw bytes first - "latin1" is a used as there could be
+             arbitrary binary data in the message.  This version of the
+             stringified message maybe useful for debugging, but for
+             transmission on the wire, use `__bytes__` instead.
+        """
+        byte_str = self.__bytes__()
+        if future.utils.PY2:
+            return byte_str
+        else:
+            return byte_str.decode('latin1')
 
     def __repr__(self):
-        """ Return message displayed in a readable form."""
+        """Return message displayed in a readable form."""
         tp = self.TYPE_NAMES[self.mtype].lower()
-        name = str(self.name)
+        name = self.name
         if self.arguments:
-            escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
-                            for x in self.arguments]
-            for arg in escaped_args:
-                if len(arg) > 10:
-                    arg = arg[:10] + "..."
+            escaped_args = []
+            for arg in self.arguments:
+                escaped_arg = self.ESCAPE_RE.sub(self._escape_match, arg)
+                if len(escaped_arg) > 10:
+                    escaped_arg = escaped_arg[:10] + b"..."
+                escaped_args.append(str(escaped_arg))
             args = "(" + ", ".join(escaped_args) + ")"
         else:
             args = ""
@@ -385,7 +411,7 @@ class Message(object):
 
     def _escape_match(self, match):
         """Given a re.Match object, return the escape code for it."""
-        return "\\" + self.REVERSE_ESCAPE_LOOKUP[match.group()]
+        return b"\\" + self.REVERSE_ESCAPE_LOOKUP[match.group()]
 
     def reply_ok(self):
         """Return True if this is a reply and its first argument is 'ok'."""
@@ -403,7 +429,7 @@ class Message(object):
         ----------
         name : str
             The name of the message.
-        args : list of strings
+        args : list of objects (float, int, bool, bytes, or str)
             The message arguments.
 
         Keyword arguments
@@ -425,7 +451,7 @@ class Message(object):
         ----------
         name : str
             The name of the message.
-        args : list of strings
+        args : list of objects (float, int, bool, bytes, or str)
             The message arguments.
 
         Keyword Arguments
@@ -449,7 +475,7 @@ class Message(object):
         ----------
         req_msg : katcp.core.Message instance
             The request message that this inform if in reply to
-        args : list of strings
+        args : list of objects (float, int, bool, bytes, or str)
             The message arguments.
 
         """
@@ -463,7 +489,7 @@ class Message(object):
         ----------
         name : str
             The name of the message.
-        args : list of strings
+        args : list of objects (float, int, bool, bytes, or str)
             The message arguments.
 
         """
@@ -482,7 +508,7 @@ class Message(object):
         ----------
         req_msg : katcp.core.Message instance
             The request message that this inform if in reply to
-        args : list of strings
+        args : list of objects (float, int, bool, bytes, or str)
             The message arguments except name
 
         """
@@ -504,17 +530,17 @@ class MessageParser(object):
     ESCAPE_LOOKUP = Message.ESCAPE_LOOKUP
 
     ## @brief Regular expression matching all special characters.
-    SPECIAL_RE = re.compile(r"[\0\n\r\x1b\t ]")
+    SPECIAL_RE = re.compile(br"[\0\n\r\x1b\t ]")
 
     ## @brief Regular expression matching all escapes.
-    UNESCAPE_RE = re.compile(r"\\(.?)")
+    UNESCAPE_RE = re.compile(br"\\(.?)")
 
     ## @brief Regular expresion matching KATCP whitespace (just space and tab)
-    WHITESPACE_RE = re.compile(r"[ \t]+")
+    WHITESPACE_RE = re.compile(br"[ \t]+")
 
     ## @brief Regular expression matching name and ID
     NAME_RE = re.compile(
-        r"^(?P<name>[a-zA-Z][a-zA-Z0-9\-]*)(\[(?P<id>[0-9]+)\])?$")
+        br"^(?P<name>[a-zA-Z][a-zA-Z0-9\-]*)(\[(?P<id>[0-9]+)\])?$")
 
     def _unescape_match(self, match):
         """Given an re.Match, unescape the escape code it represents."""
@@ -538,7 +564,7 @@ class MessageParser(object):
 
         Parameters
         ----------
-        line : str
+        line : bytes
             The line to parse (should not contain the terminating newline
             or carriage return).
 
@@ -552,10 +578,10 @@ class MessageParser(object):
         if not line:
             raise KatcpSyntaxError("Empty message received.")
 
-        if not isinstance(line, str):
-            line = str(line, 'utf-8')
+        if not future.utils.isbytes(line):
+            raise KatcpTypeError("Line type must be bytes - not {}".format(type(line)))
 
-        type_char = line[0]
+        type_char = line[:1]
         if type_char not in self.TYPE_SYMBOL_LOOKUP:
             raise KatcpSyntaxError("Bad type character %r." % (type_char,))
 
@@ -579,6 +605,10 @@ class MessageParser(object):
         else:
             raise KatcpSyntaxError("Bad message name (and possibly id) %r." %
                                    (name,))
+
+        # ensure name is native string
+        if future.utils.PY3:
+            name = str(name, encoding='ascii')
 
         return Message(mtype, name, arguments, mid)
 
@@ -615,21 +645,21 @@ class ProtocolFlags(object):
         message ids.
 
     """
-    VERSION_RE = re.compile(r"^(?P<major>\d+)\.(?P<minor>\d+)"
-                            r"(-(?P<flags>.*))?$")
+    VERSION_RE = re.compile(br"^(?P<major>\d+)\.(?P<minor>\d+)"
+                            br"(-(?P<flags>.*))?$")
 
     # flags
 
-    MULTI_CLIENT = 'M'
-    MESSAGE_IDS = 'I'
+    MULTI_CLIENT = b'M'
+    MESSAGE_IDS = b'I'
     # New proposal flag to indicate that a device supports ?request-timeout-hint
     # See CB-2051
-    REQUEST_TIMEOUT_HINTS = 'T'
+    REQUEST_TIMEOUT_HINTS = b'T'
 
-    STRATEGIES_V4 = frozenset(['none', 'auto', 'period', 'event',
-                               'differential'])
+    STRATEGIES_V4 = frozenset([b'none', b'auto', b'period', b'event',
+                               b'differential'])
     STRATEGIES_V5 = STRATEGIES_V4 | frozenset(
-        ['event-rate', 'differential-rate'])
+        [b'event-rate', b'differential-rate'])
 
     STRATEGIES_ALLOWED_BY_MAJOR_VERSION = {
         4: STRATEGIES_V4,
@@ -667,19 +697,23 @@ class ProtocolFlags(object):
                 self.flags == other.flags)
 
     def __str__(self):
-        flag_str = self.flags and ("-" + "".join(sorted(self.flags))) or ""
-        return "%d.%d%s" % (self.major, self.minor, flag_str)
+        flag_str = self.flags and (b"-" + b"".join(sorted(self.flags))) or b""
+        result = b"%d.%d%s" % (self.major, self.minor, flag_str)
+        if future.utils.PY2:
+            return result
+        else:
+            return result.decode('ascii')
 
     def supports(self, flag):
         return flag in self.flags
 
     @classmethod
     def parse_version(cls, version_str):
-        """Create a :class:`ProtocolFlags` object from a version string.
+        """Create a :class:`ProtocolFlags` object from a version byte string.
 
         Parameters
         ----------
-        version_str : str
+        version_str : bytes
             The version string from a #version-connect katcp-protocol
             message.
 
@@ -688,11 +722,20 @@ class ProtocolFlags(object):
         if match:
             major = int(match.group('major'))
             minor = int(match.group('minor'))
-            flags = set(match.group('flags') or '')
+            flags = set(cls._byte_chars(match.group('flags')) or b'')
         else:
             major, minor, flags = None, None, set()
         return cls(major, minor, flags)
 
+    @staticmethod
+    def _byte_chars(flags):
+        # In PY2, list(flags) works fine, but in PY3, this returns
+        # each element as an int instead of single character byte string.
+        # We use slicing instead to get the individual characters.
+        if flags:
+            return [flags[i:i+1] for i in range(len(flags))]
+        else:
+            return []
 
 class DeviceMetaclass(type):
     """Metaclass for DeviceServer and DeviceClient classes.
@@ -928,7 +971,7 @@ class Sensor(object):
     }
 
     # map type strings to types
-    SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in list(SENSOR_TYPES.items()))
+    SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
 
     # Sensor status constants
     UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE, INACTIVE = list(range(7))
@@ -945,7 +988,7 @@ class Sensor(object):
     }
 
     ## @brief Mapping from status name to sensor status.
-    STATUS_NAMES = dict((v, k) for k, v in list(STATUSES.items()))
+    STATUS_NAMES = dict((v, k) for k, v in STATUSES.items())
 
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = Lru.LRU_NOMINAL, Lru.LRU_ERROR
@@ -957,7 +1000,7 @@ class Sensor(object):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from LRU value name to LRU value constant.
-    LRU_CONSTANTS = dict((v, k) for k, v in list(LRU_VALUES.items()))
+    LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
 
     # pylint: enable-msg = E0602
 
@@ -1075,7 +1118,7 @@ class Sensor(object):
             The name of the sensor.
         description : str
             A short description of the sensor.
-        units : str
+        unit : str
             The units of the sensor value. May be the empty string
             if there are no applicable units.
         params : list
@@ -1102,7 +1145,7 @@ class Sensor(object):
             The name of the sensor.
         description : str
             A short description of the sensor.
-        units : str
+        unit : str
             The units of the sensor value. May be the empty string
             if there are no applicable units.
         params : list
@@ -1129,7 +1172,7 @@ class Sensor(object):
             The name of the sensor.
         description : str
             A short description of the sensor.
-        units : str
+        unit : str
             The units of the sensor value. May be the empty string
             if there are no applicable units.
         default : bool
@@ -1154,7 +1197,7 @@ class Sensor(object):
             The name of the sensor.
         description : str
             A short description of the sensor.
-        units : str
+        unit : str
             The units of the sensor value. May be the empty string
             if there are no applicable units.
         default : enum, Sensor.LRU_*
@@ -1179,7 +1222,7 @@ class Sensor(object):
             The name of the sensor.
         description : str
             A short description of the sensor.
-        units : str
+        unit : str
             The units of the sensor value. May be the empty string
             if there are no applicable units.
         default : string
@@ -1204,7 +1247,7 @@ class Sensor(object):
             The name of the sensor.
         description : str
             A short description of the sensor.
-        units : str
+        unit : str
             The units of the sensor value. May be the empty string
             if there are no applicable units.
         params : [str]
@@ -1232,7 +1275,7 @@ class Sensor(object):
             The name of the sensor.
         description : str
             A short description of the sensor.
-        units : str
+        unit: str
             The units of the sensor value. For timestamp sensor may only be the
             empty string.
         default : string
@@ -1258,7 +1301,7 @@ class Sensor(object):
             The name of the sensor.
         description : str
             A short description of the sensor.
-        units : str
+        unit : str
             The units of the sensor value. May be the empty string
             if there are no applicable units.
         default : (string, int)

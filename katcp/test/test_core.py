@@ -15,13 +15,13 @@ standard_library.install_aliases()
 import logging
 import unittest
 
-from builtins import object, str
-
+import future
 import tornado
 
 import katcp
 
-from katcp.core import AsyncEvent, AsyncState, Sensor, until_some
+from katcp import KatcpSyntaxError, KatcpTypeError
+from katcp.core import AsyncEvent, AsyncState, Message, Sensor, until_some
 from katcp.testutils import DeviceTestSensor, TestLogHandler
 
 
@@ -30,50 +30,141 @@ logging.getLogger("katcp").addHandler(log_handler)
 
 
 class TestMessage(unittest.TestCase):
+    def test_init_basic(self):
+        msg = Message(Message.REQUEST,
+                      'hello', ['world', b'binary\xff\x00', 123, 234.5, True, False])
+        self.assertEqual(msg.mtype, Message.REQUEST)
+        self.assertEqual(msg.name, 'hello')
+        self.assertEqual(msg.arguments, [
+            b'world', b'binary\xff\x00', b'123', b'234.5', b'1', b'0'])
+        self.assertIsNone(msg.mid)
+
+    def test_init_mid(self):
+        msg = Message(Message.REPLY, 'hello', ['world'], mid=345)
+        self.assertEqual(msg.mtype, Message.REPLY)
+        self.assertEqual(msg.name, 'hello')
+        self.assertEqual(msg.arguments, [b'world'])
+        self.assertEqual(msg.mid, b'345')
+
+    def test_init_bad_name(self):
+        self.assertRaises(ValueError, Message, Message.REPLY,
+                          'underscores_bad', 'world', mid=345)
+        self.assertRaises(ValueError, Message, Message.REPLY,
+                          '', 'world', mid=345)
+        self.assertRaises(ValueError, Message, Message.REPLY,
+                          '1numberfirst', 'world', mid=345)
+
     def test_reply_ok(self):
         """Test reply checking."""
-        self.assertEqual(katcp.Message.reply("foo", "ok").reply_ok(), True)
-        self.assertEqual(katcp.Message.reply("foo", "ok", 1).reply_ok(), True)
-        self.assertEqual(katcp.Message.reply("foo", "fail").reply_ok(), False)
-        self.assertEqual(katcp.Message.reply("foo", "fail", "ok").reply_ok(),
+        self.assertEqual(Message.reply("foo", "ok").reply_ok(), True)
+        self.assertEqual(Message.reply("foo", "ok", 1).reply_ok(), True)
+        self.assertEqual(Message.reply("foo", "fail").reply_ok(), False)
+        self.assertEqual(Message.reply("foo", "fail", "ok").reply_ok(),
                          False)
-        self.assertEqual(katcp.Message.request("foo", "ok").reply_ok(), False)
+        self.assertEqual(Message.request("foo", "ok").reply_ok(), False)
 
     def test_request(self):
         """Test request method."""
-        self.assertEqual(str(katcp.Message.request("foo")), "?foo")
-        self.assertEqual(str(katcp.Message.request("foo", mid=123)),
-                         "?foo[123]")
-        self.assertEqual(str(katcp.Message.request("foo", "a", "b", mid=123)),
-                         "?foo[123] a b")
+        self.assertEqual(bytes(Message.request("foo")), b"?foo")
+        self.assertEqual(bytes(Message.request("foo", mid=123)),
+                         b"?foo[123]")
+        self.assertEqual(bytes(Message.request("foo", "a", "b", mid=123)),
+                         b"?foo[123] a b")
+
+    def test_request_attributes(self):
+        """Test request message attributes."""
+        msg = Message.request('hello', 'world')
+        self.assertEqual(msg.mtype, Message.REQUEST)
+        self.assertEqual(msg.name, 'hello')
+        self.assertEqual(msg.arguments, [b'world'])
+        self.assertIsNone(msg.mid)
 
     def test_reply(self):
         """Test reply method."""
-        self.assertEqual(str(katcp.Message.reply("foo")), "!foo")
-        self.assertEqual(str(katcp.Message.reply("foo", mid=123)), "!foo[123]")
-        self.assertEqual(str(katcp.Message.reply("foo", "a", "b", mid=123)),
-                         "!foo[123] a b")
+        self.assertEqual(bytes(Message.reply("foo")), b"!foo")
+        self.assertEqual(bytes(Message.reply("foo", mid=123)), b"!foo[123]")
+        self.assertEqual(bytes(Message.reply("foo", "a", "b", mid=123)),
+                         b"!foo[123] a b")
+
+    def test_reply_attributes(self):
+        """Test reply message attributes."""
+        msg = Message.reply('hello', 'world', mid=None)
+        self.assertEqual(msg.mtype, Message.REPLY)
+        self.assertEqual(msg.name, 'hello')
+        self.assertEqual(msg.arguments, [b'world'])
+        self.assertIsNone(msg.mid)
 
     def test_inform(self):
         """Test inform method."""
-        self.assertEqual(str(katcp.Message.inform("foo")), "#foo")
-        self.assertEqual(str(katcp.Message.inform("foo", mid=123)),
-                         "#foo[123]")
-        self.assertEqual(str(katcp.Message.inform("foo", "a", "b", mid=123)),
-                         "#foo[123] a b")
+        self.assertEqual(bytes(Message.inform("foo")), b"#foo")
+        self.assertEqual(bytes(Message.inform("foo", mid=123)),
+                         b"#foo[123]")
+        self.assertEqual(bytes(Message.inform("foo", "a", "b", mid=123)),
+                         b"#foo[123] a b")
+
+    def test_inform_attributes(self):
+        """Test inform message attributes."""
+        msg = Message.inform('hello', 'world', mid=1)
+        self.assertEqual(msg.mtype, Message.INFORM)
+        self.assertEqual(msg.name, 'hello')
+        self.assertEqual(msg.arguments, [b'world'])
+        self.assertEqual(msg.mid, b'1')
+
+    def test_reply_to_request(self):
+        req = Message.request('hello', 'world', mid=1)
+        reply = Message.reply_to_request(req, 'test')
+        self.assertEqual(reply.mtype, Message.REPLY)
+        self.assertEqual(reply.name, 'hello')
+        self.assertEqual(reply.arguments, [b'test'])
+        self.assertEqual(reply.mid, b'1')
 
     def test_equality(self):
         class AlwaysEqual(object):
             def __eq__(self, other):
                 return True
 
-        msg = katcp.Message.inform("foo", "a", "b")
-        assert msg == katcp.Message.inform("foo", "a", "b")
-        assert msg != katcp.Message.request("foo", "a", "b")
-        assert msg != katcp.Message.inform("bar", "a", "b")
-        assert msg != katcp.Message.inform("foo", "a", "b", "c")
+        msg = Message.inform("foo", "a", "b")
+        assert msg == Message.inform("foo", "a", "b")
+        assert msg != Message.request("foo", "a", "b")
+        assert msg != Message.inform("bar", "a", "b")
+        assert msg != Message.inform("foo", "a", "b", "c")
+        assert msg != Message.reply("foo", "a", "b")
         assert msg != 3
         assert msg == AlwaysEqual()
+
+    def test_bytes(self):
+        msg = Message.request(
+            'hello', 'café', b'_bin ary\xff\x00\n\r\t\\\x1b', 123, 234.5, True, False, '')
+        raw = bytes(msg)
+        expected = (
+            b'?hello caf\xc3\xa9 _bin\\_ary\xff\\0\\n\\r\\t\\\\\\e 123 234.5 1 0 \\@')
+        self.assertEqual(raw, expected)
+
+    def test_bytes_mid(self):
+        msg = Message.reply('fail', 'on fire', mid=234)
+        self.assertEqual(bytes(msg), b'!fail[234] on\\_fire')
+
+    def test_repr(self):
+        msg = Message.reply(
+            'ok', 'café', b'_bin ary\xff\x00\n\r\t\\\x1b', 123, 234.5, True, False, '')
+        # storing Message.arguments as byte string results in slightly different
+        # reprs for PY2 compared to PY3.
+        if future.utils.PY2:
+            expected = ("<Message reply ok (caf\xc3\xa9, "
+                        "_bin\\_ary\xff..., "
+                        "123, 234.5, 1, 0, )>")
+        else:
+            expected = (r"<Message reply ok (b'caf\xc3\xa9', "
+                        r"b'_bin\\_ary\xff...', "
+                        r"b'123', b'234.5', b'1', b'0', b'')>")
+        self.assertEqual(repr(msg), expected)
+
+    def test_bad_utf8_unicode(self):
+        # Not great to have a test limited to PY3, but the 'utf-8' encoder
+        # doesn't complain about this string on PY2
+        if future.utils.PY3:
+            msg = Message(Message.REQUEST, 'hello', [u'bad\ud83d\ude04string'])
+            self.assertEqual(msg.arguments, [b'bad??string'])
 
 
 class TestMessageParser(unittest.TestCase):
@@ -82,115 +173,137 @@ class TestMessageParser(unittest.TestCase):
 
     def test_simple_messages(self):
         """Test simple messages."""
-        m = self.p.parse("?foo")
+        m = self.p.parse(b"?foo")
         self.assertEqual(m.mtype, m.REQUEST)
         self.assertEqual(m.name, "foo")
         self.assertEqual(m.arguments, [])
 
-        m = self.p.parse("#bar 123 baz 1.000e-05")
+        m = self.p.parse(b"#bar 123 baz 1.000e-05")
         self.assertEqual(m.mtype, m.INFORM)
         self.assertEqual(m.name, "bar")
-        self.assertEqual(m.arguments, ["123", "baz", "1.000e-05"])
+        self.assertEqual(m.arguments, [b"123", b"baz", b"1.000e-05"])
 
-        m = self.p.parse("!baz a17 goo")
+        m = self.p.parse(b"!baz a17 goo")
         self.assertEqual(m.mtype, m.REPLY)
         self.assertEqual(m.name, "baz")
-        self.assertEqual(m.arguments, ["a17", "goo"])
+        self.assertEqual(m.arguments, [b"a17", b"goo"])
 
     def test_escape_sequences(self):
         """Test escape sequences."""
-        m = self.p.parse(r"?foo \\\_\0\n\r\e\t\@")
-        self.assertEqual(m.arguments, ["\\ \0\n\r\x1b\t"])
+        m = self.p.parse(br"?foo \\\_\0\n\r\e\t\@")
+        self.assertEqual(m.arguments, [b"\\ \0\n\r\x1b\t"])
 
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"?foo \z")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, br"?foo \z")
 
         # test unescaped null
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "?foo \0")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, b"?foo \0")
 
     def test_syntax_errors(self):
         """Test generation of syntax errors."""
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r" ?foo")
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"? foo")
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"?1foo")
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r">foo")
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, "!foo \\")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, br" ?foo")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, br"? foo")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, br"?1foo")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, br">foo")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, b"!foo \\")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, b"!test message\n")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, b"")
+        # invalid escapes
+        self.assertRaises(KatcpSyntaxError, self.p.parse, b'!ok \\q')
+        self.assertRaises(KatcpSyntaxError, self.p.parse, b'!ok q\\ other')
+        # unescaped
+        self.assertRaises(KatcpSyntaxError, self.p.parse, b'!ok \x1b')
 
     def test_message_to_string(self):
         """Test message to string round trip with escapes."""
         for m_str in [
-            "?bar",
-            r"?foo \\\_\0\n\r\e\t",
+            b"?bar",
+            br"?foo \\\_\0\n\r\e\t",
         ]:
-            self.assertEqual(m_str, str(self.p.parse(m_str)))
+            self.assertEqual(m_str, bytes(self.p.parse(m_str)))
 
     def test_command_names(self):
         """Test a variety of command names."""
-        m = self.p.parse("!baz-bar")
+        m = self.p.parse(b"!baz-bar")
         self.assertEqual(m.name, "baz-bar")
-        self.assertRaises(katcp.KatcpSyntaxError, self.p.parse, r"?-foo")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, br"?-foo")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, br"?bad_name")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, br"? empty")
 
     def test_empty_params(self):
         """Test parsing messages with empty parameters."""
-        m = self.p.parse("!foo \@")  # 1 empty parameter
-        self.assertEqual(m.arguments, [""])
-        m = self.p.parse("!foo \@ \@")  # 2 empty parameter
-        self.assertEqual(m.arguments, ["", ""])
-        m = self.p.parse("!foo \_ \_ \@")  # space, space, empty
-        self.assertEqual(m.arguments, [" ", " ", ""])
+        m = self.p.parse(b"!foo \@")  # 1 empty parameter
+        self.assertEqual(m.arguments, [b""])
+        m = self.p.parse(b"!foo \@ \@")  # 2 empty parameter
+        self.assertEqual(m.arguments, [b"", b""])
+        m = self.p.parse(b"!foo \_ \_ \@")  # space, space, empty
+        self.assertEqual(m.arguments, [b" ", b" ", b""])
 
     def test_whitespace(self):
         """Test parsing of whitespace between parameters."""
-        m = self.p.parse("!baz   \@   ")  # 1 empty parameter
-        self.assertEqual(m.arguments, [""])
-        m = self.p.parse("!baz\t\@\t\@")  # 2 empty parameter
-        self.assertEqual(m.arguments, ["", ""])
-        m = self.p.parse("!baz\t \t\_\t\t\t \_\t\@   \t")  # space, space, \@
-        self.assertEqual(m.arguments, [" ", " ", ""])
+        m = self.p.parse(b"!baz   \@   ")  # 1 empty parameter
+        self.assertEqual(m.arguments, [b""])
+        m = self.p.parse(b"!baz\t\@\t\@")  # 2 empty parameter
+        self.assertEqual(m.arguments, [b"", b""])
+        m = self.p.parse(b"!baz\t \t\_\t\t\t \_\t\@   \t")  # space, space, \@
+        self.assertEqual(m.arguments, [b" ", b" ", b""])
 
     def test_formfeed(self):
         """Test that form feeds are not treated as whitespace."""
-        m = self.p.parse("!baz \fa\fb\f")
-        self.assertEqual(m.arguments, ["\fa\fb\f"])
+        m = self.p.parse(b"!baz \fa\fb\f")
+        self.assertEqual(m.arguments, [b"\fa\fb\f"])
 
     def test_message_ids(self):
         """Test that messages with message ids are parsed as expected."""
-        m = self.p.parse("?bar[123]")
+        m = self.p.parse(b"?bar[123]")
         self.assertEqual(m.mtype, m.REQUEST)
         self.assertEqual(m.name, "bar")
         self.assertEqual(m.arguments, [])
-        self.assertEqual(m.mid, "123")
+        self.assertEqual(m.mid, b"123")
 
-        m = self.p.parse("!baz[1234] a b c")
+        m = self.p.parse(b"!baz[1234] a b c")
         self.assertEqual(m.mtype, m.REPLY)
         self.assertEqual(m.name, "baz")
-        self.assertEqual(m.arguments, ["a", "b", "c"])
-        self.assertEqual(m.mid, "1234")
+        self.assertEqual(m.arguments, [b"a", b"b", b"c"])
+        self.assertEqual(m.mid, b"1234")
+
+        # TODO (AJ) update katcp-python to enforce limits in the KATCP spec
+        # out of range
+        #self.assertRaises(KatcpSyntaxError, self.p.parse, b"!ok[0]")
+        #self.assertRaises(KatcpSyntaxError, self.p.parse, b"!ok[1000000000000]")
+
+        # bad format
+        self.assertRaises(KatcpSyntaxError, self.p.parse, b"!ok[10")
+        self.assertRaises(KatcpSyntaxError, self.p.parse, b"!ok[a]")
 
     def test_message_argument_formatting(self):
         float_val = 2.35532342334233294e17
-        m = katcp.Message.request(
+        m = Message.request(
             'req-name', 1, float_val, True, False, 'string')
         self.assertEqual(m.arguments,
-                         ['1', repr(float_val), '1', '0', 'string'])
+                         [b'1', repr(float_val).encode('ascii'), b'1', b'0', b'string'])
+
+    def test_binary_data_arguments(self):
+        m = self.p.parse(b'?test message \\0\\n\\r\\t\\e\\_binary')
+        self.assertEqual(m, Message.request('test', b'message', b'\0\n\r\t\x1b binary'))
+
 
     def test_unicode_message_handling(self):
-        unicode_str = u'!baz[1] Kl\xc3\xbcf skr\xc3\xa4m inf\xc3\xb6 f\xc3\xa9d\xc3\xa9ral \xc3\xa9lecto'
-        m = self.p.parse(unicode_str)
-        self.assertEqual(m.arguments, ['Kl??f', 'skr??m', 'inf??', 'f??d??ral', '??lecto'])
+        unicode_str = u'!baz[1] Kl\xc3\xbcf skr\xc3\xa4m'
+        self.assertRaises(KatcpTypeError, self.p.parse, unicode_str)
 
 
 class TestProtocolFlags(unittest.TestCase):
     def test_parse_version(self):
         PF = katcp.ProtocolFlags
-        self.assertEqual(PF.parse_version("foo"), PF(None, None, set()))
-        self.assertEqual(PF.parse_version("1.0"), PF(1, 0, set()))
-        self.assertEqual(PF.parse_version("5.0-MI"),
+        self.assertEqual(PF.parse_version(b"foo"), PF(None, None, set()))
+        self.assertEqual(PF.parse_version(b"1.0"), PF(1, 0, set()))
+        self.assertEqual(PF.parse_version(b"5.0-MI"),
                          PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS])))
         # check an unknown flag
-        self.assertEqual(PF.parse_version("5.1-MIU"),
-                         PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS, 'U'])))
+        self.assertEqual(PF.parse_version(b"5.1-MIU"),
+                         PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS, b"U"])))
         # Check request timeout hint flag
-        self.assertEqual(PF.parse_version("5.1-MTI"),
+        self.assertEqual(PF.parse_version(b"5.1-MTI"),
                          PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
                                        PF.REQUEST_TIMEOUT_HINTS])))
 
@@ -200,7 +313,7 @@ class TestProtocolFlags(unittest.TestCase):
         self.assertEqual(str(PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS]))),
                          "5.0-IM")
         self.assertEqual(str(PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
-                                           "U"]))),
+                                           b"U"]))),
                          "5.0-IMU")
         self.assertEqual(str(PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
                                            PF.REQUEST_TIMEOUT_HINTS]))),
@@ -273,6 +386,10 @@ class TestSensor(unittest.TestCase):
         s = Sensor.float("a.float", "A float.", "", [2.0, 20.0],
                          initial_status=Sensor.WARN)
         self.assertEqual(s.status(), Sensor.WARN)
+
+        # TODO (AJ) Test for non-ascii fields
+        # with self.assertRaises(KatcpTypeError):
+        #     s = Sensor.float("a.temp", "Non-ascii unit not allowed", "°C", default=22.0)
 
     def test_boolean_sensor(self):
         """Test boolean sensor."""
