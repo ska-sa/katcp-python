@@ -15,6 +15,8 @@ standard_library.install_aliases()
 import mock
 import unittest
 
+import future
+
 from builtins import object
 
 from katcp import AsyncReply, FailReply, Message
@@ -52,14 +54,19 @@ class TestType(unittest.TestCase):
             if type(result) is type and issubclass(result, Exception):
                 self.assertRaises(result, t.pack, value)
             else:
-                self.assertEqual(t.pack(value), result)
+                packed = t.pack(value)
+                self.assertEqual(packed, result)
+                self.assertEqual(type(packed), type(result))
 
     def test_unpack(self):
         for t, value, result in self._unpack:
             if type(result) is type and issubclass(result, Exception):
                 self.assertRaises(result, t.unpack, value)
             else:
-                self.assertEqual(t.unpack(value), result)
+                unpacked = t.unpack(value)
+                self.assertEqual(unpacked, result)
+                self.assertEqual(type(unpacked), type(result))
+
 
 
 class TestInt(TestType):
@@ -72,28 +79,28 @@ class TestInt(TestType):
         self.minmax = Int(min=5, max=6)
 
         self._pack = [
-            (basic, 5, "5"),
-            (basic, -5, "-5"),
+            (basic, 5, b"5"),
+            (basic, -5, b"-5"),
             (basic, "a", TypeError),
             (basic, None, ValueError),
-            (self.minmax, 5, "5"),
-            (self.minmax, 6, "6"),
+            (self.minmax, 5, b"5"),
+            (self.minmax, 6, b"6"),
             (self.minmax, 4, ValueError),
             (self.minmax, 7, ValueError),
-            (default, None, "11"),
-            (default_optional, None, "11"),
+            (default, None, b"11"),
+            (default_optional, None, b"11"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "5", 5),
-            (basic, "-5", -5),
-            (basic, "a", ValueError),
+            (basic, b"5", 5),
+            (basic, b"-5", -5),
+            (basic, b"a", ValueError),
             (basic, None, ValueError),
-            (self.minmax, "5", 5),
-            (self.minmax, "6", 6),
-            (self.minmax, "4", ValueError),
-            (self.minmax, "7", ValueError),
+            (self.minmax, b"5", 5),
+            (self.minmax, b"6", 6),
+            (self.minmax, b"4", ValueError),
+            (self.minmax, b"7", ValueError),
             (default, None, 11),
             (default_optional, None, 11),
             (optional, None, None),
@@ -110,28 +117,32 @@ class TestFloat(TestType):
         self.minmax = Float(min=5.0, max=6.0)
 
         self._pack = [
-            (basic, 5.0, "5"),
-            (basic, -5.0, "-5"),
+            (basic, 5.0, b"5"),
+            (basic, -5.0, b"-5"),
+            (basic, 5.5, b"5.5"),
+            (basic, -5.5, b"-5.5"),
             (basic, "a", TypeError),
             (basic, None, ValueError),
-            (self.minmax, 5.0, "5"),
-            (self.minmax, 6.0, "6"),
+            (self.minmax, 5.0, b"5"),
+            (self.minmax, 6.0, b"6"),
             (self.minmax, 4.5, ValueError),
             (self.minmax, 6.5, ValueError),
-            (default, None, "11"),
-            (default_optional, None, "11"),
+            (default, None, b"11"),
+            (default_optional, None, b"11"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "5", 5.0),
-            (basic, "-5", -5.0),
-            (basic, "a", ValueError),
+            (basic, b"5", 5.0),
+            (basic, b"-5", -5.0),
+            (basic, b"5.5", 5.5),
+            (basic, b"-5.5", -5.5),
+            (basic, b"a", ValueError),
             (basic, None, ValueError),
-            (self.minmax, "5", 5.0),
-            (self.minmax, "6", 6.0),
-            (self.minmax, "4.5", ValueError),
-            (self.minmax, "6.5", ValueError),
+            (self.minmax, b"5", 5.0),
+            (self.minmax, b"6", 6.0),
+            (self.minmax, b"4.5", ValueError),
+            (self.minmax, b"6.5", ValueError),
             (default, None, 11.0),
             (default_optional, None, 11.0),
             (optional, None, None),
@@ -147,21 +158,21 @@ class TestBool(TestType):
         default_optional = Bool(default=True, optional=True)
 
         self._pack = [
-            (basic, True, "1"),
-            (basic, False, "0"),
-            (basic, 1, "1"),
-            (basic, 0, "0"),
-            (basic, "a", "1"),
+            (basic, True, b"1"),
+            (basic, False, b"0"),
+            (basic, 1, b"1"),
+            (basic, 0, b"0"),
+            (basic, "a", b"1"),
             (basic, None, ValueError),
-            (default, None, "1"),
-            (default_optional, None, "1"),
+            (default, None, b"1"),
+            (default_optional, None, b"1"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "1", True),
-            (basic, "0", False),
-            (basic, "a", ValueError),
+            (basic, b"1", True),
+            (basic, b"0", False),
+            (basic, b"a", ValueError),
             (basic, None, ValueError),
             (default, None, True),
             (default_optional, None, True),
@@ -180,30 +191,30 @@ class TestDiscrete(TestType):
         case_insensitive = Discrete(("val1", "VAL2"), case_insensitive=True)
 
         self._pack = [
-            (basic, "VAL1", "VAL1"),
-            (basic, "VAL2", "VAL2"),
+            (basic, "VAL1", b"VAL1"),
+            (basic, "VAL2", b"VAL2"),
             (basic, "a", ValueError),
             (basic, "val1", ValueError),
             (basic, None, ValueError),
-            (default, None, "VAL1"),
-            (default_optional, None, "VAL1"),
+            (default, None, b"VAL1"),
+            (default_optional, None, b"VAL1"),
             (optional, None, ValueError),
-            (case_insensitive, "VAL1", "VAL1"),
-            (case_insensitive, "vAl2", "vAl2"),
+            (case_insensitive, "VAL1", b"VAL1"),
+            (case_insensitive, "vAl2", b"vAl2"),
             (case_insensitive, "a", ValueError),
         ]
 
         self._unpack = [
-            (basic, "VAL1", "VAL1"),
-            (basic, "VAL2", "VAL2"),
-            (basic, "a", ValueError),
+            (basic, b"VAL1", "VAL1"),
+            (basic, b"VAL2", "VAL2"),
+            (basic, b"a", ValueError),
             (basic, None, ValueError),
             (default, None, "VAL1"),
             (default_optional, None, "VAL1"),
             (optional, None, None),
-            (case_insensitive, "val1", "val1"),
-            (case_insensitive, "vAl2", "vAl2"),
-            (case_insensitive, "a", ValueError),
+            (case_insensitive, b"val1", "val1"),
+            (case_insensitive, b"vAl2", "vAl2"),
+            (case_insensitive, b"a", ValueError),
         ]
 
 
@@ -216,19 +227,19 @@ class TestLru(TestType):
         default_optional = Lru(default=Lru.LRU_NOMINAL, optional=True)
 
         self._pack = [
-            (basic, Lru.LRU_NOMINAL, "nominal"),
-            (basic, Lru.LRU_ERROR, "error"),
+            (basic, Lru.LRU_NOMINAL, b"nominal"),
+            (basic, Lru.LRU_ERROR, b"error"),
             (basic, "a", ValueError),
             (basic, None, ValueError),
-            (default, None, "nominal"),
-            (default_optional, None, "nominal"),
+            (default, None, b"nominal"),
+            (default_optional, None, b"nominal"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "nominal", Lru.LRU_NOMINAL),
-            (basic, "error", Lru.LRU_ERROR),
-            (basic, "a", ValueError),
+            (basic, b"nominal", Lru.LRU_NOMINAL),
+            (basic, b"error", Lru.LRU_ERROR),
+            (basic, b"a", ValueError),
             (basic, None, ValueError),
             (default, None, Lru.LRU_NOMINAL),
             (default_optional, None, Lru.LRU_NOMINAL),
@@ -245,28 +256,28 @@ class TestAddress(TestType):
         default_optional = Address(default=("127.0.0.1", None), optional=True)
 
         self._pack = [
-            (basic, ("127.0.0.1", None), "127.0.0.1"),
-            (basic, ("127.0.0.1", 80), "127.0.0.1:80"),
-            (basic, ("0:0:0:0:0:0:0:1", None), "[0:0:0:0:0:0:0:1]"),
-            (basic, ("::1", None), "[::1]"),
+            (basic, ("127.0.0.1", None), b"127.0.0.1"),
+            (basic, ("127.0.0.1", 80), b"127.0.0.1:80"),
+            (basic, ("0:0:0:0:0:0:0:1", None), b"[0:0:0:0:0:0:0:1]"),
+            (basic, ("::1", None), b"[::1]"),
             (basic, ("::FFFF:204.152.189.116", None),
-             "[::FFFF:204.152.189.116]"),
-            (basic, ("::1", 80), "[::1]:80"),
+             b"[::FFFF:204.152.189.116]"),
+            (basic, ("::1", 80), b"[::1]:80"),
             (basic, "127.0.0.1", ValueError),  # value not a tuple
-            (default, None, "127.0.0.1"),
-            (default_optional, None, "127.0.0.1"),
+            (default, None, b"127.0.0.1"),
+            (default_optional, None, b"127.0.0.1"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "127.0.0.1", ("127.0.0.1", None)),
-            (basic, "127.0.0.1:80", ("127.0.0.1", 80)),
-            (basic, "[0:0:0:0:0:0:0:1]", ("0:0:0:0:0:0:0:1", None)),
-            (basic, "[::1]", ("::1", None)),
-            (basic, "[::FFFF:204.152.189.116]", ("::FFFF:204.152.189.116",
+            (basic, b"127.0.0.1", ("127.0.0.1", None)),
+            (basic, b"127.0.0.1:80", ("127.0.0.1", 80)),
+            (basic, b"[0:0:0:0:0:0:0:1]", ("0:0:0:0:0:0:0:1", None)),
+            (basic, b"[::1]", ("::1", None)),
+            (basic, b"[::FFFF:204.152.189.116]", ("::FFFF:204.152.189.116",
                                                  None)),
-            (basic, "[::1]:80", ("::1", 80)),
-            (basic, "127.0.0.1:foo", ValueError),
+            (basic, b"[::1]:80", ("::1", 80)),
+            (basic, b"127.0.0.1:foo", ValueError),
             (basic, None, ValueError),
             (default, None, ("127.0.0.1", None)),
             (default_optional, None, ("127.0.0.1", None)),
@@ -283,17 +294,17 @@ class TestTimestamp(TestType):
         default_optional = Timestamp(default=1235475793.0324881, optional=True)
 
         self._pack = [
-            (basic, 1235475381.6966901, "1235475381.696690"),
+            (basic, 1235475381.6966901, b"1235475381.696690"),
             (basic, "a", ValueError),
             (basic, None, ValueError),
-            (default, None, "1235475793.032488"),
-            (default_optional, None, "1235475793.032488"),
+            (default, None, b"1235475793.032488"),
+            (default_optional, None, b"1235475793.032488"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "1235475381.696", 1235475381.6960001),
-            (basic, "a", ValueError),
+            (basic, b"1235475381.696", 1235475381.6960001),
+            (basic, b"a", ValueError),
             (basic, None, ValueError),
             (default, None, 1235475793.0324881),
             (default_optional, None, 1235475793.0324881),
@@ -311,17 +322,19 @@ class TestStrictTimestamp(TestType):
                                            optional=True)
 
         self._pack = [
-            (basic, 1235475381.69669, "1235475381.69669"),
+            (basic, 1235475381.69669, b"1235475381.69669"),
+            (basic, -1.0, ValueError),
             (basic, "a", ValueError),
             (basic, None, ValueError),
-            (default, None, "1235475793.03249"),
-            (default_optional, None, "1235475793.03249"),
+            (default, None, b"1235475793.03249"),
+            (default_optional, None, b"1235475793.03249"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "1235475381.696", 1235475381.6960001),
-            (basic, "a", ValueError),
+            (basic, b"1235475381.696", 1235475381.6960001),
+            (basic, b"-1.0", ValueError),
+            (basic, b"a", ValueError),
             (basic, None, ValueError),
             (default, None, 1235475793.03249),
             (default_optional, None, 1235475793.03249),
@@ -340,24 +353,24 @@ class TestTimestampOrNow(TestType):
         default_now = TimestampOrNow(default=TimestampOrNow.NOW)
 
         self._pack = [
-            (basic, 1235475381.6966901, "1235475381.696690"),
+            (basic, 1235475381.6966901, b"1235475381.696690"),
             (basic, "a", ValueError),
-            (basic, TimestampOrNow.NOW, "now"),
+            (basic, TimestampOrNow.NOW, b"now"),
             (basic, None, ValueError),
-            (default, None, "1235475793.032488"),
-            (default, TimestampOrNow.NOW, "now"),
-            (default_optional, None, "1235475793.032488"),
+            (default, None, b"1235475793.032488"),
+            (default, TimestampOrNow.NOW, b"now"),
+            (default_optional, None, b"1235475793.032488"),
             (optional, None, ValueError),
-            (default_now, None, "now"),
+            (default_now, None, b"now"),
         ]
 
         self._unpack = [
-            (basic, "1235475381.696", 1235475381.6960001),
-            (basic, "a", ValueError),
-            (basic, "now", TimestampOrNow.NOW),
+            (basic, b"1235475381.696", 1235475381.6960001),
+            (basic, b"a", ValueError),
+            (basic, b"now", TimestampOrNow.NOW),
             (basic, None, ValueError),
             (default, None, 1235475793.0324881),
-            (default, "now", TimestampOrNow.NOW),
+            (default, b"now", TimestampOrNow.NOW),
             (default_optional, None, 1235475793.0324881),
             (optional, None, None),
             (default_now, None, TimestampOrNow.NOW),
@@ -372,20 +385,51 @@ class TestStr(TestType):
         optional = Str(optional=True)
         default_optional = Str(default="something", optional=True)
 
+        # For packing, the input is expected to be a native string, so
+        # it works on both PY2 and PY3.  Similarly, byte strings only
+        # work on PY2, and unicode strings only work on PY3.
+        if future.utils.PY2:
+            native_packed = b"adsasdasd"
+            bytes_packed = b"adsasdasd"
+            unicode_packed = ValueError
+            invalid_default = Str(default=u'bad_type')
+        else:
+            native_packed = b"adsasdasd"
+            bytes_packed = ValueError
+            unicode_packed = b"adsasdasd"
+            invalid_default = Str(default=b'bad_type')
+
         self._pack = [
-            (basic, "adsasdasd", "adsasdasd"),
+            (basic, "adsasdasd", native_packed),
+            (basic, b"adsasdasd", bytes_packed),
+            (basic, u"adsasdasd", unicode_packed),
             (basic, None, ValueError),
-            (default, None, "something"),
-            (default_optional, None, "something"),
+            (default, None, b"something"),
+            (default_optional, None, b"something"),
             (optional, None, ValueError),
+            (invalid_default, None, ValueError),
         ]
 
+        # For unpacking, the input must be a byte string, which
+        # is also the native type on PY2.
+        if future.utils.PY2:
+            native_unpacked = "adsasdasd"
+            bytes_unpacked = "adsasdasd"
+            unicode_unpacked = ValueError
+        else:
+            native_unpacked = AttributeError
+            bytes_unpacked = "adsasdasd"
+            unicode_unpacked = AttributeError
+
         self._unpack = [
-            (basic, "adsasdasd", "adsasdasd"),
+            (basic, "adsasdasd", native_unpacked),
+            (basic, b"adsasdasd", bytes_unpacked),
+            (basic, u"adsasdasd", unicode_unpacked),
             (basic, None, ValueError),
             (default, None, "something"),
             (default_optional, None, "something"),
             (optional, None, None),
+            (invalid_default, None, ValueError),
         ]
 
 
@@ -427,17 +471,17 @@ class TestRegex(TestType):
                                  optional=True)
 
         self._pack = [
-            (basic, "12:34:56", "12:34:56"),
+            (basic, "12:34:56", b"12:34:56"),
             (basic, "sdfasdfsadf", ValueError),
             (basic, None, ValueError),
-            (default, None, "00:00:00"),
-            (default_optional, None, "00:00:00"),
+            (default, None, b"00:00:00"),
+            (default_optional, None, b"00:00:00"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
-            (basic, "12:34:56", "12:34:56"),
-            (basic, "sdfasdfsadf", ValueError),
+            (basic, b"12:34:56", "12:34:56"),
+            (basic, b"sdfasdfsadf", ValueError),
             (basic, None, ValueError),
             (default, None, "00:00:00"),
             (default_optional, None, "00:00:00"),
@@ -457,9 +501,9 @@ class TestDiscreteMulti(TestType):
                                          case_insensitive=True)
 
         self._pack = [
-            (basic, ["VAL1"], "VAL1"),
-            (basic, ["VAL2"], "VAL2"),
-            (basic, ["VAL1", "VAL2"], "VAL1,VAL2"),
+            (basic, ["VAL1"], b"VAL1"),
+            (basic, ["VAL2"], b"VAL2"),
+            (basic, ["VAL1", "VAL2"], b"VAL1,VAL2"),
             (basic, "a", ValueError),
             (basic, "VAL1", ValueError),
             (basic, ["aaa"], ValueError),
@@ -467,32 +511,34 @@ class TestDiscreteMulti(TestType):
             (basic, ["VAL1", "val2"], ValueError),
             (basic, ["VAL1", "aaa"], ValueError),
             (basic, None, ValueError),
-            (default, None, "VAL1"),
-            (default_optional, None, "VAL1"),
+            (default, None, b"VAL1"),
+            (default_optional, None, b"VAL1"),
             (optional, None, ValueError),
-            (case_insensitive, ["VAL1"], "VAL1"),
-            (case_insensitive, ["vAl2"], "vAl2"),
-            (case_insensitive, ["VAL1", "val2"], "VAL1,val2"),
+            (case_insensitive, ["VAL1"], b"VAL1"),
+            (case_insensitive, ["vAl2"], b"vAl2"),
+            (case_insensitive, ["VAL1", "val2"], b"VAL1,val2"),
             (case_insensitive, ["aaa"], ValueError),
         ]
 
         self._unpack = [
-            (basic, "VAL1", ["VAL1"]),
-            (basic, "VAL2", ["VAL2"]),
-            (basic, "VAL1,VAL2", ["VAL1", "VAL2"]),
-            (basic, "all", ["VAL1", "VAL2"]),
-            (basic, "VAL1,aaa", ValueError),
-            (basic, "VAL1,val2", ValueError),
-            (basic, "a", ValueError),
+            (basic, b"VAL1", ["VAL1"]),
+        ]
+        foo =[
+            (basic, b"VAL2", ["VAL2"]),
+            (basic, b"VAL1,VAL2", ["VAL1", "VAL2"]),
+            (basic, b"all", ["VAL1", "VAL2"]),
+            (basic, b"VAL1,aaa", ValueError),
+            (basic, b"VAL1,val2", ValueError),
+            (basic, b"a", ValueError),
             (basic, None, ValueError),
             (default, None, ["VAL1"]),
             (default_optional, None, ["VAL1"]),
             (optional, None, None),
-            (case_insensitive, "val1", ["val1"]),
-            (case_insensitive, "vAl2", ["vAl2"]),
-            (case_insensitive, "VAL1,val2", ["VAL1", "val2"]),
-            (case_insensitive, "VAL1,aaa", ValueError),
-            (case_insensitive, "a", ValueError),
+            (case_insensitive, b"val1", ["val1"]),
+            (case_insensitive, b"vAl2", ["vAl2"]),
+            (case_insensitive, b"VAL1,val2", ["VAL1", "val2"]),
+            (case_insensitive, b"VAL1,aaa", ValueError),
+            (case_insensitive, b"a", ValueError),
         ]
 
 
@@ -708,6 +754,10 @@ class TestDecorator(unittest.TestCase):
                          '!int-multifloat ok 7 1.2 999 71.43')
         with self.assertRaises(FailReply) as ex:
             req('req', Message.request('int-multifloat', desired_i, 1.2, 'abc'))
-        self.assertEqual(
-            str(ex.exception),
-            "Error in parameter 3 (): Could not parse value 'abc' as float.")
+        # storing Message.arguments as byte string results in slightly different
+        # reprs for PY2 compared to PY3.
+        if future.utils.PY2:
+            expected = "Error in parameter 3 (): Could not parse value 'abc' as float."
+        else:
+            expected = "Error in parameter 3 (): Could not parse value 'b'abc'' as float."
+        self.assertEqual(str(ex.exception), expected)

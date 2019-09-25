@@ -9,7 +9,7 @@
 from __future__ import division, print_function, absolute_import
 
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import re
 import sys
@@ -170,8 +170,8 @@ def steal_docstring_from(obj):
 class KatcpSyntaxError(ValueError):
     """Raised by parsers when encountering a syntax error."""
 
-class KatcpTypeError(TypeError):
-    """Raised by parsers when encountering invalid types."""
+class KatcpValueError(ValueError):
+    """Raised by parsers when encountering invalid values."""
 
 class KatcpClientError(Exception):
     """Raised by KATCP clients when an error occurs."""
@@ -318,6 +318,8 @@ class Message(object):
             return arg
         else:
             try:
+                if not future.utils.istext(arg):
+                    arg = str(arg)
                 return arg.encode('utf-8')
             except UnicodeEncodeError:
                 # unicode characters will break the str cast, so
@@ -370,17 +372,24 @@ class Message(object):
         -------
         msg : byte string in PY2, unicode string in PY3
            - In PY2, this string of bytes can be transmitted on the wire.
-           - In PY3, the native string type is unicode, we need to decode
-             the raw bytes first - "latin1" is a used as there could be
-             arbitrary binary data in the message.  This version of the
-             stringified message maybe useful for debugging, but for
-             transmission on the wire, use `__bytes__` instead.
+           - In PY3, the native string type is unicode, so it is decoded
+             first using "utf-8" encoding.  See the warning in the next
+             section.
+
+        Raises
+        ------
+        UnicodeDecodeError:
+            Under PY3, if the raw byte string cannot be decoded using UTF-8.
+            Warning:  arbitrary bytes will not generally comply with the UTF-8
+            encoding requirements, so rather use the `__bytes__` method,
+            i.e., `bytes(msg)` instead of `str(msg)`.
+
         """
         byte_str = self.__bytes__()
         if future.utils.PY2:
             return byte_str
         else:
-            return byte_str.decode('latin1')
+            return byte_str.decode('utf-8')
 
     def __repr__(self):
         """Return message displayed in a readable form."""
@@ -579,11 +588,12 @@ class MessageParser(object):
             raise KatcpSyntaxError("Empty message received.")
 
         if not future.utils.isbytes(line):
-            raise KatcpTypeError("Line type must be bytes - not {}".format(type(line)))
+            raise KatcpValueError("Line type must be bytes - not {}".format(type(line)))
 
         type_char = line[:1]
         if type_char not in self.TYPE_SYMBOL_LOOKUP:
-            raise KatcpSyntaxError("Bad type character %r." % (type_char,))
+            raise KatcpSyntaxError(
+                "Bad type character %r." % (ensure_native_str(type_char),))
 
         mtype = self.TYPE_SYMBOL_LOOKUP[type_char]
 
@@ -604,7 +614,7 @@ class MessageParser(object):
             mid = match.group('id')
         else:
             raise KatcpSyntaxError("Bad message name (and possibly id) %r." %
-                                   (name,))
+                                   (ensure_native_str(name),))
 
         # ensure name is native string
         if future.utils.PY3:
@@ -722,20 +732,11 @@ class ProtocolFlags(object):
         if match:
             major = int(match.group('major'))
             minor = int(match.group('minor'))
-            flags = set(cls._byte_chars(match.group('flags')) or b'')
+            flags = set(byte_chars(match.group('flags')) or b'')
         else:
             major, minor, flags = None, None, set()
         return cls(major, minor, flags)
 
-    @staticmethod
-    def _byte_chars(flags):
-        # In PY2, list(flags) works fine, but in PY3, this returns
-        # each element as an int instead of single character byte string.
-        # We use slicing instead to get the individual characters.
-        if flags:
-            return [flags[i:i+1] for i in range(len(flags))]
-        else:
-            return []
 
 class DeviceMetaclass(type):
     """Metaclass for DeviceServer and DeviceClient classes.
@@ -978,13 +979,13 @@ class Sensor(object):
 
     ## @brief Mapping from sensor status to status name.
     STATUSES = {
-        UNKNOWN: 'unknown',
-        NOMINAL: 'nominal',
-        WARN: 'warn',
-        ERROR: 'error',
-        FAILURE: 'failure',
-        UNREACHABLE: 'unreachable',
-        INACTIVE: 'inactive',
+        UNKNOWN: b'unknown',
+        NOMINAL: b'nominal',
+        WARN: b'warn',
+        ERROR: b'error',
+        FAILURE: b'failure',
+        UNREACHABLE: b'unreachable',
+        INACTIVE: b'inactive',
     }
 
     ## @brief Mapping from status name to sensor status.
@@ -1046,6 +1047,7 @@ class Sensor(object):
                     default_value = params[0]
             self._kattype = typeclass()
         elif self._sensor_type == Sensor.DISCRETE:
+            params = [ensure_native_str(p) for p in params]
             default_value = params[0]
             self._kattype = typeclass(params)
         else:
@@ -1073,14 +1075,16 @@ class Sensor(object):
         # Also Expose `type` attribute to be compatible with resource.KATCPSensor
         self.type = self.stype = self._kattype.name
 
+        # ensure remaining input attributes are native strings
+        name = ensure_native_str(name)
+        units = ensure_native_str(units)
         self.name = name
         if description is None:
             description = '%(type)s sensor %(name)r %(unit_description)s' % (
                           dict(type=self.stype.capitalize(), name=self.name,
                                unit_description=('in unit '+units if units else
                                                  'with no unit')))
-
-        self.description = description
+        self.description = ensure_native_str(description)
         self.units = units
         self.params = params
         self.formatted_params = [self._formatter(p, True) for p in params]
@@ -1352,12 +1356,12 @@ class Sensor(object):
             o.update(self, reading)
 
     def parse_value(self, s_value, katcp_major=DEFAULT_KATCP_MAJOR):
-        """Parse a value from a string.
+        """Parse a value from a byte string.
 
         Parameters
         ----------
-        s_value : str
-            A string value to attempt to convert to a value for
+        s_value : bytes
+            A byte string value to attempt to convert to a value for
             the sensor.
 
         Returns
@@ -1366,6 +1370,9 @@ class Sensor(object):
             A value of a type appropriate to the sensor.
 
         """
+        if not future.utils.isbytes(s_value):
+            raise KatcpValueError(
+                "Sensor value type must be bytes - not {}".format(type(s_value)))
         return self._parser(s_value, katcp_major)
 
     def set(self, timestamp, status, value):
@@ -1391,11 +1398,11 @@ class Sensor(object):
 
         Parameters
         ----------
-        timestamp : str
+        timestamp : bytes
             KATCP formatted timestamp string
-        status : str
+        status : bytes
             KATCP formatted sensor status string
-        value : str
+        value : bytes
             KATCP formatted sensor value
         major : int, default = 5
             KATCP major version to use for interpreting the raw values
@@ -1409,7 +1416,7 @@ class Sensor(object):
     def read_formatted(self, major=DEFAULT_KATCP_MAJOR):
         """Read the sensor and return a (timestamp, status, value) tuple.
 
-        All values are strings formatted as specified in the Sensor Type
+        All values are byte strings formatted as specified in the Sensor Type
         Formats in the katcp specification.
 
         Parameters
@@ -1420,18 +1427,18 @@ class Sensor(object):
 
         Returns
         -------
-        timestamp : str
-            KATCP formatted timestamp string
-        status : str
-            KATCP formatted sensor status string
-        value : str
-            KATCP formatted sensor value
+        timestamp : bytes
+            KATCP formatted timestamp byte string
+        status : bytes
+            KATCP formatted sensor status byte string
+        value : bytes
+            KATCP formatted sensor value byte string
 
         """
         return self.format_reading(self.read(), major)
 
     def format_reading(self, reading, major=DEFAULT_KATCP_MAJOR):
-        """Format sensor reading as (timestamp, status, value) tuple of strings.
+        """Format sensor reading as (timestamp, status, value) tuple of byte strings.
 
         All values are strings formatted as specified in the Sensor Type
         Formats in the katcp specification.
@@ -1446,12 +1453,12 @@ class Sensor(object):
 
         Returns
         -------
-        timestamp : str
-            KATCP formatted timestamp string
-        status : str
-            KATCP formatted sensor status string
-        value : str
-            KATCP formatted sensor value
+        timestamp : bytes
+            KATCP formatted timestamp byte string
+        status : bytes
+            KATCP formatted sensor status byte string
+        value : bytes
+            KATCP formatted sensor value byte string
 
         Note
         ----
@@ -2022,3 +2029,39 @@ def until_some(*args, **kwargs):
         if len(results) >= done_at_least:
             break
     raise tornado.gen.Return(results)
+
+
+def ensure_native_str(value, encoding='utf-8'):
+    """Coerce unicode string or bytes to native string type."""
+    native = value
+    if future.utils.PY2:
+        if future.utils.istext(value):
+            native = value.encode(encoding)
+    else:
+        if future.utils.isbytes(value):
+            native = value.decode(encoding)
+    return native
+
+
+def byte_chars(byte_string):
+    """Return list of characters from a byte string (PY3-compatible).
+
+    In PY2, `list(byte_string)` works fine, but in PY3, this returns
+    each element as an int instead of single character byte string.
+    Slicing is used instead to get the individual characters.
+
+    Parameters
+    ----------
+    byte_string : bytes
+        Byte string to be split into characters.
+
+    Returns
+    -------
+    chars : list
+        The individual characters, each as a byte string.
+
+    """
+    if byte_string:
+        return [byte_string[i:i+1] for i in range(len(byte_string))]
+    else:
+        return []

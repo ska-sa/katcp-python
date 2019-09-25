@@ -20,7 +20,7 @@ import tornado
 
 import katcp
 
-from katcp import KatcpSyntaxError, KatcpTypeError
+from katcp import KatcpSyntaxError, KatcpValueError
 from katcp.core import AsyncEvent, AsyncState, Message, Sensor, until_some
 from katcp.testutils import DeviceTestSensor, TestLogHandler
 
@@ -32,11 +32,11 @@ logging.getLogger("katcp").addHandler(log_handler)
 class TestMessage(unittest.TestCase):
     def test_init_basic(self):
         msg = Message(Message.REQUEST,
-                      'hello', ['world', b'binary\xff\x00', 123, 234.5, True, False])
+                      'hello', ['world', b'binary\xff\x00', 123, 4.5, True, False])
         self.assertEqual(msg.mtype, Message.REQUEST)
         self.assertEqual(msg.name, 'hello')
         self.assertEqual(msg.arguments, [
-            b'world', b'binary\xff\x00', b'123', b'234.5', b'1', b'0'])
+            b'world', b'binary\xff\x00', b'123', b'4.5', b'1', b'0'])
         self.assertIsNone(msg.mid)
 
     def test_init_mid(self):
@@ -134,29 +134,42 @@ class TestMessage(unittest.TestCase):
 
     def test_bytes(self):
         msg = Message.request(
-            'hello', 'café', b'_bin ary\xff\x00\n\r\t\\\x1b', 123, 234.5, True, False, '')
+            'hello', u'café', b'_bin ary\xff\x00\n\r\t\\\x1b', 123, 4.5, True, False, '')
         raw = bytes(msg)
         expected = (
-            b'?hello caf\xc3\xa9 _bin\\_ary\xff\\0\\n\\r\\t\\\\\\e 123 234.5 1 0 \\@')
+            b'?hello caf\xc3\xa9 _bin\\_ary\xff\\0\\n\\r\\t\\\\\\e 123 4.5 1 0 \\@')
         self.assertEqual(raw, expected)
 
     def test_bytes_mid(self):
         msg = Message.reply('fail', 'on fire', mid=234)
         self.assertEqual(bytes(msg), b'!fail[234] on\\_fire')
 
+    def test_str(self):
+        msg = Message.reply('fail', 'on fire', mid=234)
+        self.assertEqual(str(msg), '!fail[234] on\\_fire')
+
+        # Expect slighty different results in case of invalid UTF-8 bytes for
+        # PY2's native byte string compared to PY3's unicode
+        msg = Message.reply('ok', b'invalid utf-8\xff\x00')
+        if future.utils.PY2:
+            self.assertEqual(str(msg), '!ok invalid\_utf-8\xff\\0')
+        else:
+            with self.assertRaises(UnicodeDecodeError):
+                str(msg)
+
     def test_repr(self):
         msg = Message.reply(
-            'ok', 'café', b'_bin ary\xff\x00\n\r\t\\\x1b', 123, 234.5, True, False, '')
+            'ok', 'café', b'_bin ary\xff\x00\n\r\t\\\x1b', 123, 4.5, True, False, '')
         # storing Message.arguments as byte string results in slightly different
         # reprs for PY2 compared to PY3.
         if future.utils.PY2:
             expected = ("<Message reply ok (caf\xc3\xa9, "
                         "_bin\\_ary\xff..., "
-                        "123, 234.5, 1, 0, )>")
+                        "123, 4.5, 1, 0, )>")
         else:
             expected = (r"<Message reply ok (b'caf\xc3\xa9', "
                         r"b'_bin\\_ary\xff...', "
-                        r"b'123', b'234.5', b'1', b'0', b'')>")
+                        r"b'123', b'4.5', b'1', b'0', b'')>")
         self.assertEqual(repr(msg), expected)
 
     def test_bad_utf8_unicode(self):
@@ -165,6 +178,16 @@ class TestMessage(unittest.TestCase):
         if future.utils.PY3:
             msg = Message(Message.REQUEST, 'hello', [u'bad\ud83d\ude04string'])
             self.assertEqual(msg.arguments, [b'bad??string'])
+
+    def test_stringy_arguments_to_bytes(self):
+        """Test non-simple types get correctly converted to bytes."""
+
+        class Stringy(object):
+            def __str__(self):
+                return "string"
+
+        req = Message.request('hello', Stringy())
+        self.assertEqual(req.arguments, [b"string"])
 
 
 class TestMessageParser(unittest.TestCase):
@@ -289,7 +312,7 @@ class TestMessageParser(unittest.TestCase):
 
     def test_unicode_message_handling(self):
         unicode_str = u'!baz[1] Kl\xc3\xbcf skr\xc3\xa4m'
-        self.assertRaises(KatcpTypeError, self.p.parse, unicode_str)
+        self.assertRaises(KatcpValueError, self.p.parse, unicode_str)
 
 
 class TestProtocolFlags(unittest.TestCase):
@@ -339,18 +362,38 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.description,
                          "Float sensor 'fsens' in unit microseconds")
 
-    def test_int_sensor(self):
-        """Test integer sensor."""
+    def test_int_sensor_from_byte_strings(self):
+        """Test integer sensor initialised from byte strings."""
+        s = Sensor.integer(b"an.int", b"An integer.", b"count", [-4, 3])
+        # sensor attributes must be native strings
+        self.assertEqual(s.name, "an.int")
+        self.assertEqual(s.units, "count")
+        self.assertEqual(s.description, "An integer.")
+        self.assertEqual(s.stype, "integer")
+        s.set(timestamp=12345, status=Sensor.NOMINAL, value=3)
+        self.assertEqual(s.value(), 3)
+        # after formatting, byte strings are required
+        self.assertEqual(s.format_reading(s.read()), (b"12345.000000", b"nominal", b"3"))
+        self.assertEqual(s.read_formatted(), (b"12345.000000", b"nominal", b"3"))
+
+    def test_int_sensor_from_native_strings(self):
+        """Test integer sensor initialised from native strings."""
         s = Sensor.integer("an.int", "An integer.", "count", [-4, 3])
-        self.assertEqual(s.stype, 'integer')
-        s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
+        # sensor attributes must be native strings
+        self.assertEqual(s.name, "an.int")
+        self.assertEqual(s.units, "count")
+        self.assertEqual(s.description, "An integer.")
+        self.assertEqual(s.stype, "integer")
+        s.set(timestamp=12345, status=Sensor.NOMINAL, value=3)
         # test both read_formatted and format_reading
-        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "nominal", "3"))
-        self.assertEqual(s.read_formatted(), ("12345.000000", "nominal", "3"))
-        self.assertEqual(s.parse_value("3"), 3)
-        self.assertEqual(s.parse_value("4"), 4)
-        self.assertEqual(s.parse_value("-10"), -10)
-        self.assertRaises(ValueError, s.parse_value, "asd")
+        self.assertEqual(s.format_reading(s.read()), (b"12345.000000", b"nominal", b"3"))
+        self.assertEqual(s.read_formatted(), (b"12345.000000", b"nominal", b"3"))
+        self.assertEqual(s.parse_value(b"3"), 3)
+        self.assertEqual(s.parse_value(b"4"), 4)
+        self.assertEqual(s.parse_value(b"-10"), -10)
+        self.assertRaises(ValueError, s.parse_value, b"asd")
+        self.assertRaises(ValueError, s.parse_value, u"asd")
+        self.assertRaises(ValueError, s.parse_value, u"3")
 
         s = Sensor(Sensor.INTEGER, "an.int", "An integer.", "count", [-20, 20])
         self.assertEqual(s.value(), 0)
@@ -367,18 +410,18 @@ class TestSensor(unittest.TestCase):
         """Test float sensor."""
         s = Sensor.float("a.float", "A float.", "power", [0.0, 5.0])
         self.assertEqual(s.stype, 'float')
-        s.set(timestamp=12345, status=katcp.Sensor.WARN, value=3.0)
+        s.set(timestamp=12345, status=Sensor.WARN, value=3.0)
         # test both read_formatted and format_reading
-        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "warn", "3"))
-        self.assertEqual(s.read_formatted(), ("12345.000000", "warn", "3"))
-        self.assertEqual(s.parse_value("3"), 3.0)
-        self.assertEqual(s.parse_value("10"), 10.0)
-        self.assertEqual(s.parse_value("-10"), -10.0)
-        self.assertRaises(ValueError, s.parse_value, "asd")
+        self.assertEqual(s.format_reading(s.read()), (b"12345.000000", b"warn", b"3"))
+        self.assertEqual(s.read_formatted(), (b"12345.000000", b"warn", b"3"))
+        self.assertEqual(s.parse_value(b"3"), 3.0)
+        self.assertEqual(s.parse_value(b"10"), 10.0)
+        self.assertEqual(s.parse_value(b"-10"), -10.0)
+        self.assertRaises(ValueError, s.parse_value, b"asd")
 
-        s = Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "", [-20.0, 20.0])
+        s = Sensor(Sensor.FLOAT, "a.float", "A float.", "", [-20.0, 20.0])
         self.assertEqual(s.value(), 0.0)
-        s = Sensor(katcp.Sensor.FLOAT, "a.float", "A float.", "", [2.0, 20.0])
+        s = Sensor(Sensor.FLOAT, "a.float", "A float.", "", [2.0, 20.0])
         self.assertEqual(s.value(), 2.0)
         s = Sensor.float("a.float", "A float.", "", [2.0, 20.0], default=5.0)
         self.assertEqual(s.value(), 5.0)
@@ -388,20 +431,20 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.status(), Sensor.WARN)
 
         # TODO (AJ) Test for non-ascii fields
-        # with self.assertRaises(KatcpTypeError):
+        # with self.assertRaises(KatcpValueError):
         #     s = Sensor.float("a.temp", "Non-ascii unit not allowed", "°C", default=22.0)
 
     def test_boolean_sensor(self):
         """Test boolean sensor."""
         s = Sensor.boolean("a.boolean", "A boolean.", "on/off", None)
         self.assertEqual(s.stype, 'boolean')
-        s.set(timestamp=12345, status=katcp.Sensor.UNKNOWN, value=True)
+        s.set(timestamp=12345, status=Sensor.UNKNOWN, value=True)
         # test both read_formatted and format_reading
-        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "unknown", "1"))
-        self.assertEqual(s.read_formatted(), ("12345.000000", "unknown", "1"))
-        self.assertEqual(s.parse_value("1"), True)
-        self.assertEqual(s.parse_value("0"), False)
-        self.assertRaises(ValueError, s.parse_value, "asd")
+        self.assertEqual(s.format_reading(s.read()), (b"12345.000000", b"unknown", b"1"))
+        self.assertEqual(s.read_formatted(), (b"12345.000000", b"unknown", b"1"))
+        self.assertEqual(s.parse_value(b"1"), True)
+        self.assertEqual(s.parse_value(b"0"), False)
+        self.assertRaises(ValueError, s.parse_value, b"asd")
         s = Sensor.boolean("a.boolean", "A boolean.", "on/off", default=True)
         self.assertEqual(s._value, True)
         s = Sensor.boolean("a.boolean", "A boolean.", "on/off", default=False)
@@ -410,17 +453,32 @@ class TestSensor(unittest.TestCase):
                            initial_status=Sensor.ERROR)
         self.assertEqual(s.status(), Sensor.ERROR)
 
-    def test_discrete_sensor(self):
-        """Test discrete sensor."""
+    def test_discrete_sensor_from_byte_strings(self):
+        """Test discrete sensor initialised from byte strings."""
+        s = Sensor.discrete(
+            b"a.discrete", b"A discrete sensor.", b"state", [b"on", b"off"])
+        # sensor attributes must be native strings
+        self.assertEqual(s.name, "a.discrete")
+        self.assertEqual(s.units, "state")
+        self.assertEqual(s.description, "A discrete sensor.")
+        self.assertEqual(s.stype, "discrete")
+        s.set(timestamp=12345, status=Sensor.ERROR, value="on")
+        self.assertEqual(s.value(), "on")
+        # after formatting, byte strings are required
+        self.assertEqual(s.format_reading(s.read()), (b"12345.000000", b"error", b"on"))
+        self.assertEqual(s.read_formatted(), (b"12345.000000", b"error", b"on"))
+
+    def test_discrete_sensor_from_native_strings(self):
+        """Test discrete sensor initialised from native strings."""
         s = Sensor.discrete(
             "a.discrete", "A discrete sensor.", "state", ["on", "off"])
         self.assertEqual(s.stype, 'discrete')
-        s.set(timestamp=12345, status=katcp.Sensor.ERROR, value="on")
+        s.set(timestamp=12345, status=Sensor.ERROR, value="on")
         # test both read_formatted and format_reading
-        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "error", "on"))
-        self.assertEqual(s.read_formatted(), ("12345.000000", "error", "on"))
-        self.assertEqual(s.parse_value("on"), "on")
-        self.assertRaises(ValueError, s.parse_value, "fish")
+        self.assertEqual(s.format_reading(s.read()), (b"12345.000000", b"error", b"on"))
+        self.assertEqual(s.read_formatted(), (b"12345.000000", b"error", b"on"))
+        self.assertEqual(s.parse_value(b"on"), "on")
+        self.assertRaises(ValueError, s.parse_value, b"fish")
         s = Sensor.discrete("a.discrete", "A discrete sensor.", "state",
                             ["on", "off"], default='on')
         self.assertEqual(s._value, 'on')
@@ -437,10 +495,11 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.stype, 'lru')
         s.set(timestamp=12345, status=Sensor.FAILURE, value=Sensor.LRU_ERROR)
         # test both read_formatted and format_reading
-        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "failure", "error"))
-        self.assertEqual(s.read_formatted(), ("12345.000000", "failure", "error"))
-        self.assertEqual(s.parse_value("nominal"), katcp.Sensor.LRU_NOMINAL)
-        self.assertRaises(ValueError, s.parse_value, "fish")
+        self.assertEqual(
+            s.format_reading(s.read()), (b"12345.000000", b"failure", b"error"))
+        self.assertEqual(s.read_formatted(), (b"12345.000000", b"failure", b"error"))
+        self.assertEqual(s.parse_value(b"nominal"), Sensor.LRU_NOMINAL)
+        self.assertRaises(ValueError, s.parse_value, b"fish")
         s = Sensor.lru(
             "an.lru", "An LRU sensor.", "state", default=Sensor.LRU_ERROR)
         self.assertEqual(s._value, Sensor.LRU_ERROR)
@@ -455,11 +514,13 @@ class TestSensor(unittest.TestCase):
         """Test string sensor."""
         s = Sensor.string("a.string", "A string sensor.", "filename", None)
         self.assertEqual(s.stype, 'string')
-        s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value="zwoop")
+        s.set(timestamp=12345, status=Sensor.NOMINAL, value="zwoop")
+        self.assertEqual(s._value, "zwoop")
         # test both read_formatted and format_reading
-        self.assertEqual(s.format_reading(s.read()), ("12345.000000", "nominal", "zwoop"))
-        self.assertEqual(s.read_formatted(), ("12345.000000", "nominal", "zwoop"))
-        self.assertEqual(s.parse_value("bar foo"), "bar foo")
+        self.assertEqual(
+            s.format_reading(s.read()), (b"12345.000000", b"nominal", b"zwoop"))
+        self.assertEqual(s.read_formatted(), (b"12345.000000", b"nominal", b"zwoop"))
+        self.assertEqual(s.parse_value(b"bar foo"), "bar foo")
         s = Sensor.string(
             "a.string", "A string sensor.", "filename", default='baz')
         self.assertEqual(s._value, 'baz')
@@ -467,33 +528,48 @@ class TestSensor(unittest.TestCase):
                           initial_status=Sensor.WARN)
         self.assertEqual(s.status(), Sensor.WARN)
 
+        # Test Python version-specific limitations
+        if future.utils.PY2:
+            valid_value = "\x00\xff"
+            valid_raw_value = b"\x00\xff"
+            invalid_value = u"skräm"
+        else:
+            valid_value = "skräm"
+            valid_raw_value = b"skr\xc3\xa4m"  # utf-8 encoded
+            invalid_value = b"\x00\xff"
+        s.set_value(valid_value)
+        _, _, formatted_value = s.read_formatted()
+        self.assertEqual(valid_raw_value, formatted_value)
+        with self.assertRaises(ValueError):
+            s.set_value(invalid_value)
+
     def test_timestamp_sensor(self):
         """Test timestamp sensor."""
         s = Sensor.timestamp("a.timestamp", "A timestamp sensor.", "", None)
         self.assertEqual(s.stype, 'timestamp')
-        s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value=1001.9)
+        s.set(timestamp=12345, status=Sensor.NOMINAL, value=1001.9)
         # test both read_formatted and format_reading
         self.assertEqual(s.format_reading(s.read()),
-                         ("12345.000000", "nominal", "1001.900000"))
+                         (b"12345.000000", b"nominal", b"1001.900000"))
         self.assertEqual(s.read_formatted(),
-                         ("12345.000000", "nominal", "1001.900000"))
+                         (b"12345.000000", b"nominal", b"1001.900000"))
         # Test with katcp v4 parsing formatting
         self.assertEqual(s.format_reading(s.read(), major=4),
-                         ("12345000", "nominal", "1001900"))
+                         (b"12345000", b"nominal", b"1001900"))
         self.assertEqual(s.read_formatted(major=4),
-                         ("12345000", "nominal", "1001900"))
-        self.assertAlmostEqual(s.parse_value("1002.100"), 1002.1)
-        self.assertRaises(ValueError, s.parse_value, "bicycle")
+                         (b"12345000", b"nominal", b"1001900"))
+        self.assertAlmostEqual(s.parse_value(b"1002.100"), 1002.1)
+        self.assertRaises(ValueError, s.parse_value, b"bicycle")
         s = Sensor.timestamp(
             "a.timestamp", "A timestamp sensor.", "", default=123)
         self.assertEqual(s._value, 123)
 
-        s.set_formatted('12346.1', 'nominal', '12246.1')
-        self.assertEqual(s.read(), (12346.1, katcp.Sensor.NOMINAL, 12246.1))
+        s.set_formatted(b'12346.1', b'nominal', b'12246.1')
+        self.assertEqual(s.read(), (12346.1, Sensor.NOMINAL, 12246.1))
 
         # Test with katcp v4 parsing
-        s.set_formatted('12347100', 'nominal', '12247100', major=4)
-        self.assertEqual(s.read(), (12347.1, katcp.Sensor.NOMINAL, 12247.1))
+        s.set_formatted(b'12347100', b'nominal', b'12247100', major=4)
+        self.assertEqual(s.read(), (12347.1, Sensor.NOMINAL, 12247.1))
 
         s = Sensor.timestamp("a.timestamp", "A timestamp sensor.", "",
                              initial_status=Sensor.NOMINAL)
@@ -506,11 +582,11 @@ class TestSensor(unittest.TestCase):
         s.set(timestamp=12345, status=Sensor.NOMINAL, value=("127.0.0.1", 80))
         # test both read_formatted and format_reading
         self.assertEqual(s.format_reading(s.read()),
-                         ("12345.000000", "nominal", "127.0.0.1:80"))
+                         (b"12345.000000", b"nominal", b"127.0.0.1:80"))
         self.assertEqual(s.read_formatted(),
-                         ("12345.000000", "nominal", "127.0.0.1:80"))
-        self.assertEqual(s.parse_value("[::1]:80"), ("::1", 80))
-        self.assertRaises(ValueError, s.parse_value, "[::1]:foo")
+                         (b"12345.000000", b"nominal", b"127.0.0.1:80"))
+        self.assertEqual(s.parse_value(b"[::1]:80"), ("::1", 80))
+        self.assertRaises(ValueError, s.parse_value, b"[::1]:foo")
         s = Sensor.address("a.address", "An address sensor.", "",
                            default=('192.168.101.1', 81))
         self.assertEqual(s._value, ('192.168.101.1', 81))
@@ -521,7 +597,7 @@ class TestSensor(unittest.TestCase):
     def test_set_and_get_value(self):
         """Test getting and setting a sensor value."""
         s = Sensor.integer("an.int", "An integer.", "count", [-4, 3])
-        s.set(timestamp=12345, status=katcp.Sensor.NOMINAL, value=3)
+        s.set(timestamp=12345, status=Sensor.NOMINAL, value=3)
 
         self.assertEqual(s.value(), 3)
 
@@ -529,17 +605,17 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.value(), 2)
 
         s.set_value(3, timestamp=12345)
-        self.assertEqual(s.read(), (12345, katcp.Sensor.NOMINAL, 3))
+        self.assertEqual(s.read(), (12345, Sensor.NOMINAL, 3))
 
         s.set_value(5, timestamp=12345)
-        self.assertEqual(s.read(), (12345, katcp.Sensor.NOMINAL, 5))
+        self.assertEqual(s.read(), (12345, Sensor.NOMINAL, 5))
 
-        s.set_formatted('12346.1', 'nominal', '-2')
-        self.assertEqual(s.read(), (12346.1, katcp.Sensor.NOMINAL, -2))
+        s.set_formatted(b'12346.1', b'nominal', b'-2')
+        self.assertEqual(s.read(), (12346.1, Sensor.NOMINAL, -2))
 
         # Test setting with katcp v4 parsing
-        s.set_formatted('12347100', 'warn', '-3', major=4)
-        self.assertEqual(s.read(), (12347.1, katcp.Sensor.WARN, -3))
+        s.set_formatted(b'12347100', b'warn', b'-3', major=4)
+        self.assertEqual(s.read(), (12347.1, Sensor.WARN, -3))
 
     def test_statuses(self):
         # Test that the status constants are all good
@@ -548,13 +624,14 @@ class TestSensor(unittest.TestCase):
         status_vals_set = set()
         status_vals_dict = {}
         for st in valid_statuses:
+            st_byte_str = st.encode('ascii')
             # Check that a capitalised attribute exists for each status
             st_val = getattr(Sensor, st.upper(), 'OOPS')
             self.assertNotEqual(st_val, 'OOPS')
             # Check that the status to name lookup dict is correct
-            self.assertEqual(Sensor.STATUSES[st_val], st)
+            self.assertEqual(Sensor.STATUSES[st_val], st_byte_str)
             # Check that the name to value lookup dict is correct
-            self.assertEqual(st, Sensor.STATUSES[st_val])
+            self.assertEqual(Sensor.STATUS_NAMES[st_byte_str], st_val)
             status_vals_set.add(st_val)
             status_vals_dict[st] = st_val
 
