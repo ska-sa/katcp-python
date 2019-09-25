@@ -11,7 +11,7 @@ from __future__ import division, print_function, absolute_import
 from future import standard_library
 standard_library.install_aliases()
 
-from builtins import next, object, str, zip
+from builtins import next, object, zip
 
 import logging
 import re
@@ -219,7 +219,6 @@ class BlockingTestClient(client.BlockingClient):
     @client.make_threadsafe
     def raw_send(self, chunk):
         """Send a raw chunk of data to the server."""
-        chunk = bytes(chunk) if future.utils.PY2 else bytes(chunk, 'utf-8')
         self._stream.write(chunk)
 
     def _sensor_lag(self):
@@ -228,13 +227,13 @@ class BlockingTestClient(client.BlockingClient):
 
     def handle_inform(self, msg):
         """Pass unhandled informs to message recorders."""
-        for append_msg in list(self._message_recorders.values()):
+        for append_msg in self._message_recorders.values():
             append_msg(msg)
         return super(BlockingTestClient, self).handle_inform(msg)
 
     def handle_reply(self, msg):
         """Pass unhandled replies to message recorders."""
-        for append_msg in list(self._message_recorders.values()):
+        for append_msg in self._message_recorders.values():
             append_msg(msg)
         return super(BlockingTestClient, self).handle_reply(msg)
 
@@ -348,7 +347,7 @@ class BlockingTestClient(client.BlockingClient):
             self.test.fail("Could not convert value %r of sensor '%s' to type "
                            "%s: %s" % (value, sensorname, typestr, e))
 
-        self.test.assertTrue(status in list(Sensor.STATUSES.values()),
+        self.test.assertTrue(status in Sensor.STATUSES.values(),
                              "Got invalid status value %r for sensor '%s'."
                              % (status, sensorname))
 
@@ -1106,7 +1105,7 @@ class DeviceTestServer(DeviceServer):
 
     def stop(self, *args, **kwargs):
         # Make sure a slow command with long timeout does not hold us up.
-        for fut in list(self._slow_futures.values()):
+        for fut in self._slow_futures.values():
             if not fut.done:
                 fut.set_result(None)
         super(DeviceTestServer, self).stop(*args, **kwargs)
@@ -1166,7 +1165,7 @@ class DeviceTestServerWithTimeoutHints(DeviceTestServer):
         """Return timeout hints for requests"""
         hints = ({name: self.request_timeout_hints.get(name, 0)} if name
                  else self.request_timeout_hints)
-        for req_name, timeout_hint in list(hints.items()):
+        for req_name, timeout_hint in hints.items():
             req.inform(req_name, timeout_hint)
         return ('ok', len(hints))
 
@@ -1293,7 +1292,7 @@ class SensorComparisonMixin(object):
         # Build description of the actual sensors in the same format
         # as desired_description
         actual_description_dict = {}
-        for name, desired_info in list(desired_description_dict.items()):
+        for name, desired_info in desired_description_dict.items():
             actual_description_dict[name] = self._get_sensor_description(
                 actual_sensor_dict[name], list(desired_info.keys()))
 
@@ -1315,9 +1314,9 @@ class SensorComparisonMixin(object):
         actual_sensor_dict = dict((s.name, s) for s in actual_sensors)
         # Check that all the requested sensors are present
         self.assertTrue(all(name in actual_sensor_dict
-                             for name in list(value_tests.keys())))
+                             for name in value_tests.keys()))
 
-        for name, test in list(value_tests.items()):
+        for name, test in value_tests.items():
             test(actual_sensor_dict[name].value())
 
 

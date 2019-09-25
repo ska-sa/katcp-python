@@ -132,11 +132,14 @@ class test_wait_sensor(unittest.TestCase):
         self._wait_sensor(vals, 0, status=Sensor.ERROR)
 
 
-class WaitingMockBase(unittest.TestCase):
+class _test_WaitingMockBase(unittest.TestCase):
 
     DUTClass = None
 
-    def _test_reset_mock(self):
+    def test_reset_mock(self):
+        # skip test run on base clase directly
+        if not self.DUTClass:
+            return
         # Verify that the call_count and call_args_list variables
         # are initially zero, and get cleared by calling reset_mock
         DUT = self.DUTClass()
@@ -150,7 +153,7 @@ class WaitingMockBase(unittest.TestCase):
         self.assertEqual(len(DUT.call_args_list), 0)
 
 
-class test_WaitingMock(WaitingMockBase):
+class test_WaitingMock(_test_WaitingMockBase):
 
     DUTClass = testutils.WaitingMock
 
@@ -179,7 +182,7 @@ class test_WaitingMock(WaitingMockBase):
             DUT.assert_wait_call_count(1, timeout=0.1)
 
 class test_AsyncWaitingMock(
-        tornado.testing.AsyncTestCase, WaitingMockBase):
+        tornado.testing.AsyncTestCase, _test_WaitingMockBase):
 
     DUTClass = testutils.AsyncWaitingMock
 
