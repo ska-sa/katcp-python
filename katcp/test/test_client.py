@@ -47,7 +47,7 @@ logging.getLogger("katcp").addHandler(log_handler)
 logger = logging.getLogger(__name__)
 
 # Number of requests on DeviceTestServer
-NO_HELP_MESSAGES = len(DeviceTestServer._request_handlers)
+NUM_HELP_MESSAGES = len(DeviceTestServer._request_handlers)
 
 
 def remove_version_connect(msgs):
@@ -523,7 +523,7 @@ class TestBlockingClient(unittest.TestCase):
         reply, informs = self.client.blocking_request(
             Message.request("help"))
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
+        self.assertEqual(reply.arguments, ["ok", "%d" % NUM_HELP_MESSAGES])
         self.assertEqual(len(informs), int(reply.arguments[1]))
 
     def test_blocking_request_mid(self):
@@ -647,7 +647,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def help_reply(reply):
             self.assertEqual(reply.name, "help")
-            self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
+            self.assertEqual(reply.arguments, ["ok", "%d" % NUM_HELP_MESSAGES])
             self.assertEqual(len(help_informs), int(reply.arguments[1]))
             help_replies.append(reply)
             help_replied.set()
@@ -670,7 +670,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         help_replied.wait(0.05)   # Check if (unwanted) late help replies arrive
         self.assertFalse(help_replied.isSet())
         self.assertEqual(len(help_replies), 1)
-        self.assertEqual(len(help_informs), NO_HELP_MESSAGES)
+        self.assertEqual(len(help_informs), NUM_HELP_MESSAGES)
 
     def test_callback_request_mid(self):
         ## Test that the client does the right thing with message identifiers
@@ -763,8 +763,8 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertTrue(help_completed.isSet())
 
         self._assert_msgs_like(help_messages,
-            [("#help[1] ", "")] * NO_HELP_MESSAGES +
-            [("!help[1] ok %d" % NO_HELP_MESSAGES, "")])
+            [("#help[1] ", "")] * NUM_HELP_MESSAGES +
+            [("!help[1] ok %d" % NUM_HELP_MESSAGES, "")])
 
     def test_timeout(self):
         self._test_timeout()
@@ -879,7 +879,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         time.sleep(0.01)
         self.assertEqual(len(help_replies), 1)
         self.assertEqual(len(remove_version_connect(help_informs)),
-                         NO_HELP_MESSAGES)
+                         NUM_HELP_MESSAGES)
 
     def test_fifty_thread_mayhem(self):
         """Test using callbacks from fifty threads simultaneously."""
@@ -926,10 +926,10 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             self.assertEqual(len(replies), 1)
             self.assertEqual(replies[0].arguments[0], "ok")
             informs = remove_version_connect(informs)
-            if len(informs) != NO_HELP_MESSAGES:
+            if len(informs) != NUM_HELP_MESSAGES:
                 print(thread_id, len(informs))
                 print([x.arguments[0] for x in informs])
-            self.assertEqual(len(informs), NO_HELP_MESSAGES)
+            self.assertEqual(len(informs), NUM_HELP_MESSAGES)
 
     def test_blocking_request(self):
         """Test the callback client's blocking request."""
@@ -938,8 +938,8 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         )
 
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
-        self.assertEqual(len(remove_version_connect(informs)), NO_HELP_MESSAGES)
+        self.assertEqual(reply.arguments, ["ok", "%d" % NUM_HELP_MESSAGES])
+        self.assertEqual(len(remove_version_connect(informs)), NUM_HELP_MESSAGES)
 
         reply, informs = self.client.blocking_request(
             Message.request("slow-command", "0.5"),
@@ -1092,8 +1092,8 @@ class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase, TestUtilMixin):
         yield self.client.until_connected()
         reply, informs = yield self.client.future_request(Message.request('help'))
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
-        self.assertEqual(len(informs), NO_HELP_MESSAGES)
+        self.assertEqual(reply.arguments, ["ok", "%d" % NUM_HELP_MESSAGES])
+        self.assertEqual(len(informs), NUM_HELP_MESSAGES)
 
     @tornado.testing.gen_test
     def test_disconnect_cleanup(self):

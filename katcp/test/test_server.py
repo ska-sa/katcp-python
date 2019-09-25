@@ -53,7 +53,7 @@ log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 logger = logging.getLogger(__name__)
 
-NO_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
+NUM_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
 
 
 class test_ClientConnection(unittest.TestCase):
@@ -71,7 +71,7 @@ class test_ClientConnection(unittest.TestCase):
 
         # Check reply-inform
         server.send_message.reset_mock()
-        mid = '5'
+        mid = b'5'
         rif_req = katcp.Message.request('rif', mid=mid)
         rif_inf = katcp.Message.inform('rif')
         # Double-check that the mid's don't match before the call
@@ -91,7 +91,7 @@ class test_ClientConnection(unittest.TestCase):
 
         # Check reply
         server.send_message.reset_mock()
-        mid = '7'
+        mid = b'7'
         rep_req = katcp.Message.request('rep-req', mid=mid)
         rep_rep = katcp.Message.reply('rep-req')
         # Double-check that the mid's don't match before the call
@@ -122,24 +122,24 @@ class test_ClientRequestConnection(unittest.TestCase):
             self.client_connection, self.req_msg)
 
     def test_inform(self):
-        arguments = ('inf1', 'inf2')
+        arguments = (b'inf1', b'inf2')
         self.DUT.inform(*arguments)
         self.assertEqual(self.client_connection.inform.call_count, 1)
         (inf_msg,), kwargs = self.client_connection.inform.call_args
         self.assertSequenceEqual(inf_msg.arguments, arguments)
         self.assertEqual(inf_msg.name, 'test-request')
-        self.assertEqual(inf_msg.mid, '42')
+        self.assertEqual(inf_msg.mid, b'42')
         self.assertEqual(inf_msg.mtype, katcp.Message.INFORM)
 
     def test_reply(self):
-        arguments = ('inf1', 'inf2')
+        arguments = (b'inf1', b'inf2')
         self.DUT.reply(*arguments)
         self.assertEqual(self.client_connection.reply.call_count, 1)
         (rep_msg, req_msg), kwargs = self.client_connection.reply.call_args
         self.assertIs(req_msg, self.req_msg)
         self.assertSequenceEqual(rep_msg.arguments, arguments)
         self.assertEqual(rep_msg.name, 'test-request')
-        self.assertEqual(rep_msg.mid, '42')
+        self.assertEqual(rep_msg.mid, b'42')
         self.assertEqual(rep_msg.mtype, katcp.Message.REPLY)
         # Test that we can't reply twice
         with self.assertRaises(RuntimeError):
@@ -157,11 +157,11 @@ class test_ClientRequestConnection(unittest.TestCase):
             self.DUT.reply_with_message(rep_msg)
 
     def test_reply_message(self):
-        arguments = ('inf1', 'inf2')
+        arguments = (b'inf1', b'inf2')
         rep_msg = self.DUT.make_reply(*arguments)
         self.assertSequenceEqual(rep_msg.arguments, arguments)
         self.assertEqual(rep_msg.name, 'test-request')
-        self.assertEqual(rep_msg.mid, '42')
+        self.assertEqual(rep_msg.mid, b'42')
         self.assertEqual(rep_msg.mtype, katcp.Message.REPLY)
 
 class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
@@ -184,8 +184,8 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         self.assertEqual(msg.name, 'log')
         self.assertIs(msg.mid, None)
         # Timestamp should be in miliseconds
-        self.assertEqual(timestamp, '1234000')
-        self.assertIn('A warning', log_message)
+        self.assertEqual(timestamp, b'1234000')
+        self.assertIn(b'A warning', log_message)
 
     def test_on_client_connect(self):
         fake_sock = mock.Mock()
@@ -204,7 +204,7 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         msgs = [str(call[0][0]) for call in mock_conn.inform.call_args_list]
         self._assert_msgs_equal(msgs, (
             r'#version deviceapi-5.6',
-            r'#build-state buildy-1.2g') )
+            r'#build-state buildy-1.2g'))
 
     def test_sensor_sampling(self):
         start_thread_with_cleanup(self, self.server)
@@ -214,7 +214,7 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
         self.server._send_message = WaitingMock()
         self.server.wait_running(timeout=1.)
         self.assertTrue(self.server.running())
-        self.server._strategies = defaultdict(lambda : {})
+        self.server._strategies = defaultdict(lambda: {})
         req = mock_req('sensor-sampling', 'a-sens', 'event')
         self.server.request_sensor_sampling(req, req.msg).result(timeout=1)
         inf = req.client_connection.inform
@@ -494,12 +494,11 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.request(katcp.Message.request("foo"), use_mid=False)
 
         # pipe-lined send
-        self.client.raw_send("?bar-boom\r\n?baz\r")
-
+        self.client.raw_send(b"?bar-boom\r\n?baz\r")
         # broken up sends
-        self.client.raw_send("?boo")
-        self.client.raw_send("m arg1 arg2")
-        self.client.raw_send("\n")
+        self.client.raw_send(b"?boo")
+        self.client.raw_send(b"m arg1 arg2")
+        self.client.raw_send(b"\n")
 
         self._assert_msgs_equal(get_msgs(min_number=4), [
             r"!foo invalid Unknown\_request.",
@@ -512,14 +511,13 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test request failure paths in device server."""
         get_msgs = self.client.message_recorder(
                 blacklist=self.BLACKLIST, replies=True)
-        self.client.raw_send("bad msg\n")
+        self.client.raw_send(b"bad msg\n")
         # wait for reply
         self.client.blocking_request(
             katcp.Message.request("watchdog"), use_mid=False)
-
         self._assert_msgs_like(get_msgs(), [
-            (r"#log error", "KatcpSyntaxError:"
-                            "\_Bad\_type\_character\_'b'.\\n"),
+            (r"#log error", r"KatcpSyntaxError:"
+                            r"\_Bad\_type\_character\_'b'.\n"),
             (r"!watchdog ok", ""),
         ])
 
@@ -543,7 +541,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
         t0 = time.time()
         # Request should not have taken a very long time.
-        self.client.assert_request_succeeds('help', informs_count=NO_HELP_MESSAGES)
+        self.client.assert_request_succeeds('help', informs_count=NUM_HELP_MESSAGES)
         self.assertTrue(time.time() - t0 < 1)
 
 
@@ -551,8 +549,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         """Test server ignores informs and replies."""
         get_msgs = self.client.message_recorder(
                 blacklist=self.BLACKLIST, replies=True)
-        self.client.raw_send("#some inform\n")
-        self.client.raw_send("!some reply\n")
+        self.client.raw_send(b"#some inform\n")
+        self.client.raw_send(b"!some reply\n")
 
         time.sleep(0.1)
 
@@ -607,7 +605,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!log-level ok trace", ""),
             (r"!log-level fail Unknown\_logging\_level\_name\_'unknown'", ""),
             (r"#help cancel-slow-command Cancel\_slow\_command\_request,\_"
-             "resulting\_in\_it\_replying\_immediately", ""),
+             r"resulting\_in\_it\_replying\_immediately", ""),
             (r"#help client-list", ""),
             (r"#help halt", ""),
             (r"#help help", ""),
@@ -623,7 +621,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#help slow-command", ""),
             (r"#help version-list", ""),
             (r"#help watchdog", ""),
-            (r"!help ok %d" % NO_HELP_MESSAGES, ""),
+            (r"!help ok %d" % NUM_HELP_MESSAGES, ""),
             (r"#help watchdog", ""),
             (r"!help ok 1", ""),
             (r"!help fail", ""),
@@ -737,7 +735,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#help[6] slow-command", ""),
             (r"#help[6] version-list", ""),
             (r"#help[6] watchdog", ""),
-            (r"!help[6] ok %d" % NO_HELP_MESSAGES, ""),
+            (r"!help[6] ok %d" % NUM_HELP_MESSAGES, ""),
             (r"#help[7] watchdog", ""),
             (r"!help[7] ok 1", ""),
             (r"!help[8] fail", ""),
@@ -954,7 +952,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         ])
 
         self.assertEqual(updates[0].arguments[1:],
-                         ["1", "an.int", "nominal", "3"])
+                         [b"1", b"an.int", b"nominal", b"3"])
 
         ## Now clear the strategies on this sensor
         # There should only be on connection to the server, so it should be
@@ -963,7 +961,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.server.ioloop.add_callback(self.server.clear_strategies, client_conn)
         self.server.sync_with_ioloop()
         self.client.assert_request_succeeds("sensor-sampling", "an.int",
-                                            args_equal=["an.int", "none"])
+                                            args_equal=[b"an.int", b"none"])
 
         # Check that we did not accidentally clobber the strategy datastructure
         # in the proccess
