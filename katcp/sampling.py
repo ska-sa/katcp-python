@@ -9,14 +9,15 @@
 from __future__ import division, print_function, absolute_import
 
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import logging
 import os
 
+import future
 import tornado.ioloop
 
-from builtins import str, range, object
+from builtins import range
 from _thread import get_ident as get_thread_ident
 from functools import wraps
 
@@ -82,13 +83,13 @@ class SampleStrategy(object):
 
     ## @brief Mapping from strategy constant to strategy name.
     SAMPLING_LOOKUP = {
-        NONE: "none",
-        AUTO: "auto",
-        PERIOD: "period",
-        EVENT: "event",
-        DIFFERENTIAL: "differential",
-        EVENT_RATE: "event-rate",
-        DIFFERENTIAL_RATE: "differential-rate",
+        NONE: b"none",
+        AUTO: b"auto",
+        PERIOD: b"period",
+        EVENT: b"event",
+        DIFFERENTIAL: b"differential",
+        EVENT_RATE: b"event-rate",
+        DIFFERENTIAL_RATE: b"differential-rate",
     }
 
     # SAMPLING_LOOKUP not found by pylint
@@ -96,7 +97,7 @@ class SampleStrategy(object):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from strategy name to strategy constant.
-    SAMPLING_LOOKUP_REV = dict((v, k) for k, v in list(SAMPLING_LOOKUP.items()))
+    SAMPLING_LOOKUP_REV = dict((v, k) for k, v in SAMPLING_LOOKUP.items())
 
     # pylint: enable-msg = E0602
 
@@ -116,7 +117,7 @@ class SampleStrategy(object):
 
         Parameters
         ----------
-        strategyName : str
+        strategyName : str or bytes
             Name of strategy.
         inform_callback : callable, signature inform_callback(sensor, reading)
             Callback to receive inform messages.
@@ -136,6 +137,8 @@ class SampleStrategy(object):
             The created sampling strategy.
 
         """
+        if future.utils.istext(strategyName):
+            strategyName = strategyName.encode('ascii')
         if strategyName not in cls.SAMPLING_LOOKUP_REV:
             raise ValueError("Unknown sampling strategy '%s'. "
                              "Known strategies are %s."
@@ -206,15 +209,19 @@ class SampleStrategy(object):
 
         Returns
         -------
-        strategy_name : string
+        strategy_name : bytes
             KATCP name for the strategy.
-        params : list of strings
+        params : list of bytes
             KATCP formatted parameters for the strategy.
 
         """
         strategy = self.get_sampling()
         strategy = self.SAMPLING_LOOKUP[strategy]
-        params = [str(p) for p in self._params]
+        params = []
+        for param in self._params:
+            if not future.utils.isbytes(param):
+                param = str(param).encode('ascii')
+            params.append(param)
         return strategy, params
 
     def attach(self):
@@ -532,6 +539,9 @@ class SampleDifferentialRate(SampleEventRate):
         # Initial value that should not cause errors in _sensor_changed(),
         # but should let it return True
         self._last_reading_sent = (None, None, 1e99)
+
+    def get_sampling(self):
+        return SampleStrategy.DIFFERENTIAL_RATE
 
     def _sensor_changed(self, reading):
         _, status, value = reading

@@ -82,6 +82,11 @@ class TestSampling(TimewarpAsyncTestCase):
         sampling.SampleStrategy.get_strategy("period", None, s, "15")
         sampling.SampleStrategy.get_strategy("event", None, s)
         sampling.SampleStrategy.get_strategy("differential", None, s, "2")
+        sampling.SampleStrategy.get_strategy(b"none", None, s)
+        sampling.SampleStrategy.get_strategy(b"auto", None, s)
+        sampling.SampleStrategy.get_strategy(b"period", None, s, "15")
+        sampling.SampleStrategy.get_strategy(b"event", None, s)
+        sampling.SampleStrategy.get_strategy(b"differential", None, s, "2")
         self.assertRaises(ValueError, sampling.SampleStrategy.get_strategy,
                           "random", None, s)
         self.assertRaises(ValueError, sampling.SampleStrategy.get_strategy,
@@ -96,6 +101,7 @@ class TestSampling(TimewarpAsyncTestCase):
         t0 = self.ioloop_time
         sample_p = 10                            # sample DUT in seconds
         DUT = sampling.SamplePeriod(self.inform, self.sensor, sample_p)
+        self.assertEqual(DUT.get_sampling_formatted(), (b'period', [b'10']))
         self.assertEqual(self.calls, [])
         t, status, value = self.sensor.read()
         DUT.start()
@@ -140,6 +146,7 @@ class TestSampling(TimewarpAsyncTestCase):
     def test_auto(self):
         t0 = self.ioloop_time
         DUT = sampling.SampleAuto(self.inform, self.sensor)
+        self.assertEqual(DUT.get_sampling_formatted(), (b'auto', []))
         self.assertEqual(self.calls, [])
         t, status, value = self.sensor.read()
         DUT.start()
@@ -195,6 +202,7 @@ class TestSampling(TimewarpAsyncTestCase):
         t, status, value = self.sensor.read()
         delta = 3
         DUT = sampling.SampleDifferential(self.inform, self.sensor, delta)
+        self.assertEqual(DUT.get_sampling_formatted(), (b'differential', [b'3']))
         self.assertEqual(len(self.calls), 0)
         DUT.start()
         yield self.wake_ioloop()
@@ -227,6 +235,7 @@ class TestSampling(TimewarpAsyncTestCase):
         time_diff = 4.12                  # Time differential in seconds
         ts_sensor = Sensor(Sensor.TIMESTAMP, 'ts', 'ts sensor', '')
         diff = sampling.SampleDifferential(self.inform, ts_sensor, time_diff)
+        self.assertEqual(diff.get_sampling_formatted(), (b'differential', [b'4.12']))
         self.assertEqual(diff._threshold, time_diff)
 
     @tornado.testing.gen_test(timeout=200)
@@ -237,6 +246,7 @@ class TestSampling(TimewarpAsyncTestCase):
         t, status, value = self.sensor.read()
 
         DUT = sampling.SampleEventRate(self.inform, self.sensor, shortest, longest)
+        self.assertEqual(DUT.get_sampling_formatted(), (b'event-rate', [b'1.5', b'4.5']))
         self.assertEqual(len(self.calls), 0)
         DUT.start()
         yield self.wake_ioloop()
@@ -321,7 +331,7 @@ class TestSampling(TimewarpAsyncTestCase):
     def test_event(self):
         """Test SampleEvent strategy."""
         DUT = sampling.SampleEvent(self.inform, self.sensor)
-        self.assertEqual(DUT.get_sampling_formatted(), ('event', []) )
+        self.assertEqual(DUT.get_sampling_formatted(), (b'event', []))
         self.assertEqual(self.calls, [])
         DUT.start()
         yield self.wake_ioloop()
@@ -354,6 +364,8 @@ class TestSampling(TimewarpAsyncTestCase):
 
         DUT = sampling.SampleDifferentialRate(
             self.inform, self.sensor, delta, shortest, longest)
+        self.assertEqual(
+            DUT.get_sampling_formatted(), (b'differential-rate', [b'1.5', b'4.5']))
         self.assertEqual(len(self.calls), 0)
         DUT.start()
         yield self.wake_ioloop()
