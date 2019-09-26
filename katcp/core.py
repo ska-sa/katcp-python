@@ -985,11 +985,6 @@ class Sensor(object):
         if initial_status is None:
             initial_status = Sensor.UNKNOWN
 
-        # Checking if sensor_type is a native string,
-        # if it is then assign it to a PY3 backport str object
-        if sensor_type == future.utils.native_str:
-            sensor_type = future.types.newstr
-
         sensor_type = self.SENSOR_SHORTCUTS.get(sensor_type, sensor_type)
 
         self._sensor_type = sensor_type
