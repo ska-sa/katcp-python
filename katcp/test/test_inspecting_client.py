@@ -12,7 +12,7 @@ import logging
 import time
 import weakref
 
-from builtins import object, range, str
+from builtins import object, range
 from concurrent.futures import Future
 
 import mock
