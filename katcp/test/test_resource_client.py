@@ -1381,7 +1381,7 @@ class test_ThreadSafeKATCPClientResourceWrapper(unittest.TestCase):
         last_server_msg = self.server.messages[-1]
         self.assertTrue(reply.succeeded)
         self.assertEqual(str(last_server_msg),
-                         '?sensor-value[{}] an.int'.format(reply.reply.mid))
+                         '?sensor-value[{}] an.int'.format(int(reply.reply.mid)))
 
     def test_sensor(self):
         server_sensor = self.server.get_sensor('an.int')

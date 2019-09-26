@@ -977,8 +977,19 @@ class Sensor(object):
     # Sensor status constants
     UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE, INACTIVE = list(range(7))
 
-    ## @brief Mapping from sensor status to status name.
+    ## @brief Mapping from sensor status to status name, as native strings
     STATUSES = {
+        UNKNOWN: 'unknown',
+        NOMINAL: 'nominal',
+        WARN: 'warn',
+        ERROR: 'error',
+        FAILURE: 'failure',
+        UNREACHABLE: 'unreachable',
+        INACTIVE: 'inactive',
+    }
+
+    ## @brief Mapping from sensor status to status name, as byte strings ("raw")
+    STATUSES_RAW = {
         UNKNOWN: b'unknown',
         NOMINAL: b'nominal',
         WARN: b'warn',
@@ -988,8 +999,11 @@ class Sensor(object):
         INACTIVE: b'inactive',
     }
 
-    ## @brief Mapping from status name to sensor status.
+    ## @brief Mapping from status name to sensor status, using native strings
     STATUS_NAMES = dict((v, k) for k, v in STATUSES.items())
+
+    ## @brief Mapping from status name to sensor status, using byte strings ("raw")
+    STATUS_NAMES_RAW = dict((v, k) for k, v in STATUSES_RAW.items())
 
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = Lru.LRU_NOMINAL, Lru.LRU_ERROR
@@ -1409,7 +1423,7 @@ class Sensor(object):
 
         """
         timestamp = self.TIMESTAMP_TYPE.decode(raw_timestamp, major)
-        status = self.STATUS_NAMES[raw_status]
+        status = self.STATUS_NAMES_RAW[raw_status]
         value = self.parse_value(raw_value, major)
         self.set(timestamp, status, value)
 
@@ -1468,7 +1482,7 @@ class Sensor(object):
 
         timestamp, status, value = reading
         return (self.TIMESTAMP_TYPE.encode(timestamp, major),
-                self.STATUSES[status],
+                self.STATUSES_RAW[status],
                 self._formatter(value, True, major))
 
     def read(self):

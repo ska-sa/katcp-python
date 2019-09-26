@@ -5,7 +5,7 @@
 from __future__ import division, print_function, absolute_import
 
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import abc
 import sys
@@ -15,15 +15,13 @@ import logging
 import tornado
 
 from builtins import object
-from future.moves.builtins import dict
 from future.utils import with_metaclass
 from past.builtins import basestring
 from tornado.gen import Return, with_timeout
 from tornado.concurrent import Future
 
 from katcp import Message, Sensor
-from katcp.core import hashable_identity, AttrDict
-from katcp.sampling import SampleStrategy
+from katcp.core import hashable_identity
 
 
 logger = logging.getLogger(__name__)

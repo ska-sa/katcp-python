@@ -629,9 +629,11 @@ class TestSensor(unittest.TestCase):
             st_val = getattr(Sensor, st.upper(), 'OOPS')
             self.assertNotEqual(st_val, 'OOPS')
             # Check that the status to name lookup dict is correct
-            self.assertEqual(Sensor.STATUSES[st_val], st_byte_str)
+            self.assertEqual(Sensor.STATUSES[st_val], st)
+            self.assertEqual(Sensor.STATUSES_RAW[st_val], st_byte_str)
             # Check that the name to value lookup dict is correct
-            self.assertEqual(Sensor.STATUS_NAMES[st_byte_str], st_val)
+            self.assertEqual(Sensor.STATUS_NAMES[st], st_val)
+            self.assertEqual(Sensor.STATUS_NAMES_RAW[st_byte_str], st_val)
             status_vals_set.add(st_val)
             status_vals_dict[st] = st_val
 
