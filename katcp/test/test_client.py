@@ -517,13 +517,13 @@ class TestBlockingClient(unittest.TestCase):
         reply, informs = self.client.blocking_request(
             Message.request("watchdog"))
         self.assertEqual(reply.name, "watchdog")
-        self.assertEqual(reply.arguments, ["ok"])
+        self.assertEqual(reply.arguments, [b"ok"])
         self.assertEqual(remove_version_connect(informs), [])
 
         reply, informs = self.client.blocking_request(
             Message.request("help"))
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "%d" % NUM_HELP_MESSAGES])
+        self.assertEqual(reply.arguments, [b"ok", b"%d" % NUM_HELP_MESSAGES])
         self.assertEqual(len(informs), int(reply.arguments[1]))
 
     def test_blocking_request_mid(self):
@@ -556,7 +556,7 @@ class TestBlockingClient(unittest.TestCase):
         # send_message
         mids = [args[0].mid              # arg[0] should be the Message() object
                 for args, kwargs in self.client.send_message.call_args_list]
-        self.assertEqual(mids, ['1','2','3'])
+        self.assertEqual(mids, [b'1', b'2', b'3'])
         self.client.send_message.reset_mock()
 
         # Explicitly ask for no mid to be used
@@ -569,7 +569,7 @@ class TestBlockingClient(unittest.TestCase):
         self.client.send_message.reset_mock()
         blocking_request(Message.request('watchdog', mid=42), timeout=0)
         mid = self.client.send_message.call_args[0][0].mid
-        self.assertEqual(mid, '42')
+        self.assertEqual(mid, b'42')
 
         ## Check situation for a katcpv4 server
         self.client._server_supports_ids = False
@@ -597,7 +597,7 @@ class TestBlockingClient(unittest.TestCase):
         self.assertFalse(reply.reply_ok())
         self.assertRegexpMatches(
             reply.arguments[1],
-            r"Request slow-command timed out after 0\..* seconds.")
+            br"Request slow-command timed out after 0\..* seconds.")
 
 class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
@@ -628,7 +628,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def watchdog_reply(reply):
             self.assertEqual(reply.name, "watchdog")
-            self.assertEqual(reply.arguments, ["ok"])
+            self.assertEqual(reply.arguments, [b"ok"])
             watchdog_replies.append(reply)
             watchdog_replied.set()
 
@@ -647,7 +647,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def help_reply(reply):
             self.assertEqual(reply.name, "help")
-            self.assertEqual(reply.arguments, ["ok", "%d" % NUM_HELP_MESSAGES])
+            self.assertEqual(reply.arguments, [b"ok", b"%d" % NUM_HELP_MESSAGES])
             self.assertEqual(len(help_informs), int(reply.arguments[1]))
             help_replies.append(reply)
             help_replied.set()
@@ -692,7 +692,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         # send_message
         mids = [args[0].mid              # args[0] should be the Message() object
                 for args, kwargs in self.client.send_message.call_args_list]
-        self.assertEqual(mids, ['1','2','3'])
+        self.assertEqual(mids, [b'1', b'2', b'3'])
         self.client.send_message.reset_mock()
 
         # Explicitly ask for no mid to be used
@@ -710,7 +710,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             Message.request('watchdog', mid=42), reply_cb=cb)
         cb.assert_wait()
         mid = self.client.send_message.call_args[0][0].mid
-        self.assertEqual(mid, '42')
+        self.assertEqual(mid, b'42')
 
         ## Check situation for a katcpv4 server
         self.client._server_supports_ids = False
@@ -803,7 +803,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(msg.name, "slow-command")
         self.assertFalse(msg.reply_ok())
         self.assertRegexpMatches(msg.arguments[1],
-                                 r"Request slow-command timed out after 0\..* seconds.")
+                                 br"Request slow-command timed out after 0\..* seconds.")
         self.assertEqual(len(remove_version_connect(informs)), 0)
         self.assertEqual(len(replies), 1)
 
@@ -823,7 +823,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(len(informs), 0)
         self.assertEqual([msg.name for msg in replies + informs],
                          ["slow-command"] * len(replies + informs))
-        self.assertEqual([msg.arguments for msg in replies], [["ok"]])
+        self.assertEqual([msg.arguments for msg in replies], [[b"ok"]])
 
     def test_timeout_nocb(self):
         """Test requests that timeout with no callbacks."""
@@ -924,7 +924,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             done.wait(5.0)
             self.assertTrue(done.isSet())
             self.assertEqual(len(replies), 1)
-            self.assertEqual(replies[0].arguments[0], "ok")
+            self.assertEqual(replies[0].arguments[0], b"ok")
             informs = remove_version_connect(informs)
             if len(informs) != NUM_HELP_MESSAGES:
                 print(thread_id, len(informs))
@@ -938,7 +938,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         )
 
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "%d" % NUM_HELP_MESSAGES])
+        self.assertEqual(reply.arguments, [b"ok", b"%d" % NUM_HELP_MESSAGES])
         self.assertEqual(len(remove_version_connect(informs)), NUM_HELP_MESSAGES)
 
         reply, informs = self.client.blocking_request(
@@ -946,10 +946,10 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             timeout=0.001)
 
         self.assertEqual(reply.name, "slow-command")
-        self.assertEqual(reply.arguments[0], "fail")
+        self.assertEqual(reply.arguments[0], b"fail")
         self.assertRegexpMatches(
             reply.arguments[1],
-            r"Request slow-command timed out after 0\..* seconds.")
+            br"Request slow-command timed out after 0\..* seconds.")
 
     def test_blocking_request_mid(self):
         ## Test that the blocking client does the right thing with message
@@ -970,7 +970,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         # send_message
         mids = [args[0].mid              # arg[0] should be the Message() object
                 for args, kwargs in self.client.send_message.call_args_list]
-        self.assertEqual(mids, ['1','2','3'])
+        self.assertEqual(mids, [b'1', b'2', b'3'])
         self.client.send_message.reset_mock()
 
         # Explicitly ask for no mid to be used
@@ -984,7 +984,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.client.blocking_request(Message.request(
             'watchdog', mid=42), timeout=0)
         mid = self.client.send_message.call_args[0][0].mid
-        self.assertEqual(mid, '42')
+        self.assertEqual(mid, b'42')
 
         ## Check situation for a katcpv4 server
         self.client._server_supports_ids = False
@@ -1026,7 +1026,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         reply_cb.assert_wait()
         self.assertEqual(len(replies), 1)
         self.assertEqual(replies[0].name, "foo")
-        self.assertEqual(replies[0].arguments, ["fail", "Error foo"])
+        self.assertEqual(replies[0].arguments, [b"fail", b"Error foo"])
 
     def test_stop_cleanup(self):
         self.client.wait_protocol(timeout=1)
@@ -1085,14 +1085,14 @@ class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase, TestUtilMixin):
         reply, informs = yield self.client.future_request(Message.request('watchdog'))
         self.assertEqual(len(informs), 0)
         self.assertEqual(reply.name, "watchdog")
-        self.assertEqual(reply.arguments, ["ok"])
+        self.assertEqual(reply.arguments, [b"ok"])
 
     @tornado.testing.gen_test
     def test_future_request_with_informs(self):
         yield self.client.until_connected()
         reply, informs = yield self.client.future_request(Message.request('help'))
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "%d" % NUM_HELP_MESSAGES])
+        self.assertEqual(reply.arguments, [b"ok", b"%d" % NUM_HELP_MESSAGES])
         self.assertEqual(len(informs), NUM_HELP_MESSAGES)
 
     @tornado.testing.gen_test
@@ -1224,4 +1224,4 @@ class test_AsyncClientTimeoutsIntegrated(test_AsyncClientIntegratedBase):
         self.assertFalse(reply.reply_ok())
         self.assertRegexpMatches(
             reply.arguments[1],
-            r"Request slow-command timed out after .* seconds.")
+            br"Request slow-command timed out after .* seconds.")

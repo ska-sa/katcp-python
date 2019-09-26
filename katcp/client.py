@@ -32,7 +32,8 @@ from concurrent.futures import Future, TimeoutError
 from .core import (DeviceMetaclass, MessageParser, Message,
                    KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
                    ProtocolFlags, AsyncEvent, until_later, LatencyTimer,
-                   SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
+                   SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC,
+                   ensure_native_str)
 from .ioloop_manager import IOLoopManager
 
 
@@ -293,8 +294,9 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
         if len(msg.arguments) < 2:
             return
         # Store version information.
-        name = msg.arguments[0]
-        self.versions[name] = tuple(msg.arguments[1:])
+        name = ensure_native_str(msg.arguments[0])
+        self.versions[name] = tuple(
+            ensure_native_str(arg) for arg in msg.arguments[1:])
         if msg.arguments[0] == b"katcp-protocol":
             protocol_flags = ProtocolFlags.parse_version(msg.arguments[1])
             self._set_protocol_from_inform(protocol_flags, msg)
