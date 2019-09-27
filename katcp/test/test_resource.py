@@ -1,10 +1,9 @@
-# Copyright 2013 National Research Foundation (South African Radio Astronomy Observatory)
+# Copyright 2015 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import logging
 import unittest
@@ -18,6 +17,7 @@ from katcp.testutils import TimewarpAsyncTestCase
 
 
 logger = logging.getLogger(__name__)
+
 
 class test_escape_name(unittest.TestCase):
     def test_escape_name(self):

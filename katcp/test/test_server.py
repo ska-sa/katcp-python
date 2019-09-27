@@ -7,19 +7,16 @@
 """Tests for the server module."""
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
-standard_library.install_aliases()
-
-import errno
 import gc
 import logging
 import socket
 import sys
-import threading
 import time
+import unittest
 import weakref
 
-from builtins import str
 from collections import defaultdict
 from concurrent.futures import Future
 from functools import partial, wraps
@@ -27,26 +24,17 @@ from functools import partial, wraps
 import _thread
 import mock
 import tornado.testing
-import unittest
 
 from tornado import gen
 
 import katcp
-
 from katcp import __version__, kattypes
 from katcp.core import FailReply
-from katcp.testutils import (
-    AsyncDeviceTestServer,
-    BlockingTestClient,
-    ClientConnectionTest,
-    DeviceTestServer,
-    TestLogHandler,
-    TestUtilMixin,
-    WaitingMock,
-    handle_mock_req,
-    mock_req,
-    start_thread_with_cleanup,
-)
+from katcp.testutils import (AsyncDeviceTestServer, BlockingTestClient,
+                             ClientConnectionTest, DeviceTestServer,
+                             TestLogHandler, TestUtilMixin, WaitingMock,
+                             handle_mock_req, mock_req,
+                             start_thread_with_cleanup)
 
 
 log_handler = TestLogHandler()

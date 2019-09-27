@@ -6,36 +6,33 @@
 
 """Clients for the KAT device control language."""
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
 standard_library.install_aliases()  # noqa: E402
 
+import logging
 import sys
 import traceback
-import logging
-
-import tornado.ioloop
-import tornado.tcpclient
-import tornado.iostream
-
-from functools import partial, wraps
-from _thread import get_ident as get_thread_ident
 
 from builtins import object
+from concurrent.futures import Future, TimeoutError
+from functools import partial, wraps
+
+import tornado.ioloop
+import tornado.iostream
+import tornado.tcpclient
+
+from _thread import get_ident as get_thread_ident
 from future.utils import with_metaclass
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from tornado.util import ObjectDict
-from concurrent.futures import Future, TimeoutError
 
-from .core import (DeviceMetaclass, MessageParser, Message,
-                   KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
-                   ProtocolFlags, AsyncEvent, until_later, LatencyTimer,
-                   SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC,
-                   ensure_native_str)
+from .core import (FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC, SEC_TS_KATCP_MAJOR,
+                   AsyncEvent, DeviceMetaclass, KatcpClientDisconnected,
+                   KatcpClientError, KatcpVersionError, LatencyTimer, Message,
+                   MessageParser, ProtocolFlags, ensure_native_str, until_later)
 from .ioloop_manager import IOLoopManager
-
 
 # logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")

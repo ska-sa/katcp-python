@@ -7,29 +7,25 @@
 """Utilities for dealing with KATCP types.
    """
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
 standard_library.install_aliases()  # noqa: E402
 
 import inspect
 import itertools
-import struct
-import re
 import logging
+import re
+import struct
+
+from builtins import object
+from functools import partial, update_wrapper, wraps
 
 import future
 
-from functools import partial, wraps, update_wrapper
-
-from builtins import object
-
 from tornado import gen
 
-from .core import (Message, FailReply, DEFAULT_KATCP_MAJOR,
-                   SEC_TS_KATCP_MAJOR, SEC_TO_MS_FAC, MS_TO_SEC_FAC,
-                   convert_method_name)
-
+from .core import (DEFAULT_KATCP_MAJOR, MS_TO_SEC_FAC, SEC_TO_MS_FAC,
+                   SEC_TS_KATCP_MAJOR, FailReply, Message, convert_method_name)
 
 logger = logging.getLogger(__name__)
 

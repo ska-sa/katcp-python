@@ -2,27 +2,27 @@
 # BSD license - see LICENSE for details
 """A high-level abstract interface to KATCP clients, sensors and requests."""
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
 standard_library.install_aliases()  # noqa: E402
 
 import abc
-import sys
 import collections
 import logging
+import sys
+
+from builtins import object
 
 import tornado
 
-from builtins import object
 from future.utils import with_metaclass
 from past.builtins import basestring
-from tornado.gen import Return, with_timeout
 from tornado.concurrent import Future
+from tornado.gen import Return, with_timeout
 
 from katcp import Message, Sensor
-from katcp.core import hashable_identity
-
+from katcp.core import AttrDict, hashable_identity
+from katcp.sampling import SampleStrategy
 
 logger = logging.getLogger(__name__)
 

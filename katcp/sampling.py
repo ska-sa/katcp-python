@@ -1,28 +1,27 @@
 # sampling.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# Copyright 2008 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
 """Strategies for sampling sensor values."""
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
 standard_library.install_aliases()  # noqa: E402
 
 import logging
 import os
 
+from builtins import range
+from functools import wraps
+
 import future
 import tornado.ioloop
 
-from builtins import range
 from _thread import get_ident as get_thread_ident
-from functools import wraps
 
 from .core import Message, Sensor
-
 
 log = logging.getLogger("katcp.sampling")
 

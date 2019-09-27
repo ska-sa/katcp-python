@@ -1,11 +1,13 @@
-# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# Copyright 2010 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
 from __future__ import absolute_import, division, print_function
 
 import sys
+
 from katcp import DeviceServer, Message, Sensor
 from util import standard_parser
+
 
 class BenchmarkServer(DeviceServer):
     # an ugly hack

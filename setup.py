@@ -1,12 +1,11 @@
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# Copyright 2008 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
-import os
-from setuptools import setup, find_packages
+from __future__ import absolute_import, division, print_function
 
+import os
+
+from setuptools import find_packages, setup
 
 this_directory = os.path.abspath(os.path.dirname(__file__))
 

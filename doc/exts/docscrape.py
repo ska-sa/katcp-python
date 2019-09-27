@@ -1,14 +1,12 @@
 """Extract reference documentation from the NumPy source tree.
 
 """
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function
 
 import inspect
-import textwrap
-import re
 import pydoc
+import re
+import textwrap
 from StringIO import StringIO
 from warnings import warn
 

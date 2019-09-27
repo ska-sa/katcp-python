@@ -15,13 +15,15 @@ It will:
 .. [1] http://projects.scipy.org/numpy/wiki/CodingStyleGuidelines#docstring-standard
 
 """
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function
 
-import os, re, pydoc
-from docscrape_sphinx import get_doc_object, SphinxDocString
 import inspect
+import os
+import pydoc
+import re
+
+from docscrape_sphinx import SphinxDocString, get_doc_object
+
 
 def mangle_docstrings(app, what, name, obj, options, lines,
                       reference_offset=[0]):

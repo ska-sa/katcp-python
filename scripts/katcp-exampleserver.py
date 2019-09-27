@@ -8,19 +8,18 @@
    @date 2008-10-10
 """
 from __future__ import absolute_import, division, print_function
-
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
-import queue as Queue
 import logging
+import queue as Queue
 import sys
 
 from optparse import OptionParser
 
 import katcp
 
-from katcp.kattypes import request, return_reply, Float, Int, Str
+from katcp.kattypes import Float, Int, Str, request, return_reply
 
 
 logging.basicConfig(level=logging.INFO,

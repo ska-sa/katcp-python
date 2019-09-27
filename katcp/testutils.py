@@ -6,49 +6,36 @@
 
 """Test utils for katcp package tests."""
 
-from __future__ import division, print_function, absolute_import
-
+from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
+
+import functools
+import logging
+import queue as Queue
+import re
+import threading
+import time
 
 from builtins import next, object, zip
+from concurrent.futures import Future, TimeoutError
 
-import logging
-import re
-import time
-import queue as Queue
-import threading
-import functools
-
-import future
 import mock
-import tornado.testing
+import tornado.gen
 import tornado.ioloop
 import tornado.locks
-import tornado.gen
-
+import tornado.testing
 from _thread import get_ident
-
 from tornado.concurrent import Future as tornado_Future
-from concurrent.futures import Future, TimeoutError
 
 from katcp import client
 
-from .core import (Sensor,
-                   Message,
-                   AsyncReply,
-                   AsyncEvent,
-                   AttrDict,
-                   steal_docstring_from,
-                   ProtocolFlags)
-from .server import DeviceServer, FailReply, ClientConnection
-from .kattypes import (request,
-                       return_reply,
-                       Float, Str, Int,
-                       concurrent_reply,
-                       request_timeout_hint)
+from .core import (AsyncEvent, AsyncReply, Message, ProtocolFlags,
+                   Sensor, steal_docstring_from)
+from .kattypes import (Float, Int, Str, concurrent_reply, request,
+                       request_timeout_hint, return_reply)
 from .object_proxies import ObjectWrapper
-
+from .server import ClientConnection, DeviceServer, FailReply
 
 logger = logging.getLogger(__name__)
 

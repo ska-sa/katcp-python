@@ -1,45 +1,31 @@
-# Copyright 2013 National Research Foundation (South African Radio Astronomy Observatory)
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import copy
 import gc
 import logging
-import threading
 import time
 import unittest
 import weakref
 
 from builtins import object
 from concurrent.futures import TimeoutError
-from functools import partial
 
 import mock
 import tornado
 
-from _thread import get_ident as get_thread_ident
-
 # module under test
-from katcp import (
-    Message,
-    Sensor,
-    inspecting_client,
-    ioloop_manager,
-    resource,
-    resource_client,
-)
+from katcp import (Message, Sensor, ioloop_manager,
+                   resource, resource_client)
 from katcp.core import AsyncEvent, AttrDict, ProtocolFlags
-from katcp.testutils import (
-    DeviceTestSensor,
-    DeviceTestServer,
-    TimewarpAsyncTestCase,
-    TimewarpAsyncTestCaseTimeAdvancer,
-    start_thread_with_cleanup,
-)
+from katcp.testutils import (DeviceTestSensor, DeviceTestServer,
+                             TimewarpAsyncTestCase,
+                             TimewarpAsyncTestCaseTimeAdvancer,
+                             start_thread_with_cleanup)
 
 
 logger = logging.getLogger(__name__)
