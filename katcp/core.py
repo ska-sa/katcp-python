@@ -616,7 +616,7 @@ class MessageParser(object):
 
         # ensure name is native string
         if future.utils.PY3:
-            name = str(name, encoding='ascii')
+            name = name.decode('ascii')
 
         return Message(mtype, name, arguments, mid)
 
@@ -1886,7 +1886,7 @@ def hashable_identity(obj):
         return (id(obj.__func__), id(obj.__self__))
     elif hasattr(obj, 'im_func'):
         return (id(obj.im_func), id(obj.im_func))
-    elif isinstance(obj, (basestring, str)):
+    elif isinstance(obj, basestring):
         return obj
     else:
         return id(obj)
@@ -2043,16 +2043,28 @@ def until_some(*args, **kwargs):
     raise tornado.gen.Return(results)
 
 
-def ensure_native_str(value, encoding='utf-8'):
-    """Coerce unicode string or bytes to native string type."""
-    native = value
-    if future.utils.PY2:
-        if future.utils.istext(value):
-            native = value.encode(encoding)
-    else:
-        if future.utils.isbytes(value):
-            native = value.decode(encoding)
-    return native
+# Python 2 to 3 compatibility functions
+
+if future.utils.PY2:
+    def ensure_native_str(value):
+        """Coerce unicode string or bytes to native string type (UTF-8 encoding)."""
+        if isinstance(value, str):
+            return value
+        elif isinstance(value, unicode):
+            return value.encode('utf-8')
+        else:
+            raise TypeError(
+                "Invalid type for string conversion: {}".format(type(value)))
+else:
+    def ensure_native_str(value):
+        """Coerce unicode string or bytes to native string type (UTF-8 encoding)."""
+        if isinstance(value, str):
+            return value
+        elif isinstance(value, bytes):
+            return value.decode('utf-8')
+        else:
+            raise TypeError(
+                "Invalid type for string conversion: {}".format(type(value)))
 
 
 def byte_chars(byte_string):

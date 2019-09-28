@@ -257,34 +257,27 @@ class Str(KatcpType):
     Thus ASCII values are fine, but arbitrary strings of bytes are not safe to
     use, and may raise an exception.
 
-    If the type is invalid for the Python version, a ValueError is raised
-    when checking, or an AttributeError during decoding.
+    For convenience, non-text types can be encoded.  The object it is converted
+    to a string, and then to bytes.  This is a one-way operation - when that byte
+    string is decoded the original type will not be recovered.
 
     """
 
     name = "string"
 
     def encode(self, value, major):
-        if future.utils.PY2:
+        if future.utils.isbytes(value):
             return value
-        else:
+        elif future.utils.istext(value):
             return value.encode('utf-8')
+        else:
+            return str(value).encode('utf-8')
 
     def decode(self, value, major):
         if future.utils.PY2:
             return value
         else:
             return value.decode('utf-8')
-
-    def check(self, value, major):
-        """Check whether the value has the correct type (Python version dependent).
-
-        Raise a ValueError if it is not.
-
-        """
-        if not isinstance(value, str):
-            raise ValueError("String value '%r' %s is not a native string type."
-                             % (value, type(value)))
 
 
 class Discrete(Str):
@@ -316,7 +309,6 @@ class Discrete(Str):
         Raise a ValueError if it is not.
 
         """
-        super(Discrete, self).check(value, major)
         if self._case_insensitive:
             value = value.lower()
             values = self._valid_values_lower

@@ -369,51 +369,43 @@ class TestStr(TestType):
         optional = Str(optional=True)
         default_optional = Str(default="something", optional=True)
 
-        # For packing, the input is expected to be a native string, so
-        # it works on both PY2 and PY3.  Similarly, byte strings only
-        # work on PY2, and unicode strings only work on PY3.
-        if future.utils.PY2:
-            native_packed = b"adsasdasd"
-            bytes_packed = b"adsasdasd"
-            unicode_packed = ValueError
-            invalid_default = Str(default=u'bad_type')
-        else:
-            native_packed = b"adsasdasd"
-            bytes_packed = ValueError
-            unicode_packed = b"adsasdasd"
-            invalid_default = Str(default=b'bad_type')
-
+        # For packing, the input can be any type except NoneType.
         self._pack = [
-            (basic, "adsasdasd", native_packed),
-            (basic, b"adsasdasd", bytes_packed),
-            (basic, u"adsasdasd", unicode_packed),
+            (basic, "adsasdasd", b"adsasdasd"),
+            (basic, b"adsasdasd", b"adsasdasd"),
+            (basic, u"adsasdasd", b"adsasdasd"),
+            (basic, u"skräm", b"skr\xc3\xa4m"),
+            (basic, [1, 2.0, 'three', False], b"[1, 2.0, 'three', False]"),
             (basic, None, ValueError),
             (default, None, b"something"),
             (default_optional, None, b"something"),
             (optional, None, ValueError),
-            (invalid_default, None, ValueError),
         ]
 
-        # For unpacking, the input must be a byte string, which
-        # is also the native type on PY2.
+        # For unpacking, the input is assumed to be a byte string, and
+        # the ouput should be a native string (bytes on PY2, unicode on PY3).
+        # On PY2, as input is assumed to be bytes already, nothing is done,
+        # nor is the type checked.
         if future.utils.PY2:
-            native_unpacked = "adsasdasd"
             bytes_unpacked = "adsasdasd"
-            unicode_unpacked = ValueError
+            unicode_unpacked = u"adsasdasd"
+            utf8_unpacked = "skr\xc3\xa4m"
+            list_str_unpacked = "[1, 2.0, 'three', False]"
         else:
-            native_unpacked = AttributeError
             bytes_unpacked = "adsasdasd"
             unicode_unpacked = AttributeError
+            utf8_unpacked = "skräm"
+            list_str_unpacked = "[1, 2.0, 'three', False]"
 
         self._unpack = [
-            (basic, "adsasdasd", native_unpacked),
             (basic, b"adsasdasd", bytes_unpacked),
             (basic, u"adsasdasd", unicode_unpacked),
+            (basic, b"skr\xc3\xa4m", utf8_unpacked),
+            (basic, b"[1, 2.0, 'three', False]", list_str_unpacked),
             (basic, None, ValueError),
             (default, None, "something"),
             (default_optional, None, "something"),
             (optional, None, None),
-            (invalid_default, None, ValueError),
         ]
 
 

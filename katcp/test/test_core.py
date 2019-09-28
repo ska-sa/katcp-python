@@ -311,7 +311,6 @@ class TestMessageParser(unittest.TestCase):
         m = self.p.parse(b'?test message \\0\\n\\r\\t\\e\\_binary')
         self.assertEqual(m, Message.request('test', b'message', b'\0\n\r\t\x1b binary'))
 
-
     def test_unicode_message_handling(self):
         unicode_str = u'!baz[1] Kl\xc3\xbcf skr\xc3\xa4m'
         self.assertRaises(KatcpValueError, self.p.parse, unicode_str)
@@ -522,28 +521,61 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(
             s.format_reading(s.read()), (b"12345.000000", b"nominal", b"zwoop"))
         self.assertEqual(s.read_formatted(), (b"12345.000000", b"nominal", b"zwoop"))
+        # test parsing byte string returns native string
         self.assertEqual(s.parse_value(b"bar foo"), "bar foo")
+        # test default value
         s = Sensor.string(
             "a.string", "A string sensor.", "filename", default='baz')
         self.assertEqual(s._value, 'baz')
+        # test initial status
         s = Sensor.string("a.string", "A string sensor.", "filename",
                           initial_status=Sensor.WARN)
         self.assertEqual(s.status(), Sensor.WARN)
 
+        # Test using non-string types from set_value are "stringified"
+        s = Sensor.string("a.string", "Value from list.")
+        s.set_value([1, 2, 3])
+        self.assertEqual(s.value(), [1, 2, 3])
+        _, _, formatted_value = s.read_formatted()
+        self.assertEqual(formatted_value, b'[1, 2, 3]')
+        # But this is "one-way", if set from formatted byte string, the
+        # "original" type is not inferred
+        s.set_formatted(b'1.23', b'nominal', b'[4, 5, 6]')
+        self.assertEqual(s.value(), '[4, 5, 6]')
+
         # Test Python version-specific limitations
         if future.utils.PY2:
-            valid_value = "\x00\xff"
-            valid_raw_value = b"\x00\xff"
-            invalid_value = u"skräm"
+            test_cases = [
+                # name,       input,       raw,           from raw
+                ('non-ascii', b"\x00\xff", b"\x00\xff",   b"\x00\xff"),
+                ('utf-8',     u"räm",      b"r\xc3\xa4m", b"r\xc3\xa4m"),
+            ]
         else:
-            valid_value = "skräm"
-            valid_raw_value = b"skr\xc3\xa4m"  # utf-8 encoded
-            invalid_value = b"\x00\xff"
-        s.set_value(valid_value)
-        _, _, formatted_value = s.read_formatted()
-        self.assertEqual(valid_raw_value, formatted_value)
-        with self.assertRaises(ValueError):
-            s.set_value(invalid_value)
+            test_cases = [
+                # name,       input,       raw,                from raw
+                ('non-ascii', b"\x00\xff", b"\x00\xff",        UnicodeDecodeError),
+                ('utf-8',     u"räm",      b"r\xc3\xa4m",      u"räm"),
+                ('invalid',   u"\ud83d",   UnicodeEncodeError, None),
+            ]
+        for name, input_, raw, from_raw in test_cases:
+            # set from input, then try to read back raw
+            s.set_value(input_)
+            if type(raw) is type and issubclass(raw, Exception):
+                with self.assertRaises(raw):
+                    s.read_formatted()
+                continue  # cannot test setting from raw, so move on
+            else:
+                _, _, formatted_value = s.read_formatted()
+                self.assertEqual(raw, formatted_value)
+
+            # set raw, and try to read back value
+            s.set_value(None)
+            if type(from_raw) is type and issubclass(from_raw, Exception):
+                with self.assertRaises(from_raw):
+                    s.set_formatted(b'1.23', b'nominal', raw)
+            else:
+                s.set_formatted(b'1.23', b'nominal', raw)
+                self.assertEqual(s.value(), from_raw)
 
     def test_timestamp_sensor(self):
         """Test timestamp sensor."""

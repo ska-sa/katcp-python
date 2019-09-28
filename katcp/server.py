@@ -1878,8 +1878,8 @@ class DeviceServer(DeviceServerBase):
 
         """
         timeout_hints = {}
-        request = ensure_native_str(request)
         if request:
+            request = ensure_native_str(request)
             if request not in self._request_handlers:
                 raise FailReply('Unknown request method')
             timeout_hint = getattr(

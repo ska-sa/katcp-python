@@ -32,8 +32,8 @@ from katcp import client
 
 from .core import (AsyncEvent, AsyncReply, Message, ProtocolFlags,
                    Sensor, steal_docstring_from)
-from .kattypes import (Float, Int, Str, concurrent_reply, request,
-                       request_timeout_hint, return_reply)
+from .kattypes import (Bool, Discrete, Float, Int, Str, concurrent_reply,
+                       request, request_timeout_hint, return_reply)
 from .object_proxies import ObjectWrapper
 from .server import ClientConnection, DeviceServer, FailReply
 
@@ -1055,6 +1055,27 @@ class DeviceTestServer(DeviceServer):
         if fut:
             fut.set_result(None)
         return req.make_reply('ok')
+
+    @request(Str(), Float(), Int(), Bool())
+    @return_reply(Str(), Float(), Int(), Bool())
+    def request_decorated(self, req, stringy, floaty, inty, do_raise):
+        """Decorated handler, return params, optionally raise exception."""
+        if do_raise:
+            raise Exception("An exception occurred!")
+        else:
+            req.inform("stringy", str(type(stringy)))
+            req.inform("floaty", str(type(floaty)))
+            req.inform("inty", str(type(inty)))
+            req.inform("do_raise", str(type(do_raise)))
+            return "ok", stringy, floaty, inty, do_raise
+
+    @return_reply()
+    def request_decorated_return_exception(self, req, msg):
+        """Decorated handler, return fail with exception object."""
+        try:
+            raise Exception("An exception occurred!")
+        except Exception as e:
+            return "fail", e
 
     def handle_message(self, req, msg):
         self.__msgs.append(msg)

@@ -41,7 +41,7 @@ log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
 logger = logging.getLogger(__name__)
 
-NUM_HELP_MESSAGES = 16       # Number of requests on DeviceTestServer
+NUM_HELP_MESSAGES = 18  # Number of requests on DeviceTestServer
 
 
 class test_ClientConnection(unittest.TestCase):
@@ -595,6 +595,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#help cancel-slow-command Cancel\_slow\_command\_request,\_"
              r"resulting\_in\_it\_replying\_immediately", ""),
             (r"#help client-list", ""),
+            (r"#help decorated", ""),
+            (r"#help decorated-return-exception", ""),
             (r"#help halt", ""),
             (r"#help help", ""),
             (r"#help log-level", ""),
@@ -709,6 +711,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#help[6] cancel-slow-command Cancel\_slow\_command\_request,\_"
              "resulting\_in\_it\_replying\_immediately", ""),
             (r"#help[6] client-list", ""),
+            (r"#help[6] decorated", ""),
+            (r"#help[6] decorated-return-exception", ""),
             (r"#help[6] halt", ""),
             (r"#help[6] help", ""),
             (r"#help[6] log-level", ""),
@@ -875,6 +879,41 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!raise-exception[1] fail Traceback", ""),
             (r"!raise-fail[2] fail There\_was\_a\_problem\_with\_your\_request.",
              ""),
+        ])
+
+    def test_decorated_handler(self):
+        """Test handling with @request and @return_reply."""
+
+        stringy = "sss"
+        floaty = 1.5
+        inty = 78
+
+        do_raise = False
+        ok_msg = katcp.Message.request(
+            "decorated", stringy, floaty, inty, do_raise)
+        reply, informs = self.client.blocking_request(ok_msg, use_mid=False)
+        self._assert_msgs_equal(informs + [reply], [
+            str(katcp.Message.inform("decorated", "stringy", type(stringy))),
+            str(katcp.Message.inform("decorated", "floaty", type(floaty))),
+            str(katcp.Message.inform("decorated", "inty", type(inty))),
+            str(katcp.Message.inform("decorated", "do_raise", type(do_raise))),
+            r"!decorated ok sss 1.5 78 0",
+        ])
+
+        do_raise = True
+        fail_msg = katcp.Message.request(
+            "decorated", stringy, floaty, inty, do_raise)
+        reply, informs = self.client.blocking_request(fail_msg, use_mid=False)
+        self._assert_msgs_like(informs + [reply], [
+            (r"!decorated fail Traceback", r"An\_exception\_occurred!\n")
+        ])
+
+    def test_decorated_return_exception_handler(self):
+        """Test handling with @return_reply exception object."""
+        msg = katcp.Message.request("decorated-return-exception")
+        reply, informs = self.client.blocking_request(msg, use_mid=False)
+        self._assert_msgs_like(informs + [reply], [
+            (r"!decorated-return-exception fail An\_exception\_occurred!", "")
         ])
 
     def test_stop_and_restart(self):

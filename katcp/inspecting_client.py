@@ -775,7 +775,7 @@ class InspectingClientAsync(object):
             sen = {'description': ensure_native_str(msg.arguments[1]),
                    'units': ensure_native_str(msg.arguments[2]),
                    'sensor_type': ensure_native_str(msg.arguments[3]),
-                   'params': ensure_native_str(msg.arguments[4:])}
+                   'params': [ensure_native_str(arg) for arg in msg.arguments[4:]]}
             self._update_index(self._sensors_index, sen_name, sen)
 
         added, removed = self._difference(
