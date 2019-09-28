@@ -397,8 +397,8 @@ class Message(object):
             escaped_args = []
             for arg in self.arguments:
                 escaped_arg = self.ESCAPE_RE.sub(self._escape_match, arg)
-                if len(escaped_arg) > 10:
-                    escaped_arg = escaped_arg[:10] + b"..."
+                if len(escaped_arg) > 1000:
+                    escaped_arg = escaped_arg[:1000] + b"..."
                 escaped_args.append(str(escaped_arg))
             args = "(" + ", ".join(escaped_args) + ")"
         else:

@@ -156,17 +156,22 @@ class TestMessage(unittest.TestCase):
 
     def test_repr(self):
         msg = Message.reply(
-            'ok', 'café', b'_bin ary\xff\x00\n\r\t\\\x1b', 123, 4.5, True, False, '')
+            'ok', 'café', b'_bin ary\xff\x00\n\r\t\\\x1b', 123, 4.5, True, False, '',
+            'z'*1100)
         # storing Message.arguments as byte string results in slightly different
         # reprs for PY2 compared to PY3.
         if future.utils.PY2:
             expected = ("<Message reply ok (caf\xc3\xa9, "
-                        "_bin\\_ary\xff..., "
-                        "123, 4.5, 1, 0, )>")
+                        "_bin\\_ary\xff\\0\\n\\r\\t\\\\\\e, "
+                        "123, 4.5, 1, 0, , "
+                        "{}..."
+                        ")>".format('z'*1000))
         else:
             expected = (r"<Message reply ok (b'caf\xc3\xa9', "
-                        r"b'_bin\\_ary\xff...', "
-                        r"b'123', b'4.5', b'1', b'0', b'')>")
+                        r"b'_bin\\_ary\xff\\0\\n\\r\\t\\\\\\e', "
+                        r"b'123', b'4.5', b'1', b'0', b'', "
+                        r"b'{}...'"
+                        r")>".format('z'*1000))
         self.assertEqual(repr(msg), expected)
 
     def test_bad_utf8_unicode(self):
