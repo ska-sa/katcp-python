@@ -363,6 +363,11 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.description,
                          "Float sensor 'fsens' in unit microseconds")
 
+    def test_units_none(self):
+        """Test units initialised to None results in empty string."""
+        s = Sensor.integer("a sens", None, None, None)
+        self.assertEqual(s.units, "")
+
     def test_int_sensor_from_byte_strings(self):
         """Test integer sensor initialised from byte strings."""
         s = Sensor.integer(b"an.int", b"An integer.", b"count", [-4, 3])

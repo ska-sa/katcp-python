@@ -1036,8 +1036,10 @@ class Sensor(object):
     # @brief List of strings containing the additional parameters (length and
     #        interpretation are specific to the sensor type)
 
-    def __init__(self, sensor_type, name, description=None, units='',
+    def __init__(self, sensor_type, name, description=None, units=None,
                  params=None, default=None, initial_status=None):
+        if units is None:
+            units = ''
         if params is None:
             params = []
 
