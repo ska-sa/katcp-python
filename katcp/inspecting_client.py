@@ -6,7 +6,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import copy
 import logging
@@ -16,11 +16,13 @@ from builtins import object, range
 from collections import defaultdict, namedtuple
 
 import tornado
+
 from tornado.gen import Return, maybe_future
 
 import katcp.core
-from katcp.core import (AttrDict, future_timeout_manager, steal_docstring_from,
-                        until_any)
+
+from katcp.core import (AttrDict, ensure_native_str, future_timeout_manager,
+                        steal_docstring_from, until_any)
 
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', 'name description timeout_hint')
@@ -645,7 +647,7 @@ class InspectingClientAsync(object):
         if not reply.reply_ok():
             # If an unknown request is specified the desired result is to return
             # an empty list even though the request will fail
-            if name is None or 'Unknown request' not in reply.arguments[1]:
+            if name is None or b'Unknown request' not in reply.arguments[1]:
                 raise SyncError(
                     'Error reply during sync process for {}: {}'
                     .format(self.bind_address_string, reply))
@@ -662,9 +664,9 @@ class InspectingClientAsync(object):
         requests_old = set(self._requests_index.keys())
         requests_updated = set()
         for msg in informs:
-            req_name = msg.arguments[0]
+            req_name = ensure_native_str(msg.arguments[0])
             req = {'name': req_name,
-                   'description': msg.arguments[1],
+                   'description': ensure_native_str(msg.arguments[1]),
                    'timeout_hint': timeout_hints.get(req_name)}
             requests_updated.add(req_name)
             self._update_index(self._requests_index, req_name, req)
@@ -715,7 +717,7 @@ class InspectingClientAsync(object):
                             'in reply to request {}, continuing with sync'
                             .format(reply, req_msg))
         for inform in informs:
-            request_name = inform.arguments[0]
+            request_name = ensure_native_str(inform.arguments[0])
             timeout_hint = float(inform.arguments[1])
             if timeout_hint > 0:
                 timeout_hints[request_name] = timeout_hint
@@ -760,7 +762,7 @@ class InspectingClientAsync(object):
         if not reply.reply_ok():
             # If an unknown sensor is specified the desired result is to return
             # an empty list, even though the request will fail
-            if name is None or 'Unknown sensor' not in reply.arguments[1]:
+            if name is None or b'Unknown sensor' not in reply.arguments[1]:
                 raise SyncError('Error reply during sync process: {}'
                                 .format(reply))
 
@@ -768,12 +770,12 @@ class InspectingClientAsync(object):
         sensors_old = set(self._sensors_index.keys())
         sensors_updated = set()
         for msg in informs:
-            sen_name = msg.arguments[0]
+            sen_name = ensure_native_str(msg.arguments[0])
             sensors_updated.add(sen_name)
-            sen = {'description': msg.arguments[1],
-                   'units': msg.arguments[2],
-                   'sensor_type': msg.arguments[3],
-                   'params': msg.arguments[4:]}
+            sen = {'description': ensure_native_str(msg.arguments[1]),
+                   'units': ensure_native_str(msg.arguments[2]),
+                   'sensor_type': ensure_native_str(msg.arguments[3]),
+                   'params': [ensure_native_str(arg) for arg in msg.arguments[4:]]}
             self._update_index(self._sensors_index, sen_name, sen)
 
         added, removed = self._difference(
@@ -966,7 +968,8 @@ class InspectingClientAsync(object):
         num_sensors = int(msg.arguments[1])
         assert len(msg.arguments) == 2 + num_sensors * 3
         for n in range(num_sensors):
-            name = msg.arguments[2 + n * 3]
+            # Note: update_sensor needs byte strings, except for sensor name
+            name = ensure_native_str(msg.arguments[2 + n * 3])
             status = msg.arguments[3 + n * 3]
             value = msg.arguments[4 + n * 3]
             self.update_sensor(name, timestamp, status, value)

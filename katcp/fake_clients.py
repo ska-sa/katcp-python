@@ -3,17 +3,19 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 from builtins import object
 
 import tornado.concurrent
+
 from _thread import get_ident as get_thread_ident
 from tornado.concurrent import Future
 from tornado.gen import Return
 
 from katcp import Sensor, client, kattypes, resource, server
 from katcp.core import AttrDict, Message, ProtocolFlags, convert_method_name
+
 
 def fake_KATCP_client_resource_factory(
         KATCPClientResourceClass, fake_options, resource_spec, *args, **kwargs):
@@ -267,7 +269,7 @@ class FakeInspectingClientManager(object):
 
         """
         # Check sensor validity. parse_type() and parse_params should raise if not OK
-        for s_name, s_info in list(sensor_infos.items()):
+        for s_name, s_info in sensor_infos.items():
             s_type = Sensor.parse_type(s_info[2])
             s_params = Sensor.parse_params(s_type, s_info[3:])
         self.fake_sensor_infos.update(sensor_infos)
@@ -302,7 +304,7 @@ class FakeInspectingClientManager(object):
 
         """
         # Check that all the callables have docstrings as strings
-        for req_func in list(rh_dict.values()):
+        for req_func in rh_dict.values():
             assert req_func.__doc__, "Even fake request handlers must have docstrings"
         self._fkc.request_handlers.update(rh_dict)
         self._fic._interface_changed.set()

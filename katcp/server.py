@@ -7,9 +7,8 @@
 """Servers for the KAT device control language."""
 
 from __future__ import absolute_import, division, print_function
-import future
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa E402
 
 import logging
 import re
@@ -24,8 +23,10 @@ from collections import deque
 from concurrent.futures import Future
 from functools import partial, wraps
 
+import future
 import tornado.ioloop
 import tornado.tcpserver
+
 from _thread import get_ident as get_thread_ident
 from past.builtins import basestring
 from tornado import gen, iostream
@@ -41,7 +42,7 @@ import katcp
 from .core import (DEFAULT_KATCP_MAJOR, MS_TO_SEC_FAC, SEC_TO_MS_FAC,
                    SEC_TS_KATCP_MAJOR, VERSION_CONNECT_KATCP_MAJOR, AsyncReply,
                    DeviceServerMetaclass, FailReply, Message, MessageParser,
-                   ProtocolFlags)
+                   ProtocolFlags, ensure_native_str)
 from .ioloop_manager import IOLoopManager, with_relative_timeout
 from .kattypes import (Int, Str, has_katcp_protocol_flags,
                        minimum_katcp_version, request, return_reply)
@@ -504,7 +505,8 @@ class KATCPServer(object):
                     e_type, e_value, trace, self._tb_limit))
                 log_msg = 'Device error initialising connection {0}'.format(reason)
                 self._logger.error(log_msg)
-                stream.write(bytes(str(Message.inform('log', log_msg)), 'utf-8'))
+                data = bytes(Message.inform('log', log_msg)) + b"\n"
+                stream.write(data)
                 stream.close(exc_info=True)
             else:
                 self._line_read_loop(stream, client_conn)
@@ -534,9 +536,8 @@ class KATCPServer(object):
                                           'while reading from client {0}:'
                                           .format(client_address), exc_info=True)
                 try:
-                    line = line.decode('utf-8') if isinstance(line, bytes) else str(line)
-                    line = line.replace("\r", "\n").split("\n")[0]
-                    msg = self._parser.parse(str(line)) if line else None
+                    line = line.replace(b"\r", b"\n").split(b"\n")[0]
+                    msg = self._parser.parse(line) if line else None
                 except Exception:
                     msg = None
                     e_type, e_value, trace = sys.exc_info()
@@ -636,15 +637,12 @@ class KATCPServer(object):
         bytes are queued for sending, implying that client is falling behind.
 
         """
-        msg = str(msg) + '\n'
-        msg = bytes(msg) if future.utils.PY2 else bytes(msg, 'utf-8')
-
         assert get_thread_ident() == self.ioloop_thread_id
         try:
             if stream.KATCPServer_closing or stream.closed():
                 raise RuntimeError(
                     'Stream is closing so we cannot accept any more writes')
-            return stream.write(msg)
+            return stream.write(bytes(msg) + b'\n')
         except Exception:
             addr = self.get_address(stream)
             self._logger.warn('Could not send message {0!r} to {1}'
@@ -920,22 +918,22 @@ class MessageHandlerThread(object):
 
 class DeviceServerBase(future.utils.with_metaclass(DeviceServerMetaclass, object)):
 
-    """Base class for device servers.
+    r"""Base class for device servers.
 
-    Subclasses should add .request\\_* methods for dealing
+    Subclasses should add .request\_* methods for dealing
     with request messages. These methods each take the client
     request connection and msg objects as arguments and should return
     the reply message or raise an exception as a result.
 
-    Subclasses can also add .inform\\_* and reply\\_* methods to handle
+    Subclasses can also add .inform\_* and reply\_* methods to handle
     those types of messages.
 
     Should a subclass need to generate inform messages it should
-    do so using either the .inform() or .mass\\_inform() methods.
+    do so using either the .inform() or .mass\_inform() methods.
 
     Finally, this class should probably not be subclassed directly
     but rather via subclassing DeviceServer itself which implements
-    common .request\\_* methods.
+    common .request\_* methods.
 
     Parameters
     ----------
@@ -977,7 +975,6 @@ class DeviceServerBase(future.utils.with_metaclass(DeviceServerMetaclass, object
         start(), or it will also have no effect
         """
         self._server.setDaemon(daemonic)
-
 
     def create_log_inform(self, level_name, msg, name, timestamp=None):
         """Create a katcp logging inform message.
@@ -1817,7 +1814,7 @@ class DeviceServer(DeviceServerBase):
             num_methods = len(self._request_handlers)
             return req.make_reply("ok", str(num_methods))
         else:
-            name = msg.arguments[0]
+            name = ensure_native_str(msg.arguments[0])
             if name in self._request_handlers:
                 method = self._request_handlers[name]
                 doc = method.__doc__.strip()
@@ -1827,7 +1824,7 @@ class DeviceServer(DeviceServerBase):
 
     @request(Str(optional=True))
     @return_reply(Int())
-    @has_katcp_protocol_flags(ProtocolFlags.REQUEST_TIMEOUT_HINTS)
+    @has_katcp_protocol_flags([ProtocolFlags.REQUEST_TIMEOUT_HINTS])
     def request_request_timeout_hint(self, req, request):
         """Return timeout hints for requests
 
@@ -1882,6 +1879,7 @@ class DeviceServer(DeviceServerBase):
         """
         timeout_hints = {}
         if request:
+            request = ensure_native_str(request)
             if request not in self._request_handlers:
                 raise FailReply('Unknown request method')
             timeout_hint = getattr(
@@ -2059,7 +2057,7 @@ class DeviceServer(DeviceServerBase):
         return req.make_reply("ok", str(num_versions))
 
     def request_sensor_list(self, req, msg):
-        """Request the list of sensors.
+        r"""Request the list of sensors.
 
         The list of sensors is sent as a sequence of #sensor-list informs.
 
@@ -2100,22 +2098,22 @@ class DeviceServer(DeviceServerBase):
         ::
 
             ?sensor-list
-            #sensor-list psu.voltage PSU\\_voltage. V float 0.0 5.0
-            #sensor-list cpu.status CPU\\_status. \\@ discrete on off error
+            #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
+            #sensor-list cpu.status CPU\_status. \@ discrete on off error
             ...
             !sensor-list ok 5
 
             ?sensor-list cpu.power.on
-            #sensor-list cpu.power.on Whether\\_CPU\\_hase\\_power. \\@ boolean
+            #sensor-list cpu.power.on Whether\_CPU\_hase\_power. \@ boolean
             !sensor-list ok 1
 
             ?sensor-list /voltage/
-            #sensor-list psu.voltage PSU\\_voltage. V float 0.0 5.0
-            #sensor-list cpu.voltage CPU\\_voltage. V float 0.0 3.0
+            #sensor-list psu.voltage PSU\_voltage. V float 0.0 5.0
+            #sensor-list cpu.voltage CPU\_voltage. V float 0.0 3.0
             !sensor-list ok 2
 
         """
-        exact, name_filter = construct_name_filter(msg.arguments[0]
+        exact, name_filter = construct_name_filter(ensure_native_str(msg.arguments[0])
                                                    if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
                    sorted(self._sensors.items()) if name_filter(name)]
@@ -2180,7 +2178,7 @@ class DeviceServer(DeviceServerBase):
             !sensor-value ok 1
 
         """
-        exact, name_filter = construct_name_filter(msg.arguments[0]
+        exact, name_filter = construct_name_filter(ensure_native_str(msg.arguments[0])
                                                    if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
                    sorted(self._sensors.items()) if name_filter(name)]
@@ -2257,7 +2255,7 @@ class DeviceServer(DeviceServerBase):
         if not msg.arguments:
             raise FailReply("No sensor name given.")
 
-        name = msg.arguments[0]
+        name = ensure_native_str(msg.arguments[0])
 
         if name not in self._sensors:
             raise FailReply("Unknown sensor name: %s." % name)
@@ -2273,11 +2271,12 @@ class DeviceServer(DeviceServerBase):
             params = msg.arguments[2:]
 
             if strategy not in SampleStrategy.SAMPLING_LOOKUP_REV:
-                raise FailReply("Unknown strategy name: %s." % strategy)
+                raise FailReply("Unknown strategy name: %s."
+                                % ensure_native_str(strategy))
 
             if not self.PROTOCOL_INFO.strategy_allowed(strategy):
                 raise FailReply("Strategy %s not allowed for version %d of katcp"
-                                % (strategy, katcp_version))
+                                % (ensure_native_str(strategy), katcp_version))
 
             format_inform = (format_inform_v5
                              if katcp_version >= SEC_TS_KATCP_MAJOR
@@ -2289,7 +2288,7 @@ class DeviceServer(DeviceServerBase):
                 cb_msg = format_inform(sensor, timestamp, status, value)
                 client.inform(cb_msg)
 
-            if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
+            if katcp_version < SEC_TS_KATCP_MAJOR and strategy == b'period':
                 # Slightly nasty hack, but since period is the only v4 strategy
                 # involving timestamps it's not _too_ nasty :)
                 params = [float(params[0]) * MS_TO_SEC_FAC] + params[1:]
@@ -2312,7 +2311,7 @@ class DeviceServer(DeviceServerBase):
                 "none", lambda *args: None, sensor)
 
         strategy, params = current_strategy.get_sampling_formatted()
-        if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
+        if katcp_version < SEC_TS_KATCP_MAJOR and strategy == b'period':
             # Another slightly nasty hack, but since period is the only
             # v4 strategy involving timestamps it's not _too_ nasty :)
             params = [int(float(params[0]) * SEC_TO_MS_FAC)] + params[1:]
@@ -2451,7 +2450,7 @@ class DeviceLogger(object):
 
         Parameters
         ----------
-        level_name : str
+        level_name : str or bytes
             The logging level name whose logging level constant
             to retrieve.
 
@@ -2462,6 +2461,7 @@ class DeviceLogger(object):
 
         """
         try:
+            level_name = ensure_native_str(level_name)
             return self.LEVELS.index(level_name)
         except ValueError:
             raise ValueError("Unknown logging level name '%s'" % (level_name,))
@@ -2479,7 +2479,7 @@ class DeviceLogger(object):
         if self._python_logger:
             try:
                 level = self.PYTHON_LEVEL.get(level)
-            except ValueError as err:
+            except ValueError:
                 raise FailReply("Unknown logging level '%s'" % (level))
             self._python_logger.setLevel(level)
 
@@ -2488,7 +2488,7 @@ class DeviceLogger(object):
 
         Parameters
         ----------
-        level_name : str
+        level_name : str or bytes
             The name of the logging level.
 
         """
@@ -2578,9 +2578,9 @@ class DeviceLogger(object):
         """
         (level, timestamp, name, message) = tuple(msg.arguments)
         log_string = "%s %s: %s" % (timestamp, name, message)
-        logger.log({"trace": 0,
-                    "debug": logging.DEBUG,
-                    "info": logging.INFO,
-                    "warn": logging.WARN,
-                    "error": logging.ERROR,
-                    "fatal": logging.FATAL}[level], log_string)
+        logger.log({b"trace": 0,
+                    b"debug": logging.DEBUG,
+                    b"info": logging.INFO,
+                    b"warn": logging.WARN,
+                    b"error": logging.ERROR,
+                    b"fatal": logging.FATAL}[level], log_string)

@@ -3,21 +3,21 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import collections
 import logging
 import math
 import re
 import sys
-import time
+
 from builtins import object
 from concurrent.futures import Future
 from functools import partial
 
 import tornado
 from future.moves.builtins import dict
-from past.utils import old_div
+
 from tornado.concurrent import Future as tornado_Future
 from tornado.gen import Return, maybe_future, with_timeout
 

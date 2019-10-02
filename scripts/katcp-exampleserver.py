@@ -9,15 +9,18 @@
 """
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import logging
 import queue as Queue
 import sys
+
 from optparse import OptionParser
 
 import katcp
+
 from katcp.kattypes import Float, Int, Str, request, return_reply
+
 
 logging.basicConfig(level=logging.INFO,
                     stream=sys.stderr,

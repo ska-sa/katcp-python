@@ -8,7 +8,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import logging
 import sys
@@ -21,8 +21,8 @@ from functools import partial, wraps
 import tornado.ioloop
 import tornado.iostream
 import tornado.tcpclient
-from _thread import get_ident as get_thread_ident
 
+from _thread import get_ident as get_thread_ident
 from future.utils import with_metaclass
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
@@ -31,7 +31,7 @@ from tornado.util import ObjectDict
 from .core import (FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC, SEC_TS_KATCP_MAJOR,
                    AsyncEvent, DeviceMetaclass, KatcpClientDisconnected,
                    KatcpClientError, KatcpVersionError, LatencyTimer, Message,
-                   MessageParser, ProtocolFlags, until_later)
+                   MessageParser, ProtocolFlags, ensure_native_str, until_later)
 from .ioloop_manager import IOLoopManager
 
 # logging.basicConfig(level=logging.DEBUG)
@@ -266,10 +266,10 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
             return device_time
 
     def _next_id(self):
-        """Return the next available message id."""
+        """Return the next available message id as a byte string."""
         assert get_thread_ident() == self.ioloop_thread_id
         self._last_msg_id += 1
-        return str(self._last_msg_id)
+        return b"%d" % self._last_msg_id
 
     def preset_protocol_flags(self, protocol_flags):
         """Preset server protocol flags.
@@ -291,9 +291,10 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
         if len(msg.arguments) < 2:
             return
         # Store version information.
-        name = msg.arguments[0]
-        self.versions[name] = tuple(msg.arguments[1:])
-        if msg.arguments[0] == "katcp-protocol":
+        name = ensure_native_str(msg.arguments[0])
+        self.versions[name] = tuple(
+            ensure_native_str(arg) for arg in msg.arguments[1:])
+        if msg.arguments[0] == b"katcp-protocol":
             protocol_flags = ProtocolFlags.parse_version(msg.arguments[1])
             self._set_protocol_from_inform(protocol_flags, msg)
 
@@ -424,9 +425,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
 
         """
         assert get_thread_ident() == self.ioloop_thread_id
-        data = str(msg) + "\n"
-        # Convert unicode str to bytes before sending via sockets.
-        data = bytes(data, 'utf-8') if not isinstance(data, bytes) else data
+        data = bytes(msg) + b"\n"
 
         # Log all sent messages here so no one else has to.
         if self._logger.isEnabledFor(logging.DEBUG):
@@ -737,7 +736,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
                 break
             except Exception:
                 if self._stream:
-                    line = ''
+                    line = b''
                     self._logger.warn('Unhandled Exception while reading from {0}:'
                                       .format(self._bindaddr), exc_info=True)
                     # Prevent potential tight error loops from blocking ioloop
@@ -747,8 +746,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
                     self._logger.warn('self._stream object seems to have disappeared.')
                     break
             try:
-                line = line.decode('utf-8') if isinstance(line, bytes) else str(line)
-                line = line.replace("\r", "\n").split("\n")[0]
+                line = line.replace(b"\r", b"\n").split(b"\n")[0]
                 msg = self._parser.parse(line) if line else None
             except Exception:
                 e_type, e_value, trace = sys.exc_info()

@@ -9,7 +9,7 @@
 """
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import logging
 import sys
@@ -20,9 +20,11 @@ from optparse import OptionParser
 
 import katcp
 
+
 logging.basicConfig(level=logging.INFO,
                     stream=sys.stderr,
                     format="%(asctime)s - %(name)s - %(filename)s:%(lineno)s - %(levelname)s - %(message)s")
+
 
 class DeviceExampleClient(katcp.DeviceClient):
 

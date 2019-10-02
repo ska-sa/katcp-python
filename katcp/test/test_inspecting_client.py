@@ -3,7 +3,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import collections
 import gc
@@ -12,13 +12,13 @@ import time
 import unittest
 import weakref
 
-from builtins import object, range, str
-from concurrent.futures import Future
+from builtins import object, range
 
 import mock
 import tornado
 
 import katcp
+
 from katcp import Message, Sensor, inspecting_client
 from katcp.inspecting_client import InspectingClientAsync
 from katcp.testutils import (DeviceTestSensor, DeviceTestServer,

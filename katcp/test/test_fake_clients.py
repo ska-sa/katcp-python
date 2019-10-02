@@ -3,13 +3,11 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import copy
-import logging
-import unittest
 
-from builtins import object, str
+from builtins import object
 
 import tornado.gen
 import tornado.testing
@@ -20,6 +18,7 @@ from katcp.inspecting_client import InspectingClientAsync
 from katcp.kattypes import Float, Int, request, return_reply
 from katcp.resource import escape_name
 from katcp.testutils import SensorComparisonMixin
+
 
 class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                                 SensorComparisonMixin):

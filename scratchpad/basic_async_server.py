@@ -4,9 +4,7 @@
 from __future__ import absolute_import, division, print_function
 
 import random
-
 import signal
-import threading
 import time
 
 import tornado

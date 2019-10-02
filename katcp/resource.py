@@ -4,16 +4,17 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import abc
 import collections
 import logging
 import sys
+
 from builtins import object
 
 import tornado
-from future.moves.builtins import dict
+
 from future.utils import with_metaclass
 from past.builtins import basestring
 from tornado.concurrent import Future

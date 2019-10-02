@@ -3,7 +3,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import logging
 import unittest
@@ -15,7 +15,9 @@ import tornado.testing
 from katcp import Sensor, resource
 from katcp.testutils import TimewarpAsyncTestCase
 
+
 logger = logging.getLogger(__name__)
+
 
 class test_escape_name(unittest.TestCase):
     def test_escape_name(self):

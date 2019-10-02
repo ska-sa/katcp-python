@@ -7,9 +7,8 @@
 """Test utils for katcp package tests."""
 
 from __future__ import absolute_import, division, print_function
-import future
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import functools
 import logging
@@ -18,7 +17,7 @@ import re
 import threading
 import time
 
-from builtins import next, object, str, zip
+from builtins import next, object, zip
 from concurrent.futures import Future, TimeoutError
 
 import mock
@@ -31,10 +30,10 @@ from tornado.concurrent import Future as tornado_Future
 
 from katcp import client
 
-from .core import (AsyncEvent, AsyncReply, AttrDict, Message, ProtocolFlags,
+from .core import (AsyncEvent, AsyncReply, Message, ProtocolFlags,
                    Sensor, steal_docstring_from)
-from .kattypes import (Float, Int, Str, concurrent_reply, request,
-                       request_timeout_hint, return_reply)
+from .kattypes import (Bool, Discrete, Float, Int, Str, concurrent_reply,
+                       request, request_timeout_hint, return_reply)
 from .object_proxies import ObjectWrapper
 from .server import ClientConnection, DeviceServer, FailReply
 
@@ -207,7 +206,6 @@ class BlockingTestClient(client.BlockingClient):
     @client.make_threadsafe
     def raw_send(self, chunk):
         """Send a raw chunk of data to the server."""
-        chunk = bytes(chunk) if future.utils.PY2 else bytes(chunk, 'utf-8')
         self._stream.write(chunk)
 
     def _sensor_lag(self):
@@ -216,13 +214,13 @@ class BlockingTestClient(client.BlockingClient):
 
     def handle_inform(self, msg):
         """Pass unhandled informs to message recorders."""
-        for append_msg in list(self._message_recorders.values()):
+        for append_msg in self._message_recorders.values():
             append_msg(msg)
         return super(BlockingTestClient, self).handle_inform(msg)
 
     def handle_reply(self, msg):
         """Pass unhandled replies to message recorders."""
-        for append_msg in list(self._message_recorders.values()):
+        for append_msg in self._message_recorders.values():
             append_msg(msg)
         return super(BlockingTestClient, self).handle_reply(msg)
 
@@ -336,7 +334,7 @@ class BlockingTestClient(client.BlockingClient):
             self.test.fail("Could not convert value %r of sensor '%s' to type "
                            "%s: %s" % (value, sensorname, typestr, e))
 
-        self.test.assertTrue(status in list(Sensor.STATUSES.values()),
+        self.test.assertTrue(status in Sensor.STATUSES.values(),
                              "Got invalid status value %r for sensor '%s'."
                              % (status, sensorname))
 
@@ -1058,6 +1056,27 @@ class DeviceTestServer(DeviceServer):
             fut.set_result(None)
         return req.make_reply('ok')
 
+    @request(Str(), Float(), Int(), Bool())
+    @return_reply(Str(), Float(), Int(), Bool())
+    def request_decorated(self, req, stringy, floaty, inty, do_raise):
+        """Decorated handler, return params, optionally raise exception."""
+        if do_raise:
+            raise Exception("An exception occurred!")
+        else:
+            req.inform("stringy", str(type(stringy)))
+            req.inform("floaty", str(type(floaty)))
+            req.inform("inty", str(type(inty)))
+            req.inform("do_raise", str(type(do_raise)))
+            return "ok", stringy, floaty, inty, do_raise
+
+    @return_reply()
+    def request_decorated_return_exception(self, req, msg):
+        """Decorated handler, return fail with exception object."""
+        try:
+            raise Exception("An exception occurred!")
+        except Exception as e:
+            return "fail", e
+
     def handle_message(self, req, msg):
         self.__msgs.append(msg)
         self._check_cnt_futures()
@@ -1094,7 +1113,7 @@ class DeviceTestServer(DeviceServer):
 
     def stop(self, *args, **kwargs):
         # Make sure a slow command with long timeout does not hold us up.
-        for fut in list(self._slow_futures.values()):
+        for fut in self._slow_futures.values():
             if not fut.done:
                 fut.set_result(None)
         super(DeviceTestServer, self).stop(*args, **kwargs)
@@ -1154,7 +1173,7 @@ class DeviceTestServerWithTimeoutHints(DeviceTestServer):
         """Return timeout hints for requests"""
         hints = ({name: self.request_timeout_hints.get(name, 0)} if name
                  else self.request_timeout_hints)
-        for req_name, timeout_hint in list(hints.items()):
+        for req_name, timeout_hint in hints.items():
             req.inform(req_name, timeout_hint)
         return ('ok', len(hints))
 
@@ -1281,7 +1300,7 @@ class SensorComparisonMixin(object):
         # Build description of the actual sensors in the same format
         # as desired_description
         actual_description_dict = {}
-        for name, desired_info in list(desired_description_dict.items()):
+        for name, desired_info in desired_description_dict.items():
             actual_description_dict[name] = self._get_sensor_description(
                 actual_sensor_dict[name], list(desired_info.keys()))
 
@@ -1303,9 +1322,9 @@ class SensorComparisonMixin(object):
         actual_sensor_dict = dict((s.name, s) for s in actual_sensors)
         # Check that all the requested sensors are present
         self.assertTrue(all(name in actual_sensor_dict
-                             for name in list(value_tests.keys())))
+                             for name in value_tests.keys()))
 
-        for name, test in list(value_tests.items()):
+        for name, test in value_tests.items():
             test(actual_sensor_dict[name].value())
 
 

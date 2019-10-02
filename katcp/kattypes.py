@@ -9,7 +9,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import inspect
 import itertools
@@ -19,6 +19,8 @@ import struct
 
 from builtins import object
 from functools import partial, update_wrapper, wraps
+
+import future
 
 from tornado import gen
 
@@ -103,8 +105,8 @@ class KatcpType(object):
 
         Returns
         -------
-        packed_value : str
-            The unescaped KATCP string representing the value.
+        packed_value : bytes
+            The unescaped KATCP byte string representing the value.
 
         """
         if value is None:
@@ -120,8 +122,8 @@ class KatcpType(object):
 
         Parameters
         ----------
-        packed_value : str
-            The unescaped KATCP string to parse into a value.
+        packed_value : bytes
+            The unescaped KATCP byte string to parse into a value.
         major : int, optional
             Major version of KATCP to use when interpreting types.
             Defaults to latest implemented KATCP version.
@@ -158,12 +160,12 @@ class Int(KatcpType):
 
     name = "integer"
 
-    encode = lambda self, value, major: "%d" % (value,)
+    encode = lambda self, value, major: b"%d" % (value,)
 
     def decode(self, value, major):
         try:
             return int(value)
-        except:
+        except Exception:
             raise ValueError("Could not parse value '%s' as integer." % value)
 
     def __init__(self, min=None, max=None, **kwargs):
@@ -198,7 +200,7 @@ class Float(KatcpType):
     """
 
     name = "float"
-    encode = lambda self, value, major: "%.15g" % (value,)
+    encode = lambda self, value, major: b"%.15g" % (value,)
 
     def decode(self, value, major):
         try:
@@ -230,22 +232,52 @@ class Bool(KatcpType):
 
     name = "boolean"
 
-    encode = lambda self, value, major: value and "1" or "0"
+    encode = lambda self, value, major: value and b"1" or b"0"
 
     def decode(self, value, major):
-        if value not in ("0", "1"):
-            raise ValueError("Boolean value must be '0' or '1' but is '%s'."
+        if value not in (b"0", b"1"):
+            raise ValueError("Boolean value must be b'0' or b'1' but is '%s'."
                              % (value,))
-        return value == "1"
+        return value == b"1"
 
 
 class Str(KatcpType):
-    """The KATCP string type."""
+    """The KATCP string type.
+
+    Note
+    ----
+
+    The behaviour of this type is subtly different between Python verions in
+    order to ease the porting effort for users of this library.
+    - Unpacked (decoded) values are native strings (bytes in PY2, unicode in PY3).
+    - Packed (encoded) values are always byte strings (in both PY2 and PY3), as
+      this is what is sent on the wire.
+
+    UTF-8 encoding is used when converting between unicode and byte strings.
+    Thus ASCII values are fine, but arbitrary strings of bytes are not safe to
+    use, and may raise an exception.
+
+    For convenience, non-text types can be encoded.  The object it is converted
+    to a string, and then to bytes.  This is a one-way operation - when that byte
+    string is decoded the original type will not be recovered.
+
+    """
 
     name = "string"
 
-    encode = lambda self, value, major: value
-    decode = lambda self, value, major: value
+    def encode(self, value, major):
+        if future.utils.isbytes(value):
+            return value
+        elif future.utils.istext(value):
+            return value.encode('utf-8')
+        else:
+            return str(value).encode('utf-8')
+
+    def decode(self, value, major):
+        if future.utils.PY2:
+            return value
+        else:
+            return value.decode('utf-8')
 
 
 class Discrete(Str):
@@ -299,8 +331,8 @@ class Lru(KatcpType):
 
     ## @brief Mapping from LRU value constant to LRU value name.
     LRU_VALUES = {
-        LRU_NOMINAL: "nominal",
-        LRU_ERROR: "error",
+        LRU_NOMINAL: b"nominal",
+        LRU_ERROR: b"error",
     }
 
     # LRU_VALUES not found by pylint
@@ -333,8 +365,8 @@ class Address(KatcpType):
 
     NULL = ("0.0.0.0", None)  # null address for use as an initial value
 
-    IPV4_RE = re.compile(r"^(?P<host>[^:]*)(:(?P<port>\d+))?$")
-    IPV6_RE = re.compile(r"^\[(?P<host>[^[]*)\](:(?P<port>\d+))?$")
+    IPV4_RE = re.compile(br"^(?P<host>[^:]*)(:(?P<port>\d+))?$")
+    IPV6_RE = re.compile(br"^\[(?P<host>[^[]*)\](:(?P<port>\d+))?$")
 
     def encode(self, value, major):
         try:
@@ -342,13 +374,14 @@ class Address(KatcpType):
         except (ValueError, TypeError):
             raise ValueError("Could not extract host and port from value %r" %
                              (value,))
-        if ':' in host:
+        host = host.encode('ascii')
+        if b':' in host:
             # IPv6
-            host = "[%s]" % host
-        return "%s:%s" % (host, port) if port is not None else host
+            host = b"[%s]" % host
+        return b"%s:%d" % (host, port) if port is not None else host
 
     def decode(self, value, major):
-        if value.startswith("["):
+        if value.startswith(b"["):
             match = self.IPV6_RE.match(value)
         else:
             match = self.IPV4_RE.match(value)
@@ -357,7 +390,10 @@ class Address(KatcpType):
         port = match.group('port')
         if port is not None:
             port = int(port)
-        return match.group('host'), port
+        host = match.group('host')
+        if not future.utils.PY2:
+            host = host.decode('ascii')
+        return host, port
 
 
 class Timestamp(KatcpType):
@@ -370,10 +406,10 @@ class Timestamp(KatcpType):
     def encode(self, value, major):
         if major >= SEC_TS_KATCP_MAJOR:
             # In seconds, please!
-            return "%.6f" % float(value)
+            return b"%.6f" % float(value)
         else:
             # In milliseconds please!
-            return "%i" % int(float(value) * SEC_TO_MS_FAC)
+            return b"%i" % int(float(value) * SEC_TO_MS_FAC)
 
     def decode(self, value, major):
         try:
@@ -402,11 +438,11 @@ class TimestampOrNow(Timestamp):
 
     def encode(self, value, major):
         if value is self.NOW:
-            return "now"
+            return b"now"
         return super(TimestampOrNow, self).encode(value, major)
 
     def decode(self, value, major):
-        if value == "now":
+        if value == b"now":
             return self.NOW
         return super(TimestampOrNow, self).decode(value, major)
 
@@ -418,7 +454,7 @@ class StrictTimestamp(KatcpType):
 
     def encode(self, value, major):
         try:
-            return "%.15g" % value
+            return b"%.15g" % value
         except:
             raise ValueError("Could not encode value %r as strict timestamp." %
                              value)
@@ -426,7 +462,7 @@ class StrictTimestamp(KatcpType):
     def decode(self, value, major):
         try:
             # Presumably these parts are only used to trigger an exception
-            parts = value.split(".", 1)
+            parts = value.split(b".", 1)
             _int_parts = [int(x) for x in parts]
             return float(value)
         except:
@@ -528,12 +564,14 @@ class DiscreteMulti(Discrete):
     name = "discretemulti"
 
     def encode(self, value, major):
-        return self.separator.join(sorted(value, key=str.lower))
+        joined_values = self.separator.join(sorted(value, key=str.lower))
+        return super(DiscreteMulti, self).encode(joined_values, major)
 
     def decode(self, value, major):
-        if self.all_keyword and value == self.all_keyword:
+        joined_values = super(DiscreteMulti, self).decode(value, major)
+        if self.all_keyword and joined_values == self.all_keyword:
             return sorted(list(self._valid_values), key=str.lower)
-        return sorted([v.strip() for v in value.split(self.separator)],
+        return sorted([v.strip() for v in joined_values.split(self.separator)],
                       key=str.lower)
 
     def __init__(self, values, all_keyword="all", separator=",", **kwargs):
@@ -1105,7 +1143,7 @@ def unpack_types(types, args, argnames, major):
 
     if len(args) < len(types):
         # if len(args) < len(types) this passes in None for missing args
-        repeat_val = abs(len(types) - len(args))
+        repeat_val = len(types) - len(args)
         args += list(itertools.repeat(None, repeat_val))
 
     return list(map(lambda param, arg: param.unpack(arg), params, args))
@@ -1134,10 +1172,10 @@ def pack_types(types, args, major):
 
     if len(args) < len(types):
         # this passes in None for missing args
-        repeat_val = abs(len(types) - len(args))
+        repeat_val = len(types) - len(args)
         args = tuple(list(args) + list(itertools.repeat(None, repeat_val)))
         retvals = list(map(lambda ktype, arg: ktype.pack(arg, major=major),
-                      types, args))
+                           types, args))
     else:
         retvals = [ktype.pack(arg, major=major)
                    for ktype, arg in zip(types, args)]

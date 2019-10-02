@@ -2,7 +2,7 @@
 # BSD license - see LICENSE for details
 from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
+standard_library.install_aliases()  # noqa: E402
 
 import logging
 import sys
@@ -15,13 +15,16 @@ from concurrent.futures import Future, TimeoutError
 from functools import wraps
 
 import tornado.ioloop
+
 from _thread import get_ident as get_thread_ident
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 
 from katcp.object_proxies import ObjectWrapper
 
+
 log = logging.getLogger(__name__)
+
 
 def with_relative_timeout(timeout, future, io_loop=None):
     return gen.with_timeout(timeout + time.time(), future, io_loop)
