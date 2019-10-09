@@ -306,12 +306,12 @@ class Message(object):
 
     def format_argument(self, arg):
         """Format a Message argument to a byte string"""
-        if isinstance(arg, numbers.Integral):
-            return str(int(arg)).encode('ascii')
-        elif isinstance(arg, numbers.Real):
-            return repr(float(arg)).encode('ascii')
-        elif isinstance(arg, bool):
+        if isinstance(arg, bool):
             return b'1' if arg else b'0'
+        elif isinstance(arg, int):
+            return b'%d' % arg
+        elif isinstance(arg, float):
+            return repr(arg).encode('ascii')
         elif future.utils.isbytes(arg):
             return arg
         else:
