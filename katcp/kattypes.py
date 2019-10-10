@@ -1111,15 +1111,19 @@ def unpack_types(types, args, argnames, major):
 
     Parameters
     ----------
-    types : list of kattypes
+    types : list or tuple of kattypes
         The types of the arguments (in order).
-    args : list of strings
+    args : list or tuple of strings
         The arguments to parse.
-    argnames : list of strings
+    argnames : list or tuple of strings
         The names of the arguments.
     major : integer
         Major version of KATCP to use when packing types
 
+    Returns
+    -------
+    unpacked_args : list
+        List of args after unpacking to kattype objects
     """
     if len(types) > 0:
         multiple = types[-1]._multiple
@@ -1144,6 +1148,7 @@ def unpack_types(types, args, argnames, major):
     if len(args) < len(types):
         # if len(args) < len(types) this passes in None for missing args
         repeat_val = len(types) - len(args)
+        args = list(args)
         args += list(itertools.repeat(None, repeat_val))
 
     return list(map(lambda param, arg: param.unpack(arg), params, args))
@@ -1154,13 +1159,17 @@ def pack_types(types, args, major):
 
     Parameters
     ----------
-    types : list of kattypes
+    types : list or tuple of kattypes
         The types of the arguments (in order).
-    args : list of objects
+    args : list or tuple of objects
         The arguments to format.
     major : integer
         Major version of KATCP to use when packing types
 
+    Returns
+    -------
+    packed_args : list
+        List of args after packing to byte strings
     """
     if len(types) > 0:
         multiple = types[-1]._multiple

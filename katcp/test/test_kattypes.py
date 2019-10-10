@@ -19,10 +19,11 @@ import future
 import mock
 
 from katcp import AsyncReply, FailReply, Message
+from katcp.core import DEFAULT_KATCP_MAJOR
 from katcp.kattypes import (Address, Bool, Discrete, DiscreteMulti, Float, Int,
                             Lru, Regex, Str, StrictTimestamp, Struct,
-                            Timestamp, TimestampOrNow, inform, request,
-                            return_reply, send_reply)
+                            Timestamp, TimestampOrNow, inform, pack_types,
+                            request, return_reply, send_reply, unpack_types)
 
 MS_TO_SEC_FAC = 1/1000.
 SEC_TO_MS_FAC = 1000
@@ -737,3 +738,78 @@ class TestDecorator(unittest.TestCase):
         else:
             expected = "Error in parameter 3 (): Could not parse value 'b'abc'' as float."
         self.assertEqual(str(ex.exception), expected)
+
+
+class TestPackTyeps(unittest.TestCase):
+
+    def check_packing(self, types, args, expected):
+        list_packed = pack_types(list(types), list(args), DEFAULT_KATCP_MAJOR)
+        tuple_packed = pack_types(tuple(types), tuple(args), DEFAULT_KATCP_MAJOR)
+        self.assertEqual(list_packed, expected)
+        self.assertEqual(tuple_packed, expected)
+
+    def test_pack_types_empty(self):
+        expected = []
+        self.check_packing([], [], expected)
+
+    def test_pack_types_single(self):
+        expected = [b'one']
+        self.check_packing([Str()], ['one'], expected)
+
+    def test_pack_types_many_without_multiple(self):
+        expected = [b'one', b'2']
+        self.check_packing([Str(), Int()], ['one', 2], expected)
+
+    def test_pack_types_many_with_multiple(self):
+        expected = [b'one', b'2', b'3']
+        self.check_packing([Str(), Int(multiple=True)], ['one', 2, 3], expected)
+
+    def test_pack_types_more_types_than_args(self):
+        expected = [b'one', b'2', b'1', b'four']
+        self.check_packing(
+            [Str(), Int(), Bool(default=True), Str(default='four')],
+            ['one', 2],
+            expected)
+
+    def test_pack_types_more_args_than_types_fails(self):
+        with self.assertRaises(ValueError):
+            self.check_packing([], ['one'], [])
+
+
+class TestUnpackTypes(unittest.TestCase):
+
+    def check_unpacking(self, types, args, expected):
+        arg_names = ['arg'] * len(args)  # names don't matter
+        list_unpacked = unpack_types(
+            list(types), list(args), arg_names, DEFAULT_KATCP_MAJOR)
+        tuple_unpacked = unpack_types(
+            tuple(types), tuple(args), tuple(arg_names), DEFAULT_KATCP_MAJOR)
+        self.assertEqual(list_unpacked, expected)
+        self.assertEqual(tuple_unpacked, expected)
+
+    def test_unpack_types_empty(self):
+        expected = []
+        self.check_unpacking([], [], expected)
+
+    def test_unpack_types_single(self):
+        expected = ['one']
+        self.check_unpacking([Str()], [b'one'], expected)
+
+    def test_unpack_types_many_without_multiple(self):
+        expected = ['one', 2]
+        self.check_unpacking([Str(), Int()], [b'one', b'2'], expected)
+
+    def test_unpack_types_many_with_multiple(self):
+        expected = ['one', 2, 3]
+        self.check_unpacking([Str(), Int(multiple=True)], [b'one', b'2', b'3'], expected)
+
+    def test_unpack_types_more_types_than_args(self):
+        expected = ['one', 2, True, None]
+        self.check_unpacking(
+            [Str(), Int(), Bool(default=True), Str(optional=True)],
+            [b'one', b'2'],
+            expected)
+
+    def test_unpack_types_more_args_than_types_fails(self):
+        with self.assertRaises(FailReply):
+            self.check_unpacking([], ['one'], [])
