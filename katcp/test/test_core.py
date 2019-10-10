@@ -772,9 +772,15 @@ class TestUntilSome(tornado.testing.AsyncTestCase):
             yield until_some(done_at_least=2, timeout=0.05, **futures)
         f2.set_result(42)
         results = yield until_some(done_at_least=1, timeout=0.5, **futures)
-        self.assertEqual(dict(results), {'f1': 24},
-                         'Results differ for until_some (1 kwarg future)')
+        # both f1 and f2 are ready, but kwargs dict makes order unpredictable
+        self.assertEqual(len(results), 1)
+        options = {'f1': 24, 'f2': 42}
+        self.assertDictContainsSubset(dict(results), options,
+                                      'Results differ for until_some (1 kwarg future)')
         f3.set_result(84)
         results = yield until_some(done_at_least=2, timeout=0.1, **futures)
-        self.assertEqual(dict(results), {'f1': 24, 'f2': 42},
-                         'Results differ for until_some (2 kwarg futures)')
+        # similar to above, any 2 of the 3 kwarg futures could be returned
+        self.assertEqual(len(results), 2)
+        options = {'f1': 24, 'f2': 42, 'f3': 84}
+        self.assertDictContainsSubset(dict(results), options,
+                                      'Results differ for until_some (2 kwarg futures)')
