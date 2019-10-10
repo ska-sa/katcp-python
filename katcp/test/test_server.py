@@ -530,7 +530,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         t0 = time.time()
         # Request should not have taken a very long time.
         self.client.assert_request_succeeds('help', informs_count=NUM_HELP_MESSAGES)
-        self.assertTrue(time.time() - t0 < 1)
+        self.assertTrue(time.time() - t0 < 1.5)
 
 
     def test_server_ignores_informs_and_replies(self):
