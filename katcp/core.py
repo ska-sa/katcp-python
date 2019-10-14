@@ -1412,12 +1412,12 @@ class Sensor(object):
 
         Parameters
         ----------
-        timestamp : bytes
-            KATCP formatted timestamp string
-        status : bytes
-            KATCP formatted sensor status string
-        value : bytes
-            KATCP formatted sensor value
+        raw_timestamp : bytes
+            KATCP formatted timestamp byte string
+        raw_status : bytes
+            KATCP formatted sensor status byte string
+        raw_value : bytes
+            KATCP formatted sensor value byte string
         major : int, default = 5
             KATCP major version to use for interpreting the raw values
 

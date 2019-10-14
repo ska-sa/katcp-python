@@ -3,6 +3,132 @@
 *************
 Release Notes
 *************
+0.7.x
+=====
+* Add Python 3 compatibility.
+
+See also :download:`CHANGELOG` for more details on changes.
+
+Important changes for Python 3 compatibility
+-------------------------------------------
+
+General notes
+^^^^^^^^^^^^^
+
+The package is now compatible with both Python 2 and 3.  The goals of the
+migration were:
+* Do not change the public API.
+* Do not break existing functionality for Python 2.
+* Ease migration of packages using katcp to Python 3.
+
+Despite these goals, some of the stricter type checking that has been added
+may force minor updates in existing code.  E.g., using integer for the options
+of a discrete sensor is no longer allowed.
+
+Asynchronous code is still using `tornado in the same Python 2 way.  The new
+Python 3.5 ``async`` and ``await`` keywords are not used.  The tornado version
+is also pinned to an old version that supports both Python 2 and 3.
+
+The Python ``future`` package was used for the compatibility layer.  The use of
+the ``newstr`` and ``newbytes`` compatibility types was avoided, to reduce
+confusion.  I.e., ``from builtins import str, bytes`` is not done.
+
+Docstrings
+^^^^^^^^^^
+
+In docstrings the interpretation of parameter and return types described
+as "str" has changed slightly.  In Python 2 the ``str`` type is a byte
+string, while in Python 3, ``str`` is a unicode string.  The ``str`` type
+is referred to as the "native" string type.  In code, native literal strings
+would have no prefix, for example: ``"native string"``.  As opposed to
+explicit byte strings, ``b"byte string"``, and explicit unicode strings,
+``u"unicode string"``.  In the docstrings "bytes" means a byte string is
+expected (or returned), "str" means a native string, and "str or bytes"
+means either type.
+
+Changes to types
+^^^^^^^^^^^^^^^^
+
+As part of the Python 3 compatibility update, note the following:
+
+- :class:`katcp.Message`.
+  - ``arguments`` and ``mid`` attributes will be forced to byte strings in all
+      Python versions.  This is to match what is sent on the wire (serialised
+      byte stream).
+  - ``name``:  is expected to be a native string.
+  - `repr()``:  the result will differ slightly in Python 3 - the arguments
+     will be shown as quoted byte strings. E.g., Python 2: `"<Message reply ok
+     (123, zzz)>"`, vs. Python 3:  `"<Message reply ok (b'123', b'zzz')>"`.
+     In all versions, arguments longer than 1000 characters are now truncated.
+- :class:`katcp.Sensor`.
+  - ``name``, ``description``, ``units``, ``params`` (for discrete sensors):
+    ``__init__`` can take byte strings or native strings, but attributes will
+    be coerced to native strings.
+  - ``set_formatted``, ``parse_value``:  only accept byte strings (stricter
+    checking).
+
+Non-ASCII and UTF-8
+^^^^^^^^^^^^^^^^^^^
+
+Prior to these changes, all strings were byte strings, so there was no encoding
+required.  Arbitrary bytes could be used for message parameters and string
+sensor values.  After these changes, strings sensors and ``Str`` types are
+considered "text".  In Python 3, UTF-8 encoding will be used when changing
+between byte strings and unicode strings for "text".  This has the following
+effects:
+
+- :class:`katcp.Message`
+  - the ``arguments`` are always using byte strings, so arbitrary bytes can
+    still be sent and received using this class directly.
+- :class:`katcp.Sensor``
+   - Values for ``string`` and ``discrete`` sensor types cannot be arbitrary
+     byte strings in Python 3 - they need to be UTF-8 compatible.
+- :class:`kattypes.Str`, :class:`kattypes.Discrete`, :class:`kattypes.DiscreteMulti`
+   - These types is still used in ``request`` and ``reply`` decorators.
+   - For sending messages, they accept any type of object, but UTF-8 encoding
+     is used if value are not already byte strings.
+   - When decoding received messages, "native" strings are returned.
+
+Keep in mind that a Python 2 server may be communicating with a Python 3
+client, so sticking to ASCII is safest.  If you are sure both client and
+server are on Python 3 (or understand the encoding the same), then UTF-8
+could be used.  That is also the encoding option used by
+https://github.com/ska-sa/aiokatcp.
+
+Performance degradation
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Adding the compatibility results in more checks and conversions.  From some
+basic benchmarking, there appears to be up to 20% performance degradation
+when instantiating message objects.
+
+Benchmark, in ipython::
+
+    import random, katcp
+
+    args_groups = []
+    for i in range(1000):
+        args_groups.append((random.randint(0, 1) == 1,
+                            random.randint(0, 1000),
+                            random.random(),
+                            str(random.random())))
+
+    def benchmark():
+        for args in args_groups:
+            tx_msg = katcp.Message.reply('foo', *args)
+            serialised = bytes(tx_msg)
+            parser = katcp.MessageParser()
+            rx_msg = parser.parse(serialised)
+            assert tx_msg == rx_msg
+
+
+    %timeit benchmark()
+
+* Old Py2:  10 loops, best of 3: 23.4 ms per loop
+* New Py2:  10 loops, best of 3: 28 ms per loop
+* New Py3:  25.2 ms ± 424 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
+
+
 0.6.4
 =====
 * Fix some client memory leaks, and add `until_stopped` methods.
