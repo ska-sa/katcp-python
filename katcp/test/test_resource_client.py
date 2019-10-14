@@ -298,7 +298,8 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         # Now get all the sensors
         result = yield DUT.list_sensors('')
         # built-in `sorted()` uses __cmp__ to sort out the order in Python2.
-        # However, this breaks compatibility on Python3 due to https://docs.python.org/3/whatsnew/3.0.html#ordering-comparisons
+        # However, this breaks compatibility on Python3 due to
+        # https://docs.python.org/3/whatsnew/3.0.html#ordering-comparisons
         result = sorted(result, key=lambda obj: obj.name)
         expected_result = sorted([
             resource.SensorResultTuple(

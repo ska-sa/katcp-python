@@ -1,5 +1,6 @@
 # Python droppings
 *.py[cod]
+__pycache__
 
 # Packages
 build

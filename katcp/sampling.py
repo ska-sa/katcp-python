@@ -78,7 +78,7 @@ class SampleStrategy(object):
     """
 
     # Sampling strategy constants
-    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL, EVENT_RATE, DIFFERENTIAL_RATE = list(range(7))
+    NONE, AUTO, PERIOD, EVENT, DIFFERENTIAL, EVENT_RATE, DIFFERENTIAL_RATE = range(7)
 
     ## @brief Mapping from strategy constant to strategy name.
     SAMPLING_LOOKUP = {

@@ -160,7 +160,7 @@ class test_FakeKATCPClientResourceContainer(tornado.testing.AsyncTestCase):
         # FakeInspectingClientManager implements more requests.
         standard_requests = ('help', 'sensor_list')
         controlled_clients = [
-            escape_name(c_name) for c_name, c in list(self.resources_spec['clients'].items())
+            escape_name(c_name) for c_name, c in self.resources_spec['clients'].items()
             if c.get('controlled')]
         desired_requests = sorted(
             escape_name(c)+'_'+r for c in controlled_clients for r in standard_requests)

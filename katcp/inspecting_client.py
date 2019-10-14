@@ -371,7 +371,7 @@ class InspectingClientAsync(object):
             yield maybe_timeout(self.katcp_client.until_running())
             self._logger.debug('Katcp client running')
         except Exception as err:
-            self._logger.error("Failed to start katcp_client: %s", str(err))
+            self._logger.error("Failed to start katcp_client: %s", err)
             self.katcp_client.stop()
             raise
 
@@ -547,7 +547,7 @@ class InspectingClientAsync(object):
             index[name] = data
         else:
             orig_data = index[name]
-            for key, value in list(data.items()):
+            for key, value in data.items():
                 if orig_data.get(key) != value:
                     orig_data[key] = value
                     orig_data['_changed'] = True

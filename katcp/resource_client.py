@@ -1060,7 +1060,7 @@ class GroupResults(dict):
         return all(self.values())
 
     # MM Investigate this
-    # Was not handled automatrically by futurize, see
+    # Was not handled automatically by futurize, see
     # https://github.com/PythonCharmers/python-future/issues/282
     if sys.version_info[0] == 2:
         __nonzero__ = __bool__
@@ -1250,7 +1250,7 @@ class ClientGroup(object):
             def __bool__(self):
                 return sum(self.values()) >= quorum
             # MM investigate this
-            # Was not handled automatrically by futurize, see
+            # Was not handled automatically by futurize, see
             # https://github.com/PythonCharmers/python-future/issues/282
             if sys.version_info[0] == 2:
                 __nonzero__ = __bool__

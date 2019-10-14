@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Copyright 2008 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
@@ -30,7 +31,7 @@ setup(
     packages=find_packages(),
     scripts=["scripts/katcp-exampleserver.py", "scripts/katcp-exampleclient.py"],
     url="https://github.com/ska-sa/katcp-python",
-    download_url="http://pypi.python.org/pypi/katcp",
+    download_url="https://pypi.org/project/katcp/",
     license="BSD",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -41,8 +42,6 @@ setup(
         "Programming Language :: Python :: 2",
         "Programming Language :: Python :: 2.7",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.3",
-        "Programming Language :: Python :: 3.4",
         "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
