@@ -17,6 +17,7 @@ from functools import partial
 
 import tornado
 from future.moves.builtins import dict
+from future.utils import PY2
 
 from tornado.concurrent import Future as tornado_Future
 from tornado.gen import Return, maybe_future, with_timeout
@@ -1062,7 +1063,7 @@ class GroupResults(dict):
     # MM Investigate this
     # Was not handled automatically by futurize, see
     # https://github.com/PythonCharmers/python-future/issues/282
-    if sys.version_info[0] == 2:
+    if PY2:
         __nonzero__ = __bool__
 
     @property
@@ -1252,7 +1253,7 @@ class ClientGroup(object):
             # MM investigate this
             # Was not handled automatically by futurize, see
             # https://github.com/PythonCharmers/python-future/issues/282
-            if sys.version_info[0] == 2:
+            if PY2:
                 __nonzero__ = __bool__
         raise tornado.gen.Return(TestableDict(results))
 
