@@ -4,8 +4,7 @@
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
 # BSD license - see LICENSE for details
 
-"""Utilities for dealing with KATCP types.
-   """
+"""Utilities for dealing with KATCP types."""
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
@@ -53,7 +52,6 @@ class KatcpType(object):
     multiple : boolean, optional
         Whether multiple values of this type are expected. Must be the
         last type parameter if this is True.
-
     """
 
     name = "unknown"
@@ -73,7 +71,6 @@ class KatcpType(object):
         -------
         default : object
             The default value.
-
         """
         if self._default is None and not self._optional:
             raise ValueError("No value or default given")
@@ -85,7 +82,6 @@ class KatcpType(object):
         Do nothing if the value is valid. Raise an exception if the value is not
         valid. Parameter major describes the KATCP major version to use when
         interpreting the validity of a value.
-
         """
         pass
 
@@ -107,7 +103,6 @@ class KatcpType(object):
         -------
         packed_value : bytes
             The unescaped KATCP byte string representing the value.
-
         """
         if value is None:
             value = self.get_default()
@@ -132,7 +127,6 @@ class KatcpType(object):
         -------
         value : object
             The value the KATCP string represented.
-
         """
         if packed_value is None:
             value = self.get_default()
@@ -155,11 +149,8 @@ class Int(KatcpType):
         The minimum allowed value. Ignored if not given.
     max : int
         The maximum allowed value. Ignored if not given.
-
     """
-
     name = "integer"
-
     encode = lambda self, value, major: b"%d" % (value,)
 
     def decode(self, value, major):
@@ -177,7 +168,6 @@ class Int(KatcpType):
         """Check whether the value is between the minimum and maximum.
 
         Raise a ValueError if it is not.
-
         """
         if self._min is not None and value < self._min:
             raise ValueError("Integer %d is lower than minimum %d."
@@ -196,9 +186,7 @@ class Float(KatcpType):
         The minimum allowed value. Ignored if not given.
     max : float
         The maximum allowed value. Ignored if not given.
-
     """
-
     name = "float"
     encode = lambda self, value, major: b"%.15g" % (value,)
 
@@ -217,7 +205,6 @@ class Float(KatcpType):
         """Check whether the value is between the minimum and maximum.
 
         Raise a ValueError if it is not.
-
         """
         if self._min is not None and value < self._min:
             raise ValueError("Float %g is lower than minimum %g."
@@ -229,9 +216,7 @@ class Float(KatcpType):
 
 class Bool(KatcpType):
     """The KATCP boolean type."""
-
     name = "boolean"
-
     encode = lambda self, value, major: value and b"1" or b"0"
 
     def decode(self, value, major):
@@ -247,22 +232,20 @@ class Str(KatcpType):
     Note
     ----
 
-    The behaviour of this type is subtly different between Python verions in
+    The behavior of this type is subtly different between Python versions in
     order to ease the porting effort for users of this library.
-    - Unpacked (decoded) values are native strings (bytes in PY2, unicode in PY3).
+    - Unpacked (decoded) values are native strings (bytes in PY2, Unicode in PY3).
     - Packed (encoded) values are always byte strings (in both PY2 and PY3), as
       this is what is sent on the wire.
 
-    UTF-8 encoding is used when converting between unicode and byte strings.
+    UTF-8 encoding is used when converting between Unicode and byte strings.
     Thus ASCII values are fine, but arbitrary strings of bytes are not safe to
     use, and may raise an exception.
 
     For convenience, non-text types can be encoded.  The object is converted
     to a string, and then to bytes.  This is a one-way operation - when that byte
     string is decoded the original type will not be recovered.
-
     """
-
     name = "string"
 
     def encode(self, value, major):
@@ -289,9 +272,7 @@ class Discrete(Str):
         List of the values the discrete type may accept.
     case_insensitive : bool
         Whether case-insensitive value matching should be used.
-
     """
-
     name = "discrete"
 
     def __init__(self, values, case_insensitive=False, **kwargs):
@@ -307,7 +288,6 @@ class Discrete(Str):
         """Check whether the value in the set of allowed values.
 
         Raise a ValueError if it is not.
-
         """
         if self._case_insensitive:
             value = value.lower()
@@ -323,9 +303,7 @@ class Discrete(Str):
 
 class Lru(KatcpType):
     """The KATCP lru type"""
-
     name = "lru"
-
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = list(range(2))
 
@@ -358,9 +336,7 @@ class Address(KatcpType):
     .. note::
 
        The address type was added in katcp 0.4.
-
     """
-
     name = "address"
 
     NULL = ("0.0.0.0", None)  # null address for use as an initial value
@@ -398,7 +374,6 @@ class Address(KatcpType):
 
 class Timestamp(KatcpType):
     """The KATCP timestamp type."""
-
     name = "timestamp"
 
     # Use microsecond precision, which is about as much as you can expect with a
@@ -429,9 +404,7 @@ class TimestampOrNow(Timestamp):
     Floats are encoded as for :class:`katcp.kattypes.Timestamp`. The special
     value for now, :const:`katcp.kattypes.TimestampOrNow.NOW`, is encoded as
     the string "now".
-
     """
-
     name = "timestamp_or_now"
 
     NOW = object()
@@ -449,7 +422,6 @@ class TimestampOrNow(Timestamp):
 
 class StrictTimestamp(KatcpType):
     """A timestamp that enforces the XXXX.YYY format for timestamps."""
-
     name = "strict_timestamp"
 
     def encode(self, value, major):
@@ -487,9 +459,7 @@ class Struct(KatcpType):
     fmt : str
         Format to use for packing and unpacking values. It is passed directly
         into :func:`struct.pack` and :func:`struct.unpack`.
-
     """
-
     name = "struct"
 
     def __init__(self, fmt, **kwargs):
@@ -520,7 +490,6 @@ class Regex(Str):
         Regular expression that values should match.
 
     """
-
     name = "regex"
 
     _re_flags = [
@@ -558,9 +527,7 @@ class DiscreteMulti(Discrete):
         The string which represents the list of all allowed values.
     separator : str, optional
         The separator used in the packed value string.
-
     """
-
     name = "discretemulti"
 
     def encode(self, value, major):
@@ -598,7 +565,6 @@ class Parameter(object):
         The parameter's kattype
     major : integer
         Major version of KATCP to use when interpreting types
-
     """
 
     def __init__(self, position, name, kattype, major):
@@ -635,7 +601,6 @@ class Parameter(object):
         -------
         value : object
             The unpacked value.
-
         """
         # Wrap errors in FailReplies with information identifying the parameter
         try:
@@ -685,7 +650,6 @@ def request(*types, **options):
     ...         req.inform('Checking oddity of %d' % my_int)
     ...         return ("ok", my_int % 2)
     ...
-
     """
     include_msg = options.pop('include_msg', False)
     has_req = options.pop('has_req', True)
@@ -853,7 +817,6 @@ def return_reply(*types, **options):
     ...     def request_myreq(self, req, my_int):
     ...         return ("ok", my_int + 1, my_int * 2.0)
     ...
-
     """
     major = options.pop('major', DEFAULT_KATCP_MAJOR)
     if len(options) > 0:
@@ -929,7 +892,6 @@ def send_reply(*types, **options):
     ...     def my_callback(self, req):
     ...         return (req, "ok", 5, 2.0)
     ...
-
     """
     major = options.pop('major', DEFAULT_KATCP_MAJOR)
     if len(options) > 0:
@@ -961,7 +923,6 @@ def make_reply(msgname, types, arguments, major):
         The (unpacked) reply message parameters.
     major : integer
         Major version of KATCP to use when packing types
-
     """
     status = arguments[0]
     if status == "fail":
@@ -993,9 +954,7 @@ def concurrent_reply(handler):
     ...         result = yield self.slow_operation()
     ...         raise tornado.gen.Return((req, result))
     ...
-
     """
-
     handler._concurrent_reply = True
     return handler
 
@@ -1021,9 +980,7 @@ def minimum_katcp_version(major, minor=0):
     ...
     ...     PROTOCOL_INFO = katcp.core.ProtocolFlags(5, 0)
     ...
-
     """
-
     version_tuple = (major, minor)
     def decorator(handler):
         handler._minimum_katcp_version = version_tuple
