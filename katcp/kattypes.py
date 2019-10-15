@@ -257,7 +257,7 @@ class Str(KatcpType):
     Thus ASCII values are fine, but arbitrary strings of bytes are not safe to
     use, and may raise an exception.
 
-    For convenience, non-text types can be encoded.  The object it is converted
+    For convenience, non-text types can be encoded.  The object is converted
     to a string, and then to bytes.  This is a one-way operation - when that byte
     string is decoded the original type will not be recovered.
 
