@@ -6,7 +6,7 @@ from __future__ import absolute_import, division, print_function
 from tornado.util import ObjectDict
 
 from katcp import Sensor
-from tornado_io import *
+import tornado_io
 
 logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d)%(message)s",
