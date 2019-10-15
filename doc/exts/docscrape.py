@@ -2,12 +2,15 @@
 
 """
 from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
 import inspect
 import pydoc
 import re
 import textwrap
-from StringIO import StringIO
+
+from io import StringIO
 from warnings import warn
 
 class Reader(object):
