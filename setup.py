@@ -8,13 +8,15 @@ import os
 
 from setuptools import find_packages, setup
 
+
 this_directory = os.path.abspath(os.path.dirname(__file__))
 
 files = {"Readme": "README.md", "Changelog": "CHANGELOG.md"}
 
 long_description = ""
 for name, filename in files.items():
-    long_description += "## {}\n".format(name)
+    if not name == 'Readme':
+        long_description += "# {}\n".format(name)
     with open(os.path.join(this_directory, filename)) as _f:
         file_contents = _f.read()
     long_description += file_contents + "\n\n"
@@ -27,9 +29,7 @@ setup(
     long_description_content_type="text/markdown",
     author="MeerKAT CAM Team",
     author_email="cam@ska.ac.za",
-    include_package_data=True,
     packages=find_packages(),
-    scripts=["scripts/katcp-exampleserver.py", "scripts/katcp-exampleclient.py"],
     url="https://github.com/ska-sa/katcp-python",
     download_url="https://pypi.org/project/katcp/",
     license="BSD",
@@ -50,7 +50,7 @@ setup(
         "Topic :: Scientific/Engineering :: Astronomy",
     ],
     platforms=["OS Independent"],
-    python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, <4",
+    python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*",
     keywords="kat kat7 ska MeerKAT",
     setup_requires=["katversion"],
     use_katversion=True,
@@ -58,7 +58,7 @@ setup(
         "ply",
         "future",
         "futures; python_version<'3'",
-        "tornado==4.5.3",
+        "tornado>=4.5.3, <5",
     ],
     # install extras by running pip install .[doc,<another_extra>]
     extras_require={
