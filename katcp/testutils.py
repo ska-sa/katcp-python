@@ -1057,16 +1057,16 @@ class DeviceTestServer(DeviceServer):
 
     @request(Str(), Float(), Int(), Bool())
     @return_reply(Str(), Float(), Int(), Bool())
-    def request_decorated(self, req, stringy, floaty, inty, do_raise):
+    def request_decorated(self, req, _string, _float, _int, do_raise):
         """Decorated handler, return params, optionally raise exception."""
         if do_raise:
             raise Exception("An exception occurred!")
         else:
-            req.inform("stringy", str(type(stringy)))
-            req.inform("floaty", str(type(floaty)))
-            req.inform("inty", str(type(inty)))
+            req.inform("_string", str(type(_string)))
+            req.inform("_float", str(type(_float)))
+            req.inform("_int", str(type(_int)))
             req.inform("do_raise", str(type(do_raise)))
-            return "ok", stringy, floaty, inty, do_raise
+            return "ok", _string, _float, _int, do_raise
 
     @return_reply()
     def request_decorated_return_exception(self, req, msg):
@@ -1202,15 +1202,17 @@ class SensorComparisonMixin(object):
         """Return a dict description of a sensor and its values"""
 
         key_fns = self.key_fns
-        if desired_keys == None:
+        if desired_keys is None:
             desired_keys = set(key_fns.keys())
         else:
             desired_keys = set(desired_keys)
         desired_keys = desired_keys - set(ignore_keys)
 
         def get_sensor_key(sensor, key):
-            try: key_fn = key_fns[key]
-            except KeyError as e: raise KeyError('Unknown sensor key: ' + e.message)
+            try:
+                key_fn = key_fns[key]
+            except KeyError as e:
+                raise KeyError('Unknown sensor key: ' + e.message)
             return key_fn(sensor)
 
         sensor_description = {}

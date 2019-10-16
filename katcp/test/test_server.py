@@ -884,25 +884,25 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
     def test_decorated_handler(self):
         """Test handling with @request and @return_reply."""
 
-        stringy = "sss"
-        floaty = 1.5
-        inty = 78
+        _string = "sss"
+        _float = 1.5
+        _int = 78
 
         do_raise = False
         ok_msg = katcp.Message.request(
-            "decorated", stringy, floaty, inty, do_raise)
+            "decorated", _string, _float, _int, do_raise)
         reply, informs = self.client.blocking_request(ok_msg, use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
-            str(katcp.Message.inform("decorated", "stringy", type(stringy))),
-            str(katcp.Message.inform("decorated", "floaty", type(floaty))),
-            str(katcp.Message.inform("decorated", "inty", type(inty))),
+            str(katcp.Message.inform("decorated", "_string", type(_string))),
+            str(katcp.Message.inform("decorated", "_float", type(_float))),
+            str(katcp.Message.inform("decorated", "_int", type(_int))),
             str(katcp.Message.inform("decorated", "do_raise", type(do_raise))),
             r"!decorated ok sss 1.5 78 0",
         ])
 
         do_raise = True
         fail_msg = katcp.Message.request(
-            "decorated", stringy, floaty, inty, do_raise)
+            "decorated", _string, _float, _int, do_raise)
         reply, informs = self.client.blocking_request(fail_msg, use_mid=False)
         self._assert_msgs_like(informs + [reply], [
             (r"!decorated fail Traceback", r"An\_exception\_occurred!\n")
