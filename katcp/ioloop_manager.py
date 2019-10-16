@@ -190,7 +190,7 @@ class IOLoopThreadWrapper(object):
         self.ioloop.add_callback(
             self._ioloop_call, future, tornado_future, fn, args, kwargs)
         try:
-            # Use the threadsafe future to block
+            # Use the thread-safe future to block
             return future.result(timeout)
         except TimeoutError:
             raise

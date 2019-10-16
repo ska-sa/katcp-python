@@ -85,7 +85,7 @@ class ExponentialRandomBackoff(object):
             self._update_delay()
         except Exception:
             ic_logger.exception(
-                'Unhandled exception trying to calculate a retry timout')
+                'Unhandled exception trying to calculate a retry timeout')
 
     def success(self):
         """Call whenever an action has succeeded, resets delay to minimum"""
@@ -167,7 +167,7 @@ class _InformHookDeviceClient(katcp.AsyncClient):
 class InspectingClientAsync(object):
     """Higher-level client that inspects a KATCP interface.
 
-    Note: This class is not threadsafe at present, it should only be called
+    Note: This class is not thread-safe at present, it should only be called
     from the ioloop.
 
     Note: always call stop() after start() and you are done with the container
@@ -946,7 +946,7 @@ class InspectingClientAsync(object):
         if not sensor:
             sensor = yield self.future_get_sensor(name)
         if sensor:
-            # TODO (NM) Performance idea: prolly we can cache katcp_major at
+            # TODO (NM) Performance idea: probably we can cache katcp_major at
             # sync time?
             katcp_major = self.katcp_client.protocol_flags.major
             sensor.set_formatted(timestamp, status, value, katcp_major)

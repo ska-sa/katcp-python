@@ -117,7 +117,7 @@ def log_future_exceptions(logger, f, ignore=()):
     f : Future object
         Future to be monitored for exceptions
     ignore : Exception or tuple of Exception
-        Exptected exception(s) to ignore, i.e. they will not be logged.
+        Expected exception(s) to ignore, i.e. they will not be logged.
 
     Notes
     -----
@@ -155,8 +155,8 @@ def steal_docstring_from(obj):
         pass
 
     In this case the docstring of the new 'meth' will be copied from superclass.meth, and
-    if an additional dosctring was defined for meth it will be appended to the superclass
-    docstring with a two newlines inbetween.
+    if an additional docstring was defined for meth it will be appended to the superclass
+    docstring with a two newlines in-between.
     """
     def deco(fn):
         docs = [obj.__doc__]
@@ -549,7 +549,7 @@ class MessageParser(object):
     ## @brief Regular expression matching all escapes.
     UNESCAPE_RE = re.compile(br"\\(.?)")
 
-    ## @brief Regular expresion matching KATCP whitespace (just space and tab)
+    ## @brief Regular expression matching KATCP whitespace (just space and tab)
     WHITESPACE_RE = re.compile(br"[ \t]+")
 
     ## @brief Regular expression matching name and ID
@@ -557,7 +557,7 @@ class MessageParser(object):
         br"^(?P<name>[a-zA-Z][a-zA-Z0-9\-]*)(\[(?P<id>[0-9]+)\])?$")
 
     def _unescape_match(self, match):
-        """Given an re.Match, unescape the escape code it represents."""
+        """Given an re.Match, unescaped the escape code it represents."""
         char = match.group(1)
         if char in self.ESCAPE_LOOKUP:
             return self.ESCAPE_LOOKUP[char]
@@ -739,7 +739,7 @@ class ProtocolFlags(object):
 
 
 class DeviceMetaclass(type):
-    r"""Metaclass for DeviceServer and DeviceClient classes.
+    r"""Meta-class for DeviceServer and DeviceClient classes.
 
     Collects up methods named request\_* and adds
     them to a dictionary of supported methods on the class.
@@ -754,9 +754,9 @@ class DeviceMetaclass(type):
         Parameters
         ----------
         mcs : class
-            The metaclass instance
+            The meta-class instance
         name : str
-            The metaclass name
+            The meta-class name
         bases : list of classes
             List of base classes
         dct : dict
@@ -1135,7 +1135,7 @@ class Sensor(object):
             The units of the sensor value. May be the empty string
             if there are no applicable units.
         params : list
-            [min, max] -- miniumum and maximum values of the sensor
+            [min, max] -- minimum and maximum values of the sensor
         default : int
             An initial value for the sensor. Defaults to 0.
         initial_status : int enum or None
@@ -1162,7 +1162,7 @@ class Sensor(object):
             The units of the sensor value. May be the empty string
             if there are no applicable units.
         params : list
-            [min, max] -- miniumum and maximum values of the sensor
+            [min, max] -- minimum and maximum values of the sensor
         default : float
             An initial value for the sensor. Defaults to 0.0.
         initial_status : int enum or None
@@ -1318,7 +1318,7 @@ class Sensor(object):
             The units of the sensor value. May be the empty string
             if there are no applicable units.
         default : (string, int)
-            An initial value for the sensor. Tuple contaning (host, port).
+            An initial value for the sensor. Tuple containing (host, port).
             default is ("0.0.0.0", None)
         initial_status : int enum or None
             An initial status for the sensor. If None, defaults to
@@ -1706,7 +1706,7 @@ class AsyncEvent(object):
 
 
 class AsyncCallbackEvent(AsyncEvent):
-    # Wanted to use @steal_docstring_from() here, but aparently Classes have read-only
+    # Wanted to use @steal_docstring_from() here, but apparently Classes have read-only
     # __doc__ attributes... Apparently this is fixed in Python 3.3
     __doc__ = '\n\n'.join((
         AsyncEvent.__doc__,
@@ -1819,7 +1819,7 @@ class LatencyTimer(object):
             result = yield future
 
     If producer's result is immediately available, it will return a future that is already
-    resolved (i.e. `future.done() == True`). `torado.gen.coroutine` will the immediately
+    resolved (i.e. `future.done() == True`). `tornado.gen.coroutine` will the immediately
     produce the return value at the yield statement without going through the ioloop. This
     improves efficiency by reducing unnecessary ioloop round trips, but can harm latency
     if `producer` is very productive.

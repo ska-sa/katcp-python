@@ -427,8 +427,7 @@ class BlockingTestClient(client.BlockingClient):
                    % (sensorname, got_status, status))
             self.test.assertEqual(got_status, status, msg)
 
-    def assert_sensor_status_equals(self, sensorname, expected_status,
-                                    msg=None):
+    def assert_sensor_status_equals(self, sensorname, expected_status, msg=None):
         """Assert that a sensor's status is equal to the given status.
 
         Parameters
@@ -1260,7 +1259,7 @@ class SensorComparisonMixin(object):
             timestamp : float (value timestamp)
             description : str (sensor description)
             units : str (sensor units)
-            params : list (sensor parameters as passsed to the constructor)
+            params : list (sensor parameters as passed to the constructor)
 
             If a key is left out of the description it is ignored, except for `name` which
             is required.
@@ -1315,7 +1314,7 @@ class SensorComparisonMixin(object):
         ----------
         actual_sensors -- List of sensor objects
         value_tests -- dict with
-           value_tests['sensor_name'] : Callable value test. Sould raise
+           value_tests['sensor_name'] : Callable value test. Should raise
                AssertionError if the test fails
         """
 
@@ -1457,8 +1456,8 @@ def suppress_queue_repeats(suppressed_queue, initial_value, read_time=None):
 
     The suppressed_queue is consumed, and a value yielded whenever it differs from the
     previous value. If *read_time* is specified, stops iteration if the
-    suppressed_queue is empty after reading the suppressed_queue for *read_time* seconds. If
-    *read_time* is None, continue reading forever.
+    suppressed_queue is empty after reading the suppressed_queue for *read_time* seconds.
+    If *read_time* is None, continue reading forever.
 
     """
     start_time = time.time()
@@ -1647,7 +1646,7 @@ class SensorTransitionWaiter(object):
         stop : bool, optional
             Stop listening, tear down and unsubscribe from sensor
         reset: bool, optional
-            Reset the recieved values to an empty list
+            Reset the received values to an empty list
 
         Notes
         -----
@@ -1667,7 +1666,7 @@ class SensorTransitionWaiter(object):
         return received_values
 
     def teardown(self):
-        """Clean up: restore sensor strategy and deregister sensor callback."""
+        """Clean up: restore sensor strategy and de-register sensor callback."""
         if self._torn_down:
             return
         self._teardown_sensor()
@@ -1998,7 +1997,7 @@ def call_in_ioloop(ioloop, fn, *args, **kwargs):
 
 
 class TimewarpAsyncTestCase(tornado.testing.AsyncTestCase):
-    """Tornado AsyncTestCase that supports timewarping.
+    """Tornado AsyncTestCase that supports time-warping.
 
     The io_loop.time() method is replaced by a mock-timer, that only progresses
     when moved along using set_ioloop_time().

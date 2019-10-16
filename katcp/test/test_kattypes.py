@@ -384,7 +384,7 @@ class TestStr(TestType):
         ]
 
         # For unpacking, the input is assumed to be a byte string, and
-        # the ouput should be a native string (bytes on PY2, unicode on PY3).
+        # the output should be a native string (bytes on PY2, unicode on PY3).
         # On PY2, as input is assumed to be bytes already, nothing is done,
         # nor is the type checked.
         if future.utils.PY2:

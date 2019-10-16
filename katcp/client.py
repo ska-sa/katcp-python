@@ -112,7 +112,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
     -----
 
     The client may block its ioloop if the default blocking tornado DNS
-    resolver is used. When an ioloop is shared, it would make sens to configure
+    resolver is used. When an ioloop is shared, it would make sense to configure
     one of the non-blocking resolver classes, see
     http://tornado.readthedocs.org/en/latest/netutil.html
 
@@ -401,7 +401,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
         return mid
 
     def send_request(self, msg):
-        """Send a request messsage.
+        """Send a request message.
 
         Parameters
         ----------
@@ -621,7 +621,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
                 self._logger.info("%s OK" % (msg.name,))
                 self.send_message(reply)
             else:
-                # Just pass on what is, potentially, a future. The implementor
+                # Just pass on what is, potentially, a future. The implementer
                 # of the request handler method must arrange for a reply to be
                 # sent. Since clients have no business dealing with requests in
                 # any case we don't do much to help them.
@@ -917,7 +917,7 @@ class DeviceClient(with_metaclass(DeviceMetaclass, object)):
         def _stop():
             if timeout:
                 yield self._running.until_set(timeout)
-            # clear _running before disconecting to allow line_read_loop
+            # clear _running before disconnecting to allow line_read_loop
             # and connect_loop to exit
             self._running.clear()
             self._disconnect()
@@ -1333,7 +1333,7 @@ class AsyncClient(DeviceClient):
         return f
 
     def blocking_request(self, msg, timeout=None, use_mid=None):
-        """Send a request messsage and wait for its reply.
+        """Send a request message and wait for its reply.
 
         Parameters
         ----------
@@ -1360,7 +1360,7 @@ class AsyncClient(DeviceClient):
             timeout = self._request_timeout
 
         f = Future()  # for thread safety
-        tf = [None]   # Placeholder for tornado Future for exception tracebacks
+        tf = [None]   # Place-holder for tornado Future for exception tracebacks
         def blocking_request_callback():
             try:
                 tf[0] = frf = self.future_request(msg, timeout=timeout,

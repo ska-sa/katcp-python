@@ -1085,7 +1085,7 @@ class DeviceServerBase(future.utils.with_metaclass(DeviceServerMetaclass, object
                             done_future.set_result(None)
 
                     # TODO When using the return_reply() decorator the future
-                    # returned is not currently threadsafe, must either deal
+                    # returned is not currently thread-safe, must either deal
                     # with it here, or in kattypes.py. Would be nice if we don't
                     # have to always fall back to adding a callback, or wrapping
                     # a thread-safe future. Supporting sync-with-thread and
@@ -1574,7 +1574,7 @@ class DeviceServer(DeviceServerBase):
         client_connection : ClientConnection instance
             The connection that should have its sampling strategies cleared
         remove_client : bool, optional
-            Remove the client connection from the strategies datastructure.
+            Remove the client connection from the strategies data-structure.
             Useful for clients that disconnect.
 
         """
@@ -2300,7 +2300,7 @@ class DeviceServer(DeviceServerBase):
             if old_strategy:
                 old_strategy.cancel()
 
-            # todo: replace isinstance check with something better
+            # TODO: replace isinstance check with something better
             if not isinstance(new_strategy, SampleNone):
                 self._strategies[client][sensor] = new_strategy
                 new_strategy.start()
@@ -2317,7 +2317,7 @@ class DeviceServer(DeviceServerBase):
             params = [int(float(params[0]) * SEC_TO_MS_FAC)] + params[1:]
 
         # Let the ioloop run so that the #sensor-status inform is sent before
-        # the reply. Not strictly neccesary, but a number of tests depend on
+        # the reply. Not strictly necessary, but a number of tests depend on
         # this behaviour, less effort to fix it here :-/
         yield gen.moment
         raise gen.Return(req.make_reply("ok", name, strategy, *params))

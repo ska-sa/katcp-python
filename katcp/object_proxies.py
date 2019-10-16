@@ -153,7 +153,7 @@ del __subject__
 
 
 class AbstractWrapper(AbstractProxy):
-    """Mixin to allow extra behaviors and attributes on proxy instance"""
+    """Mixin to allow extra behaviours and attributes on proxy instance"""
     __slots__ = ()
 
     def __getattribute__(self, attr, oga=object.__getattribute__):

@@ -321,11 +321,11 @@ class FakeKATCPServer(object):
 
     def send_message(self, conn_id, msg):
         raise FakeKATCPServerError(
-            'Cannot send messages via fake request/conection object')
+            'Cannot send messages via fake request/connection object')
 
     def mass_send_message(self, msg):
         raise FakeKATCPServerError(
-            'Cannot send messages via fake request/conection object')
+            'Cannot send messages via fake request/connection object')
 
     def flush_on_close(self):
         f = Future()

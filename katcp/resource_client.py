@@ -58,7 +58,7 @@ def transform_future(transformation, future):
             try:
                 new_future.set_result(transformation(f.result()))
             except Exception:
-                # An exception here idicates that the transformation was unsuccesful
+                # An exception here indicates that the transformation was unsuccessful
                 new_future.set_exc_info(sys.exc_info())
 
     future.add_done_callback(_transform)
@@ -189,7 +189,7 @@ class KATCPClientResource(resource.KATCPResource):
     """Class managing a client connection to a single KATCP resource
 
     Inspects the KATCP interface of the resources, exposing sensors and requests as per
-    the :class:`katcp.resource.KATCPResource` API. Can also operate without exposin
+    the :class:`katcp.resource.KATCPResource` API. Can also operate without exposing
     """
 
     MAX_LOOP_LATENCY = 0.03
@@ -317,8 +317,7 @@ class KATCPClientResource(resource.KATCPResource):
           assumed_sensors : ...
 
         parent : :class:`KATCPResource` or None
-            Parent KATCPResource object if this client is a child in a resource
-            hierarcy
+            Parent KATCPResource object if this client is a child in a resource hierarchy.
 
         logger : object, optional
            Python Logger object to log to. Default is the module logger
@@ -450,7 +449,8 @@ class KATCPClientResource(resource.KATCPResource):
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True, tuple=False, refresh=False):
         return list_sensors(self,
-            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
+            dict.items(self.sensor), filter, strategy, status, use_python_identifiers,
+                tuple, refresh)
 
     @tornado.gen.coroutine
     def set_sampling_strategies(self, filter, strategy_and_parms):
@@ -589,7 +589,8 @@ class KATCPClientResource(resource.KATCPResource):
                   .format(self.address_string, state, model_changes))
         if state.connected:
             if not state.synced:
-                self._logger.debug('{}: Setting state to "syncing"'.format(self.address_string))
+                self._logger.debug('{}: Setting state to "syncing"'.format(
+                    self.address_string))
                 self._state.set_state('syncing')
                 if model_changes:
                     self._logger.debug('{}: handling model updates: {}'.format(
@@ -852,9 +853,9 @@ class KATCPClientResourceSensorsManager(object):
             success : bool
                 True if setting succeeded for this sensor, else False
             info : tuple
-               Normalibed sensor strategy and parameters as tuple if
+               Normalised sensor strategy and parameters as tuple if
                success == True else, sys.exc_info() tuple for the error
-               that occured.
+               that occurred.
         """
         try:
             strategy_and_params = resource.normalize_strategy_parameters(
@@ -1045,7 +1046,7 @@ class GroupResults(dict):
     :class:`KATCPReply` objects, or are None for clients
     that did not support the request.
 
-    The result will evalue to a truthy value if all the requests succeeded, i.e.
+    The result will evaluate to a truthy value if all the requests succeeded, i.e.
     ::
 
         if result:
@@ -1317,7 +1318,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         Parameters
         ----------
 
-        resources_spec : dict containing the specs of the conained resources. Keys:
+        resources_spec : dict containing the specs of the contained resources. Keys:
           "name" : str, name of this collection of resources
           "description : str (optional), description of this collection of resources
           "clients" : dict, with keys:
@@ -1452,7 +1453,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def set_sampling_strategies(self, filter, strategy_and_parms):
-        """Set sampling strategies for filtered sensors - these sensors have to exsist"""
+        """Set sampling strategies for filtered sensors - these sensors have to exists."""
         result_list = yield self.list_sensors(filter=filter)
         sensor_dict = {}
         for result in result_list:
@@ -1500,7 +1501,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def set_sensor_listener(self, sensor_name, listener):
-        """Set listener for the specific sensor - this sensor has to exsist"""
+        """Set listener for the specific sensor - this sensor has to exists."""
         result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
         sensor_dict = {}
         for result in result_list:

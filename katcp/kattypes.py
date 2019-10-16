@@ -233,7 +233,7 @@ class Str(KatcpType):
     Note
     ----
 
-    The behavior of this type is subtly different between Python versions in
+    The behaviour of this type is subtly different between Python versions in
     order to ease the porting effort for users of this library.
     - Unpacked (decoded) values are native strings (bytes in PY2, Unicode in PY3).
     - Packed (encoded) values are always byte strings (in both PY2 and PY3), as
@@ -336,7 +336,7 @@ class Address(KatcpType):
 
     .. note::
 
-       The address type was added in katcp 0.4.
+        The address type was added in katcp 0.4.
     """
     name = "address"
 
