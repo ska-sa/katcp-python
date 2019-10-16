@@ -19,7 +19,8 @@ import tornado
 import katcp
 
 from katcp import KatcpSyntaxError, KatcpTypeError
-from katcp.core import AsyncEvent, AsyncState, Message, Sensor, until_some
+from katcp.core import (AsyncEvent, AsyncState, Message, Sensor,
+                        hashable_identity, until_some)
 from katcp.testutils import TestLogHandler
 
 log_handler = TestLogHandler()
@@ -784,3 +785,45 @@ class TestUntilSome(tornado.testing.AsyncTestCase):
         options = {'f1': 24, 'f2': 42, 'f3': 84}
         self.assertDictContainsSubset(dict(results), options,
                                       'Results differ for until_some (2 kwarg futures)')
+
+
+class TestHashableIdentity(unittest.TestCase):
+
+    def test_hashable_identity(self):
+
+        class MyObject(object):
+            def my_method(self):
+                pass
+
+        def my_func1():
+            pass
+
+        def my_func2():
+            pass
+
+        obj1 = MyObject()
+        obj2 = MyObject()
+
+        hash1 = hashable_identity(obj1)
+        hash1_again = hashable_identity(obj1)
+        hash2 = hashable_identity(obj2)
+        self.assertEqual(hash1, hash1_again)
+        self.assertNotEqual(hash1, hash2)
+
+        hash1 = hashable_identity(obj1.my_method)
+        hash1_again = hashable_identity(obj1.my_method)
+        hash2 = hashable_identity(obj2.my_method)
+        self.assertEqual(hash1, hash1_again)
+        self.assertNotEqual(hash1, hash2)
+
+        hash1 = hashable_identity(my_func1)
+        hash1_again = hashable_identity(my_func1)
+        hash2 = hashable_identity(my_func2)
+        self.assertEqual(hash1, hash1_again)
+        self.assertNotEqual(hash1, hash2)
+
+        hash1 = hashable_identity('baz')
+        hash1_again = hashable_identity('baz')
+        hash2 = hashable_identity('foo')
+        self.assertEqual(hash1, hash1_again)
+        self.assertNotEqual(hash1, hash2)

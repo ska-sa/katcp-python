@@ -255,18 +255,28 @@ class Str(KatcpType):
     """
     name = "string"
 
-    def encode(self, value, major):
-        if is_bytes(value):
-            return value
-        elif is_text(value):
-            return value.encode('utf-8')
-        else:
-            return str(value).encode('utf-8')
+    if future.utils.PY2:
+        def encode(self, value, major):
+            if is_bytes(value):
+                return value
+            elif is_text(value):
+                return value.encode('utf-8')
+            else:
+                return str(value)
 
-    def decode(self, value, major):
-        if future.utils.PY2:
+        def decode(self, value, major):
             return value
-        else:
+
+    else:
+        def encode(self, value, major):
+            if is_bytes(value):
+                return value
+            elif is_text(value):
+                return value.encode('utf-8')
+            else:
+                return str(value).encode('utf-8')
+
+        def decode(self, value, major):
             return value.decode('utf-8')
 
 
@@ -324,7 +334,7 @@ class Lru(KatcpType):
     # pylint: disable-msg = E0602
 
     ## @brief Mapping from LRU value name to LRU value constant.
-    LRU_CONSTANTS = dict((v, k) for k, v in list(LRU_VALUES.items()))
+    LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
 
     def encode(self, value, major):
         if value not in Lru.LRU_VALUES:
@@ -454,7 +464,7 @@ class StrictTimestamp(KatcpType):
         Raise a ValueError if it is not.
 
         """
-        if int(value) < 0:
+        if float(value) < 0:
             raise ValueError("Strict timestamps may not be negative.")
 
 
@@ -1075,11 +1085,11 @@ def unpack_types(types, args, argnames, major):
 
     Parameters
     ----------
-    types : list or tuple of kattypes
+    types : sequence of kattypes
         The types of the arguments (in order).
-    args : list or tuple of strings
+    args : sequence of strings
         The arguments to parse.
-    argnames : list or tuple of strings
+    argnames : sequence of strings
         The names of the arguments.
     major : integer
         Major version of KATCP to use when packing types
@@ -1109,13 +1119,8 @@ def unpack_types(types, args, argnames, major):
         for i in range(len(types), len(args)):
             params.append(Parameter(i+1, name, kattype, major))
 
-    if len(args) < len(types):
-        # if len(args) < len(types) this passes in None for missing args
-        repeat_val = len(types) - len(args)
-        args = list(args)
-        args += list(itertools.repeat(None, repeat_val))
-
-    return list(map(lambda param, arg: param.unpack(arg), params, args))
+    # zip_longest will use None for missing args
+    return [param.unpack(arg) for param, arg in itertools.zip_longest(params, args)]
 
 
 def pack_types(types, args, major):
@@ -1123,9 +1128,9 @@ def pack_types(types, args, major):
 
     Parameters
     ----------
-    types : list or tuple of kattypes
+    types : sequence of kattypes
         The types of the arguments (in order).
-    args : list or tuple of objects
+    args : sequence of objects
         The arguments to format.
     major : integer
         Major version of KATCP to use when packing types
@@ -1144,11 +1149,9 @@ def pack_types(types, args, major):
         raise ValueError("Too many arguments to pack.")
 
     if len(args) < len(types):
-        # this passes in None for missing args
-        repeat_val = len(types) - len(args)
-        args = tuple(list(args) + list(itertools.repeat(None, repeat_val)))
-        retvals = list(map(lambda ktype, arg: ktype.pack(arg, major=major),
-                           types, args))
+        # zip_longest will use None for missing args
+        retvals = [ktype.pack(arg, major=major)
+                   for ktype, arg in itertools.zip_longest(types, args)]
     else:
         retvals = [ktype.pack(arg, major=major)
                    for ktype, arg in zip(types, args)]

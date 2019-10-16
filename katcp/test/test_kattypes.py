@@ -106,7 +106,7 @@ class TestFloat(TestType):
             (basic, -5.0, b"-5.0"),
             (basic, 5.5, b"5.5"),
             (basic, -5.5, b"-5.5"),
-            (basic, "a", TypeError),
+            (basic, "a", ValueError),
             (basic, None, ValueError),
             (self.minmax, 5.0, b"5.0"),
             (self.minmax, 6.0, b"6.0"),

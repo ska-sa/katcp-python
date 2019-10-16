@@ -775,9 +775,7 @@ class DeviceMetaclass(type):
             if name.startswith("request_"):
                 request_name = convert_method_name("request_", name)
                 if mcs.check_protocol(handler):
-                    mcs._request_handlers[request_name] = (
-                        handler if future.utils.PY3 else handler.__func__
-                    )
+                    mcs._request_handlers[request_name] = handler
                     error_msg = "Request '{}' has no docstring.".format(request_name)
                     assert(handler.__doc__ is not None), error_msg
             elif name.startswith("inform_"):

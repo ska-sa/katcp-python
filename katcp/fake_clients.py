@@ -242,7 +242,7 @@ class FakeInspectingClientManager(object):
             if name not in self.fake_sensor_infos:
                 return ("fail", "Unknown sensor name.")
         else:
-            keys = list(self.fake_sensor_infos.keys())
+            keys = self.fake_sensor_infos.keys()
 
         num_informs = 0
         for sensor_name in keys:
