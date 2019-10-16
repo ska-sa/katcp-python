@@ -102,24 +102,26 @@ class TestFloat(TestType):
         self.minmax = Float(min=5.0, max=6.0)
 
         self._pack = [
-            (basic, 5.0, b"5"),
-            (basic, -5.0, b"-5"),
+            (basic, 5.0, b"5.0"),
+            (basic, -5.0, b"-5.0"),
             (basic, 5.5, b"5.5"),
             (basic, -5.5, b"-5.5"),
             (basic, "a", TypeError),
             (basic, None, ValueError),
-            (self.minmax, 5.0, b"5"),
-            (self.minmax, 6.0, b"6"),
+            (self.minmax, 5.0, b"5.0"),
+            (self.minmax, 6.0, b"6.0"),
             (self.minmax, 4.5, ValueError),
             (self.minmax, 6.5, ValueError),
-            (default, None, b"11"),
-            (default_optional, None, b"11"),
+            (default, None, b"11.0"),
+            (default_optional, None, b"11.0"),
             (optional, None, ValueError),
         ]
 
         self._unpack = [
             (basic, b"5", 5.0),
+            (basic, b"5.0", 5.0),
             (basic, b"-5", -5.0),
+            (basic, b"-5.0", -5.0),
             (basic, b"5.5", 5.5),
             (basic, b"-5.5", -5.5),
             (basic, b"a", ValueError),
@@ -728,7 +730,7 @@ class TestDecorator(unittest.TestCase):
         desired_i, desired_floats = (7, (1.2, 999, 71.43))
         self.assertEqual(str(req('req', Message.request(
             'int-multifloat', desired_i, *desired_floats))),
-                         '!int-multifloat ok 7 1.2 999 71.43')
+                         '!int-multifloat ok 7 1.2 999.0 71.43')
         with self.assertRaises(FailReply) as ex:
             req('req', Message.request('int-multifloat', desired_i, 1.2, 'abc'))
         # storing Message.arguments as byte string results in slightly different

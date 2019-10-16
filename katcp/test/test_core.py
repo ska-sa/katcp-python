@@ -418,9 +418,9 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.stype, 'float')
         s.set(timestamp=12345, status=Sensor.WARN, value=3.0)
         # test both read_formatted and format_reading
-        self.assertEqual(s.format_reading(s.read()), (b"12345.000000", b"warn", b"3"))
-        self.assertEqual(s.read_formatted(), (b"12345.000000", b"warn", b"3"))
-        self.assertEqual(s.parse_value(b"3"), 3.0)
+        self.assertEqual(s.format_reading(s.read()), (b"12345.000000", b"warn", b"3.0"))
+        self.assertEqual(s.read_formatted(), (b"12345.000000", b"warn", b"3.0"))
+        self.assertEqual(s.parse_value(b"3.0"), 3.0)
         self.assertEqual(s.parse_value(b"10"), 10.0)
         self.assertEqual(s.parse_value(b"-10"), -10.0)
         self.assertRaises(ValueError, s.parse_value, b"asd")

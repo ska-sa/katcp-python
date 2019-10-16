@@ -13,6 +13,7 @@ standard_library.install_aliases()  # noqa: E402
 import inspect
 import itertools
 import logging
+import numbers
 import re
 import struct
 
@@ -189,7 +190,12 @@ class Float(KatcpType):
         The maximum allowed value. Ignored if not given.
     """
     name = "float"
-    encode = lambda self, value, major: b"%.15g" % (value,)
+
+    def encode(self, value, major):
+        if isinstance(value, numbers.Real):
+            return b"%r" % (value,)
+        else:
+            raise ValueError("Could not encode value '%r' as float." % value)
 
     def decode(self, value, major):
         try:
@@ -426,10 +432,10 @@ class StrictTimestamp(KatcpType):
     name = "strict_timestamp"
 
     def encode(self, value, major):
-        try:
-            return b"%.15g" % value
-        except:
-            raise ValueError("Could not encode value %r as strict timestamp." %
+        if isinstance(value, numbers.Real):
+            return b"%r" % value
+        else:
+            raise ValueError("Could not encode value '%r' as strict timestamp." %
                              value)
 
     def decode(self, value, major):
