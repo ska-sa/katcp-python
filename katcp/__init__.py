@@ -10,7 +10,7 @@ from __future__ import absolute_import, division, print_function
 from .client import AsyncClient, BlockingClient, CallbackClient, DeviceClient
 from .core import (AsyncReply, AttrDict, DeviceMetaclass, FailReply,
                    KatcpClientError, KatcpDeviceError, KatcpSyntaxError,
-                   KatcpValueError, Message, MessageParser, ProtocolFlags, Sensor)
+                   KatcpTypeError, Message, MessageParser, ProtocolFlags, Sensor)
 from .resource_client import KATCPClientResource, KATCPClientResourceContainer
 from .sensortree import (AggregateSensorTree, BooleanSensorTree,
                          GenericSensorTree)

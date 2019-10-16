@@ -18,7 +18,7 @@ import tornado
 
 import katcp
 
-from katcp import KatcpSyntaxError, KatcpValueError
+from katcp import KatcpSyntaxError, KatcpTypeError
 from katcp.core import AsyncEvent, AsyncState, Message, Sensor, until_some
 from katcp.testutils import TestLogHandler
 
@@ -313,7 +313,7 @@ class TestMessageParser(unittest.TestCase):
 
     def test_unicode_message_handling(self):
         unicode_str = u'!baz[1] Kl\xc3\xbcf skr\xc3\xa4m'
-        self.assertRaises(KatcpValueError, self.p.parse, unicode_str)
+        self.assertRaises(KatcpTypeError, self.p.parse, unicode_str)
 
 
 class TestProtocolFlags(unittest.TestCase):
@@ -398,8 +398,8 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.parse_value(b"4"), 4)
         self.assertEqual(s.parse_value(b"-10"), -10)
         self.assertRaises(ValueError, s.parse_value, b"asd")
-        self.assertRaises(ValueError, s.parse_value, u"asd")
-        self.assertRaises(ValueError, s.parse_value, u"3")
+        self.assertRaises(KatcpTypeError, s.parse_value, u"asd")
+        self.assertRaises(KatcpTypeError, s.parse_value, u"3")
 
         s = Sensor(Sensor.INTEGER, "an.int", "An integer.", "count", [-20, 20])
         self.assertEqual(s.value(), 0)
@@ -436,9 +436,9 @@ class TestSensor(unittest.TestCase):
                          initial_status=Sensor.WARN)
         self.assertEqual(s.status(), Sensor.WARN)
 
-        # TODO (AJ) Test for non-ascii fields
-        # with self.assertRaises(KatcpValueError):
-        #     s = Sensor.float("a.temp", "Non-ascii unit not allowed", "°C", default=22.0)
+        # TODO (AJ) Test for non-ASCII fields
+        # with self.assertRaises(KatcpTypeError):
+        #     s = Sensor.float("a.temp", "Non-ASCII unit not allowed", "°C", default=22.0)
 
     def test_boolean_sensor(self):
         """Test boolean sensor."""

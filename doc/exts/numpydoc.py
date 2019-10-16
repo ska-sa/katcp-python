@@ -22,7 +22,7 @@ import os
 import pydoc
 import re
 
-from docscrape_sphinx import SphinxDocString, get_doc_object
+from .docscrape_sphinx import SphinxDocString, get_doc_object
 
 
 def mangle_docstrings(app, what, name, obj, options, lines,

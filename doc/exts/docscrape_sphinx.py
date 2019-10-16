@@ -9,7 +9,8 @@ import textwrap
 
 import sphinx
 
-from docscrape import ClassDoc, FunctionDoc, NumpyDocString
+from .docscrape import ClassDoc, FunctionDoc, NumpyDocString
+
 
 class SphinxDocString(NumpyDocString):
     use_plots = False

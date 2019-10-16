@@ -16,11 +16,11 @@ import os
 from builtins import range
 from functools import wraps
 
-import future
 import tornado.ioloop
 
 from _thread import get_ident as get_thread_ident
 
+from .compat import is_bytes, is_text
 from .core import Message, Sensor
 
 log = logging.getLogger("katcp.sampling")
@@ -136,7 +136,7 @@ class SampleStrategy(object):
             The created sampling strategy.
 
         """
-        if future.utils.istext(strategyName):
+        if is_text(strategyName):
             strategyName = strategyName.encode('ascii')
         if strategyName not in cls.SAMPLING_LOOKUP_REV:
             raise ValueError("Unknown sampling strategy '%s'. "
@@ -218,7 +218,7 @@ class SampleStrategy(object):
         strategy = self.SAMPLING_LOOKUP[strategy]
         params = []
         for param in self._params:
-            if not future.utils.isbytes(param):
+            if not is_bytes(param):
                 param = str(param).encode('ascii')
             params.append(param)
         return strategy, params

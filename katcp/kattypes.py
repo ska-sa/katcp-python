@@ -23,6 +23,7 @@ import future
 
 from tornado import gen
 
+from .compat import is_bytes, is_text
 from .core import (DEFAULT_KATCP_MAJOR, MS_TO_SEC_FAC, SEC_TO_MS_FAC,
                    SEC_TS_KATCP_MAJOR, FailReply, Message, convert_method_name)
 
@@ -249,9 +250,9 @@ class Str(KatcpType):
     name = "string"
 
     def encode(self, value, major):
-        if future.utils.isbytes(value):
+        if is_bytes(value):
             return value
-        elif future.utils.istext(value):
+        elif is_text(value):
             return value.encode('utf-8')
         else:
             return str(value).encode('utf-8')
@@ -305,7 +306,7 @@ class Lru(KatcpType):
     """The KATCP lru type"""
     name = "lru"
     # LRU sensor values
-    LRU_NOMINAL, LRU_ERROR = list(range(2))
+    LRU_NOMINAL, LRU_ERROR = range(2)
 
     ## @brief Mapping from LRU value constant to LRU value name.
     LRU_VALUES = {

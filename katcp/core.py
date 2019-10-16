@@ -30,6 +30,8 @@ from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from tornado.gen import with_timeout
 
+from .compat import byte_chars, ensure_native_str, is_bytes, is_text
+
 SEC_TO_MS_FAC = 1000
 MS_TO_SEC_FAC = 1./1000
 # The major version of the katcp protocol that is used by default
@@ -168,8 +170,8 @@ def steal_docstring_from(obj):
 class KatcpSyntaxError(ValueError):
     """Raised by parsers when encountering a syntax error."""
 
-class KatcpValueError(ValueError):
-    """Raised by parsers when encountering invalid values."""
+class KatcpTypeError(TypeError):
+    """Raised by parsers when encountering invalid types."""
 
 class KatcpClientError(Exception):
     """Raised by KATCP clients when an error occurs."""
@@ -194,14 +196,14 @@ class Message(object):
         The message name.
     arguments : list of objects (float, int, bool, bytes, or str)
         The message arguments.
-    mid : str or bytes, digits only
+    mid : str or bytes (digits only), int, or None
         The message identifier. Replies and informs that
         are part of the reply to a request should have the
         same id as the request did.
 
     """
     # Message types
-    REQUEST, REPLY, INFORM = list(range(3))
+    REQUEST, REPLY, INFORM = range(3)
 
     # Reply codes
     # TODO: make use of reply codes in device client and server
@@ -271,7 +273,7 @@ class Message(object):
         if mid is None:
             self.mid = None
         else:
-            if not future.utils.isbytes(mid):
+            if not is_bytes(mid):
                 self.mid = str(mid).encode('ascii')
             else:
                 self.mid = mid
@@ -308,15 +310,15 @@ class Message(object):
         """Format a Message argument to a byte string"""
         if isinstance(arg, bool):
             return b'1' if arg else b'0'
-        elif isinstance(arg, int):
+        elif isinstance(arg, numbers.Integral):
             return b'%d' % arg
-        elif isinstance(arg, float):
+        elif isinstance(arg, numbers.Real):
             return repr(arg).encode('ascii')
-        elif future.utils.isbytes(arg):
+        elif is_bytes(arg):
             return arg
         else:
             try:
-                if not future.utils.istext(arg):
+                if not is_text(arg):
                     arg = str(arg)
                 return arg.encode('utf-8')
             except UnicodeEncodeError:
@@ -441,7 +443,7 @@ class Message(object):
 
         Keyword arguments
         -----------------
-        mid : str or None
+        mid : str or bytes (digits only), int, or None
             Message ID to use or None (default) for no Message ID
 
         """
@@ -463,7 +465,7 @@ class Message(object):
 
         Keyword Arguments
         -----------------
-        mid : str or None
+        mid : str or bytes (digits only), int, or None
             Message ID to use or None (default) for no Message ID
 
         """
@@ -498,6 +500,11 @@ class Message(object):
             The name of the message.
         args : list of objects (float, int, bool, bytes, or str)
             The message arguments.
+
+        Keyword Arguments
+        -----------------
+        mid : str or bytes (digits only), int, or None
+            Message ID to use or None (default) for no Message ID
 
         """
         mid = kwargs.pop('mid', None)
@@ -585,8 +592,8 @@ class MessageParser(object):
         if not line:
             raise KatcpSyntaxError("Empty message received.")
 
-        if not future.utils.isbytes(line):
-            raise KatcpValueError("Line type must be bytes - not {}".format(type(line)))
+        if not is_bytes(line):
+            raise KatcpTypeError("Line type must be bytes - not {}".format(type(line)))
 
         type_char = line[:1]
         if type_char not in self.TYPE_SYMBOL_LOOKUP:
@@ -614,9 +621,7 @@ class MessageParser(object):
             raise KatcpSyntaxError("Bad message name (and possibly id) %r." %
                                    (ensure_native_str(name),))
 
-        # ensure name is native string
-        if future.utils.PY3:
-            name = name.decode('ascii')
+        name = ensure_native_str(name)
 
         return Message(mtype, name, arguments, mid)
 
@@ -707,10 +712,7 @@ class ProtocolFlags(object):
     def __str__(self):
         flag_str = self.flags and (b"-" + b"".join(sorted(self.flags))) or b""
         result = b"%d.%d%s" % (self.major, self.minor, flag_str)
-        if future.utils.PY2:
-            return result
-        else:
-            return result.decode('ascii')
+        return future.utils.bytes_to_native_str(result)
 
     def supports(self, flag):
         return flag in self.flags
@@ -737,13 +739,13 @@ class ProtocolFlags(object):
 
 
 class DeviceMetaclass(type):
-    """Metaclass for DeviceServer and DeviceClient classes.
+    r"""Metaclass for DeviceServer and DeviceClient classes.
 
-    Collects up methods named request\\_* and adds
+    Collects up methods named request\_* and adds
     them to a dictionary of supported methods on the class.
-    All request\\_* methods must have a doc string so that help
-    can be generated.  The same is done for inform\\_* and
-    reply\\_* methods.
+    All request\_* methods must have a doc string so that help
+    can be generated.  The same is done for inform\_* and
+    reply\_* methods.
 
     """
     def __init__(mcs, name, bases, dct):
@@ -946,7 +948,7 @@ class Sensor(object):
     #
     # type -> (name, formatter, parser)
     (INTEGER, FLOAT, BOOLEAN, LRU, DISCRETE, STRING, TIMESTAMP,
-     ADDRESS) = list(range(8))
+     ADDRESS) = range(8)
 
     ## @brief Mapping from sensor type to tuple containing the type name,
     #  a kattype with functions to format and parse a value and a
@@ -973,20 +975,9 @@ class Sensor(object):
     SENSOR_TYPE_LOOKUP = dict((v[0].name, k) for k, v in SENSOR_TYPES.items())
 
     # Sensor status constants
-    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE, INACTIVE = list(range(7))
+    UNKNOWN, NOMINAL, WARN, ERROR, FAILURE, UNREACHABLE, INACTIVE = range(7)
 
-    ## @brief Mapping from sensor status to status name, as native strings
-    STATUSES = {
-        UNKNOWN: 'unknown',
-        NOMINAL: 'nominal',
-        WARN: 'warn',
-        ERROR: 'error',
-        FAILURE: 'failure',
-        UNREACHABLE: 'unreachable',
-        INACTIVE: 'inactive',
-    }
-
-    ## @brief Mapping from sensor status to status name, as byte strings ("raw")
+    ## @brief Mapping from sensor status to status name, as byte strings ("raw").
     STATUSES_RAW = {
         UNKNOWN: b'unknown',
         NOMINAL: b'nominal',
@@ -997,10 +988,14 @@ class Sensor(object):
         INACTIVE: b'inactive',
     }
 
-    ## @brief Mapping from status name to sensor status, using native strings
+    ## @brief Mapping from sensor status to status name, as native strings.
+    STATUSES = dict(
+        (k, future.utils.bytes_to_native_str(v)) for k, v in STATUSES_RAW.items())
+
+    ## @brief Mapping from status name to sensor status, using native strings.
     STATUS_NAMES = dict((v, k) for k, v in STATUSES.items())
 
-    ## @brief Mapping from status name to sensor status, using byte strings ("raw")
+    ## @brief Mapping from status name to sensor status, using byte strings ("raw").
     STATUS_NAMES_RAW = dict((v, k) for k, v in STATUSES_RAW.items())
 
     # LRU sensor values
@@ -1017,7 +1012,7 @@ class Sensor(object):
 
     # pylint: enable-msg = E0602
 
-    ## @brief kattype Timestamp instance for encoding and decoding timestamps
+    ## @brief kattype Timestamp instance for encoding and decoding timestamps.
     TIMESTAMP_TYPE = Timestamp()
 
     ## @var stype
@@ -1034,7 +1029,7 @@ class Sensor(object):
 
     ## @var params
     # @brief List of strings containing the additional parameters (length and
-    #        interpretation are specific to the sensor type)
+    #        interpretation are specific to the sensor type).
 
     def __init__(self, sensor_type, name, description=None, units=None,
                  params=None, default=None, initial_status=None):
@@ -1384,8 +1379,8 @@ class Sensor(object):
             A value of a type appropriate to the sensor.
 
         """
-        if not future.utils.isbytes(s_value):
-            raise KatcpValueError(
+        if not is_bytes(s_value):
+            raise KatcpTypeError(
                 "Sensor value type must be bytes - not {}".format(type(s_value)))
         return self._parser(s_value, katcp_major)
 
@@ -1887,7 +1882,7 @@ def hashable_identity(obj):
     if hasattr(obj, '__func__'):
         return (id(obj.__func__), id(obj.__self__))
     elif hasattr(obj, 'im_func'):
-        return (id(obj.im_func), id(obj.im_func))
+        return (id(obj.im_func), id(obj.im_self))
     elif isinstance(obj, basestring):
         return obj
     else:
@@ -2043,51 +2038,3 @@ def until_some(*args, **kwargs):
         if len(results) >= done_at_least:
             break
     raise tornado.gen.Return(results)
-
-
-# Python 2 to 3 compatibility functions
-
-if future.utils.PY2:
-    def ensure_native_str(value):
-        """Coerce unicode string or bytes to native string type (UTF-8 encoding)."""
-        if isinstance(value, str):
-            return value
-        elif isinstance(value, unicode):
-            return value.encode('utf-8')
-        else:
-            raise TypeError(
-                "Invalid type for string conversion: {}".format(type(value)))
-else:
-    def ensure_native_str(value):
-        """Coerce unicode string or bytes to native string type (UTF-8 encoding)."""
-        if isinstance(value, str):
-            return value
-        elif isinstance(value, bytes):
-            return value.decode('utf-8')
-        else:
-            raise TypeError(
-                "Invalid type for string conversion: {}".format(type(value)))
-
-
-def byte_chars(byte_string):
-    """Return list of characters from a byte string (PY3-compatible).
-
-    In PY2, `list(byte_string)` works fine, but in PY3, this returns
-    each element as an int instead of single character byte string.
-    Slicing is used instead to get the individual characters.
-
-    Parameters
-    ----------
-    byte_string : bytes
-        Byte string to be split into characters.
-
-    Returns
-    -------
-    chars : list
-        The individual characters, each as a byte string.
-
-    """
-    if byte_string:
-        return [byte_string[i:i+1] for i in range(len(byte_string))]
-    else:
-        return []
