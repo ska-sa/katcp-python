@@ -318,9 +318,13 @@ class Message(object):
             return arg
         else:
             try:
-                if not is_text(arg):
-                    arg = str(arg)
-                return arg.encode('utf-8')
+                if is_text(arg):
+                    return arg.encode('utf-8')
+                else:
+                    if future.utils.PY2:
+                        return str(arg)
+                    else:
+                        return str(arg).encode('utf-8')
             except UnicodeEncodeError:
                 # unicode characters will break the str cast, so
                 # try to encode to ascii and replace the offending characters
