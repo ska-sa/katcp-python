@@ -16,11 +16,10 @@ from concurrent.futures import Future
 from functools import partial
 
 import tornado
-from future.moves.builtins import dict
 from future.utils import PY2
 
 from tornado.concurrent import Future as tornado_Future
-from tornado.gen import Return, maybe_future, with_timeout
+from tornado.gen import Return
 
 from katcp import Message, inspecting_client, resource
 from katcp.core import (AsyncCallbackEvent, AsyncEvent, AsyncState, AttrDict,
@@ -29,8 +28,7 @@ from katcp.core import (AsyncCallbackEvent, AsyncEvent, AsyncState, AttrDict,
 # TODO NM 2017-04-13 Importing IOLoopThreadwrapper here for backwards
 # compatibility, user code should be changed to import it from the more logical
 # katcp.ioloop_manager module.
-from katcp.ioloop_manager import (IOLoopThreadWrapper,
-                                  ThreadSafeMethodAttrWrapper)
+from katcp.ioloop_manager import ThreadSafeMethodAttrWrapper
 from katcp.resource import KATCPReply, KATCPSensorError
 
 log = logging.getLogger(__name__)
@@ -448,9 +446,9 @@ class KATCPClientResource(resource.KATCPResource):
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True, tuple=False, refresh=False):
-        return list_sensors(self,
-            dict.items(self.sensor), filter, strategy, status, use_python_identifiers,
-                tuple, refresh)
+        return list_sensors(
+            self, dict.items(self.sensor), filter, strategy, status,
+            use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
     def set_sampling_strategies(self, filter, strategy_and_parms):
@@ -654,7 +652,7 @@ class KATCPClientResource(resource.KATCPResource):
         request_instances = yield request_instance_fut
 
         added_names = []
-        for r_name, r_obj in list(request_instances.items()):
+        for r_name, r_obj in request_instances.items():
             r_name_escaped = resource.escape_name(r_name)
             if r_name_escaped in self.always_excluded_requests:
                 continue
@@ -1432,21 +1430,9 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True, tuple=False, refresh=False):
-        return list_sensors(self,
-            dict.items(self.sensor), filter, strategy, status,
-                            use_python_identifiers, tuple, refresh)
-
-    @tornado.gen.coroutine
-    def _resource_set_sampling_strategies(
-            self, resource_name, sensor_name, strategy_and_parms):
-        resource_name = result.object.parent_name
-        try:
-            yield self.set_sampling_strategy(
-                resource_name, sensor_name, strategy_and_parms)
-        except:
-            self._logger.error(
-                'Cannot set sensor strategy for %s %s'
-                % (resource_name, sensor_name))
+        return list_sensors(
+            self, dict.items(self.sensor), filter, strategy, status,
+            use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
     def set_sampling_strategies(self, filter, strategy_and_parms):
