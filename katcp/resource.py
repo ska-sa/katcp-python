@@ -15,7 +15,7 @@ from builtins import object
 
 import tornado
 
-from future.utils import with_metaclass
+from future.utils import with_metaclass, PY2
 from past.builtins import basestring
 from tornado.concurrent import Future
 from tornado.gen import Return, with_timeout
@@ -1014,10 +1014,9 @@ class KATCPReply(_KATCPReplyTuple):
     def __bool__(self):
         """True if request succeeded (i.e. first reply argument is 'ok')."""
         return self.messages[0].reply_ok()
-    # This might not work for python3
-    def __nonzero__(self):
-        """True if request succeeded (i.e. first reply argument is 'ok')."""
-        return self.messages[0].reply_ok()
+
+    if PY2:
+        __nonzero__ = __bool__
 
     @property
     def messages(self):

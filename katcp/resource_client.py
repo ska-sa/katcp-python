@@ -1061,9 +1061,6 @@ class GroupResults(dict):
         """True if katcp request succeeded on all clients."""
         return all(self.values())
 
-    # MM Investigate this
-    # Was not handled automatically by futurize, see
-    # https://github.com/PythonCharmers/python-future/issues/282
     if PY2:
         __nonzero__ = __bool__
 
@@ -1247,15 +1244,15 @@ class ClientGroup(object):
                 stragglers[client.name] = f
         rest_of_results = yield until_some(**stragglers)
         results.update(dict(rest_of_results))
+
         class TestableDict(dict):
             """Dictionary of results that can be tested for overall success."""
             def __bool__(self):
                 return sum(self.values()) >= quorum
-            # MM investigate this
-            # Was not handled automatically by futurize, see
-            # https://github.com/PythonCharmers/python-future/issues/282
+
             if PY2:
                 __nonzero__ = __bool__
+
         raise tornado.gen.Return(TestableDict(results))
 
 
