@@ -19,6 +19,7 @@ from functools import wraps
 import tornado.ioloop
 
 from _thread import get_ident as get_thread_ident
+from future.utils import PY2
 
 from .compat import is_bytes, is_text
 from .core import Message, Sensor
@@ -202,8 +203,8 @@ class SampleStrategy(object):
     def get_sampling_formatted(self):
         """The current sampling strategy and parameters.
 
-        The strategy is returned as a string and the values
-        in the parameter list are formatted as strings using
+        The strategy is returned as a byte string and the values
+        in the parameter list are formatted as byte strings using
         the formatter for this sensor type.
 
         Returns
@@ -219,7 +220,10 @@ class SampleStrategy(object):
         params = []
         for param in self._params:
             if not is_bytes(param):
-                param = str(param).encode('ascii')
+                if PY2:
+                    param = str(param)
+                else:
+                    param = str(param).encode('ascii')
             params.append(param)
         return strategy, params
 
