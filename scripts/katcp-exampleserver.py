@@ -12,7 +12,7 @@ from future import standard_library
 standard_library.install_aliases()  # noqa: E402
 
 import logging
-import queue as Queue
+import queue
 import sys
 
 from optparse import OptionParser
@@ -59,7 +59,7 @@ class DeviceExampleServer(katcp.DeviceServer):
     @return_reply(Int())
     def request_intdiv(self, sock, x, y):
         """Perform integer division of x and y."""
-        return ("ok", x / y)
+        return ("ok", x // y)
 
 
 if __name__ == "__main__":
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     (opts, args) = parser.parse_args()
 
     print("Server listening on port %d, Ctrl-C to terminate server" % opts.port)
-    restart_queue = Queue.Queue()
+    restart_queue = queue.Queue()
     server = DeviceExampleServer(opts.host, opts.port)
     server.set_restart_queue(restart_queue)
 
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         while True:
             try:
                 device = restart_queue.get(timeout=0.5)
-            except Queue.Empty:
+            except queue.Empty:
                 device = None
             if device is not None:
                 print("Stopping ...")

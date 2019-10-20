@@ -16,6 +16,7 @@ import sys
 import traceback
 
 from builtins import input
+from future.utils import PY3
 from optparse import OptionParser
 
 import katcp
@@ -35,6 +36,7 @@ class DeviceExampleClient(katcp.DeviceClient):
     def handle_inform(self, msg):
         """Called when an inform message arrives."""
         print(msg)
+
 
 if __name__ == "__main__":
 
@@ -56,9 +58,11 @@ if __name__ == "__main__":
         while True:
             s = input("> ")
             try:
+                if PY3:
+                    s = s.encode('utf-8')
                 msg = katcp_parser.parse(s)
                 client.ioloop.add_callback(client.send_message, msg)
-            except Exception as e:
+            except Exception:
                 e_type, e_value, trace = sys.exc_info()
                 reason = "\n".join(traceback.format_exception(
                     e_type, e_value, trace, 20

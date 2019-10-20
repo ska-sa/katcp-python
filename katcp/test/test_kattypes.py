@@ -310,6 +310,7 @@ class TestStrictTimestamp(TestType):
 
         self._pack = [
             (basic, 1235475381.69669, b"1235475381.69669"),
+            (basic, -0.1, ValueError),
             (basic, -1.0, ValueError),
             (basic, "a", ValueError),
             (basic, None, ValueError),
@@ -320,6 +321,7 @@ class TestStrictTimestamp(TestType):
 
         self._unpack = [
             (basic, b"1235475381.696", 1235475381.6960001),
+            (basic, b"-0.1", ValueError),
             (basic, b"-1.0", ValueError),
             (basic, b"a", ValueError),
             (basic, None, ValueError),
@@ -501,8 +503,6 @@ class TestDiscreteMulti(TestType):
 
         self._unpack = [
             (basic, b"VAL1", ["VAL1"]),
-        ]
-        foo =[
             (basic, b"VAL2", ["VAL2"]),
             (basic, b"VAL1,VAL2", ["VAL1", "VAL2"]),
             (basic, b"all", ["VAL1", "VAL2"]),
@@ -742,7 +742,7 @@ class TestDecorator(unittest.TestCase):
         self.assertEqual(str(ex.exception), expected)
 
 
-class TestPackTyeps(unittest.TestCase):
+class TestPackTypes(unittest.TestCase):
 
     def check_packing(self, types, args, expected):
         list_packed = pack_types(list(types), list(args), DEFAULT_KATCP_MAJOR)

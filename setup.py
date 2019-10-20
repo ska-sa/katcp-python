@@ -49,7 +49,7 @@ setup(
         "Topic :: Scientific/Engineering :: Astronomy",
     ],
     platforms=["OS Independent"],
-    python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*",
+    python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*",
     keywords="kat kat7 ska MeerKAT",
     setup_requires=["katversion"],
     use_katversion=True,
@@ -57,7 +57,7 @@ setup(
         "ply",
         "future",
         "futures; python_version<'3'",
-        "tornado>=4.5.3, <5",
+        "tornado>=4.3, <5",
     ],
     # install extras by running pip install .[doc,<another_extra>]
     extras_require={

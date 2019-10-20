@@ -264,14 +264,13 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
         def make_test_sensors(sensors_info):
             test_sensors = AttrDict()
-            # TODO PY3 check if we can get rid of the list() call
-            for sens_pyname, info in list(sensors_info.items()):
+            for sens_pyname, info in sensors_info.items():
                 info = dict(info)
                 info['sensor_type'] = Sensor.INTEGER
                 val = info.pop('value')
                 timestamp = val*10
                 received_timestamp = timestamp + 1
-                sens = test_sensors[sens_pyname] =  resource.KATCPSensor(
+                sens = test_sensors[sens_pyname] = resource.KATCPSensor(
                     info, sens_manager)
                 sens._reading = resource.KATCPSensorReading(
                     received_timestamp, timestamp, Sensor.NOMINAL, val)
@@ -283,7 +282,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         sens_manager.get_sampling_strategy.side_effect = (
             lambda sens_name: resource.normalize_strategy_parameters(
                 sensor_strategies.get(
-                    resource.escape_name(sens_name), 'none')) )
+                    resource.escape_name(sens_name), 'none')))
 
         DUT.sensor.update(test_sensors)
 
@@ -297,10 +296,10 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
         # Now get all the sensors
         result = yield DUT.list_sensors('')
-        # built-in `sorted()` uses __cmp__ to sort out the order in Python2.
-        # However, this breaks compatibility on Python3 due to
+        # built-in `sorted()` and `list.sort()` use __cmp__ for ordering in Python2.
+        # However, this breaks compatibility in Python3 due to
         # https://docs.python.org/3/whatsnew/3.0.html#ordering-comparisons
-        result = sorted(result, key=lambda obj: obj.name)
+        result.sort(key=lambda obj: obj.name)
         expected_result = sorted([
             resource.SensorResultTuple(
                 test_sensors[s_id], test_sensors_info[s_id].name,

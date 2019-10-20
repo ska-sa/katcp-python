@@ -772,7 +772,7 @@ class TestUntilSome(tornado.testing.AsyncTestCase):
         with self.assertRaises(tornado.gen.TimeoutError):
             yield until_some(done_at_least=2, timeout=0.05, **futures)
         f2.set_result(42)
-        results = yield until_some(done_at_least=1, timeout=0.5, **futures)
+        results = yield until_some(done_at_least=1, timeout=0.1, **futures)
         # both f1 and f2 are ready, but kwargs dict makes order unpredictable
         self.assertEqual(len(results), 1)
         options = {'f1': 24, 'f2': 42}

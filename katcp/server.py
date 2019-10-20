@@ -1,4 +1,4 @@
-# servers.py
+# server.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
 # Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
@@ -23,11 +23,11 @@ from collections import deque
 from concurrent.futures import Future
 from functools import partial, wraps
 
-import future
 import tornado.ioloop
 import tornado.tcpserver
 
 from _thread import get_ident as get_thread_ident
+from future.utils import with_metaclass
 from past.builtins import basestring
 from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
@@ -641,7 +641,7 @@ class KATCPServer(object):
         try:
             if stream.KATCPServer_closing or stream.closed():
                 raise RuntimeError(
-                    'Stream is closing so we cannot accept any more writes')
+                    'Stream is closing or closed so we cannot accept any more writes')
             return stream.write(bytes(msg) + b'\n')
         except Exception:
             addr = self.get_address(stream)
@@ -728,7 +728,7 @@ class KATCPServer(object):
         This method can only be called in the IOLoop thread.
 
         """
-        for stream in list(self._connections.keys()):
+        for stream in self._connections.keys():
             if not stream.closed():
                 # Don't cause noise by trying to write to already closed streams
                 self.send_message(stream, msg)
@@ -916,9 +916,8 @@ class MessageHandlerThread(object):
         return self._running.wait(timeout)
 
 
-class DeviceServerBase(future.utils.with_metaclass(DeviceServerMetaclass, object)):
-
-    r"""Base class for device servers.
+class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
+    """Base class for device servers.
 
     Subclasses should add .request\_* methods for dealing
     with request messages. These methods each take the client
@@ -929,7 +928,7 @@ class DeviceServerBase(future.utils.with_metaclass(DeviceServerMetaclass, object
     those types of messages.
 
     Should a subclass need to generate inform messages it should
-    do so using either the .inform() or .mass\_inform() methods.
+    do so using either the .inform() or .mass_inform() methods.
 
     Finally, this class should probably not be subclassed directly
     but rather via subclassing DeviceServer itself which implements
@@ -1665,7 +1664,7 @@ class DeviceServer(DeviceServerBase):
         sensor = self._sensors.pop(sensor_name)
 
         def cancel_sensor_strategies():
-            for conn_strategies in list(self._strategies.values()):
+            for conn_strategies in self._strategies.values():
                 strategy = conn_strategies.pop(sensor, None)
                 if strategy:
                     strategy.cancel()
@@ -1887,7 +1886,7 @@ class DeviceServer(DeviceServerBase):
             timeout_hint = timeout_hint or 0
             timeout_hints[request] = timeout_hint
         else:
-            for request_, handler in list(self._request_handlers.items()):
+            for request_, handler in self._request_handlers.items():
                 timeout_hint = getattr(handler, 'request_timeout_hint', None)
                 if timeout_hint:
                     timeout_hints[request_] = timeout_hint
@@ -2400,7 +2399,7 @@ class DeviceLogger(object):
 
     # level values are used as indexes into the LEVELS list
     # so these to lists should be in the same order
-    ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF = list(range(8))
+    ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF = range(8)
 
     ## @brief List of logging level names.
     LEVELS = ["all", "trace", "debug", "info", "warn",

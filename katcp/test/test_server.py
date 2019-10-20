@@ -25,6 +25,7 @@ import _thread
 import mock
 import tornado.testing
 
+from future.utils import PY2
 from tornado import gen
 
 import katcp
@@ -411,13 +412,15 @@ class test_DeviceServer51(test_DeviceServer):
                                 ['#request-timeout-hint help 0.0'])
 
         # Now set hint on help command and check that it is reflected. Note, in
-        # Python 3 the im_func would not be neccesary, but in Python 2 you
-        # cannot add a new attribute to an instance method. For Python 2 we need
+        # Python 2 you cannot add a new attribute to an instance method. We need
         # to make a copy of the original handler function using partial and then
         # mess with that copy.
         handler_original = self.server._request_handlers['help']
-        handler_updated = wraps(handler_original)(partial(handler_original,
-                                                          self.server))
+        if PY2:
+            handler_updated = wraps(handler_original)(partial(handler_original,
+                                                              self.server))
+        else:
+            handler_updated = handler_original
         self.server._request_handlers[
             'help'] = kattypes.request_timeout_hint(25.5)(handler_updated)
         req = mock_req('request-timeout-hint', 'help')
