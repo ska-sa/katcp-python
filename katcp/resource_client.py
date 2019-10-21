@@ -28,7 +28,7 @@ from katcp.core import (AsyncCallbackEvent, AsyncEvent, AsyncState, AttrDict,
 # TODO NM 2017-04-13 Importing IOLoopThreadwrapper here for backwards
 # compatibility, user code should be changed to import it from the more logical
 # katcp.ioloop_manager module.
-from katcp.ioloop_manager import ThreadSafeMethodAttrWrapper
+from katcp.ioloop_manager import IOLoopThreadWrapper, ThreadSafeMethodAttrWrapper
 from katcp.resource import KATCPReply, KATCPSensorError
 
 log = logging.getLogger(__name__)
