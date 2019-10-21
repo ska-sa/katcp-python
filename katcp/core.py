@@ -758,9 +758,9 @@ class DeviceMetaclass(type):
         Parameters
         ----------
         mcs : class
-            The meta-class instance
+            The metaclass instance
         name : str
-            The meta-class name
+            The metaclass name
         bases : list of classes
             List of base classes
         dct : dict

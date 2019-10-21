@@ -102,7 +102,7 @@ WIP (0.7.0?)
  * Make katcp.testutils.WaitingMock robust against race conditions
  * Explicitly list set of base KATCP requests in katcp.server.BASE_REQUESTS
  * Make method-name to KATCP-name function available outside KATCP server
-   meta-class
+   metaclass
  * Improvements to logging (i.a. prevents issues when using SocketHandler)
  * Docstring cleanups
 

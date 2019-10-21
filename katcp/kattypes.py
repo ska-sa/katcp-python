@@ -152,6 +152,7 @@ class Int(KatcpType):
     max : int
         The maximum allowed value. Ignored if not given.
     """
+
     name = "integer"
     encode = lambda self, value, major: b"%d" % (value,)
 
@@ -189,6 +190,7 @@ class Float(KatcpType):
     max : float
         The maximum allowed value. Ignored if not given.
     """
+
     name = "float"
 
     def encode(self, value, major):
@@ -223,6 +225,7 @@ class Float(KatcpType):
 
 class Bool(KatcpType):
     """The KATCP boolean type."""
+
     name = "boolean"
     encode = lambda self, value, major: value and b"1" or b"0"
 
@@ -253,6 +256,7 @@ class Str(KatcpType):
     to a string, and then to bytes.  This is a one-way operation - when that byte
     string is decoded the original type will not be recovered.
     """
+
     name = "string"
 
     if future.utils.PY2:
@@ -290,6 +294,7 @@ class Discrete(Str):
     case_insensitive : bool
         Whether case-insensitive value matching should be used.
     """
+
     name = "discrete"
 
     def __init__(self, values, case_insensitive=False, **kwargs):
@@ -320,6 +325,7 @@ class Discrete(Str):
 
 class Lru(KatcpType):
     """The KATCP lru type"""
+
     name = "lru"
     # LRU sensor values
     LRU_NOMINAL, LRU_ERROR = range(2)
@@ -354,6 +360,7 @@ class Address(KatcpType):
 
         The address type was added in katcp 0.4.
     """
+
     name = "address"
 
     NULL = ("0.0.0.0", None)  # null address for use as an initial value
@@ -391,6 +398,7 @@ class Address(KatcpType):
 
 class Timestamp(KatcpType):
     """The KATCP timestamp type."""
+
     name = "timestamp"
 
     # Use microsecond precision, which is about as much as you can expect with a
@@ -422,6 +430,7 @@ class TimestampOrNow(Timestamp):
     value for now, :const:`katcp.kattypes.TimestampOrNow.NOW`, is encoded as
     the string "now".
     """
+
     name = "timestamp_or_now"
 
     NOW = object()
@@ -439,6 +448,7 @@ class TimestampOrNow(Timestamp):
 
 class StrictTimestamp(KatcpType):
     """A timestamp that enforces the XXXX.YYY format for timestamps."""
+
     name = "strict_timestamp"
 
     def encode(self, value, major):
@@ -477,6 +487,7 @@ class Struct(KatcpType):
         Format to use for packing and unpacking values. It is passed directly
         into :func:`struct.pack` and :func:`struct.unpack`.
     """
+
     name = "struct"
 
     def __init__(self, fmt, **kwargs):
@@ -507,6 +518,7 @@ class Regex(Str):
         Regular expression that values should match.
 
     """
+
     name = "regex"
 
     _re_flags = [
@@ -545,6 +557,7 @@ class DiscreteMulti(Discrete):
     separator : str, optional
         The separator used in the packed value string.
     """
+
     name = "discretemulti"
 
     def encode(self, value, major):
@@ -668,6 +681,7 @@ def request(*types, **options):
     ...         return ("ok", my_int % 2)
     ...
     """
+
     include_msg = options.pop('include_msg', False)
     has_req = options.pop('has_req', True)
     major = options.pop('major', DEFAULT_KATCP_MAJOR)
