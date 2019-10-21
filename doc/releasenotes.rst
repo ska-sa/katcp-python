@@ -66,6 +66,10 @@ As part of the Python 3 compatibility update, note the following:
     be coerced to native strings.
   - ``set_formatted``, ``parse_value``:  only accept byte strings (stricter
     checking).
+  - The ``float`` and ``strict_timestamp`` sensor values are now encoded using
+    ``repr()`` instead of ``"%.15g".  This means that more significant digits
+    are transmitted on the wire (16 to 17, instead of 15), and the client will
+    be able to reconstruct the exact some floating point value.
 
 Non-ASCII and UTF-8
 ^^^^^^^^^^^^^^^^^^^
