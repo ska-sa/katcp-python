@@ -90,7 +90,7 @@ effects:
 - :class:`kattypes.Str`, :class:`kattypes.Discrete`, :class:`kattypes.DiscreteMulti`
    - These types is still used in ``request`` and ``reply`` decorators.
    - For sending messages, they accept any type of object, but UTF-8 encoding
-     is used if value are not already byte strings.
+     is used if values are not already byte strings.
    - When decoding received messages, "native" strings are returned.
 
 Keep in mind that a Python 2 server may be communicating with a Python 3
