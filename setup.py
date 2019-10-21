@@ -15,7 +15,7 @@ files = {"Readme": "README.md", "Changelog": "CHANGELOG.md"}
 
 long_description = ""
 for name, filename in files.items():
-    if not name == 'Readme':
+    if name != 'Readme':
         long_description += "# {}\n".format(name)
     with open(os.path.join(this_directory, filename)) as _f:
         file_contents = _f.read()
