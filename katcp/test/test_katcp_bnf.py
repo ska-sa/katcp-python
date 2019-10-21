@@ -96,7 +96,7 @@ class DclLexer(object):
 
     # argument state
 
-    t_argument_PLAIN = r'[^\t\n\r\\\0]'
+    t_argument_PLAIN = r'[^\t\x1b\n\r\\\0]'
 
     t_argument_ESCAPE = r'\\[\\_0nret@]'
 
