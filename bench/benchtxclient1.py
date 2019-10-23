@@ -42,7 +42,8 @@ class DemoClient(ClientKatCP):
             self.sampling = True
             self.send_request('sensor-list').addCallback(self.check_sensor_list)
 
-    def check_sensor_list(self, ((informs, reply))):
+    def check_sensor_list(self, informs_reply):
+        informs, reply = informs_reply
         sensor_no = len(informs)
         if self.no_of_sensors < sensor_no:
             self.start_sampling(None)

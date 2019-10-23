@@ -310,28 +310,25 @@ class Message(object):
         """Format a Message argument to a byte string"""
         if isinstance(arg, bool):
             return b'1' if arg else b'0'
+        elif isinstance(arg, int):
+            return b'%d' % arg
+        elif isinstance(arg, float):
+            return repr(arg).encode('ascii')
+        elif is_bytes(arg):
+            return arg
+        elif is_text(arg):
+            return encode_utf8_with_error_log(arg)
+        # Note: checks for Integral and Real allow for numpy types,
+        # but checks are quite slow, so do them as late as possible
         elif isinstance(arg, numbers.Integral):
             return b'%d' % arg
         elif isinstance(arg, numbers.Real):
             return repr(arg).encode('ascii')
-        elif is_bytes(arg):
-            return arg
         else:
-            try:
-                if is_text(arg):
-                    return arg.encode('utf-8')
-                else:
-                    if future.utils.PY2:
-                        return str(arg)
-                    else:
-                        return str(arg).encode('utf-8')
-            except UnicodeEncodeError:
-                # unicode characters will break the str cast, so
-                # try to encode to ascii and replace the offending characters
-                # with a '?' character
-                logger.error("Error encoding message argument to byte str! "
-                             "Replacing bad characters with '?'.")
-                return arg.encode('ascii', 'replace')
+            if future.utils.PY2:
+                return str(arg)
+            else:
+                return encode_utf8_with_error_log(str(arg))
 
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
@@ -561,7 +558,7 @@ class MessageParser(object):
         br"^(?P<name>[a-zA-Z][a-zA-Z0-9\-]*)(\[(?P<id>[0-9]+)\])?$")
 
     def _unescape_match(self, match):
-        """Given an re.Match, unescaped the escape code it represents."""
+        """Given an re.Match, unescape the escape code it represents."""
         char = match.group(1)
         if char in self.ESCAPE_LOOKUP:
             return self.ESCAPE_LOOKUP[char]
@@ -736,14 +733,14 @@ class ProtocolFlags(object):
         if match:
             major = int(match.group('major'))
             minor = int(match.group('minor'))
-            flags = set(byte_chars(match.group('flags')) or b'')
+            flags = set(byte_chars(match.group('flags') or b''))
         else:
             major, minor, flags = None, None, set()
         return cls(major, minor, flags)
 
 
 class DeviceMetaclass(type):
-    r"""Meta-class for DeviceServer and DeviceClient classes.
+    r"""Metaclass for DeviceServer and DeviceClient classes.
 
     Collects up methods named request\_* and adds
     them to a dictionary of supported methods on the class.
@@ -2040,3 +2037,28 @@ def until_some(*args, **kwargs):
         if len(results) >= done_at_least:
             break
     raise tornado.gen.Return(results)
+
+
+def encode_utf8_with_error_log(arg):
+    """Return byte string encoded with UTF-8, but log and replace on error.
+
+    The text is encoded, but if that fails, an error is logged, and the
+    offending characters are replaced with "?".
+
+    Parameters
+    ----------
+    arg : str
+        Text to be encoded.
+
+    Returns
+    -------
+    encoded : byte str
+        UTF-8 encoded version of the text.  May include "?" replacement chars.
+
+    """
+    try:
+        return arg.encode('utf-8')
+    except UnicodeEncodeError:
+        logger.error("Error encoding message argument to byte str! "
+                     "Replacing bad characters with '?'.")
+        return arg.encode('utf-8', 'replace')

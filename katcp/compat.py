@@ -45,20 +45,15 @@ def byte_chars(byte_string):
 
     Parameters
     ----------
-    byte_string : bytes or None
-        Byte string to be split into characters.  For None,
-        an empty list is returned.
+    byte_string : bytes
+        Byte string to be split into characters.
 
     Returns
     -------
     chars : list
         The individual characters, each as a byte string.
-
     """
-    if byte_string is not None:
-        return [byte_string[i:i+1] for i in range(len(byte_string))]
-    else:
-        return []
+    return [byte_string[i:i+1] for i in range(len(byte_string))]
 
 
 def is_bytes(value):
