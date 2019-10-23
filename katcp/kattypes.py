@@ -194,7 +194,12 @@ class Float(KatcpType):
     name = "float"
 
     def encode(self, value, major):
-        if isinstance(value, numbers.Real):
+        # Note:  order chosen for performance - Integral and Real checks are slower
+        if isinstance(value, float):
+            return b"%r" % (value,)
+        elif isinstance(value, int) or isinstance(value, numbers.Integral):
+            return b"%r" % (float(value),)
+        elif isinstance(value, numbers.Real):
             return b"%r" % (value,)
         else:
             raise ValueError("Could not encode value '%r' as float." % value)

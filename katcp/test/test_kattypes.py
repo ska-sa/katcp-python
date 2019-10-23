@@ -61,17 +61,22 @@ class TestInt(TestType):
         default = Int(default=11)
         optional = Int(optional=True)
         default_optional = Int(default=11, optional=True)
-        self.minmax = Int(min=5, max=6)
+        minmax = Int(min=5, max=6)
+        big_minmax = Int(min=-2**64, max=2**64)
 
         self._pack = [
             (basic, 5, b"5"),
             (basic, -5, b"-5"),
             (basic, "a", TypeError),
             (basic, None, ValueError),
-            (self.minmax, 5, b"5"),
-            (self.minmax, 6, b"6"),
-            (self.minmax, 4, ValueError),
-            (self.minmax, 7, ValueError),
+            (minmax, 5, b"5"),
+            (minmax, 6, b"6"),
+            (minmax, 4, ValueError),
+            (minmax, 7, ValueError),
+            (big_minmax, 2**64, b"18446744073709551616"),
+            (big_minmax, -2**64, b"-18446744073709551616"),
+            (big_minmax, 2**64 + 1, ValueError),
+            (big_minmax, -2**64 - 1, ValueError),
             (default, None, b"11"),
             (default_optional, None, b"11"),
             (optional, None, ValueError),
@@ -82,10 +87,10 @@ class TestInt(TestType):
             (basic, b"-5", -5),
             (basic, b"a", ValueError),
             (basic, None, ValueError),
-            (self.minmax, b"5", 5),
-            (self.minmax, b"6", 6),
-            (self.minmax, b"4", ValueError),
-            (self.minmax, b"7", ValueError),
+            (minmax, b"5", 5),
+            (minmax, b"6", 6),
+            (minmax, b"4", ValueError),
+            (minmax, b"7", ValueError),
             (default, None, 11),
             (default_optional, None, 11),
             (optional, None, None),
@@ -99,7 +104,8 @@ class TestFloat(TestType):
         default = Float(default=11.0)
         optional = Float(optional=True)
         default_optional = Float(default=11.0, optional=True)
-        self.minmax = Float(min=5.0, max=6.0)
+        minmax = Float(min=5.0, max=6.0)
+        big_minmax = Float(min=-2**64, max=2**64)  # allow integer limits
 
         self._pack = [
             (basic, 5.0, b"5.0"),
@@ -108,10 +114,14 @@ class TestFloat(TestType):
             (basic, -5.5, b"-5.5"),
             (basic, "a", ValueError),
             (basic, None, ValueError),
-            (self.minmax, 5.0, b"5.0"),
-            (self.minmax, 6.0, b"6.0"),
-            (self.minmax, 4.5, ValueError),
-            (self.minmax, 6.5, ValueError),
+            (minmax, 5.0, b"5.0"),
+            (minmax, 6.0, b"6.0"),
+            (minmax, 4.5, ValueError),
+            (minmax, 6.5, ValueError),
+            (big_minmax, 2**64, b"1.8446744073709552e+19"),
+            (big_minmax, -2**64, b"-1.8446744073709552e+19"),
+            (big_minmax, 2**64 + 1, ValueError),
+            (big_minmax, -2**64 - 1, ValueError),
             (default, None, b"11.0"),
             (default_optional, None, b"11.0"),
             (optional, None, ValueError),
@@ -126,10 +136,10 @@ class TestFloat(TestType):
             (basic, b"-5.5", -5.5),
             (basic, b"a", ValueError),
             (basic, None, ValueError),
-            (self.minmax, b"5", 5.0),
-            (self.minmax, b"6", 6.0),
-            (self.minmax, b"4.5", ValueError),
-            (self.minmax, b"6.5", ValueError),
+            (minmax, b"5", 5.0),
+            (minmax, b"6", 6.0),
+            (minmax, b"4.5", ValueError),
+            (minmax, b"6.5", ValueError),
             (default, None, 11.0),
             (default_optional, None, 11.0),
             (optional, None, None),
