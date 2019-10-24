@@ -79,6 +79,19 @@ pipeline {
                 }
             }
         }
+        stage('Generate documentation.') {
+            options {
+                timestamps()
+                timeout(time: 30, unit: 'MINUTES')
+            }
+
+            stage('documentation') {
+                steps {
+                    echo "Generating Sphinx documentation."
+                    sh 'tox -e docs'
+                }
+            }
+        }
 
         stage('Build & publish packages') {
             when {
