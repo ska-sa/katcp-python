@@ -244,14 +244,14 @@ class Bool(KatcpType):
 class Str(KatcpType):
     """The KATCP string type.
 
-    Note
-    ----
+    Notes
+    -----
 
     The behaviour of this type is subtly different between Python versions in
     order to ease the porting effort for users of this library.
     - Unpacked (decoded) values are native strings (bytes in PY2, Unicode in PY3).
     - Packed (encoded) values are always byte strings (in both PY2 and PY3), as
-      this is what is sent on the wire.
+    this is what is sent on the wire.
 
     UTF-8 encoding is used when converting between Unicode and byte strings.
     Thus ASCII values are fine, but arbitrary strings of bytes are not safe to

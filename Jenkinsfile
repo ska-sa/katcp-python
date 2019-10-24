@@ -85,14 +85,11 @@ pipeline {
                 timeout(time: 30, unit: 'MINUTES')
             }
 
-            stage('documentation') {
-                steps {
-                    echo "Generating Sphinx documentation."
-                    sh 'tox -e docs'
-                }
+            steps {
+                echo "Generating Sphinx documentation."
+                sh 'tox -e docs'
             }
         }
-
         stage('Build & publish packages') {
             when {
                 branch 'master'

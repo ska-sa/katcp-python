@@ -119,7 +119,9 @@ class NumpyDocString(object):
         return self._parsed_data[key]
 
     def __setitem__(self,key,val):
-        if key not in self._parsed_data:
+        if (key not in self._parsed_data) and all(
+            [bool(key not in i)for i in self._parsed_data]
+        ):
             warn("Unknown section %s" % key)
         else:
             self._parsed_data[key] = val

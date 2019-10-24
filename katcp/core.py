@@ -1468,8 +1468,8 @@ class Sensor(object):
         value : bytes
             KATCP formatted sensor value byte string
 
-        Note
-        ----
+        Notes
+        -----
         Should only be used for a reading obtained from the same sensor.
 
         """
@@ -1683,8 +1683,8 @@ class AsyncEvent(object):
         timeout : float, int or None
             If not None, only wait up to `timeout` seconds for event to be set.
 
-        Return Value
-        ------------
+        Returns
+        -------
         flag : True if event was set within timeout, otherwise False.
 
         Notes

@@ -1940,8 +1940,8 @@ def handle_mock_req(dev, req):
     req : :class:`WaitingMock` object
         A mock request created with katcp.testutils.mock_req()
 
-    Return Value
-    ------------
+    Returns
+    -------
 
     reply_and_inform_msgs_future : tornado Future instance
         Resolves with (reply_msg, inform_msgs)

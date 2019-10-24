@@ -192,7 +192,7 @@ class InspectingClientAsync(object):
 
     """
     request_factory = RequestType
-    """Factory that produces KATCP Request objects
+    """Factory that produces KATCP Request objects.
 
     signature: request_factory(name, description, timeout_hint), all parameters
     passed as kwargs
@@ -576,6 +576,7 @@ class InspectingClientAsync(object):
 
             Example structure:
             ::
+
                 {
                     'requests':{
                         'added': set(['req1', 'req2']),
@@ -640,6 +641,7 @@ class InspectingClientAsync(object):
 
             Example structure:
             ::
+
                 {
                     'added': set(['req1', 'req2']),
                     'removed': set(['req10', 'req20'])
@@ -756,6 +758,7 @@ class InspectingClientAsync(object):
 
             Example structure:
             ::
+
                 {
                     'added': set(['sens1', 'sens2']),
                     'removed': set(['sens10', 'sens20'])
@@ -1027,12 +1030,11 @@ class InspectingClientAsync(object):
         -------
         future object.
 
-        Example
-        -------
-
+        Examples
+        --------
         ::
 
-        reply, informs = yield ic.simple_request('help', 'sensor-list')
+            reply, informs = yield ic.simple_request('help', 'sensor-list')
 
         """
         # TODO (NM 2016-11-03) This method should really live on the lower level

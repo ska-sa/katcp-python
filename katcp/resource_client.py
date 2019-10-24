@@ -983,14 +983,14 @@ class GroupRequest(object):
     interactive convenience. It provides the KATCP request help string as a
     docstring accessible via IPython's question mark operator.
 
-    Call Parameters
-    ---------------
+    Parameters
+    ----------
 
     Call parameters are all forwarded to the :class:`KATCPRequest` instance of each
     client in the group.
 
-    Return Value
-    ------------
+    Returns
+    -------
     Returns a tornado future that resolves with a :class:`GroupResults` instance that
     contains the replies of each client. If a particular client does not have the request,
     its result is None.

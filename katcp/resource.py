@@ -590,8 +590,8 @@ class KATCPSensorsManager(with_metaclass(abc.ABCMeta, object)):
     def poll_sensor(self, sensor_name):
         """Poll sensor and arrange for sensor object to be updated
 
-        Return Value
-        ------------
+        Returns
+        -------
 
         done_future : tornado Future
             Resolves when the poll is complete, or raises KATCPSensorError
@@ -850,8 +850,8 @@ class KATCPSensor(with_metaclass(abc.ABCMeta, object)):
         -------
         reply : tornado Future resolving with  :class:`KATCPSensorReading` object
 
-        Note
-        ----
+        Notes
+        -----
 
         As a side-effect this will update the reading stored in this object, and result in
         registered listeners being called.
@@ -868,8 +868,8 @@ class KATCPSensor(with_metaclass(abc.ABCMeta, object)):
         -------
         reply : tornado Future resolving with  :class:`KATCPSensorReading` object
 
-        Note
-        ----
+        Notes
+        -----
 
         As a side-effect this will update the reading stored in this object, and result in
         registered listeners being called.
@@ -886,8 +886,8 @@ class KATCPSensor(with_metaclass(abc.ABCMeta, object)):
         -------
         reply : tornado Future resolving with  :class:`KATCPSensorReading` object
 
-        Note
-        ----
+        Notes
+        -----
 
         As a side-effect this will update the reading stored in this object, and result in
         registered listeners being called.
