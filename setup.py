@@ -45,6 +45,7 @@ setup(
         "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Topic :: Scientific/Engineering :: Astronomy",
     ],
@@ -59,15 +60,6 @@ setup(
         "futures; python_version<'3'",
         "tornado>=4.3, <5",
     ],
-    # install extras by running pip install .[doc,<another_extra>]
-    extras_require={
-        "doc": [
-            "sphinx>=1.2.3, <2.0",
-            "docutils>=0.12, <1.0",
-            "sphinx_rtd_theme>=0.1.5, <1.0",
-            "numpydoc>=0.5, <1.0",
-        ]
-    },
     zip_safe=False,
     test_suite="nose.collector",
 )
