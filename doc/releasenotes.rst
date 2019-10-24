@@ -7,16 +7,17 @@ Release Notes
 =====
 * Add Python 3 compatibility.
 
-See also :download:`CHANGELOG` for more details on changes.
+See also :download:`CHANGELOG.md` for more details on changes.
 
 Important changes for Python 3 compatibility
--------------------------------------------
+--------------------------------------------
 
 General notes
 ^^^^^^^^^^^^^
 
 The package is now compatible with both Python 2 and 3.  The goals of the
 migration were:
+
 * Do not change the public API.
 * Do not break existing functionality for Python 2.
 * Ease migration of packages using katcp to Python 3.
@@ -55,23 +56,23 @@ As part of the Python 3 compatibility update, note the following:
 
 - :class:`katcp.Message`.
   - ``arguments`` and ``mid`` attributes will be forced to byte strings in all
-    Python versions.  This is to match what is sent on the wire (serialised
-    byte stream).
-  - ``name``:  is expected to be a native string.
+  Python versions.  This is to match what is sent on the wire (serialised
+  byte stream).
+  - ``name``: is expected to be a native string.
   - ``repr()``:  the result will differ slightly in Python 3 - the arguments
-    will be shown as quoted byte strings. E.g., Python 2: ``"<Message reply ok
-    (123, zzz)>"``, vs. Python 3:  ``"<Message reply ok (b'123', b'zzz')>"``.
-    In all versions, arguments longer than 1000 characters are now truncated.
+  will be shown as quoted byte strings. E.g., Python 2: ``"<Message reply ok
+  (123, zzz)>"``, vs. Python 3:  ``"<Message reply ok (b'123', b'zzz')>"``.
+  In all versions, arguments longer than 1000 characters are now truncated.
 - :class:`katcp.Sensor`.
   - ``name``, ``description``, ``units``, ``params`` (for discrete sensors):
-    ``__init__`` can take byte strings or native strings, but attributes will
-    be coerced to native strings.
+  ``__init__`` can take byte strings or native strings, but attributes will
+  be coerced to native strings.
   - ``set_formatted``, ``parse_value``:  only accept byte strings (stricter
-    checking).
+  checking).
   - The ``float`` and ``strict_timestamp`` sensor values are now encoded using
-    ``repr()`` instead of ``"%.15g"``.  This means that more significant digits
-    are transmitted on the wire (16 to 17, instead of 15), and the client will
-    be able to reconstruct the exact some floating point value.
+  ``repr()`` instead of ``"%.15g"``.  This means that more significant digits
+  are transmitted on the wire (16 to 17, instead of 15), and the client will
+  be able to reconstruct the exact some floating point value.
 
 Non-ASCII and UTF-8
 ^^^^^^^^^^^^^^^^^^^
@@ -85,14 +86,14 @@ effects:
 
 - :class:`katcp.Message`
   - the ``arguments`` are always using byte strings, so arbitrary bytes can
-    still be sent and received using this class directly.
+  still be sent and received using this class directly.
 - :class:`katcp.Sensor`
   - Values for ``string`` and ``discrete`` sensor types cannot be arbitrary
-    byte strings in Python 3 - they need to be UTF-8 compatible.
+  byte strings in Python 3 - they need to be UTF-8 compatible.
 - :class:`kattypes.Str`, :class:`kattypes.Discrete`, :class:`kattypes.DiscreteMulti`
   - These types is still used in ``request`` and ``reply`` decorators.
   - For sending messages, they accept any type of object, but UTF-8 encoding
-    is used if values are not already byte strings.
+  is used if values are not already byte strings.
   - When decoding received messages, "native" strings are returned.
 
 Keep in mind that a Python 2 server may be communicating with a Python 3
@@ -141,7 +142,7 @@ Benchmark, in ipython::
 * Increase server MAX_QUEUE_SIZE to handle more clients.
 * Use correct ioloop for client AsyncEvent objects.
 
-See also :download:`CHANGELOG` for more details on changes.
+See also :download:`CHANGELOG.md` for more details on changes.
 
 Important API changes
 ---------------------
@@ -184,7 +185,7 @@ stopped will now be notified.  Previously, this was not the case.
 * Improve Jenkins pipeline configuration.
 * Add information on how to contribute to the project.
 
-See also :download:`CHANGELOG` for more details on changes.
+See also :download:`CHANGELOG.md` for more details on changes.
 
 0.6.2
 =====
@@ -196,7 +197,7 @@ See also :download:`CHANGELOG` for more details on changes.
 * Moved IOLoopThreadWrapper to ioloop_manager.py, a more sensible location
 * Added a random-exponential retry backoff process
 
-See also :download:`CHANGELOG` for more details on changes.
+See also :download:`CHANGELOG.md` for more details on changes.
 
 0.6.1
 =====
@@ -208,14 +209,14 @@ See also :download:`CHANGELOG` for more details on changes.
 * Better dependency management using setup.py with `setuptools`
 * Fixed a memory leak when using KATCPResourceContainer
 
-See also :download:`CHANGELOG` for more details on changes.
+See also :download:`CHANGELOG.md` for more details on changes.
 
 0.6.0
 =====
 
 * Major change: Use the tornado event loop and async socket routines.
 
-See also :download:`CHANGELOG` for more details on changes.
+See also :download:`CHANGELOG.md` for more details on changes.
 
 Important API changes
 ---------------------
