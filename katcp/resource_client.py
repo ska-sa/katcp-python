@@ -38,9 +38,9 @@ def _normalise_request_name_set(reqs):
     return set(resource.escape_name(r) for r in reqs)
 
 def transform_future(transformation, future):
-    """Returns a new future that will resolve with a transformed value
+    """Returns a new future that will resolve with a transformed value.
 
-    Takes the resolution value of `future` and applies transformation(*future.result())
+    Takes the resolution value of `future` and applies "transformation(\*future.result())"
     to it before setting the result of the new future with the transformed value. If
     future() resolves with an exception, it is passed through to the new future.
 
@@ -1255,12 +1255,12 @@ class ClientGroup(object):
 
 
 class KATCPClientResourceContainer(resource.KATCPResource):
-    """Class for containing multiple :class:`KATCPClientResource` instances
+    """Class for containing multiple :class:`KATCPClientResource` instances.
 
     Provides aggregate `sensor` and `req` attributes containing the union of all the
     sensors in requests in the contained resources. Names are prefixed with <resname>_,
     where <resname> is the name of the resource to which the sensor / request belongs
-    except for aggregate sensors that starts with 'agg_'.
+    except for aggregate sensors that starts with ``agg_``.
 
     """
     @property

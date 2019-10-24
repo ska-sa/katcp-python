@@ -103,14 +103,19 @@ class InspectingClientStateType(namedtuple(
     """
     States tuple for the inspecting client. Fields, all bool:
 
-    connected : TCP connection has been established with the server
-    synced : The inspecting client and the user that interfaces through the state change
+    connected: bool
+        TCP connection has been established with the server.
+    synced: bool
+        The inspecting client and the user that interfaces through the state change
         callback are all synchronised with the current device state. Also implies
-        connected = True and data_synced = True
-    model_changed : The device has changed in some way, resulting in the device model
-                    being out of date.
-    data_synced : The inspecting client's internal representation of the device is up to
-                  date, although state change user is not yet up to date.
+        `connected = True` and `data_synced = True`.
+    model_changed: bool
+        The device has changed in some way, resulting in the device model being out of
+        date.
+    data_synced: bool
+        The inspecting client's internal representation of the device is up to date,
+        although state change user is not yet up to date.
+
     """
     __slots__ = []
 
@@ -190,7 +195,7 @@ class InspectingClientAsync(object):
     """Factory that produces KATCP Request objects
 
     signature: request_factory(name, description, timeout_hint), all parameters
-               passed as kwargs
+    passed as kwargs
 
     Should be set before calling connect()/start().
 
@@ -559,7 +564,7 @@ class InspectingClientAsync(object):
 
     @tornado.gen.coroutine
     def inspect(self):
-        """Inspect device requests and sensors, update model
+        """Inspect device requests and sensors, update model.
 
         Returns
         -------
@@ -570,14 +575,17 @@ class InspectingClientAsync(object):
             Contains sets of added/removed request/sensor names
 
             Example structure:
-
-            {'requests': {
-                'added': set(['req1', 'req2']),
-                'removed': set(['req10', 'req20'])}
-             'sensors': {
-                'added': set(['sens1', 'sens2']),
-                'removed': set(['sens10', 'sens20'])}
-            }
+            ::
+                {
+                    'requests':{
+                        'added': set(['req1', 'req2']),
+                        'removed': set(['req10', 'req20'])
+                    }
+                    'sensors': {
+                        'added': set(['sens1', 'sens2']),
+                        'removed': set(['sens10', 'sens20'])
+                    }
+                }
 
             If there are no changes keys may be omitted. If an item is in both
             the 'added' and 'removed' sets that means that it changed.
@@ -631,9 +639,11 @@ class InspectingClientAsync(object):
             no changes, returns ``None`` instead.
 
             Example structure:
-
-            {'added': set(['req1', 'req2']),
-             'removed': set(['req10', 'req20'])}
+            ::
+                {
+                    'added': set(['req1', 'req2']),
+                    'removed': set(['req10', 'req20'])
+                }
 
         """
         maybe_timeout = future_timeout_manager(timeout)
@@ -744,10 +754,12 @@ class InspectingClientAsync(object):
             respectively.  Modified sensors are listed in both. If there are no
             changes, returns ``None`` instead.
 
-        Example structure:
-
-            {'added': set(['sens1', 'sens2']),
-             'removed': set(['sens10', 'sens20'])}
+            Example structure:
+            ::
+                {
+                    'added': set(['sens1', 'sens2']),
+                    'removed': set(['sens10', 'sens20'])
+                }
 
         """
         if name is None:

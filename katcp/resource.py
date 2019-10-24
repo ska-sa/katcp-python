@@ -35,7 +35,7 @@ class KATCPResourceInactive(KATCPResourceError):
 
 
 class KATCPSensorError(KATCPResourceError):
-    """Raised if a problem occured dealing with as KATCPSensor operation"""
+    """Raised if a problem occurred dealing with as KATCPSensor operation"""
 
 
 class SensorResultTuple(collections.namedtuple(
@@ -59,7 +59,7 @@ class SensorResultTuple(collections.namedtuple(
     reading : KATCPSensorReading instance
         Most recently received sensor reading
     """
-    __slots__ = []              # Prevent dynamic attributes from being possible
+    __slots__ = []  # Prevent dynamic attributes from being possible
 
 
 def normalize_strategy_parameters(params):
@@ -765,17 +765,18 @@ class KATCPSensor(with_metaclass(abc.ABCMeta, object)):
 
     def register_listener(self, listener, reading=False):
         """Add a callback function that is called when sensor value is updated.
+
         The callback footprint is received_timestamp, timestamp, status, value.
 
         Parameters
         ----------
         listener : function
-            Callback signature: if reading
-            listener(katcp_sensor, reading) where
-                `katcp_sensor` is this KATCPSensor instance
-                `reading` is an instance of :class:`KATCPSensorReading`
-            Callback signature: default, if not reading
-                listener(received_timestamp, timestamp, status, value)
+            Callback signature: if reading listener(katcp_sensor, reading) where
+            `katcp_sensor` is this KATCPSensor instance `reading` is an instance of
+            :class:`KATCPSensorReading`.
+
+            Callback signature: default, if not reading listener(received_timestamp,
+            timestamp, status, value)
         """
         listener_id = hashable_identity(listener)
         self._listeners[listener_id] = (listener, reading)
@@ -987,16 +988,17 @@ class KATCPReply(_KATCPReplyTuple):
 
     Attributes
     ----------
-    messages : list of :class:`katcp.Message` objects
+    messages: list of :class:`katcp.Message` objects
         List of all messages returned by KATCP request, reply first
-    reply : :class:`katcp.Message` object
+    reply:  :class:`katcp.Message` object
         Reply message returned by KATCP request
-    informs : list of :class:`katcp.Message` objects
+    informs: list of :class:`katcp.Message` objects
         List of inform messages returned by KATCP request
 
     The instance evaluates to nonzero (i.e. truthy) if the request succeeded.
 
     """
+
     __slots__ = []  # Prevent dynamic attributes from being possible
 
     def __repr__(self):
