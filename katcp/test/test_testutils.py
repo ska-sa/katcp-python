@@ -1,13 +1,18 @@
-from __future__ import division, print_function, absolute_import
+# Copyright 2012 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
-import unittest2 as unittest
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
+
 import threading
 import time
-import tornado.testing
-import tornado.gen
+import unittest
 
-from katcp import Sensor
-from katcp import testutils
+import tornado.gen
+import tornado.testing
+
+from katcp import Sensor, testutils
 
 
 def get_sensor(sensor_type, name=None):
@@ -23,6 +28,7 @@ def get_sensor(sensor_type, name=None):
         params)
 
     return sensor
+
 
 class test_SensorTransitionWaiter(unittest.TestCase):
     def test_wait_float_timeout(self):
@@ -130,6 +136,9 @@ class _test_WaitingMockBase(unittest.TestCase):
     DUTClass = None
 
     def test_reset_mock(self):
+        # skip test run on base clase directly
+        if not self.DUTClass:
+            return
         # Verify that the call_count and call_args_list variables
         # are initially zero, and get cleared by calling reset_mock
         DUT = self.DUTClass()

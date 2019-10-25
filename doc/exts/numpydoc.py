@@ -15,10 +15,15 @@ It will:
 .. [1] http://projects.scipy.org/numpy/wiki/CodingStyleGuidelines#docstring-standard
 
 """
+from __future__ import absolute_import, division, print_function
 
-import os, re, pydoc
-from docscrape_sphinx import get_doc_object, SphinxDocString
 import inspect
+import os
+import pydoc
+import re
+
+from docscrape_sphinx import SphinxDocString, get_doc_object
+
 
 def mangle_docstrings(app, what, name, obj, options, lines,
                       reference_offset=[0]):
@@ -107,7 +112,7 @@ def monkeypatch_sphinx_ext_autodoc():
     if sphinx.ext.autodoc.format_signature is our_format_signature:
         return
 
-    print "[numpydoc] Monkeypatching sphinx.ext.autodoc ..."
+    print("[numpydoc] Monkeypatching sphinx.ext.autodoc ...")
     _original_format_signature = sphinx.ext.autodoc.format_signature
     sphinx.ext.autodoc.format_signature = our_format_signature
 

@@ -1,3 +1,6 @@
+WIP (0.7.0?)
+* Add Python 3 compatibility (PR #215)
+
 23 August 2019 (0.6.4)
 * Fix some client memory leaks, and add `until_stopped` methods (PR #206).
 * Increase server's MAX_QUEUE_SIZE from 30 to 300 to handle more simultaneous
@@ -99,7 +102,7 @@
  * Make katcp.testutils.WaitingMock robust against race conditions
  * Explicitly list set of base KATCP requests in katcp.server.BASE_REQUESTS
  * Make method-name to KATCP-name function available outside KATCP server
-   meta-class
+   metaclass
  * Improvements to logging (i.a. prevents issues when using SocketHandler)
  * Docstring cleanups
 

@@ -1,28 +1,32 @@
 # inspect_client.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2014 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
+import copy
 import logging
 import random
-import copy
+
+from builtins import object, range
+from collections import defaultdict, namedtuple
 
 import tornado
 
+from tornado.gen import Return, maybe_future
+
 import katcp.core
 
-from collections import namedtuple, defaultdict
-
-from tornado.gen import maybe_future, Return
-
-from katcp.core import (AttrDict, until_any, future_timeout_manager,
-                        steal_docstring_from)
+from katcp.core import (AttrDict, ensure_native_str, future_timeout_manager,
+                        steal_docstring_from, until_any)
 
 ic_logger = logging.getLogger("katcp.inspect_client")
 RequestType = namedtuple('Request', 'name description timeout_hint')
+
 
 class ExponentialRandomBackoff(object):
 
@@ -81,7 +85,7 @@ class ExponentialRandomBackoff(object):
             self._update_delay()
         except Exception:
             ic_logger.exception(
-                'Unhandled exception trying to calculate a retry timout')
+                'Unhandled exception trying to calculate a retry timeout')
 
     def success(self):
         """Call whenever an action has succeeded, resets delay to minimum"""
@@ -99,14 +103,19 @@ class InspectingClientStateType(namedtuple(
     """
     States tuple for the inspecting client. Fields, all bool:
 
-    connected : TCP connection has been established with the server
-    synced : The inspecting client and the user that interfaces through the state change
+    connected: bool
+        TCP connection has been established with the server.
+    synced: bool
+        The inspecting client and the user that interfaces through the state change
         callback are all synchronised with the current device state. Also implies
-        connected = True and data_synced = True
-    model_changed : The device has changed in some way, resulting in the device model
-                    being out of date.
-    data_synced : The inspecting client's internal representation of the device is up to
-                  date, although state change user is not yet up to date.
+        `connected = True` and `data_synced = True`.
+    model_changed: bool
+        The device has changed in some way, resulting in the device model being out of
+        date.
+    data_synced: bool
+        The inspecting client's internal representation of the device is up to date,
+        although state change user is not yet up to date.
+
     """
     __slots__ = []
 
@@ -163,7 +172,7 @@ class _InformHookDeviceClient(katcp.AsyncClient):
 class InspectingClientAsync(object):
     """Higher-level client that inspects a KATCP interface.
 
-    Note: This class is not threadsafe at present, it should only be called
+    Note: This class is not thread-safe at present, it should only be called
     from the ioloop.
 
     Note: always call stop() after start() and you are done with the container
@@ -183,10 +192,10 @@ class InspectingClientAsync(object):
 
     """
     request_factory = RequestType
-    """Factory that produces KATCP Request objects
+    """Factory that produces KATCP Request objects.
 
     signature: request_factory(name, description, timeout_hint), all parameters
-               passed as kwargs
+    passed as kwargs
 
     Should be set before calling connect()/start().
 
@@ -275,12 +284,12 @@ class InspectingClientAsync(object):
     @property
     def sensors(self):
         """A list of known sensors."""
-        return self._sensors_index.keys()
+        return list(self._sensors_index.keys())
 
     @property
     def requests(self):
         """A list of possible requests."""
-        return self._requests_index.keys()
+        return list(self._requests_index.keys())
 
     @property
     def connected(self):
@@ -366,7 +375,8 @@ class InspectingClientAsync(object):
         try:
             yield maybe_timeout(self.katcp_client.until_running())
             self._logger.debug('Katcp client running')
-        except tornado.gen.TimeoutError:
+        except Exception as err:
+            self._logger.error("Failed to start katcp_client: %s", err)
             self.katcp_client.stop()
             raise
 
@@ -444,7 +454,7 @@ class InspectingClientAsync(object):
                 self._interface_changed.clear()
                 continue
                 # Next loop through should cause re-inspection and handle state updates
-            except SyncError, e:
+            except SyncError as e:
                 last_sync_failed = True
                 retry_wait_time = self.resync_delay.delay
                 self.resync_delay.failed()
@@ -554,7 +564,7 @@ class InspectingClientAsync(object):
 
     @tornado.gen.coroutine
     def inspect(self):
-        """Inspect device requests and sensors, update model
+        """Inspect device requests and sensors, update model.
 
         Returns
         -------
@@ -565,14 +575,18 @@ class InspectingClientAsync(object):
             Contains sets of added/removed request/sensor names
 
             Example structure:
+            ::
 
-            {'requests': {
-                'added': set(['req1', 'req2']),
-                'removed': set(['req10', 'req20'])}
-             'sensors': {
-                'added': set(['sens1', 'sens2']),
-                'removed': set(['sens10', 'sens20'])}
-            }
+                {
+                    'requests':{
+                        'added': set(['req1', 'req2']),
+                        'removed': set(['req10', 'req20'])
+                    }
+                    'sensors': {
+                        'added': set(['sens1', 'sens2']),
+                        'removed': set(['sens10', 'sens20'])
+                    }
+                }
 
             If there are no changes keys may be omitted. If an item is in both
             the 'added' and 'removed' sets that means that it changed.
@@ -626,9 +640,12 @@ class InspectingClientAsync(object):
             no changes, returns ``None`` instead.
 
             Example structure:
+            ::
 
-            {'added': set(['req1', 'req2']),
-             'removed': set(['req10', 'req20'])}
+                {
+                    'added': set(['req1', 'req2']),
+                    'removed': set(['req10', 'req20'])
+                }
 
         """
         maybe_timeout = future_timeout_manager(timeout)
@@ -638,14 +655,14 @@ class InspectingClientAsync(object):
             msg = katcp.Message.request('help', name)
         reply, informs = yield self.katcp_client.future_request(
             msg, timeout=maybe_timeout.remaining())
+
         if not reply.reply_ok():
             # If an unknown request is specified the desired result is to return
             # an empty list even though the request will fail
-            if name is None or 'Unknown request' not in reply.arguments[1]:
+            if name is None or b'Unknown request' not in reply.arguments[1]:
                 raise SyncError(
                     'Error reply during sync process for {}: {}'
                     .format(self.bind_address_string, reply))
-
         # Get recommended timeouts hints for slow requests if the server
         # provides them
         timeout_hints_available = (
@@ -659,9 +676,9 @@ class InspectingClientAsync(object):
         requests_old = set(self._requests_index.keys())
         requests_updated = set()
         for msg in informs:
-            req_name = msg.arguments[0]
+            req_name = ensure_native_str(msg.arguments[0])
             req = {'name': req_name,
-                   'description': msg.arguments[1],
+                   'description': ensure_native_str(msg.arguments[1]),
                    'timeout_hint': timeout_hints.get(req_name)}
             requests_updated.add(req_name)
             self._update_index(self._requests_index, req_name, req)
@@ -712,7 +729,7 @@ class InspectingClientAsync(object):
                             'in reply to request {}, continuing with sync'
                             .format(reply, req_msg))
         for inform in informs:
-            request_name = inform.arguments[0]
+            request_name = ensure_native_str(inform.arguments[0])
             timeout_hint = float(inform.arguments[1])
             if timeout_hint > 0:
                 timeout_hints[request_name] = timeout_hint
@@ -739,10 +756,13 @@ class InspectingClientAsync(object):
             respectively.  Modified sensors are listed in both. If there are no
             changes, returns ``None`` instead.
 
-        Example structure:
+            Example structure:
+            ::
 
-            {'added': set(['sens1', 'sens2']),
-             'removed': set(['sens10', 'sens20'])}
+                {
+                    'added': set(['sens1', 'sens2']),
+                    'removed': set(['sens10', 'sens20'])
+                }
 
         """
         if name is None:
@@ -757,7 +777,7 @@ class InspectingClientAsync(object):
         if not reply.reply_ok():
             # If an unknown sensor is specified the desired result is to return
             # an empty list, even though the request will fail
-            if name is None or 'Unknown sensor' not in reply.arguments[1]:
+            if name is None or b'Unknown sensor' not in reply.arguments[1]:
                 raise SyncError('Error reply during sync process: {}'
                                 .format(reply))
 
@@ -765,12 +785,12 @@ class InspectingClientAsync(object):
         sensors_old = set(self._sensors_index.keys())
         sensors_updated = set()
         for msg in informs:
-            sen_name = msg.arguments[0]
+            sen_name = ensure_native_str(msg.arguments[0])
             sensors_updated.add(sen_name)
-            sen = {'description': msg.arguments[1],
-                   'units': msg.arguments[2],
-                   'sensor_type': msg.arguments[3],
-                   'params': msg.arguments[4:]}
+            sen = {'description': ensure_native_str(msg.arguments[1]),
+                   'units': ensure_native_str(msg.arguments[2]),
+                   'sensor_type': ensure_native_str(msg.arguments[3]),
+                   'params': [ensure_native_str(arg) for arg in msg.arguments[4:]]}
             self._update_index(self._sensors_index, sen_name, sen)
 
         added, removed = self._difference(
@@ -941,7 +961,7 @@ class InspectingClientAsync(object):
         if not sensor:
             sensor = yield self.future_get_sensor(name)
         if sensor:
-            # TODO (NM) Performance idea: prolly we can cache katcp_major at
+            # TODO (NM) Performance idea: probably we can cache katcp_major at
             # sync time?
             katcp_major = self.katcp_client.protocol_flags.major
             sensor.set_formatted(timestamp, status, value, katcp_major)
@@ -962,8 +982,9 @@ class InspectingClientAsync(object):
         timestamp = msg.arguments[0]
         num_sensors = int(msg.arguments[1])
         assert len(msg.arguments) == 2 + num_sensors * 3
-        for n in xrange(num_sensors):
-            name = msg.arguments[2 + n * 3]
+        for n in range(num_sensors):
+            # Note: update_sensor needs byte strings, except for sensor name
+            name = ensure_native_str(msg.arguments[2 + n * 3])
             status = msg.arguments[3 + n * 3]
             value = msg.arguments[4 + n * 3]
             self.update_sensor(name, timestamp, status, value)
@@ -1009,12 +1030,11 @@ class InspectingClientAsync(object):
         -------
         future object.
 
-        Example
-        -------
-
+        Examples
+        --------
         ::
 
-        reply, informs = yield ic.simple_request('help', 'sensor-list')
+            reply, informs = yield ic.simple_request('help', 'sensor-list')
 
         """
         # TODO (NM 2016-11-03) This method should really live on the lower level

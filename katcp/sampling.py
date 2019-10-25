@@ -1,23 +1,28 @@
 # sampling.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2008 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Strategies for sampling sensor values."""
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
 import logging
 import os
 
-import tornado.ioloop
-
-from thread import get_ident as get_thread_ident
+from builtins import range
 from functools import wraps
 
-from .core import Message, Sensor
+import tornado.ioloop
 
+from _thread import get_ident as get_thread_ident
+from future.utils import PY2
+
+from .compat import is_bytes, is_text
+from .core import Message, Sensor
 
 log = logging.getLogger("katcp.sampling")
 
@@ -78,13 +83,13 @@ class SampleStrategy(object):
 
     ## @brief Mapping from strategy constant to strategy name.
     SAMPLING_LOOKUP = {
-        NONE: "none",
-        AUTO: "auto",
-        PERIOD: "period",
-        EVENT: "event",
-        DIFFERENTIAL: "differential",
-        EVENT_RATE: "event-rate",
-        DIFFERENTIAL_RATE: "differential-rate",
+        NONE: b"none",
+        AUTO: b"auto",
+        PERIOD: b"period",
+        EVENT: b"event",
+        DIFFERENTIAL: b"differential",
+        EVENT_RATE: b"event-rate",
+        DIFFERENTIAL_RATE: b"differential-rate",
     }
 
     # SAMPLING_LOOKUP not found by pylint
@@ -112,7 +117,7 @@ class SampleStrategy(object):
 
         Parameters
         ----------
-        strategyName : str
+        strategyName : str or bytes
             Name of strategy.
         inform_callback : callable, signature inform_callback(sensor, reading)
             Callback to receive inform messages.
@@ -132,10 +137,12 @@ class SampleStrategy(object):
             The created sampling strategy.
 
         """
+        if is_text(strategyName):
+            strategyName = strategyName.encode('ascii')
         if strategyName not in cls.SAMPLING_LOOKUP_REV:
             raise ValueError("Unknown sampling strategy '%s'. "
                              "Known strategies are %s."
-                             % (strategyName, cls.SAMPLING_LOOKUP.values()))
+                             % (strategyName, list(cls.SAMPLING_LOOKUP.values())))
 
         strategyType = cls.SAMPLING_LOOKUP_REV[strategyName]
         if strategyType == cls.NONE:
@@ -196,21 +203,28 @@ class SampleStrategy(object):
     def get_sampling_formatted(self):
         """The current sampling strategy and parameters.
 
-        The strategy is returned as a string and the values
-        in the parameter list are formatted as strings using
+        The strategy is returned as a byte string and the values
+        in the parameter list are formatted as byte strings using
         the formatter for this sensor type.
 
         Returns
         -------
-        strategy_name : string
+        strategy_name : bytes
             KATCP name for the strategy.
-        params : list of strings
+        params : list of bytes
             KATCP formatted parameters for the strategy.
 
         """
         strategy = self.get_sampling()
         strategy = self.SAMPLING_LOOKUP[strategy]
-        params = [str(p) for p in self._params]
+        params = []
+        for param in self._params:
+            if not is_bytes(param):
+                if PY2:
+                    param = str(param)
+                else:
+                    param = str(param).encode('ascii')
+            params.append(param)
         return strategy, params
 
     def attach(self):
@@ -528,6 +542,9 @@ class SampleDifferentialRate(SampleEventRate):
         # Initial value that should not cause errors in _sensor_changed(),
         # but should let it return True
         self._last_reading_sent = (None, None, 1e99)
+
+    def get_sampling(self):
+        return SampleStrategy.DIFFERENTIAL_RATE
 
     def _sensor_changed(self, reading):
         _, status, value = reading

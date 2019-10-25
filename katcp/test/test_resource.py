@@ -1,26 +1,23 @@
-###############################################################################
-# SKA South Africa (http://ska.ac.za/)                                        #
-# Author: cam@ska.ac.za                                                       #
-# Copyright @ 2013 SKA SA. All rights reserved.                               #
-#                                                                             #
-# THIS SOFTWARE MAY NOT BE COPIED OR DISTRIBUTED IN ANY FORM WITHOUT THE      #
-# WRITTEN PERMISSION OF SKA SA.                                               #
-###############################################################################
-from __future__ import division, print_function, absolute_import
+# Copyright 2015 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
-import unittest
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
+
 import logging
-import mock
+import unittest
 
+import mock
 import tornado.testing
 
-from katcp import Sensor
+# Module under test
+from katcp import Sensor, resource
 from katcp.testutils import TimewarpAsyncTestCase
 
-# Module under test
-from katcp import resource
 
 logger = logging.getLogger(__name__)
+
 
 class test_escape_name(unittest.TestCase):
     def test_escape_name(self):

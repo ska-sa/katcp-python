@@ -1,20 +1,23 @@
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
+from __future__ import absolute_import, division, print_function
+
 import logging
+import signal
+import threading
+import time
+
+import IPython
+import tornado
+
+from katcp import inspecting_client, resource_client
+from katcp.testutils import DeviceTestServer
+
 logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d)%(message)s",
     level=logging.DEBUG
 )
-
-import time
-import threading
-import signal
-
-import tornado
-import IPython
-
-from katcp.testutils import DeviceTestServer
-
-from katcp import resource_client, inspecting_client
-
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +30,7 @@ ioloop.add_callback(d.start)
 
 def setup_resource_client():
     global rc
-    print d.bind_address
+    print(d.bind_address)
     rc = resource_client.KATCPClientResource(dict(
         name='thething',
         address=d.bind_address,
@@ -36,13 +39,13 @@ def setup_resource_client():
     rc.start()
 
 def printy(*args):
-    print args
+    print(args)
 
 @tornado.gen.coroutine
 def setup_inspecting_client():
     global ic
     try:
-        print d.bind_address
+        print(d.bind_address)
         host, port = d.bind_address
         ic = inspecting_client.InspectingClientAsync(host, port, ioloop=ioloop)
         ic.set_state_callback(printy)
@@ -57,15 +60,15 @@ stop = threading.Event()
 
 @tornado.gen.coroutine
 def doreq(req, *args, **kwargs):
-    print 'hi'
+    print('hi')
     try:
         rep = yield req(*args, **kwargs)
-        print rep
+        print(rep)
     except Exception:
-        print 'logging'
+        print('logging')
         log.exception('oops')
     finally:
-        print 'blah'
+        print('blah')
 
 def run_ipy():
     try:
@@ -89,6 +92,5 @@ signal.signal(signal.SIGINT, ignore_signal)
 try:
     ioloop.start()
 except KeyboardInterrupt:
-    print 'Keyboard interrupt'
+    print('Keyboard interrupt')
     stop.set()
-

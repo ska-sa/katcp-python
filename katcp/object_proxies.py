@@ -4,11 +4,12 @@
 # ZPL (Zope Public License if I' not mistaken). The PSF license is BSD style and
 # allows us to copy, modify and redistribute this code.
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
-# Python 2/3 compatibility stuff
 from builtins import object
-#
+
 
 class AbstractProxy(object):
     """Delegates all operations (except ``.__subject__``) to another object"""
@@ -152,7 +153,7 @@ del __subject__
 
 
 class AbstractWrapper(AbstractProxy):
-    """Mixin to allow extra behaviors and attributes on proxy instance"""
+    """Mixin to allow extra behaviours and attributes on proxy instance"""
     __slots__ = ()
 
     def __getattribute__(self, attr, oga=object.__getattribute__):

@@ -1,50 +1,46 @@
-# Copyright 2014 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
-from __future__ import division, print_function, absolute_import
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
-# Python 2/3 compatibility stuff
-from builtins import str
-from past.utils import old_div
-from builtins import object
-#
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
-import logging
-import sys
-import re
 import collections
+import logging
 import math
-import time
+import re
+import sys
 
-import tornado
-
+from builtins import object
+from concurrent.futures import Future
 from functools import partial
 
-from concurrent.futures import Future
+import tornado
+from future.utils import PY2
+
 from tornado.concurrent import Future as tornado_Future
-from tornado.gen import Return, maybe_future, with_timeout
+from tornado.gen import Return
 
-from katcp import resource, inspecting_client, Message
-from katcp.resource import KATCPReply, KATCPSensorError
-from katcp.core import (AttrDict, DefaultAttrDict, AsyncCallbackEvent,
-                        steal_docstring_from,
-                        AsyncState, AsyncEvent, LatencyTimer,
-                        until_any, until_some, log_future_exceptions)
-
+from katcp import Message, inspecting_client, resource
+from katcp.core import (AsyncCallbackEvent, AsyncEvent, AsyncState, AttrDict,
+                        DefaultAttrDict, LatencyTimer, log_future_exceptions,
+                        steal_docstring_from, until_any, until_some)
 # TODO NM 2017-04-13 Importing IOLoopThreadwrapper here for backwards
 # compatibility, user code should be changed to import it from the more logical
 # katcp.ioloop_manager module.
-from katcp.ioloop_manager import (ThreadSafeMethodAttrWrapper,
-                                  IOLoopThreadWrapper)
+from katcp.ioloop_manager import IOLoopThreadWrapper, ThreadSafeMethodAttrWrapper
+from katcp.resource import KATCPReply, KATCPSensorError
 
 log = logging.getLogger(__name__)
+
 
 def _normalise_request_name_set(reqs):
     return set(resource.escape_name(r) for r in reqs)
 
 def transform_future(transformation, future):
-    """Returns a new future that will resolve with a transformed value
+    """Returns a new future that will resolve with a transformed value.
 
-    Takes the resolution value of `future` and applies transformation(*future.result())
+    Takes the resolution value of `future` and applies "transformation(\*future.result())"
     to it before setting the result of the new future with the transformed value. If
     future() resolves with an exception, it is passed through to the new future.
 
@@ -60,7 +56,7 @@ def transform_future(transformation, future):
             try:
                 new_future.set_result(transformation(f.result()))
             except Exception:
-                # An exception here idicates that the transformation was unsuccesful
+                # An exception here indicates that the transformation was unsuccessful
                 new_future.set_exc_info(sys.exc_info())
 
     future.add_done_callback(_transform)
@@ -191,7 +187,7 @@ class KATCPClientResource(resource.KATCPResource):
     """Class managing a client connection to a single KATCP resource
 
     Inspects the KATCP interface of the resources, exposing sensors and requests as per
-    the :class:`katcp.resource.KATCPResource` API. Can also operate without exposin
+    the :class:`katcp.resource.KATCPResource` API. Can also operate without exposing
     """
 
     MAX_LOOP_LATENCY = 0.03
@@ -319,8 +315,7 @@ class KATCPClientResource(resource.KATCPResource):
           assumed_sensors : ...
 
         parent : :class:`KATCPResource` or None
-            Parent KATCPResource object if this client is a child in a resource
-            hierarcy
+            Parent KATCPResource object if this client is a child in a resource hierarchy.
 
         logger : object, optional
            Python Logger object to log to. Default is the module logger
@@ -451,8 +446,9 @@ class KATCPClientResource(resource.KATCPResource):
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True, tuple=False, refresh=False):
-        return list_sensors(self,
-            dict.items(self.sensor), filter, strategy, status, use_python_identifiers, tuple, refresh)
+        return list_sensors(
+            self, dict.items(self.sensor), filter, strategy, status,
+            use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
     def set_sampling_strategies(self, filter, strategy_and_parms):
@@ -591,7 +587,8 @@ class KATCPClientResource(resource.KATCPResource):
                   .format(self.address_string, state, model_changes))
         if state.connected:
             if not state.synced:
-                self._logger.debug('{}: Setting state to "syncing"'.format(self.address_string))
+                self._logger.debug('{}: Setting state to "syncing"'.format(
+                    self.address_string))
                 self._state.set_state('syncing')
                 if model_changes:
                     self._logger.debug('{}: handling model updates: {}'.format(
@@ -854,9 +851,9 @@ class KATCPClientResourceSensorsManager(object):
             success : bool
                 True if setting succeeded for this sensor, else False
             info : tuple
-               Normalibed sensor strategy and parameters as tuple if
+               Normalised sensor strategy and parameters as tuple if
                success == True else, sys.exc_info() tuple for the error
-               that occured.
+               that occurred.
         """
         try:
             strategy_and_params = resource.normalize_strategy_parameters(
@@ -986,14 +983,14 @@ class GroupRequest(object):
     interactive convenience. It provides the KATCP request help string as a
     docstring accessible via IPython's question mark operator.
 
-    Call Parameters
-    ---------------
+    Parameters
+    ----------
 
     Call parameters are all forwarded to the :class:`KATCPRequest` instance of each
     client in the group.
 
-    Return Value
-    ------------
+    Returns
+    -------
     Returns a tornado future that resolves with a :class:`GroupResults` instance that
     contains the replies of each client. If a particular client does not have the request,
     its result is None.
@@ -1047,7 +1044,7 @@ class GroupResults(dict):
     :class:`KATCPReply` objects, or are None for clients
     that did not support the request.
 
-    The result will evalue to a truthy value if all the requests succeeded, i.e.
+    The result will evaluate to a truthy value if all the requests succeeded, i.e.
     ::
 
         if result:
@@ -1062,9 +1059,7 @@ class GroupResults(dict):
         """True if katcp request succeeded on all clients."""
         return all(self.values())
 
-    # Was not handled automatrically by futurize, see
-    # https://github.com/PythonCharmers/python-future/issues/282
-    if sys.version_info[0] == 2:
+    if PY2:
         __nonzero__ = __bool__
 
     @property
@@ -1111,8 +1106,9 @@ class ClientGroup(object):
                 self._req = DefaultAttrDict(DummyRequest)
             else:
                 self._req = AttrDict()
+
             for client in self.clients:
-                for name, request in dict.iteritems(client.req):
+                for name, request in dict.items(client.req):
                     if name not in self._req:
                         self._req[name] = GroupRequest(self, name,
                                                        request.description)
@@ -1246,24 +1242,25 @@ class ClientGroup(object):
                 stragglers[client.name] = f
         rest_of_results = yield until_some(**stragglers)
         results.update(dict(rest_of_results))
+
         class TestableDict(dict):
             """Dictionary of results that can be tested for overall success."""
             def __bool__(self):
                 return sum(self.values()) >= quorum
-            # Was not handled automatrically by futurize, see
-            # https://github.com/PythonCharmers/python-future/issues/282
-            if sys.version_info[0] == 2:
+
+            if PY2:
                 __nonzero__ = __bool__
+
         raise tornado.gen.Return(TestableDict(results))
 
 
 class KATCPClientResourceContainer(resource.KATCPResource):
-    """Class for containing multiple :class:`KATCPClientResource` instances
+    """Class for containing multiple :class:`KATCPClientResource` instances.
 
     Provides aggregate `sensor` and `req` attributes containing the union of all the
     sensors in requests in the contained resources. Names are prefixed with <resname>_,
     where <resname> is the name of the resource to which the sensor / request belongs
-    except for aggregate sensors that starts with 'agg_'.
+    except for aggregate sensors that starts with ``agg_``.
 
     """
     @property
@@ -1316,7 +1313,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
         Parameters
         ----------
 
-        resources_spec : dict containing the specs of the conained resources. Keys:
+        resources_spec : dict containing the specs of the contained resources. Keys:
           "name" : str, name of this collection of resources
           "description : str (optional), description of this collection of resources
           "clients" : dict, with keys:
@@ -1345,7 +1342,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     def _init_resources(self):
         resources = self._resources_spec['clients']
         children = AttrDict()
-        for res_name, res_spec in resources.items():
+        for res_name, res_spec in list(resources.items()):
             # Make a copy since we'll be modifying the dict
             res_spec = dict(res_spec)
             res_spec['name'] = res_name
@@ -1433,25 +1430,13 @@ class KATCPClientResourceContainer(resource.KATCPResource):
     @steal_docstring_from(resource.KATCPResource.list_sensors)
     def list_sensors(self, filter="", strategy=False, status="",
                      use_python_identifiers=True, tuple=False, refresh=False):
-        return list_sensors(self,
-            dict.items(self.sensor), filter, strategy, status,
-                            use_python_identifiers, tuple, refresh)
-
-    @tornado.gen.coroutine
-    def _resource_set_sampling_strategies(
-            self, resource_name, sensor_name, strategy_and_parms):
-        resource_name = result.object.parent_name
-        try:
-            yield self.set_sampling_strategy(
-                resource_name, sensor_name, strategy_and_parms)
-        except:
-            self._logger.error(
-                'Cannot set sensor strategy for %s %s'
-                % (resource_name, sensor_name))
+        return list_sensors(
+            self, dict.items(self.sensor), filter, strategy, status,
+            use_python_identifiers, tuple, refresh)
 
     @tornado.gen.coroutine
     def set_sampling_strategies(self, filter, strategy_and_parms):
-        """Set sampling strategies for filtered sensors - these sensors have to exsist"""
+        """Set sampling strategies for filtered sensors - these sensors have to exists."""
         result_list = yield self.list_sensors(filter=filter)
         sensor_dict = {}
         for result in result_list:
@@ -1499,7 +1484,7 @@ class KATCPClientResourceContainer(resource.KATCPResource):
 
     @tornado.gen.coroutine
     def set_sensor_listener(self, sensor_name, listener):
-        """Set listener for the specific sensor - this sensor has to exsist"""
+        """Set listener for the specific sensor - this sensor has to exists."""
         result_list = yield self.list_sensors(filter="^"+sensor_name+"$") #exact match
         sensor_dict = {}
         for result in result_list:

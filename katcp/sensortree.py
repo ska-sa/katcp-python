@@ -1,3 +1,6 @@
+# Copyright 2010 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 """Sensor tree implementation.
 
 A sensor tree is a DAG (directed acyclic graph) of sensor objects
@@ -22,8 +25,12 @@ The acyclic requirement on the graph structure is required to ensure
 that the update chain eventually terminates. It is not enforced.
 
 """
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
-from __future__ import division, print_function, absolute_import
+from builtins import object
+
 
 class GenericSensorTree(object):
     """A tree of generic sensors."""
@@ -39,7 +46,7 @@ class GenericSensorTree(object):
         self._parent_to_children = {}
 
     def update(self, sensor, reading):
-        """Update callback used by sensors to notify obervers of changes.
+        """Update callback used by sensors to notify observers of changes.
 
         Parameters
         ----------
@@ -260,7 +267,7 @@ class BooleanSensorTree(GenericSensorTree):
             self._parent_to_not_ok[parent] = set()
         if child not in self:
             if child.stype != "boolean":
-                raise ValueError("Child sensor %r is not booelan" % child)
+                raise ValueError("Child sensor %r is not boolean" % child)
             self._parent_to_not_ok[child] = set()
         self.add_links(parent, (child,))
 
@@ -424,8 +431,7 @@ class AggregateSensorTree(GenericSensorTree):
                              " tree" % child)
         self._registered_sensors[child_name] = child
         completed = []
-        for parent, (_rule, names, sensors) in \
-                self._incomplete_aggregates.iteritems():
+        for parent, (_rule, names, sensors) in self._incomplete_aggregates.items():
             if child_name in names:
                 names.remove(child_name)
                 sensors.add(child)

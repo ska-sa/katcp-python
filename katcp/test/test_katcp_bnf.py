@@ -1,8 +1,8 @@
 # test_katcp_bnf.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Test the KAT device communication language BNF.
 
@@ -33,19 +33,24 @@
             <plain> ::= character / <special>
 
     Uses the ply library from http://www.dabeaz.com/ply/.
-    """
+"""
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
+
+import unittest
+
+from builtins import object
 
 import ply.lex as lex
 import ply.yacc as yacc
+
 import katcp
-import unittest
 
 
 class DclLexer(object):
     """Lexer definition for the DCL."""
-
     states = (
         ('argument', 'exclusive'),
     )
@@ -91,7 +96,7 @@ class DclLexer(object):
 
     # argument state
 
-    t_argument_PLAIN = r'[^ \t\e\n\r\\\0]'
+    t_argument_PLAIN = r'[^\t\x1b\n\r\\\0]'
 
     t_argument_ESCAPE = r'\\[\\_0nret@]'
 
@@ -111,7 +116,8 @@ class DclGrammar(object):
 
     def p_message(self, p):
         """message : TYPE NAME id arguments eol"""
-        mtype = katcp.Message.TYPE_SYMBOL_LOOKUP[p[1]]
+        mytpe_symbol = p[1].encode('ascii')
+        mtype = katcp.Message.TYPE_SYMBOL_LOOKUP[mytpe_symbol]
         name = p[2]
         mid = p[3]
         arguments = p[4]
@@ -154,8 +160,9 @@ class DclGrammar(object):
         """argumentchar : PLAIN
                         | ESCAPE"""
         if p[1][0] == "\\":
-            cescape = p[1][1]
-            p[0] = katcp.MessageParser.ESCAPE_LOOKUP[cescape]
+            escaped = p[1][1].encode('ascii')
+            unescaped = katcp.MessageParser.ESCAPE_LOOKUP[escaped]
+            p[0] = unescaped.decode('ascii')
         else:
             p[0] = p[1]
 
@@ -207,17 +214,17 @@ class TestBnf(unittest.TestCase):
         m = self.p.parse("!foz baz")
         self.assertEqual(m.mtype, m.REPLY)
         self.assertEqual(m.name, "foz")
-        self.assertEqual(m.arguments, ["baz"])
+        self.assertEqual(m.arguments, [b"baz"])
 
         m = self.p.parse("#foz baz b")
         self.assertEqual(m.mtype, m.INFORM)
         self.assertEqual(m.name, "foz")
-        self.assertEqual(m.arguments, ["baz", "b"])
+        self.assertEqual(m.arguments, [b"baz", b"b"])
 
     def test_escape_sequences(self):
         """Test escape sequences."""
         m = self.p.parse(r"?foo \\\_\0\n\r\e\t")
-        self.assertEqual(m.arguments, ["\\ \0\n\r\x1b\t"])
+        self.assertEqual(m.arguments, [b"\\ \0\n\r\x1b\t"])
 
     def test_lexer_errors(self):
         """Test errors which should be raised by the lexer."""
@@ -229,25 +236,25 @@ class TestBnf(unittest.TestCase):
     def test_empty_params(self):
         """Test parsing messages with empty parameters."""
         m = self.p.parse("!foo \@")  # 1 empty parameter
-        self.assertEqual(m.arguments, [""])
+        self.assertEqual(m.arguments, [b""])
         m = self.p.parse("!foo \@ \@")  # 2 empty parameter
-        self.assertEqual(m.arguments, ["", ""])
+        self.assertEqual(m.arguments, [b"", b""])
         m = self.p.parse("!foo \_  \_  \@")  # space, space, \@
-        self.assertEqual(m.arguments, [" ", " ", ""])
+        self.assertEqual(m.arguments, [b" ", b" ", b""])
 
     def test_extra_whitespace(self):
         """Test extra whitespace around parameters."""
         m = self.p.parse("!foo \t\@  ")  # 1 empty parameter
-        self.assertEqual(m.arguments, [""])
+        self.assertEqual(m.arguments, [b""])
         m = self.p.parse("!foo   \@    \@")  # 2 empty parameter
-        self.assertEqual(m.arguments, ["", ""])
+        self.assertEqual(m.arguments, [b"", b""])
         m = self.p.parse("!foo \_  \t\t\_\t  \@\t")  # space, space, \@
-        self.assertEqual(m.arguments, [" ", " ", ""])
+        self.assertEqual(m.arguments, [b" ", b" ", b""])
 
     def test_formfeed(self):
         """Test that form feeds are not treated as whitespace."""
         m = self.p.parse("!baz \fa\fb\f")
-        self.assertEqual(m.arguments, ["\fa\fb\f"])
+        self.assertEqual(m.arguments, [b"\fa\fb\f"])
 
     def test_message_ids(self):
         """Test that messages with message ids are parsed as expected."""
@@ -255,10 +262,10 @@ class TestBnf(unittest.TestCase):
         self.assertEqual(m.mtype, m.REQUEST)
         self.assertEqual(m.name, "bar")
         self.assertEqual(m.arguments, [])
-        self.assertEqual(m.mid, "123")
+        self.assertEqual(m.mid, b"123")
 
         m = self.p.parse("!baz[1234] a b c")
         self.assertEqual(m.mtype, m.REPLY)
         self.assertEqual(m.name, "baz")
-        self.assertEqual(m.arguments, ["a", "b", "c"])
-        self.assertEqual(m.mid, "1234")
+        self.assertEqual(m.arguments, [b"a", b"b", b"c"])
+        self.assertEqual(m.mid, b"1234")

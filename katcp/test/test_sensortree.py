@@ -1,8 +1,15 @@
+# Copyright 2010 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 """Tests for the nodeman module."""
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
 import unittest
+
+from builtins import object, range, zip
+
 import katcp
 
 

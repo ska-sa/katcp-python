@@ -1,19 +1,24 @@
-from __future__ import division, print_function, absolute_import
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
-import sys
-import time
 import logging
-import threading
+import sys
 import textwrap
+import threading
+import time
+
+from builtins import object
+from concurrent.futures import Future, TimeoutError
+from functools import wraps
 
 import tornado.ioloop
 
-from functools import wraps
-from thread import get_ident as get_thread_ident
-
-from concurrent.futures import Future, TimeoutError
-from tornado.concurrent import Future as tornado_Future
+from _thread import get_ident as get_thread_ident
 from tornado import gen
+from tornado.concurrent import Future as tornado_Future
 
 from katcp.object_proxies import ObjectWrapper
 
@@ -185,7 +190,7 @@ class IOLoopThreadWrapper(object):
         self.ioloop.add_callback(
             self._ioloop_call, future, tornado_future, fn, args, kwargs)
         try:
-            # Use the threadsafe future to block
+            # Use the thread-safe future to block
             return future.result(timeout)
         except TimeoutError:
             raise

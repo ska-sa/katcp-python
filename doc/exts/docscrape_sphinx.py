@@ -1,6 +1,16 @@
-import re, inspect, textwrap, pydoc
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
+
+import inspect
+import pydoc
+import re
+import textwrap
+
 import sphinx
-from docscrape import NumpyDocString, FunctionDoc, ClassDoc
+
+from docscrape import ClassDoc, FunctionDoc, NumpyDocString
+
 
 class SphinxDocString(NumpyDocString):
     use_plots = False

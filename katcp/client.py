@@ -1,34 +1,38 @@
 # client.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 """Clients for the KAT device control language."""
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
+import logging
 import sys
 import traceback
-import logging
+
+from builtins import object
+from concurrent.futures import Future, TimeoutError
+from functools import partial, wraps
 
 import tornado.ioloop
-import tornado.tcpclient
 import tornado.iostream
+import tornado.tcpclient
 
-from functools import partial, wraps
-from thread import get_ident as get_thread_ident
-
+from _thread import get_ident as get_thread_ident
+from future.utils import with_metaclass
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from tornado.util import ObjectDict
-from concurrent.futures import Future, TimeoutError
 
-from .core import (DeviceMetaclass, MessageParser, Message,
-                   KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
-                   ProtocolFlags, AsyncEvent, until_later, LatencyTimer,
-                   SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
+from .core import (FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC, SEC_TS_KATCP_MAJOR,
+                   AsyncEvent, DeviceMetaclass, KatcpClientDisconnected,
+                   KatcpClientError, KatcpVersionError, LatencyTimer, Message,
+                   MessageParser, ProtocolFlags, ensure_native_str, until_later)
 from .ioloop_manager import IOLoopManager
-
 
 # logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")
@@ -66,7 +70,7 @@ def make_threadsafe_blocking(meth):
     return meth
 
 
-class DeviceClient(object):
+class DeviceClient(with_metaclass(DeviceMetaclass, object)):
     """Device client proxy.
 
     Subclasses should implement .reply\_*, .inform\_* and
@@ -108,12 +112,11 @@ class DeviceClient(object):
     -----
 
     The client may block its ioloop if the default blocking tornado DNS
-    resolver is used. When an ioloop is shared, it would make sens to configure
+    resolver is used. When an ioloop is shared, it would make sense to configure
     one of the non-blocking resolver classes, see
     http://tornado.readthedocs.org/en/latest/netutil.html
 
     """
-    __metaclass__ = DeviceMetaclass
 
     MAX_MSG_SIZE = 2*1024*1024
     """Maximum message size that can be received in bytes.
@@ -263,10 +266,10 @@ class DeviceClient(object):
             return device_time
 
     def _next_id(self):
-        """Return the next available message id."""
+        """Return the next available message id as a byte string."""
         assert get_thread_ident() == self.ioloop_thread_id
         self._last_msg_id += 1
-        return str(self._last_msg_id)
+        return b"%d" % self._last_msg_id
 
     def preset_protocol_flags(self, protocol_flags):
         """Preset server protocol flags.
@@ -288,9 +291,10 @@ class DeviceClient(object):
         if len(msg.arguments) < 2:
             return
         # Store version information.
-        name = msg.arguments[0]
-        self.versions[name] = tuple(msg.arguments[1:])
-        if msg.arguments[0] == "katcp-protocol":
+        name = ensure_native_str(msg.arguments[0])
+        self.versions[name] = tuple(
+            ensure_native_str(arg) for arg in msg.arguments[1:])
+        if msg.arguments[0] == b"katcp-protocol":
             protocol_flags = ProtocolFlags.parse_version(msg.arguments[1])
             self._set_protocol_from_inform(protocol_flags, msg)
 
@@ -397,7 +401,7 @@ class DeviceClient(object):
         return mid
 
     def send_request(self, msg):
-        """Send a request messsage.
+        """Send a request message.
 
         Parameters
         ----------
@@ -421,7 +425,8 @@ class DeviceClient(object):
 
         """
         assert get_thread_ident() == self.ioloop_thread_id
-        data = str(msg) + "\n"
+        data = bytes(msg) + b"\n"
+
         # Log all sent messages here so no one else has to.
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug("Sending to {}: {}"
@@ -463,7 +468,7 @@ class DeviceClient(object):
                 self._logger.warn("Reconnected to {0}"
                                   .format(self.bind_address_string))
             self._connect_failures = 0
-        except Exception, e:
+        except Exception as e:
             if self._connect_failures % 5 == 0:
                 # warn on every fifth failure
 
@@ -616,7 +621,7 @@ class DeviceClient(object):
                 self._logger.info("%s OK" % (msg.name,))
                 self.send_message(reply)
             else:
-                # Just pass on what is, potentially, a future. The implementor
+                # Just pass on what is, potentially, a future. The implementer
                 # of the request handler method must arrange for a reply to be
                 # sent. Since clients have no business dealing with requests in
                 # any case we don't do much to help them.
@@ -685,7 +690,7 @@ class DeviceClient(object):
                     # Make sure everything is torn down properly
                     if self.running():
                         self.stop()
-                except RuntimeError, e:
+                except RuntimeError as e:
                     if str(e) == 'IOLoop is closing':
                         # Seems the ioloop was stopped already, no worries.
                         self._running.clear()
@@ -721,7 +726,7 @@ class DeviceClient(object):
         latency_timer = LatencyTimer(self.MAX_LOOP_LATENCY)
         while self._running.isSet():
             try:
-                line_fut = self._stream.read_until_regex('\n|\r')
+                line_fut = self._stream.read_until_regex(b'\n|\r')
                 latency_timer.check_future(line_fut)
                 if latency_timer.time_to_yield():
                     yield gen.moment
@@ -731,7 +736,7 @@ class DeviceClient(object):
                 break
             except Exception:
                 if self._stream:
-                    line = ''
+                    line = b''
                     self._logger.warn('Unhandled Exception while reading from {0}:'
                                       .format(self._bindaddr), exc_info=True)
                     # Prevent potential tight error loops from blocking ioloop
@@ -741,7 +746,7 @@ class DeviceClient(object):
                     self._logger.warn('self._stream object seems to have disappeared.')
                     break
             try:
-                line = line.replace("\r", "\n").split("\n")[0]
+                line = line.replace(b"\r", b"\n").split(b"\n")[0]
                 msg = self._parser.parse(line) if line else None
             except Exception:
                 e_type, e_value, trace = sys.exc_info()
@@ -912,7 +917,7 @@ class DeviceClient(object):
         def _stop():
             if timeout:
                 yield self._running.until_set(timeout)
-            # clear _running before disconecting to allow line_read_loop
+            # clear _running before disconnecting to allow line_read_loop
             # and connect_loop to exit
             self._running.clear()
             self._disconnect()
@@ -1240,7 +1245,7 @@ class AsyncClient(DeviceClient):
     @make_threadsafe
     def callback_request(self, msg, reply_cb=None, inform_cb=None,
                          user_data=None, timeout=None, use_mid=None):
-        """Send a request messsage.
+        """Send a request message.
 
         Parameters
         ----------
@@ -1279,13 +1284,13 @@ class AsyncClient(DeviceClient):
 
         try:
             self.send_request(msg)
-        except KatcpClientError, e:
+        except KatcpClientError as e:
             error_reply = Message.request(msg.name, "fail", str(e))
             error_reply.mid = mid
             self.handle_reply(error_reply)
 
     def future_request(self, msg, timeout=None, use_mid=None):
-        """Send a request messsage, with future replies.
+        """Send a request message, with future replies.
 
         Parameters
         ----------
@@ -1328,7 +1333,7 @@ class AsyncClient(DeviceClient):
         return f
 
     def blocking_request(self, msg, timeout=None, use_mid=None):
-        """Send a request messsage and wait for its reply.
+        """Send a request message and wait for its reply.
 
         Parameters
         ----------
@@ -1355,7 +1360,7 @@ class AsyncClient(DeviceClient):
             timeout = self._request_timeout
 
         f = Future()  # for thread safety
-        tf = [None]   # Placeholder for tornado Future for exception tracebacks
+        tf = [None]   # Place-holder for tornado Future for exception tracebacks
         def blocking_request_callback():
             try:
                 tf[0] = frf = self.future_request(msg, timeout=timeout,
@@ -1531,7 +1536,7 @@ class AsyncClient(DeviceClient):
 
     def _fail_waiting_requests(self, reason):
         # Fail all requests that have not yet received their replies
-        for request_data in self._async_queue.values():
+        for request_data in list(self._async_queue.values()):
             # Last one should be timeout handle
             timeout_handle = request_data[-1]
             if timeout_handle is not None:
