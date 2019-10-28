@@ -3,9 +3,9 @@
 *************
 Release Notes
 *************
-0.7.x
+0.7.0-pre-release
 =====
-* Add Python 3 compatibility.
+* Added Python 3 compatibility.
 
 See also :download:`CHANGELOG.md` for more details on changes.
 
