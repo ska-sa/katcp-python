@@ -1,5 +1,5 @@
-WIP (0.7.0?)
-* Add Python 3 compatibility (PR #215)
+28 October 2019 (0.7.0)
+* Added Python 3 compatibility (PR [#215](https://github.com/ska-sa/katcp-python/pull/215))
 
 23 August 2019 (0.6.4)
 * Fix some client memory leaks, and add `until_stopped` methods (PR #206).
