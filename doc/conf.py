@@ -47,7 +47,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'KATCP'
-copyright = u'2009-2012, SKA South Africa'
+copyright = u'2009-2012, National Research Foundation (South African Radio Astronomy Observatory)'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
