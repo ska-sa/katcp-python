@@ -1,0 +1,47 @@
+# Project configuration file
+
+# NOTE: you have to use single-quoted strings in TOML for regular expressions.
+# It's the equivalent of r-strings in Python.  Multiline strings are treated as
+# verbose regular expressions by Black.  Use [ ] to denote a significant space
+# character.
+
+[tool.black]
+# See: https://docs.google.com/document/d/1aZoIyR9tz5rCWr2qJKuMTmKp2IzHlFjrCFrpDDHFypM/edit#heading=h.95alkrtwtub0
+line-length = 90
+target-version = ['py27', 'py36']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+    | \.git
+    | \.__pycache__
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | \.env
+    | _build
+    | buck-out
+    | build
+    | dist
+)/
+'''
+
+[tool.isort]
+force_grid_wrap = 0
+include_trailing_comma = true
+indent = 4
+line_length = 90
+multi_line_output = 3
+# Having imports glued together is physically painful. ;)
+lines_between_types = 1
+# Imports sections
+sections = ['FUTURE', 'STDLIB', 'THIRDPARTY', 'FIRSTPARTY', 'LOCALFOLDER']
+# A list of known imports that will be forced to display within their specified category.
+known_first_party = [
+    'astrokat', 'katcapture', 'katcomp', 'katconf', 'katcore', 'katcorelib', 'katcp',
+    'katdeploy', 'katgui', 'katlogger', 'katmisc', 'katnodeman', 'katobs', 'katopc',
+    'katpoint', 'katportal', 'katportalclient', 'katproxy', 'katscripts', 'katsdisp',
+    'katsdpcatalogues', 'katsdpcontroller', 'katsdpscripts', 'katsdpservices',
+    'katsdptelstate', 'katsim', 'katuilib', 'katusescripts', 'katversion', 'mkat_tango', 'mkatstore',
+    'nosekatreport', 'pylibmodbus', 'spead', 'tango_simlib'
+    ]
