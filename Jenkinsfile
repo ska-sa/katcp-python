@@ -58,6 +58,20 @@ pipeline {
                         sh 'tox -e py36'
                     }
                 }
+
+                stage ('py37') {
+                    steps {
+                        echo "Running nosetests on Python 3.7"
+                        sh 'tox -e py37'
+                    }
+                }
+
+                stage ('py38') {
+                    steps {
+                        echo "Running nosetests on Python 3.8"
+                        sh 'tox -e py38'
+                    }
+                }
             }
 
             post {
