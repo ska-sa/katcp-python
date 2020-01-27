@@ -254,15 +254,6 @@ class Message(object):
     ## @brief Regular expression matching all unescaped character.
     ESCAPE_RE = re.compile(br"[\\ \0\n\r\x1b\t]")
 
-    ## @var mtype
-    # @brief Message type.
-
-    ## @var name
-    # @brief Message name.
-
-    ## @var arguments
-    # @brief List of string message arguments.
-
     ## @brief Attempt to optimize messages by specifying attributes up front
     __slots__ = ["mtype", "name", "mid", "arguments"]
 
@@ -892,7 +883,7 @@ class Sensor(object):
 
     Subclasses will usually pass in a fixed sensor_type which should
     be one of the sensor type constants. The list params if set will
-    have its values formatter by the type formatter for the given
+    have its values formatted by the type formatter for the given
     sensor type.
 
     .. note::
@@ -1013,22 +1004,6 @@ class Sensor(object):
 
     ## @brief kattype Timestamp instance for encoding and decoding timestamps.
     TIMESTAMP_TYPE = Timestamp()
-
-    ## @var stype
-    # @brief Sensor type constant.
-
-    ## @var name
-    # @brief Sensor name.
-
-    ## @var description
-    # @brief String describing the sensor.
-
-    ## @var units
-    # @brief String contain the units for the sensor value.
-
-    ## @var params
-    # @brief List of strings containing the additional parameters (length and
-    #        interpretation are specific to the sensor type).
 
     def __init__(self, sensor_type, name, description=None, units=None,
                  params=None, default=None, initial_status=None):
