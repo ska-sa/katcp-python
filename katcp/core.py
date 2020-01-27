@@ -900,24 +900,31 @@ class Sensor(object):
         The type of sensor.
     name : str
         The name of the sensor.
-    description : str
+    description : str, optional
         A short description of the sensor.
-    units : str
+    units : str, optional
         The units of the sensor value. May be the empty string
         if there are no applicable units.
-    params : list
+    params : list, optional
         Additional parameters, dependent on the type of sensor:
 
-          * For :const:`INTEGER` and :const:`FLOAT` the list should
-            give the minimum and maximum that define the range
-            of the sensor value.
-          * For :const:`DISCRETE` the list should contain all
-            possible values the sensor may take.
+          * For :const:`INTEGER` and :const:`FLOAT` the list is optional.
+            If provided, it should have two items, providing the minimum
+            and maximum that define the range of the sensor value,
+            respectively. The type of each item must be int, or float.
+          * For :const:`DISCRETE` the list is required, and must
+            contain all possible values the sensor may take. There
+            must be at least one item.  The type of each item must be
+            str or bytes.
           * For all other types, params should be omitted.
-    default : object
+    default : object, optional
         An initial value for the sensor. By default this is
         determined by the sensor type.
-    initial_status : int enum or None
+        For :const:`INTEGER` and :const:`FLOAT` sensors,
+        if no default is provided, but valid minimum and
+        maximum parameters are, the default will be set to
+        the minimum.
+    initial_status : int enum or None, optional
         An initial status for the sensor. If None, defaults to
         Sensor.UNKNOWN. `initial_status` must be one of the keys in
         Sensor.STATUSES
