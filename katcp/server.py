@@ -1505,9 +1505,6 @@ class DeviceServer(DeviceServerBase):
 
     SUPPORTED_PROTOCOL_MAJOR_VERSIONS = (4, 5)
 
-    ## @var log
-    # @brief DeviceLogger instance for sending log messages to the client.
-
     # * and ** magic fine here
     # pylint: disable-msg = W0142
 
