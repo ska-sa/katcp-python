@@ -229,15 +229,15 @@ class KATCPServer(object):
     All class CONSTANT attributes can be changed until start() is called.
 
     """
-    BACKLOG = 5              # Size of server socket backlog
-    MAX_MSG_SIZE = 2*1024*1024
+    BACKLOG = 50              # Size of server socket backlog
+    MAX_MSG_SIZE = 50*1024*1024
     """Maximum message size that can be received in bytes.
 
     If more than MAX_MSG_SIZE bytes are read from the client without
     encountering a message terminator (i.e. newline), the connection is closed.
 
     """
-    MAX_WRITE_BUFFER_SIZE = 2*MAX_MSG_SIZE
+    MAX_WRITE_BUFFER_SIZE = 50*MAX_MSG_SIZE
     """Maximum outstanding bytes to be buffered by the server process.
 
     If more than MAX_WRITE_BUFFER_SIZE bytes are outstanding, the client

@@ -54,12 +54,12 @@ setup(
     keywords="kat kat7 ska MeerKAT",
     setup_requires=["katversion"],
     use_katversion=True,
-    install_requires=[
-        "ply",
-        "future",
-        "futures; python_version<'3'",
-        "tornado>=4.3, <5",
-    ],
+    #install_requires=[
+    #    "ply",
+    #    "future",
+    #    "futures; python_version<'3'",
+    #    "tornado>=4.3, <5",
+    #],
     zip_safe=False,
     test_suite="nose.collector",
 )
