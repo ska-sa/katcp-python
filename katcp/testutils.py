@@ -38,6 +38,7 @@ from .kattypes import (Bool, Discrete, Float, Int, Str, concurrent_reply,
                        request, request_timeout_hint, return_reply)
 from .object_proxies import ObjectWrapper
 from .server import ClientConnection, DeviceServer, FailReply
+from .compat import ensure_byte_str
 
 logger = logging.getLogger(__name__)
 
@@ -701,12 +702,12 @@ class BlockingTestClient(client.BlockingClient):
 
         if descriptions:
             if not full_descriptions:
-                got_requests = [(ensure_binary(name), ensure_binary(desc).split(b'\n')[0])
+                got_requests = [(name, desc.split(b'\n')[0])
                                 for (name, desc) in got_requests]
-                expected_requests = [(ensure_binary(name), ensure_binary(desc).split(b'\n')[0])
+                expected_requests = [(ensure_byte_str(name), ensure_byte_str(desc).split(b'\n')[0])
                                      for (name, desc) in expected_requests]
         else:
-            got_requests = [ensure_binary(name) for (name, desc) in got_requests]
+            got_requests = [name for (name, desc) in got_requests]
 
         got_set = set(got_requests)
         expected_set = set(expected_requests)
