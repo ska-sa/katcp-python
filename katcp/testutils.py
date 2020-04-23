@@ -18,6 +18,8 @@ import threading
 import time
 
 from builtins import next, object, zip
+from six import ensure_binary
+
 from concurrent.futures import Future, TimeoutError
 
 import mock
@@ -699,12 +701,12 @@ class BlockingTestClient(client.BlockingClient):
 
         if descriptions:
             if not full_descriptions:
-                got_requests = [(name, desc.split('\n')[0])
+                got_requests = [(ensure_binary(name), ensure_binary(desc).split(b'\n')[0])
                                 for (name, desc) in got_requests]
-                expected_requests = [(name, desc.split('\n')[0])
+                expected_requests = [(ensure_binary(name), ensure_binary(desc).split(b'\n')[0])
                                      for (name, desc) in expected_requests]
         else:
-            got_requests = [name for (name, desc) in got_requests]
+            got_requests = [ensure_binary(name) for (name, desc) in got_requests]
 
         got_set = set(got_requests)
         expected_set = set(expected_requests)
