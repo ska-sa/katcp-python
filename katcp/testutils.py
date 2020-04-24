@@ -18,7 +18,6 @@ import threading
 import time
 
 from builtins import next, object, zip
-from six import ensure_binary
 
 from concurrent.futures import Future, TimeoutError
 
