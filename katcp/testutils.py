@@ -29,6 +29,7 @@ import tornado.locks
 import tornado.testing
 from _thread import get_ident
 from tornado.concurrent import Future as tornado_Future
+from future.utils import native_str_to_bytes
 
 from katcp import client
 
@@ -38,7 +39,6 @@ from .kattypes import (Bool, Discrete, Float, Int, Str, concurrent_reply,
                        request, request_timeout_hint, return_reply)
 from .object_proxies import ObjectWrapper
 from .server import ClientConnection, DeviceServer, FailReply
-from .compat import ensure_byte_str
 
 logger = logging.getLogger(__name__)
 
@@ -704,7 +704,7 @@ class BlockingTestClient(client.BlockingClient):
             if not full_descriptions:
                 got_requests = [(name, desc.split(b'\n')[0])
                                 for (name, desc) in got_requests]
-                expected_requests = [(ensure_byte_str(name), ensure_byte_str(desc).split(b'\n')[0])
+                expected_requests = [(native_str_to_bytes(name), native_str_to_bytes(desc).split(b'\n')[0])
                                      for (name, desc) in expected_requests]
         else:
             got_requests = [name for (name, desc) in got_requests]
