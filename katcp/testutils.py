@@ -703,8 +703,11 @@ class BlockingTestClient(client.BlockingClient):
             if not full_descriptions:
                 got_requests = [(name, desc.split(b'\n')[0])
                                 for (name, desc) in got_requests]
-                expected_requests = [(native_str_to_bytes(name), native_str_to_bytes(desc).split(b'\n')[0])
-                                     for (name, desc) in expected_requests]
+                expected_requests = [
+                    (native_str_to_bytes(name),
+                     native_str_to_bytes(desc).split(b"\n")[0])
+                    for (name, desc) in expected_requests
+                ]
         else:
             got_requests = [name for (name, desc) in got_requests]
 
