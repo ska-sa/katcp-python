@@ -36,17 +36,6 @@ else:
                 "Invalid type for string conversion: {}".format(type(value)))
 
 
-def ensure_byte_str(value):
-    """Coerce unicode string to bytes (UTF-8 encoding), no change if input is bytes."""
-    if is_bytes(value):
-        return value
-    elif is_text(value):
-        return value.encode('utf-8')
-    else:
-        raise TypeError(
-                "Invalid type for string conversion: {}".format(type(value)))
-
-
 def byte_chars(byte_string):
     """Return list of characters from a byte string (PY3-compatible).
 
