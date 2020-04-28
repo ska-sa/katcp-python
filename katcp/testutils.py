@@ -710,6 +710,8 @@ class BlockingTestClient(client.BlockingClient):
                 ]
         else:
             got_requests = [name for (name, desc) in got_requests]
+            expected_requests = [native_str_to_bytes(name) for name in expected_requests]
+
 
         got_set = set(got_requests)
         expected_set = set(expected_requests)
