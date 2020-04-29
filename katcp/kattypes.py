@@ -286,7 +286,12 @@ class Str(KatcpType):
                 return str(value).encode('utf-8')
 
         def decode(self, value, major):
-            return value.decode('utf-8')
+            if is_bytes(value):
+                return value.decode('utf-8')
+            elif is_text(value):
+                return value
+            else:
+                return str(value)
 
 
 class Discrete(Str):
