@@ -1064,6 +1064,17 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             # Use the tornado future to get a usable traceback
             tornado_future.result()
 
+    def test_test_help(self):
+        """Basic Test to exercise test_help function
+        """
+        request_names = ['cancel-slow-command',
+                         'decorated',
+                         'decorated-return-exception',
+                         'new-command',
+                         'raise-exception',
+                         'raise-fail',
+                         'slow-command']
+        self.client.test_help(request_names)
 
 class TestHandlerFiltering(unittest.TestCase):
     class DeviceWithEverything(katcp.DeviceServer):
