@@ -717,12 +717,8 @@ class BlockingTestClient(client.BlockingClient):
         expected_set = set(expected_requests)
 
         if exclude_defaults:
-            default_request_names = set(DeviceServer._request_handlers.keys())
-            bytes_str_default_request_names = set()
-            for name in default_request_names:
-                bytes_str_default_request_names.add(native_str_to_bytes(name))
-
-            default_request_names = bytes_str_default_request_names
+            default_request_names = {native_str_to_bytes(name)
+                                     for name in DeviceServer._request_handlers.keys()}
             if not descriptions:
                 got_set = got_set - default_request_names
             else:
