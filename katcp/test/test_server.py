@@ -1094,7 +1094,9 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         if PY3:
             with self.assertRaises(ValueError):
                 self.client.test_help(request_names)
-
+        # Please note that this does not fail in python2
+        if PY2:
+            self.client.test_help(request_names)
 
 class TestHandlerFiltering(unittest.TestCase):
     class DeviceWithEverything(katcp.DeviceServer):
