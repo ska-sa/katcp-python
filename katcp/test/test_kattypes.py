@@ -406,17 +406,20 @@ class TestStr(TestType):
             unicode_unpacked = u"adsasdasd"
             utf8_unpacked = "skr\xc3\xa4m"
             list_str_unpacked = "[1, 2.0, 'three', False]"
+            int_unpacked = 42
         else:
             bytes_unpacked = "adsasdasd"
-            unicode_unpacked = AttributeError
+            unicode_unpacked = "adsasdasd"
             utf8_unpacked = "skräm"
             list_str_unpacked = "[1, 2.0, 'three', False]"
+            int_unpacked = "42"
 
         self._unpack = [
             (basic, b"adsasdasd", bytes_unpacked),
             (basic, u"adsasdasd", unicode_unpacked),
             (basic, b"skr\xc3\xa4m", utf8_unpacked),
             (basic, b"[1, 2.0, 'three', False]", list_str_unpacked),
+            (basic, 42, int_unpacked),
             (basic, None, ValueError),
             (default, None, "something"),
             (default_optional, None, "something"),
