@@ -25,7 +25,7 @@ import _thread
 import mock
 import tornado.testing
 
-from future.utils import PY2
+from future.utils import PY2, PY3
 from tornado import gen
 
 import katcp
@@ -1080,7 +1080,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     def test_test_help_failure(self):
         """Basic Test to exercise test_help function
-        failure by supplying byte strings.
+        failure by supplying byte strings in Python 3.
         """
         request_names = [
             b"cancel-slow-command",
@@ -1091,8 +1091,9 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             b"raise-fail",
             b"slow-command",
         ]
-        with self.assertRaises(ValueError):
-            self.client.test_help(request_names)
+        if PY3:
+            with self.assertRaises(ValueError):
+                self.client.test_help(request_names)
 
 
 class TestHandlerFiltering(unittest.TestCase):
