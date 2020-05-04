@@ -25,7 +25,7 @@ import _thread
 import mock
 import tornado.testing
 
-from future.utils import PY2
+from future.utils import PY2, PY3
 from tornado import gen
 
 import katcp
@@ -1064,6 +1064,39 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             # Use the tornado future to get a usable traceback
             tornado_future.result()
 
+    def test_test_help(self):
+        """Basic Test to exercise test_help function
+        """
+        request_names = [
+            "cancel-slow-command",
+            "decorated",
+            "decorated-return-exception",
+            "new-command",
+            "raise-exception",
+            "raise-fail",
+            "slow-command",
+        ]
+        self.client.test_help(request_names)
+
+    def test_test_help_failure(self):
+        """Basic Test to exercise test_help function
+        failure by supplying byte strings in Python 3.
+        """
+        request_names = [
+            b"cancel-slow-command",
+            b"decorated",
+            b"decorated-return-exception",
+            b"new-command",
+            b"raise-exception",
+            b"raise-fail",
+            b"slow-command",
+        ]
+        if PY3:
+            with self.assertRaises(ValueError):
+                self.client.test_help(request_names)
+        # Please note that this does not fail in python2
+        if PY2:
+            self.client.test_help(request_names)
 
 class TestHandlerFiltering(unittest.TestCase):
     class DeviceWithEverything(katcp.DeviceServer):
