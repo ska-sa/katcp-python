@@ -1,5 +1,6 @@
 (Unreleased) 
 * Ensure testutils method casts expected requests to byte strings (PR [#233](https://github.com/ska-sa/katcp-python/pull/233))
+* Added tests to test `test_help`.
 
 28 October 2019 (0.7.0)
 * Added Python 3 compatibility (PR [#215](https://github.com/ska-sa/katcp-python/pull/215))
