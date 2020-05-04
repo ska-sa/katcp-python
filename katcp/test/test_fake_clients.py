@@ -38,7 +38,7 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
             'a-discrete': ('A discrete sensor', '', 'discrete', 'a', 'b', 'c'),
             'a-timestamp': ('A timestamp sensor', '', 'timestamp', 1556928000),
             'a-float': ('A float sensor', '', 'float', 1234.42),
-            'a-boolean': ('A boolean sensor', '', 'boolean', '1'),
+            'a-boolean': ('A boolean sensor', '', 'boolean', '0'),
         }
 
         yield self.fake_inspecting_client.connect()
@@ -92,7 +92,7 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                 name="a-boolean",
                 type=Sensor.BOOLEAN,
                 description="A boolean sensor",
-                params=['1'],
+                params=[False],
             ),
         )
 
