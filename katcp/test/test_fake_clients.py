@@ -36,7 +36,9 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
             'an-int': ('An integer sensor', 'things', 'integer', 0, 10),
             'a-string' : ('A string sensor', '', 'string'),
             'a-discrete': ('A discrete sensor', '', 'discrete', 'a', 'b', 'c'),
-
+            'a-timestamp': ('A timestamp sensor', '', 'timestamp', 1556928000),
+            'a-float': ('A float sensor', '', 'float', 1234.42),
+            'a-boolean': ('A boolean sensor', '', 'boolean', '1'),
         }
 
         yield self.fake_inspecting_client.connect()
@@ -63,7 +65,36 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                 params=["a", "b", "c"],
             ),
         )
-
+        a_timestamp = yield self.fake_inspecting_client.future_get_sensor('a-timestamp')
+        self.assert_sensor_equal_description(
+            a_timestamp,
+            dict(
+                name="a-timestamp",
+                type=Sensor.TIMESTAMP,
+                description="A timestamp sensor",
+                params=[1556928000],
+            ),
+        )
+        a_float = yield self.fake_inspecting_client.future_get_sensor('a-float')
+        self.assert_sensor_equal_description(
+            a_float,
+            dict(
+                name="a-float",
+                type=Sensor.FLOAT,
+                description="A float sensor",
+                params=[1234.42],
+            ),
+        )
+        a_boolean = yield self.fake_inspecting_client.future_get_sensor('a-boolean')
+        self.assert_sensor_equal_description(
+            a_boolean,
+            dict(
+                name="a-boolean",
+                type=Sensor.BOOLEAN,
+                description="A boolean sensor",
+                params=['1'],
+            ),
+        )
 
 class FakeHandlers(object):
     @request(Int(), Int())
