@@ -342,8 +342,8 @@ class Lru(KatcpType):
 
     ## @brief Mapping from LRU value constant to LRU value name.
     LRU_VALUES = {
-        LRU_NOMINAL: b"nominal",
-        LRU_ERROR: b"error",
+        LRU_NOMINAL: "nominal",
+        LRU_ERROR: "error",
     }
 
     # LRU_VALUES not found by pylint
@@ -391,6 +391,8 @@ class Address(KatcpType):
         return b"%s:%d" % (host, port) if port is not None else host
 
     def decode(self, value, major):
+        if not future.utils.PY2:
+            value = future.utils.native_str_to_bytes(value)
         if value.startswith(b"["):
             match = self.IPV6_RE.match(value)
         else:
