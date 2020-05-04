@@ -39,6 +39,7 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
             'a-timestamp': ('A timestamp sensor', '', 'timestamp', 1556928000),
             'a-float': ('A float sensor', '', 'float', 1234.42),
             'a-boolean': ('A boolean sensor', '', 'boolean', '0'),
+            'an-address': ('An address sensor', '', 'address', '127.0.0.1'),
         }
 
         yield self.fake_inspecting_client.connect()
@@ -95,6 +96,18 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                 params=[False],
             ),
         )
+        an_address = yield self.fake_inspecting_client.future_get_sensor('an-address')
+        self.assert_sensor_equal_description(
+            an_address,
+            dict(
+                name="an-address",
+                type=Sensor.ADDRESS,
+                description="An address sensor",
+                params=['127.0.0.1'],
+            ),
+        )
+
+
 
 class FakeHandlers(object):
     @request(Int(), Int())
