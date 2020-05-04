@@ -18,6 +18,7 @@ import threading
 import time
 
 from builtins import next, object, zip
+
 from concurrent.futures import Future, TimeoutError
 
 import mock
@@ -27,6 +28,7 @@ import tornado.locks
 import tornado.testing
 from _thread import get_ident
 from tornado.concurrent import Future as tornado_Future
+from future.utils import native_str_to_bytes
 
 from katcp import client
 
@@ -699,19 +701,24 @@ class BlockingTestClient(client.BlockingClient):
 
         if descriptions:
             if not full_descriptions:
-                got_requests = [(name, desc.split('\n')[0])
+                got_requests = [(name, desc.split(b'\n')[0])
                                 for (name, desc) in got_requests]
-                expected_requests = [(name, desc.split('\n')[0])
-                                     for (name, desc) in expected_requests]
+                expected_requests = [
+                    (native_str_to_bytes(name),
+                     native_str_to_bytes(desc).split(b"\n")[0])
+                    for (name, desc) in expected_requests
+                ]
         else:
             got_requests = [name for (name, desc) in got_requests]
+            expected_requests = [native_str_to_bytes(name) for name in expected_requests]
+
 
         got_set = set(got_requests)
         expected_set = set(expected_requests)
 
         if exclude_defaults:
-            default_request_names = set(DeviceServer._request_handlers.keys())
-
+            default_request_names = {native_str_to_bytes(name)
+                                     for name in DeviceServer._request_handlers.keys()}
             if not descriptions:
                 got_set = got_set - default_request_names
             else:
