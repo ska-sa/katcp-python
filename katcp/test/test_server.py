@@ -1067,14 +1067,33 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
     def test_test_help(self):
         """Basic Test to exercise test_help function
         """
-        request_names = ['cancel-slow-command',
-                         'decorated',
-                         'decorated-return-exception',
-                         'new-command',
-                         'raise-exception',
-                         'raise-fail',
-                         'slow-command']
+        request_names = [
+            "cancel-slow-command",
+            "decorated",
+            "decorated-return-exception",
+            "new-command",
+            "raise-exception",
+            "raise-fail",
+            "slow-command",
+        ]
         self.client.test_help(request_names)
+
+    def test_test_help_failure(self):
+        """Basic Test to exercise test_help function
+        failure by supplying byte strings.
+        """
+        request_names = [
+            b"cancel-slow-command",
+            b"decorated",
+            b"decorated-return-exception",
+            b"new-command",
+            b"raise-exception",
+            b"raise-fail",
+            b"slow-command",
+        ]
+        with self.assertRaises(ValueError):
+            self.client.test_help(request_names)
+
 
 class TestHandlerFiltering(unittest.TestCase):
     class DeviceWithEverything(katcp.DeviceServer):
