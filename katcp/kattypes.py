@@ -342,8 +342,8 @@ class Lru(KatcpType):
 
     ## @brief Mapping from LRU value constant to LRU value name.
     LRU_VALUES = {
-        LRU_NOMINAL: "nominal",
-        LRU_ERROR: "error",
+        LRU_NOMINAL: b"nominal",
+        LRU_ERROR: b"error",
     }
 
     # LRU_VALUES not found by pylint
@@ -358,6 +358,9 @@ class Lru(KatcpType):
         return Lru.LRU_VALUES[value]
 
     def decode(self, value, major):
+        if is_text(value):
+            if future.utils.PY3:
+                value = future.utils.native_str_to_bytes(value)
         if value not in Lru.LRU_CONSTANTS:
             raise ValueError("Lru value must be 'nominal' or 'error'.")
         return Lru.LRU_CONSTANTS[value]
