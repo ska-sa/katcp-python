@@ -110,9 +110,13 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
         a_lru = yield self.fake_inspecting_client.future_get_sensor("a-lru")
         self.assert_sensor_equal_description(
             a_lru,
-            {"name": "a-lru", "type": Sensor.LRU, "description": "A LRU sensor", "params": [0]},
+            {
+                "name": "a-lru",
+                "type": Sensor.LRU,
+                "description": "A LRU sensor",
+                "params": [0]
+            },
         )
-
 
 class FakeHandlers(object):
     @request(Int(), Int())
