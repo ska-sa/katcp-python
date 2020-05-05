@@ -349,21 +349,30 @@ class Lru(KatcpType):
     # LRU_VALUES not found by pylint
     # pylint: disable-msg = E0602
 
-    ## @brief Mapping from LRU value name to LRU value constant.
+    # @brief Mapping from LRU value name to LRU value constant.
     LRU_CONSTANTS = dict((v, k) for k, v in LRU_VALUES.items())
+    if future.utils.PY2:
+        def encode(self, value, major):
+            if value not in Lru.LRU_VALUES:
+                raise ValueError("Lru value must be LRU_NOMINAL or LRU_ERROR.")
+            return Lru.LRU_VALUES[value]
 
-    def encode(self, value, major):
-        if value not in Lru.LRU_VALUES:
-            raise ValueError("Lru value must be LRU_NOMINAL or LRU_ERROR.")
-        return Lru.LRU_VALUES[value]
+        def decode(self, value, major):
+            if value not in Lru.LRU_CONSTANTS:
+                raise ValueError("Lru value must be 'nominal' or 'error'.")
+            return Lru.LRU_CONSTANTS[value]
+    else:
+        def encode(self, value, major):
+            if value not in Lru.LRU_VALUES:
+                raise ValueError("Lru value must be LRU_NOMINAL or LRU_ERROR.")
+            return Lru.LRU_VALUES[value]
 
-    def decode(self, value, major):
-        if is_text(value):
-            if future.utils.PY3:
-                value = future.utils.native_str_to_bytes(value)
-        if value not in Lru.LRU_CONSTANTS:
-            raise ValueError("Lru value must be 'nominal' or 'error'.")
-        return Lru.LRU_CONSTANTS[value]
+        def decode(self, value, major):
+            if is_text(value):
+                    value = future.utils.native_str_to_bytes(value)
+            if value not in Lru.LRU_CONSTANTS:
+                raise ValueError("Lru value must be 'nominal' or 'error'.")
+            return Lru.LRU_CONSTANTS[value]
 
 
 class Address(KatcpType):
@@ -380,36 +389,62 @@ class Address(KatcpType):
 
     IPV4_RE = re.compile(br"^(?P<host>[^:]*)(:(?P<port>\d+))?$")
     IPV6_RE = re.compile(br"^\[(?P<host>[^[]*)\](:(?P<port>\d+))?$")
+    if future.utils.PY2:
+        def encode(self, value, major):
+            try:
+                host, port = value
+            except (ValueError, TypeError):
+                raise ValueError("Could not extract host and port from value %r" %
+                                 (value,))
+            host = host.encode('ascii')
+            if b':' in host:
+                # IPv6
+                host = b"[%s]" % host
+            return b"%s:%d" % (host, port) if port is not None else host
 
-    def encode(self, value, major):
-        try:
-            host, port = value
-        except (ValueError, TypeError):
-            raise ValueError("Could not extract host and port from value %r" %
-                             (value,))
-        host = host.encode('ascii')
-        if b':' in host:
-            # IPv6
-            host = b"[%s]" % host
-        return b"%s:%d" % (host, port) if port is not None else host
 
-    def decode(self, value, major):
-        if is_text(value):
-            if not future.utils.PY2:
+        def decode(self, value, major):
+            if value.startswith(b"["):
+                match = self.IPV6_RE.match(value)
+            else:
+                match = self.IPV4_RE.match(value)
+            if match is None:
+                raise ValueError("Could not parse '%s' as an address." % value)
+            port = match.group('port')
+            if port is not None:
+                port = int(port)
+            host = match.group('host')
+            return host, port
+
+    else:
+        def encode(self, value, major):
+            try:
+                host, port = value
+            except (ValueError, TypeError):
+                raise ValueError("Could not extract host and port from value %r" %
+                                 (value,))
+            host = host.encode('ascii')
+            if b':' in host:
+                # IPv6
+                host = b"[%s]" % host
+            return b"%s:%d" % (host, port) if port is not None else host
+
+        def decode(self, value, major):
+            if is_text(value):
                 value = future.utils.native_str_to_bytes(value)
-        if value.startswith(b"["):
-            match = self.IPV6_RE.match(value)
-        else:
-            match = self.IPV4_RE.match(value)
-        if match is None:
-            raise ValueError("Could not parse '%s' as an address." % value)
-        port = match.group('port')
-        if port is not None:
-            port = int(port)
-        host = match.group('host')
-        if not future.utils.PY2:
-            host = host.decode('ascii')
-        return host, port
+            if value.startswith(b"["):
+                match = self.IPV6_RE.match(value)
+            else:
+                match = self.IPV4_RE.match(value)
+            if match is None:
+                raise ValueError("Could not parse '%s' as an address." % value)
+            port = match.group('port')
+            if port is not None:
+                port = int(port)
+            host = match.group('host')
+            if not future.utils.PY2:
+                host = host.decode('ascii')
+            return host, port
 
 
 class Timestamp(KatcpType):
