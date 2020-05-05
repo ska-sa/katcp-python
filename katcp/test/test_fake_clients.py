@@ -57,65 +57,60 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
         self.assert_sensor_equal_description(a_string, dict(
             name='a-string', type=Sensor.STRING, description='A string sensor',
             params=[]))
-        a_discrete = yield self.fake_inspecting_client.future_get_sensor('a-discrete')
+        a_discrete = yield self.fake_inspecting_client.future_get_sensor("a-discrete")
         self.assert_sensor_equal_description(
             a_discrete,
-            dict(
-                name="a-discrete",
-                type=Sensor.DISCRETE,
-                description="A discrete sensor",
-                params=["a", "b", "c"],
-            ),
+            {
+                "name": "a-discrete",
+                "type": Sensor.DISCRETE,
+                "description": "A discrete sensor",
+                "params": ["a", "b", "c"],
+            },
         )
-        a_timestamp = yield self.fake_inspecting_client.future_get_sensor('a-timestamp')
+        a_timestamp = yield self.fake_inspecting_client.future_get_sensor("a-timestamp")
         self.assert_sensor_equal_description(
             a_timestamp,
-            dict(
-                name="a-timestamp",
-                type=Sensor.TIMESTAMP,
-                description="A timestamp sensor",
-                params=[1556928000],
-            ),
+            {
+                "name": "a-timestamp",
+                "type": Sensor.TIMESTAMP,
+                "description": "A timestamp sensor",
+                "params": [1556928000],
+            },
         )
-        a_float = yield self.fake_inspecting_client.future_get_sensor('a-float')
+        a_float = yield self.fake_inspecting_client.future_get_sensor("a-float")
         self.assert_sensor_equal_description(
             a_float,
-            dict(
-                name="a-float",
-                type=Sensor.FLOAT,
-                description="A float sensor",
-                params=[1234.42],
-            ),
+            {
+                "name": "a-float",
+                "type": Sensor.FLOAT,
+                "description": "A float sensor",
+                "params": [1234.42],
+            },
         )
-        a_boolean = yield self.fake_inspecting_client.future_get_sensor('a-boolean')
+        a_boolean = yield self.fake_inspecting_client.future_get_sensor("a-boolean")
         self.assert_sensor_equal_description(
             a_boolean,
-            dict(
-                name="a-boolean",
-                type=Sensor.BOOLEAN,
-                description="A boolean sensor",
-                params=[False],
-            ),
+            {
+                "name": "a-boolean",
+                "type": Sensor.BOOLEAN,
+                "description": "A boolean sensor",
+                "params": [False],
+            },
         )
-        an_address = yield self.fake_inspecting_client.future_get_sensor('an-address')
+        an_address = yield self.fake_inspecting_client.future_get_sensor("an-address")
         self.assert_sensor_equal_description(
             an_address,
-            dict(
-                name="an-address",
-                type=Sensor.ADDRESS,
-                description="An address sensor",
-                params=[('127.0.0.1', 8080)],
-            ),
+            {
+                "name": "an-address",
+                "type": Sensor.ADDRESS,
+                "description": "An address sensor",
+                "params": [("127.0.0.1", 8080)],
+            },
         )
-        a_lru = yield self.fake_inspecting_client.future_get_sensor('a-lru')
+        a_lru = yield self.fake_inspecting_client.future_get_sensor("a-lru")
         self.assert_sensor_equal_description(
             a_lru,
-            dict(
-                name="a-lru",
-                type=Sensor.LRU,
-                description="A LRU sensor",
-                params=[0],
-            ),
+            {"name": "a-lru", "type": Sensor.LRU, "description": "A LRU sensor", "params": [0]},
         )
 
 
