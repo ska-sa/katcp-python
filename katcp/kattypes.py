@@ -441,7 +441,7 @@ class Address(KatcpType):
             if port is not None:
                 port = int(port)
             host = match.group('host')
-            if not future.utils.PY2:
+            if is_bytes(host):
                 host = host.decode('ascii')
             return host, port
 
