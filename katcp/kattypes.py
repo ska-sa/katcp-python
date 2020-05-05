@@ -369,7 +369,7 @@ class Lru(KatcpType):
 
         def decode(self, value, major):
             if is_text(value):
-                    value = future.utils.native_str_to_bytes(value)
+                value = future.utils.native_str_to_bytes(value)
             if value not in Lru.LRU_CONSTANTS:
                 raise ValueError("Lru value must be 'nominal' or 'error'.")
             return Lru.LRU_CONSTANTS[value]
@@ -401,7 +401,6 @@ class Address(KatcpType):
                 # IPv6
                 host = b"[%s]" % host
             return b"%s:%d" % (host, port) if port is not None else host
-
 
         def decode(self, value, major):
             if value.startswith(b"["):
