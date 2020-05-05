@@ -394,8 +394,6 @@ class Address(KatcpType):
         return b"%s:%d" % (host, port) if port is not None else host
 
     def decode(self, value, major):
-        if not future.utils.PY2:
-            value = future.utils.native_str_to_bytes(value)
         if value.startswith(b"["):
             match = self.IPV6_RE.match(value)
         else:
