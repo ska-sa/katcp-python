@@ -235,10 +235,10 @@ class Bool(KatcpType):
     encode = lambda self, value, major: value and b"1" or b"0"
 
     def decode(self, value, major):
-        if value not in (b"0", b"1", "0", "1"):
+        if value not in (b"0", b"1"):
             raise ValueError("Boolean value must be b'0' or b'1' but is '%s'."
                              % (value,))
-        return value == b"1" or value == "1"
+        return value == b"1"
 
 
 class Str(KatcpType):
