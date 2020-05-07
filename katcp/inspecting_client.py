@@ -6,6 +6,8 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+from future.utils import native_str_to_bytes
+
 standard_library.install_aliases()  # noqa: E402
 
 import copy
@@ -867,11 +869,17 @@ class InspectingClientAsync(object):
             sensor_info = self._sensors_index[name]
             obj = sensor_info.get('obj')
             if obj is None:
+                params = []
                 sensor_type = katcp.Sensor.parse_type(
                     sensor_info.get('sensor_type'))
+                for param in sensor_info.get('params'):
+                    if sensor_type == 2:
+                        params.append(native_str_to_bytes(param))
+                    else:
+                        params.append(param)
                 sensor_params = katcp.Sensor.parse_params(
                     sensor_type,
-                    sensor_info.get('params'))
+                    params)
                 obj = self.sensor_factory(
                     name=name,
                     sensor_type=sensor_type,
