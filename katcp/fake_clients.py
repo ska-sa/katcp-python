@@ -277,8 +277,7 @@ class FakeInspectingClientManager(object):
             if s_info[2] == 'boolean':
                 params = []
                 for param in s_info[3:]:
-                    if param:
-                        params.append(native_str_to_bytes(param))
+                    params.append(native_str_to_bytes(param))
             Sensor.parse_params(s_type, params)
         self.fake_sensor_infos.update(sensor_infos)
         self._fic._interface_changed.set()
