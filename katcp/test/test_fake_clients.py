@@ -49,13 +49,25 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
 
         an_int = yield self.fake_inspecting_client.future_get_sensor('an-int')
         s_description, s_units = sensor_info['an-int'][0:2]
-        self.assert_sensor_equal_description(an_int, dict(
-            name='an-int', type=Sensor.INTEGER, description='An integer sensor',
-            params=[0, 10]))
+        self.assert_sensor_equal_description(
+            an_int,
+            {
+                'name': 'an-int',
+                'type': Sensor.INTEGER,
+                'description': 'An integer sensor',
+                'params': [0, 10]
+            }
+        )
         a_string = yield self.fake_inspecting_client.future_get_sensor('a-string')
-        self.assert_sensor_equal_description(a_string, dict(
-            name='a-string', type=Sensor.STRING, description='A string sensor',
-            params=[]))
+        self.assert_sensor_equal_description(
+            a_string,
+            {
+                'name': 'a-string',
+                'type': Sensor.STRING,
+                'description': 'A string sensor',
+                'params': []
+            }
+        )
         a_discrete = yield self.fake_inspecting_client.future_get_sensor("a-discrete")
         self.assert_sensor_equal_description(
             a_discrete,
