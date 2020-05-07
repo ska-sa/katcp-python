@@ -40,7 +40,6 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
             'a-float': ('A float sensor', '', 'float', 1234.42),
             'a-boolean': ('A boolean sensor', '', 'boolean', '0'),
             'an-address': ('An address sensor', '', 'address', '127.0.0.1:8080'),
-            'a-lru': ('A LRU sensor', '', 'lru', 'nominal'),
         }
 
         yield self.fake_inspecting_client.connect()
@@ -105,16 +104,6 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                 "type": Sensor.ADDRESS,
                 "description": "An address sensor",
                 "params": [("127.0.0.1", 8080)],
-            },
-        )
-        a_lru = yield self.fake_inspecting_client.future_get_sensor("a-lru")
-        self.assert_sensor_equal_description(
-            a_lru,
-            {
-                "name": "a-lru",
-                "type": Sensor.LRU,
-                "description": "A LRU sensor",
-                "params": [0]
             },
         )
 
