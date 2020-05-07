@@ -36,10 +36,10 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
             'an-int': ('An integer sensor', 'things', 'integer', 0, 10),
             'a-string' : ('A string sensor', '', 'string'),
             'a-discrete': ('A discrete sensor', '', 'discrete', 'a', 'b', 'c'),
-            'a-timestamp': ('A timestamp sensor', '', 'timestamp', 1556928000),
-            'a-float': ('A float sensor', '', 'float', 1234.42),
-            'a-boolean': ('A boolean sensor', '', 'boolean', '0'),
-            'an-address': ('An address sensor', '', 'address', '127.0.0.1:8080'),
+            'a-timestamp': ('A timestamp sensor', '', 'timestamp'),
+            'a-float': ('A float sensor', '', 'float', -123.4, 123.4),
+            'a-boolean': ('A boolean sensor', '', 'boolean'),
+            'an-address': ('An address sensor', '', 'address'),
         }
 
         yield self.fake_inspecting_client.connect()
@@ -85,7 +85,6 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                 "name": "a-timestamp",
                 "type": Sensor.TIMESTAMP,
                 "description": "A timestamp sensor",
-                "params": [1556928000],
             },
         )
         a_float = yield self.fake_inspecting_client.future_get_sensor("a-float")
@@ -95,7 +94,7 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                 "name": "a-float",
                 "type": Sensor.FLOAT,
                 "description": "A float sensor",
-                "params": [1234.42],
+                "params": [-123.4, 123.4],
             },
         )
         a_boolean = yield self.fake_inspecting_client.future_get_sensor("a-boolean")
@@ -105,7 +104,6 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                 "name": "a-boolean",
                 "type": Sensor.BOOLEAN,
                 "description": "A boolean sensor",
-                "params": [False],
             },
         )
         an_address = yield self.fake_inspecting_client.future_get_sensor("an-address")
@@ -115,7 +113,6 @@ class test_FakeInspectingClient(tornado.testing.AsyncTestCase,
                 "name": "an-address",
                 "type": Sensor.ADDRESS,
                 "description": "An address sensor",
-                "params": [("127.0.0.1", 8080)],
             },
         )
 
