@@ -624,13 +624,15 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#version-list katcp-library", ""),
             (r"#version-list katcp-device", ""),
             (r"!version-list ok 3", ""),
+            (r"#sensor-list a.discrete A\_Discrete. \@ discrete one two three", ""),
             (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
-            (r"!sensor-list ok 1", ""),
+            (r"!sensor-list ok 2", ""),
             (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
             (r"!sensor-list ok 1", ""),
             (r"!sensor-list fail", ""),
+            (r"#sensor-value 12345.000000 1 a.discrete nominal one", ""),
             (r"#sensor-value 12345.000000 1 an.int nominal 3", ""),
-            (r"!sensor-value ok 1", ""),
+            (r"!sensor-value ok 2", ""),
             (r"#sensor-value 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-value ok 1", ""),
             (r"!sensor-value fail", ""),
@@ -772,15 +774,17 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         reply, informs = self.client.blocking_request(katcp.Message.request(
                 "sensor-list", "/a.*/"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
+            r"#sensor-list a.discrete A\_Discrete. \@ discrete one two three",
             r"#sensor-list an.int An\_Integer. count integer -5 5",
-            r"!sensor-list ok 1",
+            r"!sensor-list ok 2",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
                 "sensor-list", "//"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
+            r"#sensor-list a.discrete A\_Discrete. \@ discrete one two three",
             r"#sensor-list an.int An\_Integer. count integer -5 5",
-            r"!sensor-list ok 1",
+            r"!sensor-list ok 2",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
@@ -793,15 +797,17 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         reply, informs = self.client.blocking_request(katcp.Message.request(
                 "sensor-value", "/a.*/"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
+            r'#sensor-value 12345.000000 1 a.discrete nominal one',
             r"#sensor-value 12345.000000 1 an.int nominal 3",
-            r"!sensor-value ok 1",
+            r"!sensor-value ok 2",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
                 "sensor-value", "//"), use_mid=False)
         self._assert_msgs_equal(informs + [reply], [
+            r'#sensor-value 12345.000000 1 a.discrete nominal one',
             r"#sensor-value 12345.000000 1 an.int nominal 3",
-            r"!sensor-value ok 1",
+            r"!sensor-value ok 2",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
