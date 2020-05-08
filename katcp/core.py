@@ -1548,7 +1548,7 @@ class Sensor(object):
         ----------
         sensor_type : Sensor type constant
             The type of sensor the parameters are for.
-        formatted_params : list of strings
+        formatted_params : list of byte strings
             The formatted parameters that should be parsed.
         major : int
             Major version of KATCP to use when interpreting types.
