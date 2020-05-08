@@ -1013,7 +1013,7 @@ class DeviceTestServer(DeviceServer):
             timestamp=12345, status=Sensor.NOMINAL, value=3))
         self.add_sensor(DeviceTestSensor(
             Sensor.DISCRETE, "a.discrete", "A Discrete.", "",
-            ['one', 'two',  'three'],
+            ['one', 'two', 'three'],
             timestamp=12345, status=Sensor.NOMINAL, value="one"))
 
     def request_new_command(self, req, msg):
