@@ -274,6 +274,11 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         self.assertEqual(sensor.name, sensor_name)
         self.assertEqual(sensor.stype, 'integer')
 
+        sensor_name = 'a.discrete'
+        sensor = yield self.client.future_get_sensor(sensor_name)
+        self.assertEqual(sensor.name, sensor_name)
+        self.assertEqual(sensor.stype, 'discrete')
+
         # Unknown sensor requests return a None.
         sensor_name = 'thing.unknown_sensor'
         sensor = yield self.client.future_get_sensor(sensor_name)
