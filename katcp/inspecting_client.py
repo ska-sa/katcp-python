@@ -18,6 +18,7 @@ from collections import defaultdict, namedtuple
 import tornado
 
 from tornado.gen import Return, maybe_future
+from future.utils import native_str_to_bytes
 
 import katcp.core
 
@@ -867,11 +868,14 @@ class InspectingClientAsync(object):
             sensor_info = self._sensors_index[name]
             obj = sensor_info.get('obj')
             if obj is None:
+                params = []
+                for param in sensor_info.get('params', []):
+                    params.append(native_str_to_bytes(param))
                 sensor_type = katcp.Sensor.parse_type(
                     sensor_info.get('sensor_type'))
                 sensor_params = katcp.Sensor.parse_params(
                     sensor_type,
-                    sensor_info.get('params'))
+                    params)
                 obj = self.sensor_factory(
                     name=name,
                     sensor_type=sensor_type,
