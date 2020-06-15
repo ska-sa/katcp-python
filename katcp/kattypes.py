@@ -294,7 +294,7 @@ class Discrete(Str):
 
     Parameters
     ----------
-    values : list of str
+    values : iterable of str
         List of the values the discrete type may accept.
     case_insensitive : bool
         Whether case-insensitive value matching should be used.

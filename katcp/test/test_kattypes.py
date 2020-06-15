@@ -186,6 +186,8 @@ class TestDiscrete(TestType):
         default_optional = Discrete(("VAL1", "VAL2"), default="VAL1",
                                     optional=True)
         case_insensitive = Discrete(("val1", "VAL2"), case_insensitive=True)
+        values = ('VAL{}'.format(i + 1) for i in range(2))
+        basic_generator = Discrete(values)
 
         self._pack = [
             (basic, "VAL1", b"VAL1"),
@@ -193,6 +195,11 @@ class TestDiscrete(TestType):
             (basic, "a", ValueError),
             (basic, "val1", ValueError),
             (basic, None, ValueError),
+            (basic_generator, "VAL1", b"VAL1"),
+            (basic_generator, "VAL2", b"VAL2"),
+            (basic_generator, "a", ValueError),
+            (basic_generator, "val1", ValueError),
+            (basic_generator, None, ValueError),
             (default, None, b"VAL1"),
             (default_optional, None, b"VAL1"),
             (optional, None, ValueError),
@@ -213,6 +220,11 @@ class TestDiscrete(TestType):
             (case_insensitive, b"vAl2", "vAl2"),
             (case_insensitive, b"a", ValueError),
         ]
+
+    def test_discrete_values(self):
+        values = ('VAL{}'.format(i + 1) for i in range(2))
+        basic = Discrete(values)
+        self.assertEqual(sorted(basic._values), sorted(basic._valid_values))
 
 
 class TestLru(TestType):
