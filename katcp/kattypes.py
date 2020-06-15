@@ -305,10 +305,6 @@ class Discrete(Str):
     def __init__(self, values, case_insensitive=False, **kwargs):
         super(Discrete, self).__init__(**kwargs)
         self._case_insensitive = case_insensitive
-        if not isinstance(values, list):
-            raise ValueError("%r values passed should be a list, instead of %r" % (
-                values, type(values))
-            )
         self._values = list(values)  # just to preserve ordering
         self._valid_values = set(self._values)
         if self._case_insensitive:
