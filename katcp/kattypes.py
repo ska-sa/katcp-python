@@ -294,7 +294,7 @@ class Discrete(Str):
 
     Parameters
     ----------
-    values : list of str
+    values : iterable of str
         List of the values the discrete type may accept.
     case_insensitive : bool
         Whether case-insensitive value matching should be used.
@@ -306,7 +306,7 @@ class Discrete(Str):
         super(Discrete, self).__init__(**kwargs)
         self._case_insensitive = case_insensitive
         self._values = list(values)  # just to preserve ordering
-        self._valid_values = set(values)
+        self._valid_values = set(self._values)
         if self._case_insensitive:
             self._valid_values_lower = set([val.lower()
                                             for val in self._values])
