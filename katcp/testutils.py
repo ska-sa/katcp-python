@@ -28,7 +28,7 @@ import tornado.locks
 import tornado.testing
 from _thread import get_ident
 from tornado.concurrent import Future as tornado_Future
-from future.utils import native_str_to_bytes, bytes_to_native_str  # noqa: E402
+from future.utils import native_str_to_bytes, bytes_to_native_str
 
 from katcp import client
 
