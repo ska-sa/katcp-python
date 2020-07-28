@@ -502,6 +502,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.get_sensor('an.int', int)
         self.client.get_sensor_value('an.int', int)
         self.client.assert_sensor_equals('an.int', 3, int, status='nominal')
+        self.client.assert_sensor_status_equals('an.int', 'nominal')
 
 
     def test_bad_requests(self):
