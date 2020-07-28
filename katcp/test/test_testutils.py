@@ -184,8 +184,7 @@ class test_WaitingMock(_test_WaitingMockBase):
             DUT.assert_wait_call_count(1, timeout=0.1)
 
 
-class test_AsyncWaitingMock(
-    tornado.testing.AsyncTestCase, _test_WaitingMockBase):
+class test_AsyncWaitingMock(tornado.testing.AsyncTestCase, _test_WaitingMockBase):
     DUTClass = testutils.AsyncWaitingMock
 
     @tornado.testing.gen_test
