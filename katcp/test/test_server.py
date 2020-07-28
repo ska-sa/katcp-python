@@ -498,6 +498,12 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             r"!boom invalid Unknown\_request.",
         ])
 
+    def test_get_sensor(self):
+        self.client.get_sensor('an.int', int)
+        self.client.get_sensor_value('an.int', int)
+        self.client.assert_sensor_equals('an.int', 3, int, status='nominal')
+
+
     def test_bad_requests(self):
         """Test request failure paths in device server."""
         get_msgs = self.client.message_recorder(

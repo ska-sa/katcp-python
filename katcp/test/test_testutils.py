@@ -214,23 +214,3 @@ class test_AsyncWaitingMock(
         DUT(1)
         self.io_loop.add_callback(DUT, 2)
         yield DUT.assert_wait_call_count(2, timeout=0.1)
-
-
-def test_assert_sensor_equals():
-    assert False
-
-
-def test_assert_sensor_status_equals():
-    assert False
-
-
-def test_assert_sensor_not_equal():
-    assert False
-
-
-def test_wait_until_sensor_equals():
-    assert False
-
-
-def test_test_sensor_list():
-    assert False
