@@ -85,10 +85,12 @@ pipeline {
                         autoUpdateHealth: true,
                         autoUpdateStability: true,
                         zoomCoverageChart: true,
+                        //Ideally test coverage should be > 80%
                         lineCoverageTargets: '80, 80, 80',
                         conditionalCoverageTargets: '80, 80, 80',
                         classCoverageTargets: '80, 80, 80',
                         fileCoverageTargets: '80, 80, 80',
+                        methodCoverageTargets: '80, 0, 0',
                     )
                     archiveArtifacts '*.xml'
                 }
