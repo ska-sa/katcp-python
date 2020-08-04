@@ -3,6 +3,7 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+
 standard_library.install_aliases()  # noqa: E402
 
 import threading
@@ -40,7 +41,8 @@ class test_SensorTransitionWaiter(unittest.TestCase):
             lambda x: x < 1,
             lambda x: x < 0.3)
         value_series = (0.5, 0.6, 1, 0.7, 0.299)
-        def sensor_stream(): # Target for thread that pushes values to DUT
+
+        def sensor_stream():  # Target for thread that pushes values to DUT
             # We are purposefully not adjusting the timestamps (1st 2
             # parameters to sensor.set_value()) to check that events
             # that come in faster than timer precision are also caught
@@ -57,7 +59,7 @@ class test_SensorTransitionWaiter(unittest.TestCase):
         sensor_thread = threading.Thread(target=sensor_stream)
         sensor_thread.daemon = True
         thread_alive = threading.Event()
-        delay_value = 0.005 # Should be fast enough to complete within timeout
+        delay_value = 0.005  # Should be fast enough to complete within timeout
         thread_alive.clear()
         sensor_thread.start()
         # wait until the thread starts working
@@ -87,9 +89,9 @@ class test_SensorTransitionWaiter(unittest.TestCase):
         # sensor does not match the first value in the expected
         # sequence.
         with self.assertRaises(ValueError):
-            testutils.SensorTransitionWaiter(sensor,(1,2,3))
+            testutils.SensorTransitionWaiter(sensor, (1, 2, 3))
 
-        DUT = testutils.SensorTransitionWaiter(sensor,(0,2,3))
+        DUT = testutils.SensorTransitionWaiter(sensor, (0, 2, 3))
         # Test that we are attached to the sensor
         self.assertTrue(DUT._observer in sensor._observers)
         self.assertEqual(DUT._observer.update, DUT._sensor_callback)
@@ -99,12 +101,14 @@ class test_SensorTransitionWaiter(unittest.TestCase):
         self.assertFalse(DUT._observer in sensor._observers)
         self.assertTrue(DUT._torn_down)
         with self.assertRaises(RuntimeError):
-            DUT.wait() # should not allow waiting if we're torn down
+            DUT.wait()  # should not allow waiting if we're torn down
+
 
 class test_wait_sensor(unittest.TestCase):
     def _wait_sensor(self, vals, val, status):
         sensor = get_sensor(Sensor.INTEGER)
         sensor.set_value(0, Sensor.NOMINAL)
+
         def set_vals():
             time.sleep(0.05)
             for v in vals:
@@ -112,6 +116,7 @@ class test_wait_sensor(unittest.TestCase):
                     sensor.set_value(v)
                 else:
                     sensor.set_value(*v)
+
         sensor_thread = threading.Thread(target=set_vals)
         # test timeout
         self.assertFalse(testutils.wait_sensor(sensor, val, status=status, timeout=0.05))
@@ -120,7 +125,7 @@ class test_wait_sensor(unittest.TestCase):
         self.assertTrue(testutils.wait_sensor(sensor, val, status=status, timeout=1))
 
     def test_values(self):
-        vals = (1,2,0,3)
+        vals = (1, 2, 0, 3)
         self._wait_sensor(vals, 3, status=None)
 
     def test_values_and_status(self):
@@ -132,7 +137,6 @@ class test_wait_sensor(unittest.TestCase):
 
 
 class _test_WaitingMockBase(unittest.TestCase):
-
     DUTClass = None
 
     def test_reset_mock(self):
@@ -153,7 +157,6 @@ class _test_WaitingMockBase(unittest.TestCase):
 
 
 class test_WaitingMock(_test_WaitingMockBase):
-
     DUTClass = testutils.WaitingMock
 
     def test_assert_wait_call_count_success(self):
@@ -180,9 +183,8 @@ class test_WaitingMock(_test_WaitingMockBase):
         with self.assertRaises(RuntimeError):
             DUT.assert_wait_call_count(1, timeout=0.1)
 
-class test_AsyncWaitingMock(
-        tornado.testing.AsyncTestCase, _test_WaitingMockBase):
 
+class test_AsyncWaitingMock(tornado.testing.AsyncTestCase, _test_WaitingMockBase):
     DUTClass = testutils.AsyncWaitingMock
 
     @tornado.testing.gen_test

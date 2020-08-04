@@ -28,7 +28,7 @@ import tornado.locks
 import tornado.testing
 from _thread import get_ident
 from tornado.concurrent import Future as tornado_Future
-from future.utils import native_str_to_bytes
+from future.utils import native_str_to_bytes, bytes_to_native_str
 
 from katcp import client
 
@@ -335,7 +335,7 @@ class BlockingTestClient(client.BlockingClient):
         except ValueError as e:
             self.test.fail("Could not convert value %r of sensor '%s' to type "
                            "%s: %s" % (value, sensorname, typestr, e))
-
+        status = bytes_to_native_str(status)
         self.test.assertTrue(status in Sensor.STATUSES.values(),
                              "Got invalid status value %r for sensor '%s'."
                              % (status, sensorname))
