@@ -82,6 +82,7 @@ pipeline {
                         failNoReports: true,
                         failUnhealthy: true,
                         failUnstable: true,
+                        failBuildIfCoverageDecreasedInChangeRequest: false,
                         autoUpdateHealth: true,
                         autoUpdateStability: true,
                         zoomCoverageChart: true,
@@ -90,7 +91,6 @@ pipeline {
                         conditionalCoverageTargets: '80, 80, 80',
                         classCoverageTargets: '80, 80, 80',
                         fileCoverageTargets: '80, 80, 80',
-                        methodCoverageTargets: '80, 0, 0',
                     )
                     archiveArtifacts '*.xml'
                 }
