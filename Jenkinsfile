@@ -82,7 +82,6 @@ pipeline {
                         failNoReports: true,
                         failUnhealthy: true,
                         failUnstable: true,
-                        failBuildIfCoverageDecreasedInChangeRequest: false,
                         autoUpdateHealth: true,
                         autoUpdateStability: true,
                         zoomCoverageChart: true,
