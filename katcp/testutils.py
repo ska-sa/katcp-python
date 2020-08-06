@@ -8,7 +8,11 @@
 
 from __future__ import absolute_import, division, print_function
 from future import standard_library
+
 standard_library.install_aliases()  # noqa: E402
+
+from .compat import is_bytes
+
 
 import functools
 import logging
@@ -792,7 +796,12 @@ class BlockingTestClient(client.BlockingClient):
         informs_args_equal = kwargs.get("informs_args_equal")
 
         if args_echo:
-            args_equal = [str(p) for p in params]
+            args_equal = []
+            for p in params:
+                if is_bytes(p):
+                    args_equal.append(p)
+                else:
+                    args_equal.append(str(p))
 
         if args_equal is not None:
             msg = ("Expected reply to request '%s' called with parameters %r "

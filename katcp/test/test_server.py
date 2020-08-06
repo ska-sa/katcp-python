@@ -991,6 +991,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
         self.assertTrue(get_msgs.wait_number(6, timeout=4.75/32.))
         self.client.assert_request_succeeds("sensor-sampling", "an.int", "none")
+        self.client.assert_request_succeeds("log-level", b"debug", args_echo=True)
         # Wait for reply to above request
         get_msgs.wait_number(7)
         msgs = get_msgs()
@@ -1002,6 +1003,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_equal(others, [
             r"!sensor-sampling[1] ok an.int period %s" % (1/32.),
             r"!sensor-sampling[2] ok an.int none",
+            r"!log-level[3] ok debug"
         ])
 
         self.assertEqual(updates[0].arguments[1:],
