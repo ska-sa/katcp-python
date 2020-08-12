@@ -802,6 +802,7 @@ class BlockingTestClient(client.BlockingClient):
                    % (requestname, params, args_equal, args))
             self.test.assertEqual(args, args_equal, msg)
         elif args_in is not None:
+            args_in = [list_to_native_strings(arg) for arg in args_in]
             msg = ("Expected reply to request '%s' called with parameters %r "
                    "to have arguments in %s, but received %s."
                    % (requestname, params, args_in, args))
