@@ -1015,7 +1015,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.server.sync_with_ioloop()
         self.client.assert_request_succeeds("sensor-sampling", "an.int",
                                             args_equal=["an.int", "none"])
-
+        self.client.assert_request_succeeds("sensor-sampling", b"an.int",
+                                            args_equal=["an.int", "none"])
         # Check that we did not accidentally clobber the strategy datastructure
         # in the proccess
         self.client.assert_request_succeeds(
