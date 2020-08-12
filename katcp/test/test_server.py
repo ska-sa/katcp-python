@@ -1062,8 +1062,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.assert_request_succeeds("sensor-sampling", b"an.int",
                                             args_equal=["an.int", "none"])
         levels = ['off', b'fatal', 'error', b'warn', 'info', 'debug', 'trace', 'all']
-
-        self.client.assert_request_succeeds("log-level", args_in=[[l] for l in levels])
+        self.client.assert_request_succeeds("log-level", args_in=[[level] for level in levels])
         # Check that we did not accidentally clobber the strategy datastructure
         # in the proccess
         self.client.assert_request_succeeds(
