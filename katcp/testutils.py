@@ -38,7 +38,7 @@ from .kattypes import (Bool, Discrete, Float, Int, Str, concurrent_reply,
                        request, request_timeout_hint, return_reply)
 from .object_proxies import ObjectWrapper
 from .server import ClientConnection, DeviceServer, FailReply
-from .compat import is_bytes, ensure_native_str
+from .compat import is_bytes, ensure_native_str, is_text
 
 logger = logging.getLogger(__name__)
 
@@ -2087,7 +2087,7 @@ class TimewarpAsyncTestCaseTimeAdvancer(threading.Thread):
 def list_to_native_strings(list_to_coerce):
     coerced_list = []
     for item in list_to_coerce:
-        if is_bytes(item):
+        if is_bytes(item) or is_text(item):
             coerced_list.append(ensure_native_str(item))
         else:
             coerced_list.append(str(item))
