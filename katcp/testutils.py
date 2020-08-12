@@ -38,6 +38,7 @@ from .kattypes import (Bool, Discrete, Float, Int, Str, concurrent_reply,
                        request, request_timeout_hint, return_reply)
 from .object_proxies import ObjectWrapper
 from .server import ClientConnection, DeviceServer, FailReply
+from .compat import is_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -782,8 +783,11 @@ class BlockingTestClient(client.BlockingClient):
                                         "(with no error message)")))
         self.test.assertTrue(reply.reply_ok(), msg)
 
-        args = reply.arguments[1:]
-
+        args = []
+        for arg in reply.arguments[1:]:
+            if is_bytes(arg):
+                arg = bytes_to_native_str(arg)
+            args.append(arg)
         args_echo = kwargs.get("args_echo", False)
         args_equal = kwargs.get("args_equal")
         args_in = kwargs.get("args_in")
