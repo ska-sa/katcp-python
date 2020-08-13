@@ -329,6 +329,9 @@ class BlockingTestClient(client.BlockingClient):
             if sensortype == bool:
                 typestr = "%r and then %r" % (int, bool)
                 value = bool(int(value))
+            elif sensortype == str:
+                typestr = "%r" % sensortype
+                value = bytes_to_native_str(value)
             else:
                 typestr = "%r" % sensortype
                 value = sensortype(value)
