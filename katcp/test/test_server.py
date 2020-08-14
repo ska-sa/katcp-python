@@ -1021,52 +1021,19 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             "sensor-sampling", "an.int", "period", 0.125)
 
     def test_assert_request_succeeds(self):
-        """Test exercises assert_request_succeeds it is a copy of test_sampling."""
-        get_msgs = self.client.message_recorder(
-                blacklist=self.BLACKLIST, replies=True)
-        self.client.wait_protocol(timeout=1)
-        self.client.request(katcp.Message.request(
-            "sensor-sampling", "an.int", "period", 1/32.))
-
-        # Wait for the request reply and for the sensor update messages to
-        # arrive. We expect update one the moment the sensor-sampling request is
-        # made, then four more over 4/32. of a second, resutling in 6
-        # messages. Wait 0.75 of a period longer just to be sure we get everything.
-
-        self.assertTrue(get_msgs.wait_number(6, timeout=4.75/32.))
-        self.client.assert_request_succeeds("sensor-sampling", "an.int", "none")
-        # Wait for reply to above request
-        get_msgs.wait_number(7)
-        msgs = get_msgs()
-        updates = [x for x in msgs if x.name == "sensor-status"]
-        others = [x for x in msgs if x.name != "sensor-status"]
-        self.assertTrue(abs(len(updates) - 5) < 2,
-                        "Expected 5 informs, saw %d." % len(updates))
-
-        self._assert_msgs_equal(others, [
-            r"!sensor-sampling[1] ok an.int period %s" % (1/32.),
-            r"!sensor-sampling[2] ok an.int none",
-        ])
-
-        self.assertEqual(updates[0].arguments[1:],
-                         [b"1", b"an.int", b"nominal", b"3"])
-
-        ## Now clear the strategies on this sensor
-        # There should only be on connection to the server, so it should be
-        # the test client
-        client_conn = list(self.server._client_conns)[0]
-        self.server.ioloop.add_callback(self.server.clear_strategies, client_conn)
-        self.server.sync_with_ioloop()
+        """Test exercises assert_request_succeeds"""
         self.client.assert_request_succeeds("sensor-sampling", "an.int",
                                             args_equal=["an.int", "none"])
         self.client.assert_request_succeeds("sensor-sampling", b"an.int",
                                             args_equal=["an.int", "none"])
+        self.client.assert_request_succeeds("sensor-sampling", b"an.int",
+                                            args_equal=[b"an.int", b"none"])
+        self.client.assert_request_succeeds("log-level", "debug", args_equal=["debug"],
+                                            args_echo=True)
+        self.client.assert_request_succeeds("log-level", "debug", args_equal=[b"debug"],
+                                            args_echo=True)
         levels = ['off', b'fatal', 'error', b'warn', 'info', 'debug', 'trace', 'all']
         self.client.assert_request_succeeds("log-level", args_in=[[level] for level in levels])
-        # Check that we did not accidentally clobber the strategy datastructure
-        # in the proccess
-        self.client.assert_request_succeeds(
-            "sensor-sampling", "an.int", "period", 0.125)
 
     def test_add_remove_sensors(self):
         """Test adding and removing sensors from a running device."""

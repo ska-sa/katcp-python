@@ -795,8 +795,8 @@ class BlockingTestClient(client.BlockingClient):
         if args_echo:
             args_equal = list_to_native_strings(params)
 
-
         if args_equal is not None:
+            args_equal = list_to_native_strings(args_equal)
             msg = ("Expected reply to request '%s' called with parameters %r "
                    "to have arguments %s, but received %s."
                    % (requestname, params, args_equal, args))
