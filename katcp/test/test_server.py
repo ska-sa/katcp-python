@@ -500,10 +500,11 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 
     def test_get_sensor(self):
         self.client.get_sensor('an.int', int)
+        response = self.client.get_sensor('an.int')
+        self.assertEquals(response[0], '3')
         self.client.get_sensor_value('an.int', int)
         self.client.assert_sensor_equals('an.int', 3, int, status='nominal')
         self.client.assert_sensor_status_equals('an.int', 'nominal')
-
 
     def test_bad_requests(self):
         """Test request failure paths in device server."""
