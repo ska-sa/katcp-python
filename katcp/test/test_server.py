@@ -1030,9 +1030,20 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.assert_request_fails(
             "sensor-sampling", "an.nonexistentsensor", status_equals="fail"
         )
+        with self.assertRaises(Exception):
+            self.client.assert_request_fails(
+                "sensor-sampling", "an.int", status_equals="fail"
+            )
+        with self.assertRaises(Exception):
+            self.client.assert_request_fails(
+                "sensor-sampling", "an.int",
+                error_equals="Unknown sensor name: an.nonexistentsensor."
+            )
+
 
     def test_assert_request_succeeds(self):
         """Test exercises assert_request_succeeds"""
+
         self.client.assert_request_succeeds("sensor-sampling", "an.int",
                                             args_equal=["an.int", "none"])
         self.client.assert_request_succeeds("sensor-sampling", b"an.int",
