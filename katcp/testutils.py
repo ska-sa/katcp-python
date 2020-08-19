@@ -820,7 +820,7 @@ class BlockingTestClient(client.BlockingClient):
             self.test.assertEqual(len(informs), informs_count, msg)
 
         if informs_args_equal is not None:
-            expected_inform_args = list_to_native_strings(list(informs_args_equal))
+            expected_inform_args = [list_to_native_strings(inform) for inform in informs_args_equal]
             actual_inform_args = [list_to_native_strings(inform.arguments) for inform in informs]
             msg = ("Expected inform arguments {expected_inform_args} in reply to request "
                    "{requestname!r} called with parameters {params!r}, "
