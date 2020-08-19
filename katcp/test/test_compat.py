@@ -13,6 +13,7 @@ import unittest
 
 from katcp.compat import ensure_native_str
 
+
 class test_CompatClass(unittest.TestCase):
     def test_ensure_native_str(self):
         with self.assertRaises(TypeError):
