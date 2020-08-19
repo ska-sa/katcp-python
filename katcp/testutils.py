@@ -857,18 +857,21 @@ class BlockingTestClient(client.BlockingClient):
         self.test.assertFalse(reply.reply_ok(), msg)
 
         status = reply.arguments[0]
-        error = reply.arguments[1] if len(reply.arguments) > 1 else None
+        error = ensure_native_str(reply.arguments[1]) if len(reply.arguments) > 1 else None
 
         status_equals = kwargs.get("status_equals")
         error_equals = kwargs.get("error_equals")
 
         if status_equals is not None:
+            status_equals = ensure_native_str(status_equals)
+            status = ensure_native_str(status)
             msg = ("Expected request '%s' called with parameters %r to return "
                    "status %s, but the status was %r."
                    % (requestname, params, status_equals, status))
             self.test.assertTrue(status == status_equals, msg)
 
         if error_equals is not None:
+            error_equals = ensure_native_str(error_equals)
             msg = ("Expected request '%s' called with parameters %r to fail "
                    "with error %s, but the error was %r."
                    % (requestname, params, error_equals, error))
