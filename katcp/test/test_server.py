@@ -20,7 +20,6 @@ import weakref
 from collections import defaultdict
 from concurrent.futures import Future
 from functools import partial, wraps
-from datetime import datetime
 
 import _thread
 import mock
@@ -1031,16 +1030,12 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
                                             args_equal=[b"an.int", b"none"])
         self.client.assert_request_succeeds("log-level", "debug", args_echo=True)
         levels = ['off', b'fatal', 'error', b'warn', 'info', 'debug', 'trace', 'all']
-        self.client.assert_request_succeeds("log-level", args_in=[[level] for level in levels])
-        d = datetime.now()
-        version = "0.0+unknown.{}".format(d.strftime("%Y%m%d%H%M"))
+        self.client.assert_request_succeeds("log-level", args_in=[[level]
+                                                                  for level in levels])
         self.client.assert_request_succeeds(
-            "version-list",
-            args_equal=["3"],
-            informs_args_equal=[[b'katcp-protocol', b'5.0-IM'],
-                                ['katcp-library','katcp-python-{}'.format(version), version],
-                                ['katcp-device', b'device_stub-0.1', 'name-0.1']],
-        )
+            "sensor-value", "an.int",
+            args_equal=["1"],
+            informs_args_equal=[['12345.000000', '1', 'an.int', 'nominal', '3']])
 
     def test_add_remove_sensors(self):
         """Test adding and removing sensors from a running device."""
