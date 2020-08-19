@@ -1059,6 +1059,13 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             args_equal=["1"],
             informs_args_equal=[['12345.000000', '1', 'an.int', 'nominal', '3']])
 
+        with self.assertRaises(Exception):
+            self.client.assert_request_succeeds(
+                "sensor-value", "an.int",
+                args_equal=["1"],
+                informs_args_equal=[['12345.000000', '1', 'an.int', 'nominal', '3a']])
+
+
     def test_add_remove_sensors(self):
         """Test adding and removing sensors from a running device."""
         an_int = self.server._sensors["an.int"]
