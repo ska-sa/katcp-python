@@ -15,6 +15,9 @@ from katcp.compat import ensure_native_str
 
 
 class test_CompatClass(unittest.TestCase):
-    def test_ensure_native_str(self):
+    def test_ensure_native_str_raises_error(self):
+        """Test that ensure_native_str raises an error"""
         with self.assertRaises(TypeError):
             ensure_native_str(9)
+        with self.assertRaises(TypeError):
+            ensure_native_str(False)
