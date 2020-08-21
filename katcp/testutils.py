@@ -38,6 +38,7 @@ from .kattypes import (Bool, Discrete, Float, Int, Str, concurrent_reply,
                        request, request_timeout_hint, return_reply)
 from .object_proxies import ObjectWrapper
 from .server import ClientConnection, DeviceServer, FailReply
+from .compat import is_bytes, ensure_native_str, is_text
 
 logger = logging.getLogger(__name__)
 
@@ -785,7 +786,7 @@ class BlockingTestClient(client.BlockingClient):
                                         "(with no error message)")))
         self.test.assertTrue(reply.reply_ok(), msg)
 
-        args = reply.arguments[1:]
+        args = [ensure_native_str(arg) for arg in reply.arguments[1:]]
 
         args_echo = kwargs.get("args_echo", False)
         args_equal = kwargs.get("args_equal")
@@ -795,14 +796,16 @@ class BlockingTestClient(client.BlockingClient):
         informs_args_equal = kwargs.get("informs_args_equal")
 
         if args_echo:
-            args_equal = [str(p) for p in params]
+            args_equal = list_to_native_strings(params)
 
         if args_equal is not None:
+            args_equal = list_to_native_strings(args_equal)
             msg = ("Expected reply to request '%s' called with parameters %r "
                    "to have arguments %s, but received %s."
                    % (requestname, params, args_equal, args))
             self.test.assertEqual(args, args_equal, msg)
         elif args_in is not None:
+            args_in = [list_to_native_strings(arg) for arg in args_in]
             msg = ("Expected reply to request '%s' called with parameters %r "
                    "to have arguments in %s, but received %s."
                    % (requestname, params, args_in, args))
@@ -820,13 +823,18 @@ class BlockingTestClient(client.BlockingClient):
             self.test.assertEqual(len(informs), informs_count, msg)
 
         if informs_args_equal is not None:
-            expected_inform_args = list(informs_args_equal)
-            actual_inform_args = [inform.arguments for inform in informs]
-            msg = ("Expected inform arguments {expected_inform_args} in reply to request "
-                   "{requestname!r} called with parameters {params!r}, "
-                   "but received {actual_inform_args!r}.".format(**locals()))
+            expected_inform_args = [
+                list_to_native_strings(inform) for inform in informs_args_equal
+            ]
+            actual_inform_args = [
+                list_to_native_strings(inform.arguments) for inform in informs
+            ]
+            msg = (
+                "Expected inform arguments {expected_inform_args} in reply to request "
+                "{requestname!r} called with parameters {params!r}, "
+                "but received {actual_inform_args!r}.".format(**locals())
+            )
             self.test.assertEqual(actual_inform_args, expected_inform_args, msg)
-
         return args
 
     def assert_request_fails(self, requestname, *params, **kwargs):
@@ -857,18 +865,21 @@ class BlockingTestClient(client.BlockingClient):
         self.test.assertFalse(reply.reply_ok(), msg)
 
         status = reply.arguments[0]
-        error = reply.arguments[1] if len(reply.arguments) > 1 else None
-
+        error = (ensure_native_str(reply.arguments[1])
+                 if len(reply.arguments) > 1 else None)
         status_equals = kwargs.get("status_equals")
         error_equals = kwargs.get("error_equals")
 
         if status_equals is not None:
+            status_equals = ensure_native_str(status_equals)
+            status = ensure_native_str(status)
             msg = ("Expected request '%s' called with parameters %r to return "
                    "status %s, but the status was %r."
                    % (requestname, params, status_equals, status))
             self.test.assertTrue(status == status_equals, msg)
 
         if error_equals is not None:
+            error_equals = ensure_native_str(error_equals)
             msg = ("Expected request '%s' called with parameters %r to fail "
                    "with error %s, but the error was %r."
                    % (requestname, params, error_equals, error))
@@ -2082,3 +2093,13 @@ class TimewarpAsyncTestCaseTimeAdvancer(threading.Thread):
         yield self.test_instance.set_ioloop_time(
             self.test_instance.ioloop_time + self.quantum)
         future.set_result(None)
+
+
+def list_to_native_strings(list_to_coerce):
+    coerced_list = []
+    for item in list_to_coerce:
+        if is_bytes(item) or is_text(item):
+            coerced_list.append(ensure_native_str(item))
+        else:
+            coerced_list.append(str(item))
+    return coerced_list

@@ -1015,13 +1015,55 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.server.ioloop.add_callback(self.server.clear_strategies, client_conn)
         self.server.sync_with_ioloop()
         self.client.assert_request_succeeds("sensor-sampling", "an.int",
-                                            args_equal=[b"an.int", b"none"])
-
+                                            args_equal=["an.int", "none"])
         # Check that we did not accidentally clobber the strategy datastructure
         # in the proccess
         self.client.assert_request_succeeds(
             "sensor-sampling", "an.int", "period", 0.125)
 
+    def test_assert_request_fails(self):
+        self.client.assert_request_fails("sensor-sampling", "an.nonexistentsensor")
+        self.client.assert_request_fails(
+            "sensor-sampling",
+            "an.nonexistentsensor",
+            error_equals="Unknown sensor name: an.nonexistentsensor.",
+        )
+        self.client.assert_request_fails(
+            "sensor-sampling", "an.nonexistentsensor", status_equals="fail"
+        )
+        with self.assertRaises(Exception):
+            self.client.assert_request_fails(
+                "sensor-sampling", "an.int", status_equals="fail"
+            )
+        with self.assertRaises(Exception):
+            self.client.assert_request_fails(
+                "sensor-sampling", "an.int",
+                error_equals="Unknown sensor name: an.nonexistentsensor."
+            )
+
+    def test_assert_request_succeeds(self):
+        """Test exercises assert_request_succeeds"""
+
+        self.client.assert_request_succeeds("sensor-sampling", "an.int",
+                                            args_equal=["an.int", "none"])
+        self.client.assert_request_succeeds("sensor-sampling", b"an.int",
+                                            args_equal=["an.int", "none"])
+        self.client.assert_request_succeeds("sensor-sampling", b"an.int",
+                                            args_equal=[b"an.int", b"none"])
+        self.client.assert_request_succeeds("log-level", "debug", args_echo=True)
+        levels = ['off', b'fatal', 'error', b'warn', 'info', 'debug', 'trace', 'all']
+        self.client.assert_request_succeeds("log-level", args_in=[[level]
+                                                                  for level in levels])
+        self.client.assert_request_succeeds(
+            "sensor-value", "an.int",
+            args_equal=["1"],
+            informs_args_equal=[['12345.000000', '1', 'an.int', 'nominal', '3']])
+
+        with self.assertRaises(Exception):
+            self.client.assert_request_succeeds(
+                "sensor-value", "an.int",
+                args_equal=["1"],
+                informs_args_equal=[['12345.000000', '1', 'an.int', 'nominal', '3a']])
 
     def test_add_remove_sensors(self):
         """Test adding and removing sensors from a running device."""
