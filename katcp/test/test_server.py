@@ -1040,7 +1040,6 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
                 error_equals="Unknown sensor name: an.nonexistentsensor."
             )
 
-
     def test_assert_request_succeeds(self):
         """Test exercises assert_request_succeeds"""
 
@@ -1064,7 +1063,6 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
                 "sensor-value", "an.int",
                 args_equal=["1"],
                 informs_args_equal=[['12345.000000', '1', 'an.int', 'nominal', '3a']])
-
 
     def test_add_remove_sensors(self):
         """Test adding and removing sensors from a running device."""
