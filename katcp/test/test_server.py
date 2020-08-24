@@ -1041,6 +1041,14 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
                 error_equals="Unknown sensor name: an.nonexistentsensor."
             )
 
+    def test_test_sensor_list(self):
+        """Test that exercises test_sensor_list"""
+        expected_sensors = {(b"a.discrete", b"A Discrete.", b"", b"discrete", b"one", b"two", b"three"),
+                            (b"a.float", b"A Float.", b"", b"float", b"-123.4", b"123.4"),
+                            (b"an.int", b"An Integer.", b"count", b"integer", b"-5", b"5")}
+
+        self.client.test_sensor_list(expected_sensors)
+
     def test_assert_request_succeeds(self):
         """Test exercises assert_request_succeeds"""
 
