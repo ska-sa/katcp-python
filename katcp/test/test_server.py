@@ -1049,9 +1049,14 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self.client.test_sensor_list(byte_sensors)
 
         str_sensors = {("a.discrete", "A Discrete.", "", "discrete", "one", "two", "three"),
-                            ("a.float", b"A Float.", "", "float", "-123.4", "123.4"),
-                            ("an.int", b"An Integer.", "count", "integer", "-5", "5")}
+                            ("a.float", "A Float.", "", "float", "-123.4", "123.4"),
+                            ("an.int", "An Integer.", "count", "integer", "-5", "5")}
         self.client.test_sensor_list(str_sensors)
+
+        mix_sensors = {("a.discrete", "A Discrete.", "", "discrete", b"one", b"two", b"three"),
+                            ("a.float", b"A Float.", "", b"float", "-123.4", "123.4"),
+                            ("an.int", b"An Integer.", "count", "integer", "-5", b"5")}
+        self.client.test_sensor_list(mix_sensors)
 
     def test_assert_request_succeeds(self):
         """Test exercises assert_request_succeeds"""
