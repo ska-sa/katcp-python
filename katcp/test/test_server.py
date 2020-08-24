@@ -1066,6 +1066,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         }
         self.client.test_sensor_list(mix_sensors)
         self.client.test_sensor_list(mix_sensors, ignore_descriptions=True)
+
     def test_assert_request_succeeds(self):
         """Test exercises assert_request_succeeds"""
 
