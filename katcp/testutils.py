@@ -642,9 +642,21 @@ class BlockingTestClient(client.BlockingClient):
         """
         def sensortuple(name, description, units, stype, *params):
             # ensure float params reduced to the same format
+            native_str_params = []
             if stype == "float":
                 params = ["%g" % float(p) for p in params]
-            return (name, description, units, stype) + tuple(params)
+            for param in params:
+                if is_bytes(param):
+                    str_param = ensure_native_str(param)
+                    native_str_params.append(str_param)
+                else:
+                    native_str_params.append(param)
+            return (
+                ensure_native_str(name),
+                ensure_native_str(description),
+                ensure_native_str(units),
+                ensure_native_str(stype),
+            ) + tuple(native_str_params)
 
         reply, informs = self.blocking_request(Message.request("sensor-list"))
 
