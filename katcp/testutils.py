@@ -1045,6 +1045,10 @@ class DeviceTestServer(DeviceServer):
             Sensor.FLOAT, "a.float", "A Float.", "",
             [-123.4, 123.4],
             timestamp=12345, status=Sensor.NOMINAL, value=12))
+        self.add_sensor(DeviceTestSensor(
+            Sensor.FLOAT, "a.floatwithzero", "A Float with zero.", "",
+            [-123.0, 123.0],
+            timestamp=12345, status=Sensor.NOMINAL, value=12))
 
     def request_new_command(self, req, msg):
         """A new command."""
