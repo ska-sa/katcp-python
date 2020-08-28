@@ -730,7 +730,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!log-level[5] fail Unknown\_logging\_level\_name\_'unknown'", ""),
             (
                 r"#help[6] cancel-slow-command Cancel\_slow\_command\_request,\_"
-                "resulting\_in\_it\_replying\_immediately",
+                r"resulting\_in\_it\_replying\_immediately",
                 "",
             ),
             (r"#help[6] client-list", ""),
