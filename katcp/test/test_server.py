@@ -763,7 +763,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#sensor-list[11] a.discrete A\_Discrete. \@ discrete one two three", ""),
             (r"#sensor-list[11] a.float A\_Float. \@ float -123.4 123.4", ""),
             (
-                r"#sensor-list[11] a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0",
+                r"#sensor-list[11] a.floatwithzero A\_Float\_with\_zero. \@ float -123.0"
+                r" 123.0",
                 "",
             ),
             (r"#sensor-list[11] an.int An\_Integer. count integer -5 5", ""),
