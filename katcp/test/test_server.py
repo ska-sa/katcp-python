@@ -670,6 +670,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#log fatal", r"root fatal-msg"),
         ]
         self._assert_msgs_like(get_msgs(min_number=len(expected_msgs)), expected_msgs)
+
     def test_standard_requests_with_ids(self):
         """Test standard request and replies with message ids."""
         get_msgs = self.client.message_recorder(
