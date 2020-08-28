@@ -595,7 +595,6 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             self.server.log.error("error-msg")
             self.server.log.fatal("fatal-msg")
         self.server.ioloop.add_callback(tst)
-
         self.assertEqual(self.server.restart_queue.get_nowait(), self.server)
         expected_msgs = [
             (r"!watchdog ok", ""),
@@ -603,8 +602,11 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!log-level ok warn", ""),
             (r"!log-level ok trace", ""),
             (r"!log-level fail Unknown\_logging\_level\_name\_'unknown'", ""),
-            (r"#help cancel-slow-command Cancel\_slow\_command\_request,\_"
-             r"resulting\_in\_it\_replying\_immediately", ""),
+            (
+                r"#help cancel-slow-command Cancel\_slow\_command\_request,\_"
+                r"resulting\_in\_it\_replying\_immediately",
+                "",
+            ),
             (r"#help client-list", ""),
             (r"#help decorated", ""),
             (r"#help decorated-return-exception", ""),
@@ -634,7 +636,10 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!version-list ok 3", ""),
             (r"#sensor-list a.discrete A\_Discrete. \@ discrete one two three", ""),
             (r"#sensor-list a.float A\_Float. \@ float -123.4 123.4", ""),
-            (r"#sensor-list a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0", ""),
+            (
+                r"#sensor-list a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0",
+                "",
+            ),
             (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
             (r"!sensor-list ok 4", ""),
             (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
@@ -663,9 +668,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"#log error", r"root error-msg"),
             (r"#log fatal", r"root fatal-msg"),
         ]
-        self._assert_msgs_like(get_msgs(min_number=len(expected_msgs)),
-                               expected_msgs)
-
+        self._assert_msgs_like(get_msgs(min_number=len(expected_msgs)), expected_msgs)
     def test_standard_requests_with_ids(self):
         """Test standard request and replies with message ids."""
         get_msgs = self.client.message_recorder(
@@ -716,6 +719,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             self.server.log.warn("warn-msg")
             self.server.log.error("error-msg")
             self.server.log.fatal("fatal-msg")
+
         self.server.ioloop.add_callback(tst)
 
         expected_msgs = [
@@ -723,10 +727,12 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!restart[2] ok", ""),
             (r"!log-level[3] ok warn", ""),
             (r"!log-level[4] ok trace", ""),
-            (r"!log-level[5] fail Unknown\_logging\_level\_name\_'unknown'",
-             ""),
-            (r"#help[6] cancel-slow-command Cancel\_slow\_command\_request,\_"
-             "resulting\_in\_it\_replying\_immediately", ""),
+            (r"!log-level[5] fail Unknown\_logging\_level\_name\_'unknown'", ""),
+            (
+                r"#help[6] cancel-slow-command Cancel\_slow\_command\_request,\_"
+                "resulting\_in\_it\_replying\_immediately",
+                "",
+            ),
             (r"#help[6] client-list", ""),
             (r"#help[6] decorated", ""),
             (r"#help[6] decorated-return-exception", ""),
@@ -756,7 +762,10 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!version-list[10] ok 3", ""),
             (r"#sensor-list[11] a.discrete A\_Discrete. \@ discrete one two three", ""),
             (r"#sensor-list[11] a.float A\_Float. \@ float -123.4 123.4", ""),
-            (r"#sensor-list[11] a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0", ""),
+            (
+                r"#sensor-list[11] a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0",
+                "",
+            ),
             (r"#sensor-list[11] an.int An\_Integer. count integer -5 5", ""),
             (r"!sensor-list[11] ok 4", ""),
             (r"#sensor-list[12] an.int An\_Integer. count integer -5 5", ""),
@@ -1054,12 +1063,18 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         byte_sensors = {
             (b"a.discrete", b"A Discrete.", b"", b"discrete", b"one", b"two", b"three"),
             (b"a.float", b"A Float.", b"", b"float", b"-123.4", b"123.4"),
-            (b"a.floatwithzero", b"A Float with zero.", b"", b"float", b"-123.0", b"123.0"),
+            (
+                b"a.floatwithzero",
+                b"A Float with zero.",
+                b"",
+                b"float",
+                b"-123.0",
+                b"123.0",
+            ),
             (b"an.int", b"An Integer.", b"count", b"integer", b"-5", b"5"),
         }
         self.client.test_sensor_list(byte_sensors)
         self.client.test_sensor_list(byte_sensors, ignore_descriptions=True)
-
         str_sensors = {
             ("a.discrete", "A Discrete.", "", "discrete", "one", "two", "three"),
             ("a.float", "A Float.", "", "float", "-123.4", "123.4"),
