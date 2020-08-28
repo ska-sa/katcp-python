@@ -634,15 +634,17 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!version-list ok 3", ""),
             (r"#sensor-list a.discrete A\_Discrete. \@ discrete one two three", ""),
             (r"#sensor-list a.float A\_Float. \@ float -123.4 123.4", ""),
+            (r"#sensor-list a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0", ""),
             (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
-            (r"!sensor-list ok 3", ""),
+            (r"!sensor-list ok 4", ""),
             (r"#sensor-list an.int An\_Integer. count integer -5 5", ""),
             (r"!sensor-list ok 1", ""),
             (r"!sensor-list fail", ""),
             (r"#sensor-value 12345.000000 1 a.discrete nominal one", ""),
             (r"#sensor-value 12345.000000 1 a.float nominal 12.0", ""),
+            (r"#sensor-value 12345.000000 1 a.floatwithzero nominal 12.0", ""),
             (r"#sensor-value 12345.000000 1 an.int nominal 3", ""),
-            (r"!sensor-value ok 3", ""),
+            (r"!sensor-value ok 4", ""),
             (r"#sensor-value 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-value ok 1", ""),
             (r"!sensor-value fail", ""),
@@ -754,15 +756,17 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             (r"!version-list[10] ok 3", ""),
             (r"#sensor-list[11] a.discrete A\_Discrete. \@ discrete one two three", ""),
             (r"#sensor-list[11] a.float A\_Float. \@ float -123.4 123.4", ""),
+            (r"#sensor-list[11] a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0", ""),
             (r"#sensor-list[11] an.int An\_Integer. count integer -5 5", ""),
-            (r"!sensor-list[11] ok 3", ""),
+            (r"!sensor-list[11] ok 4", ""),
             (r"#sensor-list[12] an.int An\_Integer. count integer -5 5", ""),
             (r"!sensor-list[12] ok 1", ""),
             (r"!sensor-list[13] fail", ""),
             (r"#sensor-value[14] 12345.000000 1 a.discrete nominal one", ""),
             (r"#sensor-value[14] 12345.000000 1 a.float nominal 12", ""),
+            (r"#sensor-value[14] 12345.000000 1 a.floatwithzero nominal 12", ""),
             (r"#sensor-value[14] 12345.000000 1 an.int nominal 3", ""),
-            (r"!sensor-value[14] ok 3", ""),
+            (r"!sensor-value[14] ok 4", ""),
             (r"#sensor-value[15] 12345.000000 1 an.int nominal 3", ""),
             (r"!sensor-value[15] ok 1", ""),
             (r"!sensor-value[16] fail", ""),
@@ -790,8 +794,9 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_equal(informs + [reply], [
             r"#sensor-list a.discrete A\_Discrete. \@ discrete one two three",
             r"#sensor-list a.float A\_Float. \@ float -123.4 123.4",
+            r"#sensor-list a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0",
             r"#sensor-list an.int An\_Integer. count integer -5 5",
-            r"!sensor-list ok 3",
+            r"!sensor-list ok 4",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
@@ -799,8 +804,9 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_equal(informs + [reply], [
             r"#sensor-list a.discrete A\_Discrete. \@ discrete one two three",
             r"#sensor-list a.float A\_Float. \@ float -123.4 123.4",
+            r"#sensor-list a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0",
             r"#sensor-list an.int An\_Integer. count integer -5 5",
-            r"!sensor-list ok 3",
+            r"!sensor-list ok 4",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
@@ -815,8 +821,9 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_equal(informs + [reply], [
             r'#sensor-value 12345.000000 1 a.discrete nominal one',
             r"#sensor-value 12345.000000 1 a.float nominal 12.0",
+            r"#sensor-value 12345.000000 1 a.floatwithzero nominal 12.0",
             r"#sensor-value 12345.000000 1 an.int nominal 3",
-            r"!sensor-value ok 3",
+            r"!sensor-value ok 4",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
@@ -824,8 +831,9 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_equal(informs + [reply], [
             r'#sensor-value 12345.000000 1 a.discrete nominal one',
             r'#sensor-value 12345.000000 1 a.float nominal 12.0',
+            r'#sensor-value 12345.000000 1 a.floatwithzero nominal 12.0',
             r"#sensor-value 12345.000000 1 an.int nominal 3",
-            r"!sensor-value ok 3",
+            r"!sensor-value ok 4",
         ])
 
         reply, informs = self.client.blocking_request(katcp.Message.request(
@@ -1046,6 +1054,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         byte_sensors = {
             (b"a.discrete", b"A Discrete.", b"", b"discrete", b"one", b"two", b"three"),
             (b"a.float", b"A Float.", b"", b"float", b"-123.4", b"123.4"),
+            (b"a.floatwithzero", b"A Float with zero.", b"", b"float", b"-123.0", b"123.0"),
             (b"an.int", b"An Integer.", b"count", b"integer", b"-5", b"5"),
         }
         self.client.test_sensor_list(byte_sensors)
@@ -1054,6 +1063,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         str_sensors = {
             ("a.discrete", "A Discrete.", "", "discrete", "one", "two", "three"),
             ("a.float", "A Float.", "", "float", "-123.4", "123.4"),
+            ("a.floatwithzero", "A Float with zero.", "", "float", "-123.0", "123.0"),
             ("an.int", "An Integer.", "count", "integer", "-5", "5"),
         }
         self.client.test_sensor_list(str_sensors)
@@ -1062,6 +1072,7 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
         mix_sensors = {
             ("a.discrete", "A Discrete.", "", "discrete", b"one", b"two", b"three"),
             ("a.float", b"A Float.", "", b"float", "-123.4", "123.4"),
+            (b"a.floatwithzero", "A Float with zero.", b"", "float", b"-123.0", "123.0"),
             ("an.int", b"An Integer.", "count", "integer", "-5", b"5"),
         }
         self.client.test_sensor_list(mix_sensors)

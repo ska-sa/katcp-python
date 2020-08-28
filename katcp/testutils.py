@@ -644,7 +644,7 @@ class BlockingTestClient(client.BlockingClient):
             # ensure float params reduced to the same format
             native_str_params = []
             if stype == "float":
-                params = ["%g" % float(p) for p in params]
+                params = ["%r" % float(p) for p in params]
             for param in params:
                 if is_bytes(param):
                     str_param = ensure_native_str(param)
