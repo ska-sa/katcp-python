@@ -644,7 +644,7 @@ class BlockingTestClient(client.BlockingClient):
             # ensure float params reduced to the same format
             native_str_params = []
             if stype == "float":
-                params = ["%g" % float(p) for p in params]
+                params = ["%r" % float(p) for p in params]
             for param in params:
                 if is_bytes(param):
                     str_param = ensure_native_str(param)
@@ -1044,6 +1044,10 @@ class DeviceTestServer(DeviceServer):
         self.add_sensor(DeviceTestSensor(
             Sensor.FLOAT, "a.float", "A Float.", "",
             [-123.4, 123.4],
+            timestamp=12345, status=Sensor.NOMINAL, value=12))
+        self.add_sensor(DeviceTestSensor(
+            Sensor.FLOAT, "a.floatwithzero", "A Float with zero.", "",
+            [-123.0, 123.0],
             timestamp=12345, status=Sensor.NOMINAL, value=12))
 
     def request_new_command(self, req, msg):
