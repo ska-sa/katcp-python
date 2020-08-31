@@ -166,7 +166,7 @@ class test_ClientRequestConnection(unittest.TestCase):
 class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
     class DeviceTestServerV4(DeviceTestServer):
         ## Protocol versions and flags for a katcp v4 server
-        PROTOCOL_INFO = katcp.ProtocolFlags(4, 0, set([katcp.ProtocolFlags.MULTI_CLIENT]))
+        PROTOCOL_INFO = katcp.ProtocolFlags(4, 0, {katcp.ProtocolFlags.MULTI_CLIENT})
 
     def setUp(self):
         self.server = self.DeviceTestServerV4("", 0)
@@ -274,7 +274,7 @@ class TestDeviceServerV4(unittest.TestCase, TestUtilMixin):
 class TestDeviceServerV4Async(TestDeviceServerV4):
     class DeviceTestServerV4(DeviceTestServer):
         ## Protocol versions and flags for a katcp v4 server
-        PROTOCOL_INFO = katcp.ProtocolFlags(4, 0, set([katcp.ProtocolFlags.MULTI_CLIENT]))
+        PROTOCOL_INFO = katcp.ProtocolFlags(4, 0, {katcp.ProtocolFlags.MULTI_CLIENT})
 
         def __init__(self, *args, **kwargs):
             super(TestDeviceServerV4Async.DeviceTestServerV4, self).__init__(
@@ -288,7 +288,7 @@ class TestVersionCompatibility(unittest.TestCase):
         class DeviceTestServerWrong(DeviceTestServer):
             ## Protocol versions and flags for a katcp v4 server
             PROTOCOL_INFO = katcp.ProtocolFlags(
-                3, 0, set([katcp.ProtocolFlags.MULTI_CLIENT])
+                3, 0, {katcp.ProtocolFlags.MULTI_CLIENT}
             )
 
         # Only major versions 4 and 5 are supported
@@ -413,7 +413,7 @@ class test_DeviceServer51(test_DeviceServer):
         self.server.set_concurrency_options(thread_safe=False, handler_thread=False)
 
     def test_excluded_default_handlers(self):
-        pass  #  No excluded default handlers for v5.1 as of yet
+        pass  # No excluded default handlers for v5.1 as of yet
 
     def test_request_timeout_hint(self):
         req = mock_req("request-timeout-hint")
@@ -822,7 +822,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             [
                 r"#sensor-list a.discrete A\_Discrete. \@ discrete one two three",
                 r"#sensor-list a.float A\_Float. \@ float -123.4 123.4",
-                r"#sensor-list a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0",
+                r"#sensor-list a.floatwithzero A\_Float\_with\_zero. \@ float -123.0"
+                r" 123.0",
                 r"#sensor-list an.int An\_Integer. count integer -5 5",
                 r"!sensor-list ok 4",
             ],
@@ -836,7 +837,8 @@ class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
             [
                 r"#sensor-list a.discrete A\_Discrete. \@ discrete one two three",
                 r"#sensor-list a.float A\_Float. \@ float -123.4 123.4",
-                r"#sensor-list a.floatwithzero A\_Float\_with\_zero. \@ float -123.0 123.0",
+                r"#sensor-list a.floatwithzero A\_Float\_with\_zero. \@ float -123.0"
+                r" 123.0",
                 r"#sensor-list an.int An\_Integer. count integer -5 5",
                 r"!sensor-list ok 4",
             ],
