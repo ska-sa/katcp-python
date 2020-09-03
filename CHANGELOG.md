@@ -5,7 +5,7 @@
 * Handle str type correctly('easier') in `testutils.get_sensor` for python 2 and python 3 ([#243](https://github.com/ska-sa/katcp-python/pull/243))
 * Allow bytes and strings in `test_sensor_list` comparison of sensors ([#244](https://github.com/ska-sa/katcp-python/pull/244))
 * Correct handling of floats `test_sensor_list` ([#245](https://github.com/ska-sa/katcp-python/pull/245))
-* black formatting on certain certain test files.
+* black formatting on certain test files.
 
 12 May 2020 (0.7.1)
 * All params in `future_get_sensor` are now cast to byte strings (PR [#235](https://github.com/ska-sa/katcp-python/pull/235)). 
