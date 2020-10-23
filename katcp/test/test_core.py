@@ -323,25 +323,22 @@ class TestProtocolFlags(unittest.TestCase):
         self.assertEqual(PF.parse_version(b"foo"), PF(None, None, set()))
         self.assertEqual(PF.parse_version(b"1.0"), PF(1, 0, set()))
         self.assertEqual(PF.parse_version(b"5.0-MI"),
-                         PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS])))
+                         PF(5, 0, {PF.MULTI_CLIENT, PF.MESSAGE_IDS}))
         # check an unknown flag
         self.assertEqual(PF.parse_version(b"5.1-MIU"),
-                         PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS, b"U"])))
+                         PF(5, 1, {PF.MULTI_CLIENT, PF.MESSAGE_IDS, b"U"}))
         # Check request timeout hint flag
         self.assertEqual(PF.parse_version(b"5.1-MTI"),
-                         PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
-                                       PF.REQUEST_TIMEOUT_HINTS])))
+                         PF(5, 1, {PF.MULTI_CLIENT, PF.MESSAGE_IDS, PF.REQUEST_TIMEOUT_HINTS}))
 
     def test_str(self):
         PF = katcp.ProtocolFlags
         self.assertEqual(str(PF(1, 0, set())), "1.0")
-        self.assertEqual(str(PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS]))),
+        self.assertEqual(str(PF(5, 0, {PF.MULTI_CLIENT, PF.MESSAGE_IDS})),
                          "5.0-IM")
-        self.assertEqual(str(PF(5, 0, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
-                                           b"U"]))),
+        self.assertEqual(str(PF(5, 0, {PF.MULTI_CLIENT, PF.MESSAGE_IDS, b"U"})),
                          "5.0-IMU")
-        self.assertEqual(str(PF(5, 1, set([PF.MULTI_CLIENT, PF.MESSAGE_IDS,
-                                           PF.REQUEST_TIMEOUT_HINTS]))),
+        self.assertEqual(str(PF(5, 1, {PF.MULTI_CLIENT, PF.MESSAGE_IDS, PF.REQUEST_TIMEOUT_HINTS})),
                          "5.1-IMT")
 
     def test_incompatible_options(self):

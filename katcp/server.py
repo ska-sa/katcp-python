@@ -2189,7 +2189,7 @@ class DeviceServer(DeviceServerBase):
         return req.make_reply("ok", str(len(sensors)))
 
     def request_sensor_sampling(self, req, msg):
-        """Configure or query the way a sensor is sampled.
+        r"""Configure or query the way a sensor is sampled.
 
         Sampled values are reported asynchronously using the #sensor-status
         message.

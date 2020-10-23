@@ -691,14 +691,14 @@ class ProtocolFlags(object):
         if self.message_ids and self.major < MID_KATCP_MAJOR:
             raise ValueError(
                 'MESSAGE_IDS is only supported in katcp v5 and newer')
-        version_supports_hints = ((self.major, self.minor) >=
-                                  self.REQUEST_TIMEOUT_HINTS_MIN_VERSION)
+        version_supports_hints = ((self.major, self.minor)
+                                  >= self.REQUEST_TIMEOUT_HINTS_MIN_VERSION)
         if self.request_timeout_hints and not version_supports_hints:
             raise ValueError(
                 'REQUEST_TIMEOUT_HINTS only suported in katcp v{}.{} and newer'
                 .format(*self.REQUEST_TIMEOUT_HINTS_MIN_VERSION))
-        version_supports_bulk = ((self.major, self.minor) >=
-                                 self.BULK_SET_SENSOR_SAMPLING_MIN_VERSION)
+        version_supports_bulk = ((self.major, self.minor)
+                                 >= self.BULK_SET_SENSOR_SAMPLING_MIN_VERSION)
         if self.bulk_set_sensor_sampling and not version_supports_bulk:
             raise ValueError(
                 'BULK_SET_SENSOR_SAMPLING only suported in katcp v{}.{} and newer'
