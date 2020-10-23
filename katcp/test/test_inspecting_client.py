@@ -1,24 +1,29 @@
-from __future__ import division
+# Copyright 2016 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
+
+import collections
+import gc
 import logging
 import time
-import collections
-import unittest2 as unittest
+import unittest
+import weakref
 
-import tornado
+from builtins import object, range
+
 import mock
+import tornado
 
 import katcp
 
-from concurrent.futures import Future
-
-from katcp import Sensor, Message
-from katcp.testutils import (DeviceTestServer,
-                             DeviceTestServerWithTimeoutHints,
-                             start_thread_with_cleanup,
-                             DeviceTestSensor)
-from katcp import inspecting_client
+from katcp import Message, Sensor, inspecting_client
 from katcp.inspecting_client import InspectingClientAsync
+from katcp.testutils import (DeviceTestSensor, DeviceTestServer,
+                             DeviceTestServerWithTimeoutHints,
+                             start_thread_with_cleanup)
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +193,7 @@ class TestInspectingClientInspect(tornado.testing.AsyncTestCase):
         """
         hints = getattr(server, 'request_timeout_hints', {})
         expected = {}
-        for req, handler in server._request_handlers.items():
+        for req, handler in list(server._request_handlers.items()):
             expected[req] = {'name': req,
                              'description': handler.__doc__,
                              'timeout_hint': hints.get(req)}
@@ -258,7 +263,7 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         yield self.client.until_synced()
         reply, informs = yield self.client.simple_request('help', 'watchdog')
         self.assertIn('ok', str(reply))
-        self.assertEquals(len(informs), 1)
+        self.assertEqual(len(informs), 1)
 
     @tornado.testing.gen_test
     def test_sensor(self):
@@ -266,8 +271,18 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         yield self.client.until_synced()
         sensor_name = 'an.int'
         sensor = yield self.client.future_get_sensor(sensor_name)
-        self.assertEquals(sensor.name, sensor_name)
-        self.assertEquals(sensor.stype, 'integer')
+        self.assertEqual(sensor.name, sensor_name)
+        self.assertEqual(sensor.stype, 'integer')
+
+        sensor_name = 'a.discrete'
+        sensor = yield self.client.future_get_sensor(sensor_name)
+        self.assertEqual(sensor.name, sensor_name)
+        self.assertEqual(sensor.stype, 'discrete')
+
+        sensor_name = 'a.float'
+        sensor = yield self.client.future_get_sensor(sensor_name)
+        self.assertEqual(sensor.name, sensor_name)
+        self.assertEqual(sensor.stype, 'float')
 
         # Unknown sensor requests return a None.
         sensor_name = 'thing.unknown_sensor'
@@ -369,9 +384,9 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         yield client.connect()
         yield client.until_connected()
         yield client.until_synced()
-        self.assertEquals(len(client.sensors), 0)
+        self.assertEqual(len(client.sensors), 0)
 
-        self.assertEquals(len(client.requests), 0)
+        self.assertEqual(len(client.requests), 0)
         self.assertTrue(client.synced)
         self.assertTrue(client.is_connected())
         self.assertTrue(client.connected)
@@ -379,9 +394,9 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         # Wait for sync and check if the sensor was automaticaly added.
         # Get the sensor object and see if it has data.
         sensor = yield client.future_get_sensor('an.int')
-        self.assertEquals(len(client.sensors), 1)
+        self.assertEqual(len(client.sensors), 1)
         self.assertTrue(sensor.read())
-        self.assertEquals(len(client.requests), 0)
+        self.assertEqual(len(client.requests), 0)
 
     @tornado.testing.gen_test
     def test_handle_sensor_value(self):
@@ -429,6 +444,23 @@ class TestInspectingClientAsync(tornado.testing.AsyncTestCase):
         self.assertIs(req, rf.return_value)
         rf.assert_called_once_with(
             name='watchdog', description=mock.ANY, timeout_hint=None)
+
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_usage(self):
+        client = InspectingClientAsync(self.host, self.port, ioloop=self.io_loop)
+        wr = weakref.ref(client)
+
+        yield client.connect()
+        yield client.until_synced()
+        client.stop()
+        yield client.until_stopped()
+        client.join()
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
 
 class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
     longMessage = True
@@ -507,12 +539,11 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
     def _test_expected_model_changes(self, model_changes):
         # Check that the model_changes reflect the sensors and requests of the
         # test sever (self.server)
-        server_sensors = self.server._sensors.keys()
-        server_requests = self.server._request_handlers.keys()
+        server_sensors = list(self.server._sensors.keys())
+        server_requests = list(self.server._request_handlers.keys())
         self.assertEqual(model_changes, dict(
             sensors=dict(added=set(server_sensors), removed=set()),
             requests=dict(added=set(server_requests), removed=set())))
-
 
     @tornado.testing.gen_test(timeout=1)
     def test_reconnect(self):
@@ -525,6 +556,24 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self.server.stop()
         self.server.join()
         state, model_changes = yield self.state_cb_future
+        self.assertEqual(state, inspecting_client.InspectingClientStateType(
+            connected=False, synced=False, model_changed=False, data_synced=False))
+        self.assertIs(model_changes, None)
+        yield self._check_cb_count(num_calls_before + 1)
+
+    @tornado.testing.gen_test(timeout=1)
+    def test_stop(self):
+        self.client.connect()
+        yield self.client.until_synced()
+        yield tornado.gen.moment   # Make sure the ioloop is 'caught up'
+
+        # stop and check that the callback is called
+        num_calls_before = len(self.done_state_cb_futures)
+        next_state_cb_future = self.state_cb_future
+        self.client.stop()
+        yield self.client.until_stopped()
+        self.client.join()
+        state, model_changes = yield next_state_cb_future
         self.assertEqual(state, inspecting_client.InspectingClientStateType(
             connected=False, synced=False, model_changed=False, data_synced=False))
         self.assertIs(model_changes, None)
@@ -559,8 +608,6 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         self._test_expected_model_changes(model_changes)
         yield self.client.until_synced()
         self.assertTrue(self.client.synced)
-
-
 
     @tornado.testing.gen_test(timeout=1)
     def test_help_inspection_error(self):

@@ -1,50 +1,53 @@
-# servers.py
+# server.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Servers for the KAT device control language."""
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa E402
 
-import socket
-import threading
-import traceback
 import logging
-import sys
 import re
+import socket
+import sys
+import threading
 import time
+import traceback
+
+from builtins import object, range
+from collections import deque
+from concurrent.futures import Future
+from functools import partial, wraps
 
 import tornado.ioloop
 import tornado.tcpserver
 
-from functools import partial, wraps
-from collections import deque
-from thread import get_ident as get_thread_ident
-
+from _thread import get_ident as get_thread_ident
+from future.utils import with_metaclass
+from past.builtins import basestring
 from tornado import gen, iostream
 from tornado.concurrent import Future as tornado_Future
 from tornado.concurrent import chain_future
 from tornado.util import ObjectDict
-from concurrent.futures import Future
-
-from .ioloop_manager import IOLoopManager, with_relative_timeout
-from .core import (DeviceServerMetaclass, Message, MessageParser,
-                   FailReply, AsyncReply, ProtocolFlags)
-from .sampling import SampleStrategy, SampleNone
-from .sampling import format_inform_v5, format_inform_v4
-from .core import (SEC_TO_MS_FAC, MS_TO_SEC_FAC, SEC_TS_KATCP_MAJOR,
-                   VERSION_CONNECT_KATCP_MAJOR, DEFAULT_KATCP_MAJOR)
-from .kattypes import (request, return_reply,
-                       minimum_katcp_version,
-                       has_katcp_protocol_flags,
-                       Int, Str)
 
 # 'import katcp' so that we can use katcp.__version__ later
 # we cannot do this: 'from . import __version__' because __version__
 # does not exist at this stage
 import katcp
+
+from .core import (DEFAULT_KATCP_MAJOR, MS_TO_SEC_FAC, SEC_TO_MS_FAC,
+                   SEC_TS_KATCP_MAJOR, VERSION_CONNECT_KATCP_MAJOR, AsyncReply,
+                   DeviceServerMetaclass, FailReply, Message, MessageParser,
+                   ProtocolFlags, ensure_native_str)
+from .ioloop_manager import IOLoopManager, with_relative_timeout
+from .kattypes import (Int, Str, has_katcp_protocol_flags,
+                       minimum_katcp_version, request, return_reply)
+from .sampling import (SampleNone, SampleStrategy, format_inform_v4,
+                       format_inform_v5)
 
 log = logging.getLogger("katcp.server")
 
@@ -463,7 +466,7 @@ class KATCPServer(object):
         assert get_thread_ident() == self.ioloop_thread_id
         try:
             self._tcp_server.stop()
-            for stream, conn in self._connections.items():
+            for stream, conn in list(self._connections.items()):
                 yield self._disconnect_client(stream, conn,
                                               'Device server shutting down.')
         finally:
@@ -502,7 +505,8 @@ class KATCPServer(object):
                     e_type, e_value, trace, self._tb_limit))
                 log_msg = 'Device error initialising connection {0}'.format(reason)
                 self._logger.error(log_msg)
-                stream.write(str(Message.inform('log', log_msg)))
+                data = bytes(Message.inform('log', log_msg)) + b"\n"
+                stream.write(data)
                 stream.close(exc_info=True)
             else:
                 self._line_read_loop(stream, client_conn)
@@ -523,7 +527,7 @@ class KATCPServer(object):
                         # resulting in message handlers being called with a
                         # closed connection. Exit early instead.
                         break
-                    line = yield stream.read_until_regex('\n|\r')
+                    line = yield stream.read_until_regex(b'\n|\r')
                 except iostream.StreamClosedError:
                     # Assume that _stream_closed_callback() will handle this
                     break
@@ -532,7 +536,7 @@ class KATCPServer(object):
                                           'while reading from client {0}:'
                                           .format(client_address), exc_info=True)
                 try:
-                    line = line.replace("\r", "\n").split("\n")[0]
+                    line = line.replace(b"\r", b"\n").split(b"\n")[0]
                     msg = self._parser.parse(line) if line else None
                 except Exception:
                     msg = None
@@ -635,10 +639,10 @@ class KATCPServer(object):
         """
         assert get_thread_ident() == self.ioloop_thread_id
         try:
-            if stream.KATCPServer_closing:
-                raise RuntimeError('Stream is closing so we cannot '
-                                   'accept any more writes')
-            return stream.write(str(msg) + '\n')
+            if stream.KATCPServer_closing or stream.closed():
+                raise RuntimeError(
+                    'Stream is closing or closed so we cannot accept any more writes')
+            return stream.write(bytes(msg) + b'\n')
         except Exception:
             addr = self.get_address(stream)
             self._logger.warn('Could not send message {0!r} to {1}'
@@ -655,7 +659,7 @@ class KATCPServer(object):
         # Prevent futher writes
         stream.KATCPServer_closing = True
         # Write empty message to get future that resolves when buffer is flushed
-        return stream.write('\n')
+        return stream.write(b'\n')
 
     def call_from_thread(self, fn):
         """Allow thread-safe calls to ioloop functions.
@@ -670,7 +674,7 @@ class KATCPServer(object):
             f = tornado_Future()
             try:
                 f.set_result(fn())
-            except Exception, e:
+            except Exception as e:
                 f.set_exception(e)
                 self._logger.exception('Error executing callback '
                                        'in ioloop thread')
@@ -684,7 +688,7 @@ class KATCPServer(object):
                 def send_message_callback():
                     try:
                         f.set_result(fn())
-                    except Exception, e:
+                    except Exception as e:
                         f.set_exception(e)
                         self._logger.exception(
                             'Error executing wrapped async callback')
@@ -791,9 +795,9 @@ class MessageHandlerThread(object):
     def __init__(self, handler, log_inform_formatter, logger=log):
         self.handler = handler
         try:
-            owner = handler.im_self.name
+            owner = handler.__self__.name
         except AttributeError:
-            owner = handler.im_self.__class__.__name__
+            owner = handler.__self__.__class__.__name__
         self.name = "{}.message_handler" .format(owner)
         self.log_inform_formatter = log_inform_formatter
         self._wake = threading.Event()
@@ -820,7 +824,7 @@ class MessageHandlerThread(object):
         *on_message* should not be called again until *ready* has resolved.
 
         """
-        MAX_QUEUE_SIZE = 30
+        MAX_QUEUE_SIZE = 300
         if len(self._msg_queue) >= MAX_QUEUE_SIZE:
             # This should never happen if callers to handle_message wait
             # for its futures to resolve before sending another message.
@@ -850,7 +854,7 @@ class MessageHandlerThread(object):
                                                      ready_future)
                         else:
                             ready_future.set_result(res)
-                    except Exception, e:
+                    except Exception as e:
                         err_msg = ('Error calling message '
                                    'handler for msg:\n {0!s}'.format(msg))
                         self._logger.error(err_msg, exc_info=True)
@@ -912,7 +916,7 @@ class MessageHandlerThread(object):
         return self._running.wait(timeout)
 
 
-class DeviceServerBase(object):
+class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
     """Base class for device servers.
 
     Subclasses should add .request\_* methods for dealing
@@ -943,8 +947,6 @@ class DeviceServerBase(object):
 
     """
 
-    __metaclass__ = DeviceServerMetaclass
-
     ## @brief Protocol versions and flags. Default to version 5, subclasses
     ## should override PROTOCOL_INFO
     PROTOCOL_INFO = ProtocolFlags(DEFAULT_KATCP_MAJOR, 0, set([
@@ -972,7 +974,6 @@ class DeviceServerBase(object):
         start(), or it will also have no effect
         """
         self._server.setDaemon(daemonic)
-
 
     def create_log_inform(self, level_name, msg, name, timestamp=None):
         """Create a katcp logging inform message.
@@ -1066,7 +1067,7 @@ class DeviceServerBase(object):
                             connection.reply(f.result(), msg)
                             self._logger.debug("%s FUTURE%s replied",
                                                msg.name, concurrent_str)
-                        except FailReply, e:
+                        except FailReply as e:
                             reason = str(e)
                             self._logger.error("Request %s FUTURE%s FAIL: %s",
                                                msg.name, concurrent_str, reason)
@@ -1083,7 +1084,7 @@ class DeviceServerBase(object):
                             done_future.set_result(None)
 
                     # TODO When using the return_reply() decorator the future
-                    # returned is not currently threadsafe, must either deal
+                    # returned is not currently thread-safe, must either deal
                     # with it here, or in kattypes.py. Would be nice if we don't
                     # have to always fall back to adding a callback, or wrapping
                     # a thread-safe future. Supporting sync-with-thread and
@@ -1102,10 +1103,10 @@ class DeviceServerBase(object):
                     assert (reply.mtype == Message.REPLY)
                     assert (reply.name == msg.name)
                     self._logger.debug("%s OK" % (msg.name,))
-            except AsyncReply, e:
+            except AsyncReply as e:
                 self._logger.debug("%s ASYNC OK" % (msg.name,))
                 send_reply = False
-            except FailReply, e:
+            except FailReply as e:
                 reason = str(e)
                 self._logger.error("Request %s FAIL: %s" % (msg.name, reason))
                 reply = Message.reply(msg.name, "fail", reason)
@@ -1504,9 +1505,6 @@ class DeviceServer(DeviceServerBase):
 
     SUPPORTED_PROTOCOL_MAJOR_VERSIONS = (4, 5)
 
-    ## @var log
-    # @brief DeviceLogger instance for sending log messages to the client.
-
     # * and ** magic fine here
     # pylint: disable-msg = W0142
 
@@ -1572,7 +1570,7 @@ class DeviceServer(DeviceServerBase):
         client_connection : ClientConnection instance
             The connection that should have its sampling strategies cleared
         remove_client : bool, optional
-            Remove the client connection from the strategies datastructure.
+            Remove the client connection from the strategies data-structure.
             Useful for clients that disconnect.
 
         """
@@ -1697,7 +1695,7 @@ class DeviceServer(DeviceServerBase):
             The list of sensors registered with the device server.
 
         """
-        return self._sensors.values()
+        return list(self._sensors.values())
 
     def set_restart_queue(self, restart_queue):
         """Set the restart queue.
@@ -1812,7 +1810,7 @@ class DeviceServer(DeviceServerBase):
             num_methods = len(self._request_handlers)
             return req.make_reply("ok", str(num_methods))
         else:
-            name = msg.arguments[0]
+            name = ensure_native_str(msg.arguments[0])
             if name in self._request_handlers:
                 method = self._request_handlers[name]
                 doc = method.__doc__.strip()
@@ -1822,7 +1820,7 @@ class DeviceServer(DeviceServerBase):
 
     @request(Str(optional=True))
     @return_reply(Int())
-    @has_katcp_protocol_flags(ProtocolFlags.REQUEST_TIMEOUT_HINTS)
+    @has_katcp_protocol_flags([ProtocolFlags.REQUEST_TIMEOUT_HINTS])
     def request_request_timeout_hint(self, req, request):
         """Return timeout hints for requests
 
@@ -1877,6 +1875,7 @@ class DeviceServer(DeviceServerBase):
         """
         timeout_hints = {}
         if request:
+            request = ensure_native_str(request)
             if request not in self._request_handlers:
                 raise FailReply('Unknown request method')
             timeout_hint = getattr(
@@ -1927,7 +1926,7 @@ class DeviceServer(DeviceServerBase):
         if msg.arguments:
             try:
                 self.log.set_log_level_by_name(msg.arguments[0])
-            except ValueError, e:
+            except ValueError as e:
                 raise FailReply(str(e))
         return req.make_reply("ok", self.log.level_name())
 
@@ -2054,7 +2053,7 @@ class DeviceServer(DeviceServerBase):
         return req.make_reply("ok", str(num_versions))
 
     def request_sensor_list(self, req, msg):
-        """Request the list of sensors.
+        r"""Request the list of sensors.
 
         The list of sensors is sent as a sequence of #sensor-list informs.
 
@@ -2110,10 +2109,10 @@ class DeviceServer(DeviceServerBase):
             !sensor-list ok 2
 
         """
-        exact, name_filter = construct_name_filter(msg.arguments[0]
+        exact, name_filter = construct_name_filter(ensure_native_str(msg.arguments[0])
                                                    if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
-                   sorted(self._sensors.iteritems()) if name_filter(name)]
+                   sorted(self._sensors.items()) if name_filter(name)]
 
         if exact and not sensors:
             return req.make_reply("fail", "Unknown sensor name.")
@@ -2175,10 +2174,10 @@ class DeviceServer(DeviceServerBase):
             !sensor-value ok 1
 
         """
-        exact, name_filter = construct_name_filter(msg.arguments[0]
+        exact, name_filter = construct_name_filter(ensure_native_str(msg.arguments[0])
                                                    if msg.arguments else None)
         sensors = [(name, sensor) for name, sensor in
-                   sorted(self._sensors.iteritems()) if name_filter(name)]
+                   sorted(self._sensors.items()) if name_filter(name)]
 
         if exact and not sensors:
             return req.make_reply("fail", "Unknown sensor name.")
@@ -2272,7 +2271,7 @@ class DeviceServer(DeviceServerBase):
         if not msg.arguments:
             raise FailReply("No sensor name given.")
 
-        name = msg.arguments[0]
+        name = ensure_native_str(msg.arguments[0])
 
         if name not in self._sensors:
             raise FailReply("Unknown sensor name: %s." % name)
@@ -2288,11 +2287,12 @@ class DeviceServer(DeviceServerBase):
             params = msg.arguments[2:]
 
             if strategy not in SampleStrategy.SAMPLING_LOOKUP_REV:
-                raise FailReply("Unknown strategy name: %s." % strategy)
+                raise FailReply("Unknown strategy name: %s."
+                                % ensure_native_str(strategy))
 
             if not self.PROTOCOL_INFO.strategy_allowed(strategy):
                 raise FailReply("Strategy %s not allowed for version %d of katcp"
-                                % (strategy, katcp_version))
+                                % (ensure_native_str(strategy), katcp_version))
 
             format_inform = (format_inform_v5
                              if katcp_version >= SEC_TS_KATCP_MAJOR
@@ -2304,7 +2304,7 @@ class DeviceServer(DeviceServerBase):
                 cb_msg = format_inform(sensor, timestamp, status, value)
                 client.inform(cb_msg)
 
-            if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
+            if katcp_version < SEC_TS_KATCP_MAJOR and strategy == b'period':
                 # Slightly nasty hack, but since period is the only v4 strategy
                 # involving timestamps it's not _too_ nasty :)
                 params = [float(params[0]) * MS_TO_SEC_FAC] + params[1:]
@@ -2316,7 +2316,7 @@ class DeviceServer(DeviceServerBase):
             if old_strategy:
                 old_strategy.cancel()
 
-            # todo: replace isinstance check with something better
+            # TODO: replace isinstance check with something better
             if not isinstance(new_strategy, SampleNone):
                 self._strategies[client][sensor] = new_strategy
                 new_strategy.start()
@@ -2327,13 +2327,13 @@ class DeviceServer(DeviceServerBase):
                 "none", lambda *args: None, sensor)
 
         strategy, params = current_strategy.get_sampling_formatted()
-        if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
+        if katcp_version < SEC_TS_KATCP_MAJOR and strategy == b'period':
             # Another slightly nasty hack, but since period is the only
             # v4 strategy involving timestamps it's not _too_ nasty :)
             params = [int(float(params[0]) * SEC_TO_MS_FAC)] + params[1:]
 
         # Let the ioloop run so that the #sensor-status inform is sent before
-        # the reply. Not strictly neccesary, but a number of tests depend on
+        # the reply. Not strictly necessary, but a number of tests depend on
         # this behaviour, less effort to fix it here :-/
         yield gen.moment
         raise gen.Return(req.make_reply("ok", name, strategy, *params))
@@ -2559,7 +2559,7 @@ class DeviceLogger(object):
 
         Parameters
         ----------
-        level_name : str
+        level_name : str or bytes
             The logging level name whose logging level constant
             to retrieve.
 
@@ -2570,6 +2570,7 @@ class DeviceLogger(object):
 
         """
         try:
+            level_name = ensure_native_str(level_name)
             return self.LEVELS.index(level_name)
         except ValueError:
             raise ValueError("Unknown logging level name '%s'" % (level_name,))
@@ -2587,7 +2588,7 @@ class DeviceLogger(object):
         if self._python_logger:
             try:
                 level = self.PYTHON_LEVEL.get(level)
-            except ValueError as err:
+            except ValueError:
                 raise FailReply("Unknown logging level '%s'" % (level))
             self._python_logger.setLevel(level)
 
@@ -2596,7 +2597,7 @@ class DeviceLogger(object):
 
         Parameters
         ----------
-        level_name : str
+        level_name : str or bytes
             The name of the logging level.
 
         """
@@ -2686,9 +2687,9 @@ class DeviceLogger(object):
         """
         (level, timestamp, name, message) = tuple(msg.arguments)
         log_string = "%s %s: %s" % (timestamp, name, message)
-        logger.log({"trace": 0,
-                    "debug": logging.DEBUG,
-                    "info": logging.INFO,
-                    "warn": logging.WARN,
-                    "error": logging.ERROR,
-                    "fatal": logging.FATAL}[level], log_string)
+        logger.log({b"trace": 0,
+                    b"debug": logging.DEBUG,
+                    b"info": logging.INFO,
+                    b"warn": logging.WARN,
+                    b"error": logging.ERROR,
+                    b"fatal": logging.FATAL}[level], log_string)

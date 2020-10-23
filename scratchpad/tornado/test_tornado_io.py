@@ -1,8 +1,12 @@
-from tornado_io import *
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
+from __future__ import absolute_import, division, print_function
 
 from tornado.util import ObjectDict
-from katcp import Sensor
 
+from katcp import Sensor
+import tornado_io
 
 logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d)%(message)s",

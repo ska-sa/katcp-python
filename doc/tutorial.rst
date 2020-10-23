@@ -9,12 +9,65 @@ Tutorial
 Installing the Python Katcp Library
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-You can install the latest version of the KATCP library by running :command:`pip
-install katcp` if pip is installed. Alternatively, :command:`easy_install
-katcp`; requires the setuptools Python package to be installed.
+Stable release
+--------------
+
+To install katcp, run this command in your terminal:
+
+.. code-block:: console
+
+    $ pip install katcp
+
+This is the preferred method to install katcp, as it will always install the most recent stable release.
+
+If you don't have `pip`_ installed, this `Python installation guide`_ can guide
+you through the process.
+
+.. _pip: https://pip.pypa.io
+.. _Python installation guide: http://docs.python-guide.org/en/latest/starting/installation/
+
+Alternatively,
+
+.. code-block:: console
+
+    $ easy_install katcp
+
+
+Note: This requires the setuptools Python package to be installed.
+
+From sources
+------------
+
+The sources for katcp can be downloaded from the `Github repo`_.
+
+You can either clone the public repository:
+
+.. code-block:: console
+
+    $ git clone https://github.com/ska-sa/katcp-python/
+
+Or download the `tarball`_:
+
+.. code-block:: console
+
+    $ curl -OJL https://github.com/ska-sa/katcp-python/tarball/master
+
+Once you have a copy of the source, you can install it with:
+
+.. code-block:: console
+
+    $ python setup.py install
+
+
+.. _Github repo: https://github.com/ska-sa/katcp-python
+.. _tarball: https://github.com/ska-sa/katcp-python/tarball/master
+
+
+Usage
+^^^^^
 
 Using the Blocking Client
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 The blocking client is the most straight-forward way of
 querying a KATCP device. It is used as follows::
@@ -42,7 +95,7 @@ After creating the :class:`BlockingClient <katcp.BlockingClient>` instance, the
 :meth:`start` method is called to launch the client thread.  The
 :meth:`wait_protocol` method waits until katcp version information has been
 received from the server, allowing the KATCP version spoken by the server to be
-known; server protocol iformation is stores in client.protocol_flags. Once you
+known; server protocol information is stores in client.protocol_flags. Once you
 have finished with the client, :meth:`stop` can be called to request that the
 thread shutdown. Finally, :meth:`join` is used to wait for the client thread to
 finish.
@@ -59,7 +112,7 @@ messages containing any KATCP informs associated with the reply.
 
 
 Using the Callback Client
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 For situations where one wants to communicate with a server
 but doesn't want to wait for a reply, the
@@ -97,7 +150,7 @@ structure.
 
 
 Writing your own Client
-^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------
 
 If neither the :class:`BlockingClient <katcp.BlockingClient>` nor
 the :class:`CallbackClient <katcp.CallbackClient>` provide the
@@ -202,7 +255,7 @@ that the `req` parameter is omitted.
 .. _Tutorial_high_level_client:
 
 Using the high-level client API
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------------
 
 The high level client API inspects a KATCP device server and presents requests as
 method calls and sensors as objects.
@@ -259,7 +312,7 @@ A high level client for the example server presented in the following section: :
 
 
 Writing your own Server
-^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------
 
 Creating a server requires sub-classing :class:`DeviceServer
 <katcp.DeviceServer>`.  This class already provides all the requests and inform
@@ -361,7 +414,7 @@ A very simple server example looks like::
       def request_raw_reverse(self, req, msg):
           """
           A raw request handler to demonstrate the calling convention if
-          @request decoraters are not used. Reverses the message arguments.
+          @request decorator are not used. Reverses the message arguments.
           """
           # msg is a katcp.Message.request object
           reversed_args = msg.arguments[::-1]
@@ -426,7 +479,7 @@ example, with the exception that there are no :meth:`unhandled_request`,
 server will log an exception.
 
 Writing your own Async Server
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------------
 
 To write a server in the typical tornado async style, modify the example above by
 adding the following imports ::
@@ -457,11 +510,11 @@ with ::
 
 If multiple servers are started in a single ioloop, :func:`on_shutdown` should
 be modified to call :meth:`stop` on each server. This is needed to allow a clean
-shutdown that adheres to the KATCP spec requirement that a `#disconnect` inform
+shutdown that adheres to the KATCP specification requirement that a `#disconnect` inform
 is sent when a server shuts down.
 
 Event Loops and Thread Safety
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------------
 
 As of version 0.6.0, katcp-python was completely reworked to use Tornado as an
 event- and network library. A typical Tornado application would only use a
@@ -469,14 +522,14 @@ single `tornado.ioloop.IOLoop` event-loop instance. Logically independent parts 
 application would all share the same ioloop using e.g. coroutines to allow
 concurrent tasks.
 
-However, to maintain backwards compatiblity with the thread-semantics of older
+However, to maintain backwards compatibility with the thread-semantics of older
 versions of this library, it supports starting a `tornado.ioloop.IOLoop`
 instance in a new thread for each client or server. Instantiating the
 :class:`BlockingClient` or :class:`CallbackClient` client classes or the
 :class:`DeviceServer` server class will implement the backward compatible
 behaviour by default, while using :class:`AsyncClient` or
 :class:`AsyncDeviceServer` will by default use `tornado.ioloop.IOLoop.current()`
-as the ioloop (can be overidden using their `set_ioloop` methods), and won't
+as the ioloop (can be overridden using their `set_ioloop` methods), and won't
 enable thread safety by default (can be overridden using
 :meth:`AsyncDeviceServer.set_concurrency_options` and
 :meth:`AsyncClient.enable_thread_safety`)
@@ -486,7 +539,7 @@ block. A blocking handler will block the ioloop, causing all timed operations
 (e.g. sensor strategies), network io, etc. to block. This is particularly
 important when multiple servers/clients share a single ioloop. A good solution
 for handlers that need to wait on other tasks is to implement them as Tornado
-couroutines. A :class:`DeviceServer` will not accept another request message
+coroutines. A :class:`DeviceServer` will not accept another request message
 from a client connection until the request handler has completed / resolved its
 future. Multiple outstanding requests can be handled concurrently by raising the
 :class:`AsyncReply` exception in a request handler. It is then the
@@ -519,14 +572,14 @@ called with `thread_safe=False`), all interaction with the device server needs
 to be through the :meth:`tornado.ioloop.Ioloop.add_callback` method of the
 server's ioloop. The server's ioloop instance can be accessed through its
 `ioloop` attribute. If a threadsafe server (e.g. :class:`DeviceServer` with
-default concurrency options) or client (e.g. :class:`CallbackClient`) is used, 
+default concurrency options) or client (e.g. :class:`CallbackClient`) is used,
 all the public methods provided by this katcp library for sending `!replies` or
 `#informs` are thread safe.
 
 Updates to :class:`Sensor` objects using the public setter methods are always
 thread-safe, provided that the same is true for all the observers attached to
 the sensor. The server observers used to implement sampling strategies are
-threadsafe, even if an asyc server is used.
+threadsafe, even if an async server is used.
 
 Backwards Compatibility
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -574,11 +627,11 @@ version of the server if it can, see
 :ref:`release_notes_0_5_0a0_server_version_auto_detection`. For a simple client
 this means that no changes are required to support different KATCP
 versions. However, the semantics of the messages might be different for
-different protocl versions. Using the :func:`unpack_message
+different protocol versions. Using the :func:`unpack_message
 <katcp.kattypes.unpack_message>` decorator with `major=4` for reply or inform
 handlers might help here, although it could use some `improvement
 <https://github.com/ska-sa/katcp-python/issues/1>`_.
 
-In the case of version auto-dection failing for a given server, 
+In the case of version auto-detection failing for a given server,
 :meth:`preset_protocol_flags <katcp.DeviceClient.preset_protocol_flags>` can be
 used to set the KATCP version before calling the client's :meth:`start` method.

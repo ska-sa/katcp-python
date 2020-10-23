@@ -1,48 +1,44 @@
 # testutils.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Test utils for katcp package tests."""
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
-import logging
-import re
-import time
-import Queue
-import threading
 import functools
+import logging
+import queue
+import re
+import threading
+import time
+
+from builtins import next, object, zip
+
+from concurrent.futures import Future, TimeoutError
 
 import mock
-import tornado.testing
+import tornado.gen
 import tornado.ioloop
 import tornado.locks
-import tornado.gen
-
-from thread import get_ident
-
+import tornado.testing
+from _thread import get_ident
 from tornado.concurrent import Future as tornado_Future
-from concurrent.futures import Future, TimeoutError
+from future.utils import native_str_to_bytes, bytes_to_native_str
 
 from katcp import client
 
-
-from .core import (Sensor,
-                   Message,
-                   AsyncReply,
-                   AsyncEvent,
-                   AttrDict,
-                   steal_docstring_from,
-                   ProtocolFlags)
-from .server import DeviceServer, FailReply, ClientConnection
-from .kattypes import (request,
-                       return_reply,
-                       Float, Str, Int,
-                       concurrent_reply,
-                       request_timeout_hint)
+from .core import (AsyncEvent, AsyncReply, Message, ProtocolFlags,
+                   Sensor, steal_docstring_from)
+from .kattypes import (Bool, Discrete, Float, Int, Str, concurrent_reply,
+                       request, request_timeout_hint, return_reply)
 from .object_proxies import ObjectWrapper
+from .server import ClientConnection, DeviceServer, FailReply
+from .compat import is_bytes, ensure_native_str, is_text
 
 logger = logging.getLogger(__name__)
 
@@ -334,20 +330,23 @@ class BlockingTestClient(client.BlockingClient):
             if sensortype == bool:
                 typestr = "%r and then %r" % (int, bool)
                 value = bool(int(value))
+            elif sensortype == str:
+                typestr = "%r" % sensortype
+                value = bytes_to_native_str(value)
             else:
                 typestr = "%r" % sensortype
                 value = sensortype(value)
-        except ValueError, e:
+        except ValueError as e:
             self.test.fail("Could not convert value %r of sensor '%s' to type "
                            "%s: %s" % (value, sensorname, typestr, e))
-
+        status = bytes_to_native_str(status)
         self.test.assertTrue(status in Sensor.STATUSES.values(),
                              "Got invalid status value %r for sensor '%s'."
                              % (status, sensorname))
 
         try:
             timestamp = float(timestamp)
-        except ValueError, e:
+        except ValueError as e:
             self.test.fail("Could not convert timestamp %r of sensor '%s' to "
                            "type %r: %s" % (timestamp, sensorname, float, e))
 
@@ -434,8 +433,7 @@ class BlockingTestClient(client.BlockingClient):
                    % (sensorname, got_status, status))
             self.test.assertEqual(got_status, status, msg)
 
-    def assert_sensor_status_equals(self, sensorname, expected_status,
-                                    msg=None):
+    def assert_sensor_status_equals(self, sensorname, expected_status, msg=None):
         """Assert that a sensor's status is equal to the given status.
 
         Parameters
@@ -644,9 +642,21 @@ class BlockingTestClient(client.BlockingClient):
         """
         def sensortuple(name, description, units, stype, *params):
             # ensure float params reduced to the same format
+            native_str_params = []
             if stype == "float":
-                params = ["%g" % float(p) for p in params]
-            return (name, description, units, stype) + tuple(params)
+                params = ["%r" % float(p) for p in params]
+            for param in params:
+                if is_bytes(param):
+                    str_param = ensure_native_str(param)
+                    native_str_params.append(str_param)
+                else:
+                    native_str_params.append(param)
+            return (
+                ensure_native_str(name),
+                ensure_native_str(description),
+                ensure_native_str(units),
+                ensure_native_str(stype),
+            ) + tuple(native_str_params)
 
         reply, informs = self.blocking_request(Message.request("sensor-list"))
 
@@ -707,19 +717,24 @@ class BlockingTestClient(client.BlockingClient):
 
         if descriptions:
             if not full_descriptions:
-                got_requests = [(name, desc.split('\n')[0])
+                got_requests = [(name, desc.split(b'\n')[0])
                                 for (name, desc) in got_requests]
-                expected_requests = [(name, desc.split('\n')[0])
-                                     for (name, desc) in expected_requests]
+                expected_requests = [
+                    (native_str_to_bytes(name),
+                     native_str_to_bytes(desc).split(b"\n")[0])
+                    for (name, desc) in expected_requests
+                ]
         else:
             got_requests = [name for (name, desc) in got_requests]
+            expected_requests = [native_str_to_bytes(name) for name in expected_requests]
+
 
         got_set = set(got_requests)
         expected_set = set(expected_requests)
 
         if exclude_defaults:
-            default_request_names = set(DeviceServer._request_handlers.keys())
-
+            default_request_names = {native_str_to_bytes(name)
+                                     for name in DeviceServer._request_handlers.keys()}
             if not descriptions:
                 got_set = got_set - default_request_names
             else:
@@ -783,7 +798,7 @@ class BlockingTestClient(client.BlockingClient):
                                         "(with no error message)")))
         self.test.assertTrue(reply.reply_ok(), msg)
 
-        args = reply.arguments[1:]
+        args = [ensure_native_str(arg) for arg in reply.arguments[1:]]
 
         args_echo = kwargs.get("args_echo", False)
         args_equal = kwargs.get("args_equal")
@@ -793,14 +808,16 @@ class BlockingTestClient(client.BlockingClient):
         informs_args_equal = kwargs.get("informs_args_equal")
 
         if args_echo:
-            args_equal = [str(p) for p in params]
+            args_equal = list_to_native_strings(params)
 
         if args_equal is not None:
+            args_equal = list_to_native_strings(args_equal)
             msg = ("Expected reply to request '%s' called with parameters %r "
                    "to have arguments %s, but received %s."
                    % (requestname, params, args_equal, args))
             self.test.assertEqual(args, args_equal, msg)
         elif args_in is not None:
+            args_in = [list_to_native_strings(arg) for arg in args_in]
             msg = ("Expected reply to request '%s' called with parameters %r "
                    "to have arguments in %s, but received %s."
                    % (requestname, params, args_in, args))
@@ -818,13 +835,18 @@ class BlockingTestClient(client.BlockingClient):
             self.test.assertEqual(len(informs), informs_count, msg)
 
         if informs_args_equal is not None:
-            expected_inform_args = list(informs_args_equal)
-            actual_inform_args = [inform.arguments for inform in informs]
-            msg = ("Expected inform arguments {expected_inform_args} in reply to request "
-                   "{requestname!r} called with parameters {params!r}, "
-                   "but received {actual_inform_args!r}.".format(**locals()))
+            expected_inform_args = [
+                list_to_native_strings(inform) for inform in informs_args_equal
+            ]
+            actual_inform_args = [
+                list_to_native_strings(inform.arguments) for inform in informs
+            ]
+            msg = (
+                "Expected inform arguments {expected_inform_args} in reply to request "
+                "{requestname!r} called with parameters {params!r}, "
+                "but received {actual_inform_args!r}.".format(**locals())
+            )
             self.test.assertEqual(actual_inform_args, expected_inform_args, msg)
-
         return args
 
     def assert_request_fails(self, requestname, *params, **kwargs):
@@ -855,18 +877,21 @@ class BlockingTestClient(client.BlockingClient):
         self.test.assertFalse(reply.reply_ok(), msg)
 
         status = reply.arguments[0]
-        error = reply.arguments[1] if len(reply.arguments) > 1 else None
-
+        error = (ensure_native_str(reply.arguments[1])
+                 if len(reply.arguments) > 1 else None)
         status_equals = kwargs.get("status_equals")
         error_equals = kwargs.get("error_equals")
 
         if status_equals is not None:
+            status_equals = ensure_native_str(status_equals)
+            status = ensure_native_str(status)
             msg = ("Expected request '%s' called with parameters %r to return "
                    "status %s, but the status was %r."
                    % (requestname, params, status_equals, status))
             self.test.assertTrue(status == status_equals, msg)
 
         if error_equals is not None:
+            error_equals = ensure_native_str(error_equals)
             msg = ("Expected request '%s' called with parameters %r to fail "
                    "with error %s, but the error was %r."
                    % (requestname, params, error_equals, error))
@@ -983,7 +1008,7 @@ class DeviceTestServer(DeviceServer):
         self.break_sensor_list = False
         # Set to fail string if the help request should break
         self.break_help = False
-        self.restart_queue = Queue.Queue()
+        self.restart_queue = queue.Queue()
         self.set_restart_queue(self.restart_queue)
         # Map of ClientConnection -> futures that can be resolved to cancel command
         self._slow_futures = {}
@@ -994,11 +1019,11 @@ class DeviceTestServer(DeviceServer):
 
     @property
     def request_names(self):
-        return self._request_handlers.keys()
+        return list(self._request_handlers.keys())
 
     @property
     def sensor_names(self):
-        return self._sensors.keys()
+        return list(self._sensors.keys())
 
     @tornado.gen.coroutine
     def on_client_connect(self, client_conn):
@@ -1012,6 +1037,18 @@ class DeviceTestServer(DeviceServer):
             Sensor.INTEGER, "an.int", "An Integer.", "count",
             [-5, 5],
             timestamp=12345, status=Sensor.NOMINAL, value=3))
+        self.add_sensor(DeviceTestSensor(
+            Sensor.DISCRETE, "a.discrete", "A Discrete.", "",
+            ['one', 'two', 'three'],
+            timestamp=12345, status=Sensor.NOMINAL, value="one"))
+        self.add_sensor(DeviceTestSensor(
+            Sensor.FLOAT, "a.float", "A Float.", "",
+            [-123.4, 123.4],
+            timestamp=12345, status=Sensor.NOMINAL, value=12))
+        self.add_sensor(DeviceTestSensor(
+            Sensor.FLOAT, "a.floatwithzero", "A Float with zero.", "",
+            [-123.0, 123.0],
+            timestamp=12345, status=Sensor.NOMINAL, value=12))
 
     def request_new_command(self, req, msg):
         """A new command."""
@@ -1062,6 +1099,27 @@ class DeviceTestServer(DeviceServer):
         if fut:
             fut.set_result(None)
         return req.make_reply('ok')
+
+    @request(Str(), Float(), Int(), Bool())
+    @return_reply(Str(), Float(), Int(), Bool())
+    def request_decorated(self, req, _string, _float, _int, do_raise):
+        """Decorated handler, return params, optionally raise exception."""
+        if do_raise:
+            raise Exception("An exception occurred!")
+        else:
+            req.inform("_string", str(type(_string)))
+            req.inform("_float", str(type(_float)))
+            req.inform("_int", str(type(_int)))
+            req.inform("do_raise", str(type(do_raise)))
+            return "ok", _string, _float, _int, do_raise
+
+    @return_reply()
+    def request_decorated_return_exception(self, req, msg):
+        """Decorated handler, return fail with exception object."""
+        try:
+            raise Exception("An exception occurred!")
+        except Exception as e:
+            return "fail", e
 
     def handle_message(self, req, msg):
         self.__msgs.append(msg)
@@ -1189,15 +1247,17 @@ class SensorComparisonMixin(object):
         """Return a dict description of a sensor and its values"""
 
         key_fns = self.key_fns
-        if desired_keys == None:
+        if desired_keys is None:
             desired_keys = set(key_fns.keys())
         else:
             desired_keys = set(desired_keys)
         desired_keys = desired_keys - set(ignore_keys)
 
         def get_sensor_key(sensor, key):
-            try: key_fn = key_fns[key]
-            except KeyError, e: raise KeyError('Unknown sensor key: ' + e.message)
+            try:
+                key_fn = key_fns[key]
+            except KeyError as e:
+                raise KeyError('Unknown sensor key: ' + e.message)
             return key_fn(sensor)
 
         sensor_description = {}
@@ -1246,7 +1306,7 @@ class SensorComparisonMixin(object):
             timestamp : float (value timestamp)
             description : str (sensor description)
             units : str (sensor units)
-            params : list (sensor parameters as passsed to the constructor)
+            params : list (sensor parameters as passed to the constructor)
 
             If a key is left out of the description it is ignored, except for `name` which
             is required.
@@ -1288,7 +1348,7 @@ class SensorComparisonMixin(object):
         actual_description_dict = {}
         for name, desired_info in desired_description_dict.items():
             actual_description_dict[name] = self._get_sensor_description(
-                actual_sensor_dict[name], desired_info.keys())
+                actual_sensor_dict[name], list(desired_info.keys()))
 
         self.maxDiff = None     # Make unittest print differences even
                                 # if they are large
@@ -1301,7 +1361,7 @@ class SensorComparisonMixin(object):
         ----------
         actual_sensors -- List of sensor objects
         value_tests -- dict with
-           value_tests['sensor_name'] : Callable value test. Sould raise
+           value_tests['sensor_name'] : Callable value test. Should raise
                AssertionError if the test fails
         """
 
@@ -1438,13 +1498,13 @@ def counting_callback(event=None, number_of_calls=1):
     return decorator
 
 
-def suppress_queue_repeats(queue, initial_value, read_time=None):
+def suppress_queue_repeats(suppressed_queue, initial_value, read_time=None):
     """Generator that reads a Queue and suppresses runs of repeated values.
 
-    The queue is consumed, and a value yielded whenever it differs from the
+    The suppressed_queue is consumed, and a value yielded whenever it differs from the
     previous value. If *read_time* is specified, stops iteration if the
-    queue is empty after reading the queue for *read_time* seconds. If
-    *read_time* is None, continue reading forever.
+    suppressed_queue is empty after reading the suppressed_queue for *read_time* seconds.
+    If *read_time* is None, continue reading forever.
 
     """
     start_time = time.time()
@@ -1456,8 +1516,8 @@ def suppress_queue_repeats(queue, initial_value, read_time=None):
             next_wait = read_time - (time.time() - start_time)
             next_wait = max(0, next_wait)
         try:
-            next_value = queue.get(timeout=next_wait)
-        except Queue.Empty:
+            next_value = suppressed_queue.get(timeout=next_wait)
+        except queue.Empty:
             break
         if next_value != cur_value:
             yield next_value
@@ -1524,7 +1584,7 @@ class SensorTransitionWaiter(object):
         self.desired_value_sequence = value_sequence
         self._torn_down = False
         self._done = False
-        self._value_queue = Queue.Queue()
+        self._value_queue = queue.Queue()
         self.timed_out = False
         current_value = self._get_current_sensor_value()
         if value_sequence:
@@ -1605,7 +1665,7 @@ class SensorTransitionWaiter(object):
                 while True:
                     # Read values from the queue until either the timeout
                     # expires or a value different from the last is found
-                    next_value = nonrepeat_sensor_values.next()
+                    next_value = next(nonrepeat_sensor_values)
                     self.received_values.append(next_value)
                     current_pass = self._test_value(next_value, current_test)
                     next_pass = self._test_value(next_value, next_test)
@@ -1633,7 +1693,7 @@ class SensorTransitionWaiter(object):
         stop : bool, optional
             Stop listening, tear down and unsubscribe from sensor
         reset: bool, optional
-            Reset the recieved values to an empty list
+            Reset the received values to an empty list
 
         Notes
         -----
@@ -1643,7 +1703,7 @@ class SensorTransitionWaiter(object):
         try:
             while True:
                 self.received_values.append(self._value_queue.get_nowait())
-        except Queue.Empty:
+        except queue.Empty:
             pass
         received_values = self.received_values
         if reset:
@@ -1653,7 +1713,7 @@ class SensorTransitionWaiter(object):
         return received_values
 
     def teardown(self):
-        """Clean up: restore sensor strategy and deregister sensor callback."""
+        """Clean up: restore sensor strategy and de-register sensor callback."""
         if self._torn_down:
             return
         self._teardown_sensor()
@@ -1751,7 +1811,7 @@ class AtomicIaddCallback(ObjectWrapper):
 class WaitingMock(mock.Mock):
     def __init__(self, *args, **kwargs):
         super(WaitingMock, self).__init__(*args, **kwargs)
-        self._counted_queue = Queue.Queue(maxsize=1)
+        self._counted_queue = queue.Queue(maxsize=1)
         # Replace the underlying value for self.call_count with a proxied int
         # that uses a threading.RLock to allow atomic incrementation in case
         # multiple threads are calling the mock, and does a callback as soon as
@@ -1765,7 +1825,7 @@ class WaitingMock(mock.Mock):
     def _call_count_callback(self, call_count):
         try:
             self._counted_queue.put_nowait(call_count)
-        except Queue.Full:
+        except queue.Full:
             pass
 
     def reset_mock(self, visited=None):
@@ -1788,7 +1848,7 @@ class WaitingMock(mock.Mock):
         while to_wait >= 0 and self.call_count < count:
             try:
                 self._counted_queue.get(timeout=to_wait)
-            except Queue.Empty:
+            except queue.Empty:
                 pass
             to_wait = timeout - (time.time() - t0)
 
@@ -1925,8 +1985,8 @@ def handle_mock_req(dev, req):
     req : :class:`WaitingMock` object
         A mock request created with katcp.testutils.mock_req()
 
-    Return Value
-    ------------
+    Returns
+    -------
 
     reply_and_inform_msgs_future : tornado Future instance
         Resolves with (reply_msg, inform_msgs)
@@ -1984,7 +2044,7 @@ def call_in_ioloop(ioloop, fn, *args, **kwargs):
 
 
 class TimewarpAsyncTestCase(tornado.testing.AsyncTestCase):
-    """Tornado AsyncTestCase that supports timewarping.
+    """Tornado AsyncTestCase that supports time-warping.
 
     The io_loop.time() method is replaced by a mock-timer, that only progresses
     when moved along using set_ioloop_time().
@@ -2049,3 +2109,13 @@ class TimewarpAsyncTestCaseTimeAdvancer(threading.Thread):
         yield self.test_instance.set_ioloop_time(
             self.test_instance.ioloop_time + self.quantum)
         future.set_result(None)
+
+
+def list_to_native_strings(list_to_coerce):
+    coerced_list = []
+    for item in list_to_coerce:
+        if is_bytes(item) or is_text(item):
+            coerced_list.append(ensure_native_str(item))
+        else:
+            coerced_list.append(str(item))
+    return coerced_list

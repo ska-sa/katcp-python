@@ -3,6 +3,190 @@
 *************
 Release Notes
 *************
+0.7.0
+=====
+* Added Python 3 compatibility.
+
+See also :download:`CHANGELOG.md` for more details on changes.
+
+Important changes for Python 3 compatibility
+--------------------------------------------
+
+General notes
+^^^^^^^^^^^^^
+
+The package is now compatible with both Python 2 and 3.  The goals of the
+migration were:
+
+* Do not change the public API.
+* Do not break existing functionality for Python 2.
+* Ease migration of packages using katcp to Python 3.
+
+Despite these goals, some of the stricter type checking that has been added
+may force minor updates in existing code.  E.g., using integer for the options
+of a discrete sensor is no longer allowed.
+
+Asynchronous code is still using tornado in the same Python 2 way.  The new
+Python 3.5 ``async`` and ``await`` keywords are not used.  The tornado version
+is also pinned to older versions that support both Python 2 and 3.  The 5.x
+versions also support Python 2, but they are avoided as some significant
+changes result in test failures.
+
+The Python ``future`` package was used for the compatibility layer.  The use of
+the ``newstr`` and ``newbytes`` compatibility types was avoided, to reduce
+confusion.  I.e., ``from builtins import str, bytes`` is not done.
+
+Docstrings
+^^^^^^^^^^
+
+In docstrings the interpretation of parameter and return types described
+as "str" has changed slightly.  In Python 2 the ``str`` type is a byte
+string, while in Python 3, ``str`` is a unicode string.  The ``str`` type
+is referred to as the "native" string type.  In code, native literal strings
+would have no prefix, for example: ``"native string"``, as opposed to
+explicit byte strings, ``b"byte string"``, and explicit unicode strings,
+``u"unicode string"``.  In the docstrings "bytes" means a byte string is
+expected (or returned), "str" means a native string, and "str or bytes"
+means either type.
+
+Changes to types
+^^^^^^^^^^^^^^^^
+
+As part of the Python 3 compatibility update, note the following:
+
+- :class:`katcp.Message`.
+  - ``arguments`` and ``mid`` attributes will be forced to byte strings in all
+  Python versions.  This is to match what is sent on the wire (serialised
+  byte stream).
+  - ``name``: is expected to be a native string.
+  - ``repr()``:  the result will differ slightly in Python 3 - the arguments
+  will be shown as quoted byte strings. E.g., Python 2: ``"<Message reply ok
+  (123, zzz)>"``, vs. Python 3:  ``"<Message reply ok (b'123', b'zzz')>"``.
+  In all versions, arguments longer than 1000 characters are now truncated.
+- :class:`katcp.Sensor`.
+  - ``name``, ``description``, ``units``, ``params`` (for discrete sensors):
+  ``__init__`` can take byte strings or native strings, but attributes will
+  be coerced to native strings.
+  - ``set_formatted``, ``parse_value``:  only accept byte strings (stricter
+  checking).
+  - The ``float`` and ``strict_timestamp`` sensor values are now encoded using
+  ``repr()`` instead of ``"%.15g"``.  This means that more significant digits
+  are transmitted on the wire (16 to 17, instead of 15), and the client will
+  be able to reconstruct the exact some floating point value.
+
+Non-ASCII and UTF-8
+^^^^^^^^^^^^^^^^^^^
+
+Prior to these changes, all strings were byte strings, so there was no encoding
+required.  Arbitrary bytes could be used for message parameters and string
+sensor values.  After these changes, strings sensors and ``Str`` types are
+considered "text".  In Python 3, UTF-8 encoding will be used when changing
+between byte strings and unicode strings for "text".  This has the following
+effects:
+
+- :class:`katcp.Message`
+  - the ``arguments`` are always using byte strings, so arbitrary bytes can
+  still be sent and received using this class directly.
+- :class:`katcp.Sensor`
+  - Values for ``string`` and ``discrete`` sensor types cannot be arbitrary
+  byte strings in Python 3 - they need to be UTF-8 compatible.
+- :class:`kattypes.Str`, :class:`kattypes.Discrete`, :class:`kattypes.DiscreteMulti`
+  - These types is still used in ``request`` and ``reply`` decorators.
+  - For sending messages, they accept any type of object, but UTF-8 encoding
+  is used if values are not already byte strings.
+  - When decoding received messages, "native" strings are returned.
+
+Keep in mind that a Python 2 server may be communicating with a Python 3
+client, so sticking to ASCII is safest.  If you are sure both client and
+server are on Python 3 (or understand the encoding the same), then UTF-8
+could be used.  That is also the encoding option used by the
+`aiokatcp <https://github.com/ska-sa/aiokatcp>`_ package.
+
+Performance degradation
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Adding the compatibility results in more checks and conversions.  From some
+basic benchmarking, there appears to be up to 20% performance degradation
+when instantiating message objects.
+
+Benchmark, in ipython::
+
+    import random, katcp
+
+    args_groups = []
+    for i in range(1000):
+        args_groups.append((random.randint(0, 1) == 1,
+                            random.randint(0, 1000),
+                            random.random(),
+                            str(random.random())))
+
+    def benchmark():
+        for args in args_groups:
+            tx_msg = katcp.Message.reply('foo', *args)
+            serialised = bytes(tx_msg)
+            parser = katcp.MessageParser()
+            rx_msg = parser.parse(serialised)
+            assert tx_msg == rx_msg
+
+
+    %timeit benchmark()
+
+* Old Py2:  10 loops, best of 3: 23.4 ms per loop
+* New Py2:  10 loops, best of 3: 29.9 ms per loop
+* New Py3:  25.1 ms ± 86.8 µs per loop (mean ± std. dev. of 7 runs, 10 loops each)
+
+
+0.6.4
+=====
+* Fix some client memory leaks, and add `until_stopped` methods.
+* Increase server MAX_QUEUE_SIZE to handle more clients.
+* Use correct ioloop for client AsyncEvent objects.
+
+See also :download:`CHANGELOG.md` for more details on changes.
+
+Important API changes
+---------------------
+
+Stopping KATCP clients
+^^^^^^^^^^^^^^^^^^^^^^
+
+When stopping KATCP client classes that use a *managed* ioloop (i.e., create their
+own in a new thread), the traditional semantics are to call ``stop()`` followed by
+``join()`` from another thread.  This is unchanged.  In the case of an *unmanaged*
+ioloop (i.e., an existing ioloop instance is provided to the client), we typically
+stop from the same thread, and calling ``join()`` does nothing.  For the case of
+*unmanaged* ioloops, a new method, ``until_stopped()``, has been added.  It returns a
+future that resolves when the client has stopped.  The caller can ``yield`` on this
+future to be sure that the client has completed all its coroutines.  Using this new
+method is not required.  If the ioloop will keep running, the stopped client's
+coroutines will eventually exit.  However, it is useful in some cases, e.g., to
+verify correct clean up in unit tests.
+
+The new method is available on :class:`katcp.DeviceClient` and derived classes, on
+:class:`katcp.inspecting_client.InspectingClientAsync`, and on the high-level
+clients :class:`katcp.KATCPClientResource` and
+:class:`katcp.KATCPClientResourceContainer`.
+
+An additional change is that the inspecting client now sends a state update
+(indicating that it is disconnected and not synced) when stopping.  This means
+high-level clients that were waiting on ``until_not_synced`` when the client was
+stopped will now be notified.  Previously, this was not the case.
+
+
+0.6.3
+=====
+* Put docs on readthedocs.
+* Better error handling for messages with non-ASCII characters (invalid).
+* Increase container sync time to better support large containers.
+* Limit tornado version to <5.
+* Allow sampling strategy to be removed from cache.
+* Improve error messages for DeviceMetaClass assertions.
+* Increase server's message queue length handle more simultaneous client connections.
+* Improve Jenkins pipeline configuration.
+* Add information on how to contribute to the project.
+
+See also :download:`CHANGELOG.md` for more details on changes.
+
 0.6.2
 =====
 * Various bug fixes
@@ -13,7 +197,7 @@ Release Notes
 * Moved IOLoopThreadWrapper to ioloop_manager.py, a more sensible location
 * Added a random-exponential retry backoff process
 
-See also :download:`CHANGELOG` for more details on changes.
+See also :download:`CHANGELOG.md` for more details on changes.
 
 0.6.1
 =====
@@ -25,14 +209,14 @@ See also :download:`CHANGELOG` for more details on changes.
 * Better dependency management using setup.py with `setuptools`
 * Fixed a memory leak when using KATCPResourceContainer
 
-See also :download:`CHANGELOG` for more details on changes.
+See also :download:`CHANGELOG.md` for more details on changes.
 
 0.6.0
 =====
 
 * Major change: Use the tornado event loop and async socket routines.
 
-See also :download:`CHANGELOG` for more details on changes.
+See also :download:`CHANGELOG.md` for more details on changes.
 
 Important API changes
 ---------------------
@@ -119,7 +303,7 @@ a number of backward incompatible changes, and hence requires care. This library
 implements support for both KATCP v5 and for the older dialect. Some API changes
 have also been made, mainly in aid of fool-proof support of the Message ID
 feature of KATCP v5. The changes do, however, also eliminate a category of
-potential bugs for older versions of the spec. 
+potential bugs for older versions of the spec.
 
 Important API changes
 ---------------------
@@ -247,62 +431,3 @@ This release implements the majority of the KATCP v5 spec; excluded parts are:
 
 * Support for optional warning/error range meta-information on sensors.
 * Differential-rate sensor strategy.
-
-Releasing
----------
-
-Notes for whomever becomes the release manager in the future. This assumes that
-you have `git@github.com:ska-sa/katcp-python.git` (or the https equivalent) as
-your git origin.
-
-* Edit CHANGELOG with the details of the changes, and doc/releasenotes.rst (this
-  file) with the change summary. Consider more detailed document updates /
-  examples.
-
-* Be aware that `https://pypi.python.org/pypi/katversion` generates the version
-  string. katversion looks at git tags to figure out the version number, so we
-  need to add a tag and push that to github.
-
-* Commit and tag the final changes::
-
-    git commit -a -m "Final updates for release 0.X.Y"
-    git tag -a v0.X.Y -m "Version 0.X.Y Stable"
-    git push --tags
-
-* Execute this the first time you do a release::
-
-    pip install sphinx-pypi-upload Sphinx
-    python setup.py register
-
-* Check the documentation by building it (should be in the `build/sphinx/html`
-  directory)::
-
-    python setup.py build_sphinx
-
-* Next execute::
-
-   python setup.py sdist upload
-   python setup.py build_sphinx upload_sphinx --upload-dir=build/sphinx/html
-
-* Check the pypi page to see that the upload and doc build was successful.
-
-* Host package docs on `http://readthedocs.org`
-
-  1. Create an account on Read the Docs. You will get an email verifying your
-     email address which you should accept within 7 days.
-  2. Log in and click on "Import".
-  3. Give your project a name, add the HTTPS link for your GitHub project, and
-     select Git as your repository type.
-  4. Fill in the rest of the form as needed and click "Create".
-  5. Then click "Build"
-
-* Automatically updated when you push to GitHub
-
-  6. On GitHub, navigate to your repository and click on "Settings".
-  7. In the sidebar, click on "Integrations & services", then find and click on
-     the "ReadTheDocs service".
-  8. Check the "Active" setting and click "Update Settings".
-
-* Good, it seems you have managed to release katcp!
-
-  - All done. Commit away and your project will auto-update.

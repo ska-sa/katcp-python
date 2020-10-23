@@ -8,8 +8,9 @@ It is developed as a part of the `Karoo Array Telescope <http://ska.ac.za/>`_
 (KAT) project and used at KAT for the monitoring and control of hardware
 devices.
 
-The protocol specification :download:`NRF-KAT7-6.0-IFCE-002-Rev5.pdf`
-is maintained as an internal memo. The latest version is `Rev5`.
+The protocol specification :download:`NRF-KAT7-6.0-IFCE-002-Rev5-1.pdf`
+is maintained as an internal memo. The latest version is `Rev5.1`.
+The specification source is hosted here:  https://github.com/ska-sa/katcp-guidelines
 
 
 
@@ -29,6 +30,7 @@ Contents
    sampling
    server
    tutorial
+   how_to_contribute
 
 Indices and tables
 ==================
@@ -36,4 +38,3 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-

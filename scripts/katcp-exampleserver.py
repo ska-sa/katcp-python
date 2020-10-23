@@ -1,18 +1,25 @@
 #!/usr/bin/env python
+# Copyright 2008 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """KATCP server example.
 
-   copyright (c) 2008 SKA/KAT. All Rights Reserved.
    @author Robert Crida <robert.crida@ska.ac.za>
    @date 2008-10-10
-   """
+"""
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
 import logging
+import queue
 import sys
-import Queue
+
 from optparse import OptionParser
+
 import katcp
-from katcp.kattypes import request, return_reply, Float, Int, Str
+
+from katcp.kattypes import Float, Int, Str, request, return_reply
 
 
 logging.basicConfig(level=logging.INFO,
@@ -52,7 +59,7 @@ class DeviceExampleServer(katcp.DeviceServer):
     @return_reply(Int())
     def request_intdiv(self, sock, x, y):
         """Perform integer division of x and y."""
-        return ("ok", x / y)
+        return ("ok", x // y)
 
 
 if __name__ == "__main__":
@@ -61,32 +68,32 @@ if __name__ == "__main__":
     parser = OptionParser(usage=usage)
     parser.add_option('-a', '--host', dest='host', type="string", default="", metavar='HOST',
                       help='listen to HOST (default="" - all hosts)')
-    parser.add_option('-p', '--port', dest='port', type=long, default=1235, metavar='N',
+    parser.add_option('-p', '--port', dest='port', type=int, default=1235, metavar='N',
                       help='attach to port N (default=1235)')
     (opts, args) = parser.parse_args()
 
-    print "Server listening on port %d, Ctrl-C to terminate server" % opts.port
-    restart_queue = Queue.Queue()
+    print("Server listening on port %d, Ctrl-C to terminate server" % opts.port)
+    restart_queue = queue.Queue()
     server = DeviceExampleServer(opts.host, opts.port)
     server.set_restart_queue(restart_queue)
 
     server.start()
-    print "Started."
+    print("Started.")
 
     try:
         while True:
             try:
                 device = restart_queue.get(timeout=0.5)
-            except Queue.Empty:
+            except queue.Empty:
                 device = None
             if device is not None:
-                print "Stopping ..."
+                print("Stopping ...")
                 device.stop()
                 device.join()
-                print "Restarting ..."
+                print("Restarting ...")
                 device.start()
-                print "Started."
+                print("Started.")
     except KeyboardInterrupt:
-        print "Shutting down ..."
+        print("Shutting down ...")
         server.stop()
         server.join()

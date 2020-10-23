@@ -1,9 +1,14 @@
-from tornado.util import ObjectDict
-from tornado.concurrent import Future as tornado_Future
-from katcp import Sensor
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
-from katcp.testutils import DeviceTestServer
+from __future__ import absolute_import, division, print_function
+
+from tornado.concurrent import Future as tornado_Future
+from tornado.util import ObjectDict
+
+from katcp import Sensor
 from katcp.client import *
+from katcp.testutils import DeviceTestServer
 
 logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d)%(message)s",
@@ -11,7 +16,7 @@ logging.basicConfig(
 )
 
 def cb(*args):
-    print args
+    print(args)
 
 try:
     d = DeviceTestServer('', 0)

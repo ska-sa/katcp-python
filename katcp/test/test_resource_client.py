@@ -1,44 +1,32 @@
-from __future__ import print_function, division, absolute_import
-###############################################################################
-# SKA South Africa (http://ska.ac.za/)                                        #
-# Author: cam@ska.ac.za                                                       #
-# Copyright @ 2013 SKA SA. All rights reserved.                               #
-#                                                                             #
-# THIS SOFTWARE MAY NOT BE COPIED OR DISTRIBUTED IN ANY FORM WITHOUT THE      #
-# WRITTEN PERMISSION OF SKA SA.                                               #
-###############################################################################
-from __future__ import division, print_function, absolute_import
+# Copyright 2014 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
-# Python 2/3 compatibility stuff
+from __future__ import absolute_import, division, print_function
 from future import standard_library
-standard_library.install_aliases()
-from builtins import str
-from builtins import object
-#
+standard_library.install_aliases()  # noqa: E402
 
-import unittest
-import logging
 import copy
+import gc
+import logging
 import time
-import threading
+import unittest
+import weakref
 
-import tornado
-import mock
-
-from _thread import get_ident as get_thread_ident
-from functools import partial
-
+from builtins import object
 from concurrent.futures import TimeoutError
 
-from katcp.testutils import (DeviceTestServer, DeviceTestSensor,
-                             start_thread_with_cleanup, TimewarpAsyncTestCase,
-                             TimewarpAsyncTestCaseTimeAdvancer)
-
-from katcp import resource, inspecting_client, ioloop_manager, Message, Sensor
-from katcp.core import AttrDict, AsyncEvent, ProtocolFlags
+import mock
+import tornado
 
 # module under test
-from katcp import resource_client
+from katcp import (Message, Sensor, ioloop_manager,
+                   resource, resource_client)
+from katcp.core import AsyncEvent, AttrDict, ProtocolFlags
+from katcp.testutils import (DeviceTestSensor, DeviceTestServer,
+                             TimewarpAsyncTestCase,
+                             TimewarpAsyncTestCaseTimeAdvancer,
+                             start_thread_with_cleanup)
+
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +126,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_dummy_requests(self):
+
         resource_spec_nodummy = dict(
             name='testdev',
             description='resource for testing',
@@ -260,6 +249,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
     @tornado.testing.gen_test
     def test_list_sensors(self):
+
         resource_spec = dict(
             name='testdev',
             address=('testhost', 12345))
@@ -274,14 +264,13 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
         def make_test_sensors(sensors_info):
             test_sensors = AttrDict()
-            # TODO PY3 check if we can get rid of the list() call
-            for sens_pyname, info in list(sensors_info.items()):
+            for sens_pyname, info in sensors_info.items():
                 info = dict(info)
                 info['sensor_type'] = Sensor.INTEGER
                 val = info.pop('value')
                 timestamp = val*10
                 received_timestamp = timestamp + 1
-                sens = test_sensors[sens_pyname] =  resource.KATCPSensor(
+                sens = test_sensors[sens_pyname] = resource.KATCPSensor(
                     info, sens_manager)
                 sens._reading = resource.KATCPSensorReading(
                     received_timestamp, timestamp, Sensor.NOMINAL, val)
@@ -293,7 +282,7 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
         sens_manager.get_sampling_strategy.side_effect = (
             lambda sens_name: resource.normalize_strategy_parameters(
                 sensor_strategies.get(
-                    resource.escape_name(sens_name), 'none')) )
+                    resource.escape_name(sens_name), 'none')))
 
         DUT.sensor.update(test_sensors)
 
@@ -307,12 +296,20 @@ class test_KATCPClientResource(tornado.testing.AsyncTestCase):
 
         # Now get all the sensors
         result = yield DUT.list_sensors('')
-        expected_result = sorted(resource.SensorResultTuple(
-            test_sensors[s_id], test_sensors_info[s_id].name,
-            s_id, test_sensors_info[s_id].description, 'integer', '',
-            test_sensors[s_id].reading)
-                                 for s_id in test_sensors_info)
-        self.assertEqual(sorted(result), expected_result)
+        # built-in `sorted()` and `list.sort()` use __cmp__ for ordering in Python2.
+        # However, this breaks compatibility in Python3 due to
+        # https://docs.python.org/3/whatsnew/3.0.html#ordering-comparisons
+        result.sort(key=lambda obj: obj.name)
+        expected_result = sorted([
+            resource.SensorResultTuple(
+                test_sensors[s_id], test_sensors_info[s_id].name,
+                s_id, test_sensors_info[s_id].description, 'integer', '',
+                test_sensors[s_id].reading
+            )
+            for s_id in test_sensors_info
+            ], key=lambda obj: obj.name)
+
+        self.assertEqual(result, expected_result)
 
         # Test that all sensors are found using their Python identifiers
         result = yield DUT.list_sensors('sens_two')
@@ -369,7 +366,7 @@ class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
 
     @tornado.gen.coroutine
     def _get_DUT_and_sync(self, resource_spec):
-        DUT = resource_client.KATCPClientResource(self.default_resource_spec)
+        DUT = resource_client.KATCPClientResource(resource_spec)
         DUT.start()
         yield DUT.until_state('synced')
         raise tornado.gen.Return(DUT)
@@ -454,6 +451,19 @@ class test_KATCPClientResource_Integrated(tornado.testing.AsyncTestCase):
         self.assertEqual(set(DUT.sensor), sensors_before)
         self.assertEqual(set(DUT.req), reqs_before)
 
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_usage(self):
+        DUT = yield self._get_DUT_and_sync(self.default_resource_spec)
+        wr = weakref.ref(DUT)
+
+        DUT.stop()
+        yield DUT.until_stopped()
+
+        # clear strong reference and check if object can be garbage collected
+        DUT = None
+        gc.collect()
+        self.assertIsNone(wr())
+
 
 class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
     def setUp(self):
@@ -482,6 +492,7 @@ class test_KATCPClientResource_IntegratedTimewarp(TimewarpAsyncTestCase):
         self.server.stop()
         self.server.join(timeout=1)
         yield DUT.until_state('disconnected')
+        self.assertEqual(DUT.state, 'disconnected')
 
         # Test that requests fail
         rep = yield DUT.req.watchdog()
@@ -1100,7 +1111,7 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
         t, status, value = (t0+2.5, Sensor.NOMINAL, 3)
         katcp_sensor.set(t, status, value)
         print("listener.mock_calls", listener.mock_calls)
-        self.assertEquals(len(listener.mock_calls), 6)
+        self.assertEqual(len(listener.mock_calls), 6)
         return
 
     def get_expected(self, testserv_attr):
@@ -1220,6 +1231,65 @@ class test_KATCPClientResourceContainerIntegrated(tornado.testing.AsyncTestCase)
             else:
                 self.assertFalse(result[client.name])
 
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_usage(self):
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        wr = weakref.ref(DUT)
+
+        DUT.start()
+        yield DUT.until_synced()
+        DUT.stop()
+        yield DUT.until_stopped()
+
+        # clear strong reference and check if object can be garbage collected
+        DUT = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_until_not_synced(self):
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        wr = weakref.ref(DUT)
+
+        DUT.start()
+        yield DUT.until_synced()
+        # call, but don't yield on until_not_synced - we are testing if
+        # stopping cleans up the futures it is waiting on
+        DUT.until_not_synced()
+        DUT.stop()
+        yield DUT.until_stopped()
+
+        # clear strong reference and check if object can be garbage collected
+        DUT = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    @unittest.skip('TODO: (AJ) Fix clean exit while syncing')
+    @tornado.testing.gen_test
+    def test_no_memory_leak_after_until_synced(self):
+        DUT = resource_client.KATCPClientResourceContainer(self.default_spec)
+        wr = weakref.ref(DUT)
+
+        DUT.start()
+        yield DUT.until_synced()
+        self.servers['resource1'].mass_inform(Message.inform('interface-changed'))
+        yield DUT.until_not_synced()
+        # call, but don't yield on until_synced - we are testing if
+        # stopping cleans up the futures it is waiting on
+        DUT.until_synced()
+        # TODO: (AJ)  Additional note:
+        # This test is skipped because the fix hasn't been found.
+        # The test fails regardless of whether `until_synced` is called.
+        # The problem is to do with stopping while sync is in progress - the
+        # container keeps references to the children.
+        DUT.stop()
+        yield DUT.until_stopped()
+
+        # clear strong reference and check if object can be garbage collected
+        DUT = None
+        gc.collect()
+        self.assertIsNone(wr())
+
 
 class test_AttrMappingProxy(unittest.TestCase):
     def test_wrapping(self):
@@ -1297,7 +1367,7 @@ class test_ThreadSafeKATCPClientResourceWrapper(unittest.TestCase):
         last_server_msg = self.server.messages[-1]
         self.assertTrue(reply.succeeded)
         self.assertEqual(str(last_server_msg),
-                         '?sensor-value[{}] an.int'.format(reply.reply.mid))
+                         '?sensor-value[{}] an.int'.format(int(reply.reply.mid)))
 
     def test_sensor(self):
         server_sensor = self.server.get_sensor('an.int')

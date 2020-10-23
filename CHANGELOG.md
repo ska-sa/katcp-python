@@ -1,3 +1,45 @@
+3 September 2020 (0.7.2)
+* Support for handling generator expressions in Discrete type (PR [#237](https://github.com/ska-sa/katcp-python/pull/237))
+* Fix handling of strings and bytes in `get_sensor` in testutils ([#240](https://github.com/ska-sa/katcp-python/pull/240))
+* Allow strings or bytes for assert_request_fails and `test_assert_request_succeeds` function arguments. (PR([#242](https://github.com/ska-sa/katcp-python/pull/242))
+* Handle str type correctly('easier') in `testutils.get_sensor` for python 2 and python 3 ([#243](https://github.com/ska-sa/katcp-python/pull/243))
+* Allow bytes and strings in `test_sensor_list` comparison of sensors ([#244](https://github.com/ska-sa/katcp-python/pull/244))
+* Correct handling of floats `test_sensor_list` ([#245](https://github.com/ska-sa/katcp-python/pull/245))
+* black formatting on certain test files.
+
+12 May 2020 (0.7.1)
+* All params in `future_get_sensor` are now cast to byte strings (PR [#235](https://github.com/ska-sa/katcp-python/pull/235)). 
+* Added tests to`test_fake_clients.py` and `test_inspecting_client.py` (PR [#235](https://github.com/ska-sa/katcp-python/pull/235)).
+* Ensure testutils method casts expected requests to byte strings (PR [#233](https://github.com/ska-sa/katcp-python/pull/233)).
+
+28 October 2019 (0.7.0)
+* Added Python 3 compatibility (PR [#215](https://github.com/ska-sa/katcp-python/pull/215))
+
+23 August 2019 (0.6.4)
+* Fix some client memory leaks, and add `until_stopped` methods (PR #206).
+* Increase server's MAX_QUEUE_SIZE from 30 to 300 to handle more simultaneous
+  client connections (PR #208).
+* Use correct ioloop for client AsyncEvent objects (PR #210).
+
+14 May 2019 (0.6.3)
+* Put docs on readthedocs (PR #192).
+* Added error handling when parsing Message arguments that include non-ASCII
+  characters (not following KATCP specification).  Invalid characters are replaced
+  with question marks, possibly breaking functionality (PR #193).
+* Increase container sync time from 8 sec to 20 sec, and initial resync
+  timeout from 1 sec to 5 sec, to better support large containers (PR #194).
+* Limit tornado version to <5 because the openssl version on Ubuntu 14.04
+  is not compatible (PR #195).
+* Allow sampling strategy to be removed from cache, to better support clients
+  working with devices that dynamically remove sensors (PR #196).
+* Provide a meaningful error message for the DeviceMetaClass assert statements
+  (PR #198).
+* Increase server's MAX_QUEUE_SIZE from 30 to 300 to handle more simultaneous
+  client connections (PR #199).  (Not in release 0.6.3 - it was only on the
+  release/karoocamv20 branch)
+* Updates to Jenkinsfile for pipeline improvements (PR #200, #201, #202).
+* Add information on how to contribute to the project (PR #203).
+
 19 July 2017 (0.6.2)
  * Bumped the tornado dependency to at least 4.3
  * Started work to support for python3 (not production ready)
@@ -74,7 +116,7 @@
  * Make katcp.testutils.WaitingMock robust against race conditions
  * Explicitly list set of base KATCP requests in katcp.server.BASE_REQUESTS
  * Make method-name to KATCP-name function available outside KATCP server
-   meta-class
+   metaclass
  * Improvements to logging (i.a. prevents issues when using SocketHandler)
  * Docstring cleanups
 
@@ -228,7 +270,7 @@
  * Created 0.3.x branch.
 
 22 Oct 2010:
- * Add a NullHandler for katcp library logging as recommended by Python logging 
+ * Add a NullHandler for katcp library logging as recommended by Python logging
    documentation.
 
 12 Oct 2010:
@@ -290,7 +332,7 @@
 26 Oct 2009
  * Add include_msg option to request decorator to give decorated
    requests a means to access the original message and the message id.
- * Add support for msg ids to callback client. 
+ * Add support for msg ids to callback client.
 
 23 Oct 2009
  * Add support for message ids to server and client request handling.
@@ -340,6 +382,6 @@
  * Update version to 0.2.x.
  * Fix download url and license in setup.py.
  * Have Sphinx read the version number from katcp.VERSION and katcp.VERSION_STR.
- 
+
 29 Jun 2009
  * Start of CHANGELOG in preparation for 0.1.0 release.

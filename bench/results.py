@@ -1,5 +1,11 @@
-import math
+# Copyright 2010 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
+from __future__ import absolute_import, division, print_function
+
 import json
+import math
+
 
 class Result(object):
     def __init__(self, scenario, interpreter, lib, result):
@@ -27,7 +33,7 @@ def compute_all(all):
     colors = ['green', 'red', 'yellow', 'brown']
 
     retval = {}
-    
+
     for ii, result in enumerate(all):
         d = {}
         max_clients = max([i for v, i in result.result])

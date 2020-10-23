@@ -1,32 +1,37 @@
 # test_client.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
 """Tests for client module."""
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
-import unittest2 as unittest
-import socket
-import mock
-import time
+import gc
 import logging
 import threading
-import tornado.testing
+import time
+import unittest
+import weakref
 
-import katcp
-
+from builtins import range
 from concurrent.futures import Future
+
+import mock
+import tornado
+import tornado.testing
 
 from tornado import gen
 
-from katcp.core import ProtocolFlags, Message
+import katcp
 
-from katcp.testutils import (TestLogHandler, DeviceTestServer, TestUtilMixin,
-                             counting_callback, start_thread_with_cleanup,
-                             WaitingMock, TimewarpAsyncTestCase)
+from katcp.core import Message, ProtocolFlags
+from katcp.testutils import (DeviceTestServer, TestLogHandler, TestUtilMixin,
+                             TimewarpAsyncTestCase, WaitingMock,
+                             counting_callback, start_thread_with_cleanup)
 
 log_handler = TestLogHandler()
 logging.getLogger("katcp").addHandler(log_handler)
@@ -34,7 +39,7 @@ logging.getLogger("katcp").addHandler(log_handler)
 logger = logging.getLogger(__name__)
 
 # Number of requests on DeviceTestServer
-NO_HELP_MESSAGES = len(DeviceTestServer._request_handlers)
+NUM_HELP_MESSAGES = len(DeviceTestServer._request_handlers)
 
 
 def remove_version_connect(msgs):
@@ -310,6 +315,184 @@ class TestDeviceClientIntegrated(unittest.TestCase, TestUtilMixin):
                         "Expected %r to not be %r" % (stream, self.client._stream))
         self.assertEqual(sockname, self.client._stream.socket.getpeername())
 
+    def test_async_events_on_correct_ioloop(self):
+        client = self.client
+        # for managed ioloop, client must be using a different ioloop
+        self.assertNotEqual(client.ioloop, tornado.ioloop.IOLoop.current())
+        # check AsyncEvents (test is a little brittle)
+        self.assertEqual(client.ioloop, client._stopped._ioloop)
+        self.assertEqual(client.ioloop, client._running._ioloop)
+        self.assertEqual(client.ioloop, client._waiting_to_retry._ioloop)
+        self.assertEqual(client.ioloop, client._connected._ioloop)
+        self.assertEqual(client.ioloop, client._disconnected._ioloop)
+        self.assertEqual(client.ioloop, client._received_protocol_info._ioloop)
+
+
+class TestDeviceClientMemoryLeaks(tornado.testing.AsyncTestCase):
+
+    def setUp(self):
+        super(TestDeviceClientMemoryLeaks, self).setUp()
+        self.server = DeviceTestServer('', 0)
+        start_thread_with_cleanup(self, self.server, start_timeout=0.1)
+        self.host, self.port = self.server.bind_address
+
+    def use_on_managed_ioloop(self, client, timeout=0.1):
+        client.start(timeout=timeout)
+        client.wait_protocol(timeout=timeout)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=timeout)
+        client.join(timeout=timeout)
+
+    @gen.coroutine
+    def use_on_unmanaged_ioloop(self, client, timeout=0.1):
+        client.set_ioloop(self.io_loop)
+        client.start()  # no timeout if starting from ioloop thread
+        yield client.until_protocol(timeout=timeout)
+        self.assertTrue(client.protocol_flags)
+        client.stop(timeout=timeout)
+        yield client.until_stopped(timeout=timeout)
+
+    def test_no_memory_leak_managed_ioloop(self):
+        client = katcp.DeviceClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        self.use_on_managed_ioloop(client)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    @tornado.testing.gen_test
+    def test_no_memory_leak_unmanaged_ioloop(self):
+        client = katcp.DeviceClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        # use test's ioloop, so client does not create its own (i.e., unmanaged)
+        yield self.use_on_unmanaged_ioloop(client)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    @tornado.testing.gen_test
+    def test_no_memory_leak_change_ioloop(self):
+        client = katcp.DeviceClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        # start and stop client with managed ioloop
+        self.use_on_managed_ioloop(client)
+
+        # repeat with managed ioloop (new ioloop instance created)
+        self.use_on_managed_ioloop(client)
+
+        # change to unmanaged ioloop
+        yield self.use_on_unmanaged_ioloop(client)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_stop_current_ioloop(self):
+        # The DeviceClient may use the current ioloop during initialisation.
+        # Similarly, the DeviceTestServer created in setUp() may have references to
+        # the current ioloop.  We make a new instance to replace the current
+        # ioloop, which we can stop without affecting the server.  This test aims
+        # to verify that the client is not dependent on the ioloop that was
+        # current at the time the client was initialised.  This is only for
+        # the "managed" ioloop case.
+        ioloop = tornado.ioloop.IOLoop()
+        tornado.ioloop.IOLoop.make_current(ioloop)
+
+        client = katcp.DeviceClient(self.host, self.port)
+        wr = weakref.ref(client)
+        # close ioloop that was current when client created
+        ioloop.close()
+        self.use_on_managed_ioloop(client)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_async_client(self):
+        client = katcp.AsyncClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        self.use_on_managed_ioloop(client)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_callback_client(self):
+        client = katcp.CallbackClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        self.use_on_managed_ioloop(client)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_stopped_server(self):
+        client = katcp.DeviceClient(self.host, self.port)
+        wr = weakref.ref(client)
+
+        client.auto_reconnect_delay = 0.01
+        client.start(timeout=0.1)
+        client.wait_protocol(timeout=0.1)
+        self.assertTrue(client.protocol_flags)
+        # stop server before client
+        self.server.stop()
+        client.wait_disconnected(timeout=0.1)
+        self.assertFalse(client.is_connected())
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_invalid_server_no_reconnect(self):
+        bad_port = 0
+        client = katcp.DeviceClient(self.host, bad_port, auto_reconnect=False)
+        wr = weakref.ref(client)
+
+        client.start(timeout=0.1)
+        client.wait_connected(timeout=0.1)
+        self.assertFalse(client.is_connected())
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+    def test_no_memory_leak_invalid_server_auto_reconnect(self):
+        bad_port = 0
+        client = katcp.DeviceClient(self.host, bad_port, auto_reconnect=True)
+        wr = weakref.ref(client)
+
+        client.auto_reconnect_delay = 0.01  # speed up test
+        client.start(timeout=0.1)
+        client.wait_connected(timeout=2 * client.auto_reconnect_delay)
+        self.assertFalse(client.is_connected())
+        client.stop(timeout=0.1)
+        client.join(timeout=0.1)
+
+        # clear strong reference and check if object can be garbage collected
+        client = None
+        gc.collect()
+        self.assertIsNone(wr())
+
+
 class TestBlockingClient(unittest.TestCase):
     def setUp(self):
         self.server = DeviceTestServer('', 0)
@@ -326,13 +509,13 @@ class TestBlockingClient(unittest.TestCase):
         reply, informs = self.client.blocking_request(
             Message.request("watchdog"))
         self.assertEqual(reply.name, "watchdog")
-        self.assertEqual(reply.arguments, ["ok"])
+        self.assertEqual(reply.arguments, [b"ok"])
         self.assertEqual(remove_version_connect(informs), [])
 
         reply, informs = self.client.blocking_request(
             Message.request("help"))
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
+        self.assertEqual(reply.arguments, [b"ok", b"%d" % NUM_HELP_MESSAGES])
         self.assertEqual(len(informs), int(reply.arguments[1]))
 
     def test_blocking_request_mid(self):
@@ -352,7 +535,7 @@ class TestBlockingClient(unittest.TestCase):
         def blocking_request(*args, **kwargs):
             try:
                 return self.client.blocking_request(*args, **kwargs)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 if not e.args[0].startswith('Request '):
                     raise
 
@@ -365,7 +548,7 @@ class TestBlockingClient(unittest.TestCase):
         # send_message
         mids = [args[0].mid              # arg[0] should be the Message() object
                 for args, kwargs in self.client.send_message.call_args_list]
-        self.assertEqual(mids, ['1','2','3'])
+        self.assertEqual(mids, [b'1', b'2', b'3'])
         self.client.send_message.reset_mock()
 
         # Explicitly ask for no mid to be used
@@ -378,7 +561,7 @@ class TestBlockingClient(unittest.TestCase):
         self.client.send_message.reset_mock()
         blocking_request(Message.request('watchdog', mid=42), timeout=0)
         mid = self.client.send_message.call_args[0][0].mid
-        self.assertEqual(mid, '42')
+        self.assertEqual(mid, b'42')
 
         ## Check situation for a katcpv4 server
         self.client._server_supports_ids = False
@@ -406,7 +589,7 @@ class TestBlockingClient(unittest.TestCase):
         self.assertFalse(reply.reply_ok())
         self.assertRegexpMatches(
             reply.arguments[1],
-            r"Request slow-command timed out after 0\..* seconds.")
+            br"Request slow-command timed out after 0\..* seconds.")
 
 class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
@@ -437,7 +620,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def watchdog_reply(reply):
             self.assertEqual(reply.name, "watchdog")
-            self.assertEqual(reply.arguments, ["ok"])
+            self.assertEqual(reply.arguments, [b"ok"])
             watchdog_replies.append(reply)
             watchdog_replied.set()
 
@@ -456,7 +639,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
 
         def help_reply(reply):
             self.assertEqual(reply.name, "help")
-            self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
+            self.assertEqual(reply.arguments, [b"ok", b"%d" % NUM_HELP_MESSAGES])
             self.assertEqual(len(help_informs), int(reply.arguments[1]))
             help_replies.append(reply)
             help_replied.set()
@@ -479,7 +662,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         help_replied.wait(0.05)   # Check if (unwanted) late help replies arrive
         self.assertFalse(help_replied.isSet())
         self.assertEqual(len(help_replies), 1)
-        self.assertEqual(len(help_informs), NO_HELP_MESSAGES)
+        self.assertEqual(len(help_informs), NUM_HELP_MESSAGES)
 
     def test_callback_request_mid(self):
         ## Test that the client does the right thing with message identifiers
@@ -501,7 +684,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         # send_message
         mids = [args[0].mid              # args[0] should be the Message() object
                 for args, kwargs in self.client.send_message.call_args_list]
-        self.assertEqual(mids, ['1','2','3'])
+        self.assertEqual(mids, [b'1', b'2', b'3'])
         self.client.send_message.reset_mock()
 
         # Explicitly ask for no mid to be used
@@ -519,7 +702,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             Message.request('watchdog', mid=42), reply_cb=cb)
         cb.assert_wait()
         mid = self.client.send_message.call_args[0][0].mid
-        self.assertEqual(mid, '42')
+        self.assertEqual(mid, b'42')
 
         ## Check situation for a katcpv4 server
         self.client._server_supports_ids = False
@@ -572,8 +755,8 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertTrue(help_completed.isSet())
 
         self._assert_msgs_like(help_messages,
-            [("#help[1] ", "")] * NO_HELP_MESSAGES +
-            [("!help[1] ok %d" % NO_HELP_MESSAGES, "")])
+            [("#help[1] ", "")] * NUM_HELP_MESSAGES +
+            [("!help[1] ok %d" % NUM_HELP_MESSAGES, "")])
 
     def test_timeout(self):
         self._test_timeout()
@@ -612,7 +795,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(msg.name, "slow-command")
         self.assertFalse(msg.reply_ok())
         self.assertRegexpMatches(msg.arguments[1],
-                                 r"Request slow-command timed out after 0\..* seconds.")
+                                 br"Request slow-command timed out after 0\..* seconds.")
         self.assertEqual(len(remove_version_connect(informs)), 0)
         self.assertEqual(len(replies), 1)
 
@@ -632,7 +815,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.assertEqual(len(informs), 0)
         self.assertEqual([msg.name for msg in replies + informs],
                          ["slow-command"] * len(replies + informs))
-        self.assertEqual([msg.arguments for msg in replies], [["ok"]])
+        self.assertEqual([msg.arguments for msg in replies], [[b"ok"]])
 
     def test_timeout_nocb(self):
         """Test requests that timeout with no callbacks."""
@@ -688,7 +871,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         time.sleep(0.01)
         self.assertEqual(len(help_replies), 1)
         self.assertEqual(len(remove_version_connect(help_informs)),
-                         NO_HELP_MESSAGES)
+                         NUM_HELP_MESSAGES)
 
     def test_fifty_thread_mayhem(self):
         """Test using callbacks from fifty threads simultaneously."""
@@ -733,12 +916,12 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
             done.wait(5.0)
             self.assertTrue(done.isSet())
             self.assertEqual(len(replies), 1)
-            self.assertEqual(replies[0].arguments[0], "ok")
+            self.assertEqual(replies[0].arguments[0], b"ok")
             informs = remove_version_connect(informs)
-            if len(informs) != NO_HELP_MESSAGES:
+            if len(informs) != NUM_HELP_MESSAGES:
                 print(thread_id, len(informs))
                 print([x.arguments[0] for x in informs])
-            self.assertEqual(len(informs), NO_HELP_MESSAGES)
+            self.assertEqual(len(informs), NUM_HELP_MESSAGES)
 
     def test_blocking_request(self):
         """Test the callback client's blocking request."""
@@ -747,18 +930,18 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         )
 
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
-        self.assertEqual(len(remove_version_connect(informs)), NO_HELP_MESSAGES)
+        self.assertEqual(reply.arguments, [b"ok", b"%d" % NUM_HELP_MESSAGES])
+        self.assertEqual(len(remove_version_connect(informs)), NUM_HELP_MESSAGES)
 
         reply, informs = self.client.blocking_request(
             Message.request("slow-command", "0.5"),
             timeout=0.001)
 
         self.assertEqual(reply.name, "slow-command")
-        self.assertEqual(reply.arguments[0], "fail")
+        self.assertEqual(reply.arguments[0], b"fail")
         self.assertRegexpMatches(
             reply.arguments[1],
-            r"Request slow-command timed out after 0\..* seconds.")
+            br"Request slow-command timed out after 0\..* seconds.")
 
     def test_blocking_request_mid(self):
         ## Test that the blocking client does the right thing with message
@@ -779,7 +962,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         # send_message
         mids = [args[0].mid              # arg[0] should be the Message() object
                 for args, kwargs in self.client.send_message.call_args_list]
-        self.assertEqual(mids, ['1','2','3'])
+        self.assertEqual(mids, [b'1', b'2', b'3'])
         self.client.send_message.reset_mock()
 
         # Explicitly ask for no mid to be used
@@ -793,7 +976,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         self.client.blocking_request(Message.request(
             'watchdog', mid=42), timeout=0)
         mid = self.client.send_message.call_args[0][0].mid
-        self.assertEqual(mid, '42')
+        self.assertEqual(mid, b'42')
 
         ## Check situation for a katcpv4 server
         self.client._server_supports_ids = False
@@ -835,7 +1018,7 @@ class TestCallbackClient(unittest.TestCase, TestUtilMixin):
         reply_cb.assert_wait()
         self.assertEqual(len(replies), 1)
         self.assertEqual(replies[0].name, "foo")
-        self.assertEqual(replies[0].arguments, ["fail", "Error foo"])
+        self.assertEqual(replies[0].arguments, [b"fail", b"Error foo"])
 
     def test_stop_cleanup(self):
         self.client.wait_protocol(timeout=1)
@@ -894,15 +1077,15 @@ class test_AsyncClientIntegrated(tornado.testing.AsyncTestCase, TestUtilMixin):
         reply, informs = yield self.client.future_request(Message.request('watchdog'))
         self.assertEqual(len(informs), 0)
         self.assertEqual(reply.name, "watchdog")
-        self.assertEqual(reply.arguments, ["ok"])
+        self.assertEqual(reply.arguments, [b"ok"])
 
     @tornado.testing.gen_test
     def test_future_request_with_informs(self):
         yield self.client.until_connected()
         reply, informs = yield self.client.future_request(Message.request('help'))
         self.assertEqual(reply.name, "help")
-        self.assertEqual(reply.arguments, ["ok", "%d" % NO_HELP_MESSAGES])
-        self.assertEqual(len(informs), NO_HELP_MESSAGES)
+        self.assertEqual(reply.arguments, [b"ok", b"%d" % NUM_HELP_MESSAGES])
+        self.assertEqual(len(informs), NUM_HELP_MESSAGES)
 
     @tornado.testing.gen_test
     def test_disconnect_cleanup(self):
@@ -1033,4 +1216,4 @@ class test_AsyncClientTimeoutsIntegrated(test_AsyncClientIntegratedBase):
         self.assertFalse(reply.reply_ok())
         self.assertRegexpMatches(
             reply.arguments[1],
-            r"Request slow-command timed out after .* seconds.")
+            br"Request slow-command timed out after .* seconds.")

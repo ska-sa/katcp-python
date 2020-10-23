@@ -1,34 +1,38 @@
 # client.py
 # -*- coding: utf8 -*-
 # vim:fileencoding=utf8 ai ts=4 sts=4 et sw=4
-# Copyright 2009 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2009 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
 """Clients for the KAT device control language."""
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
 
+import logging
 import sys
 import traceback
-import logging
+
+from builtins import object
+from concurrent.futures import Future, TimeoutError
+from functools import partial, wraps
 
 import tornado.ioloop
-import tornado.tcpclient
 import tornado.iostream
+import tornado.tcpclient
 
-from functools import partial, wraps
-from thread import get_ident as get_thread_ident
-
+from _thread import get_ident as get_thread_ident
+from future.utils import with_metaclass
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
 from tornado.util import ObjectDict
-from concurrent.futures import Future, TimeoutError
 
-from .core import (DeviceMetaclass, MessageParser, Message,
-                   KatcpClientError, KatcpVersionError, KatcpClientDisconnected,
-                   ProtocolFlags, AsyncEvent, until_later, LatencyTimer,
-                   SEC_TS_KATCP_MAJOR, FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC)
+from .core import (FLOAT_TS_KATCP_MAJOR, SEC_TO_MS_FAC, SEC_TS_KATCP_MAJOR,
+                   AsyncEvent, DeviceMetaclass, KatcpClientDisconnected,
+                   KatcpClientError, KatcpVersionError, LatencyTimer, Message,
+                   MessageParser, ProtocolFlags, ensure_native_str, until_later)
 from .ioloop_manager import IOLoopManager
-
 
 # logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("katcp.client")
@@ -66,7 +70,7 @@ def make_threadsafe_blocking(meth):
     return meth
 
 
-class DeviceClient(object):
+class DeviceClient(with_metaclass(DeviceMetaclass, object)):
     """Device client proxy.
 
     Subclasses should implement .reply\_*, .inform\_* and
@@ -108,12 +112,11 @@ class DeviceClient(object):
     -----
 
     The client may block its ioloop if the default blocking tornado DNS
-    resolver is used. When an ioloop is shared, it would make sens to configure
+    resolver is used. When an ioloop is shared, it would make sense to configure
     one of the non-blocking resolver classes, see
     http://tornado.readthedocs.org/en/latest/netutil.html
 
     """
-    __metaclass__ = DeviceMetaclass
 
     MAX_MSG_SIZE = 2*1024*1024
     """Maximum message size that can be received in bytes.
@@ -147,43 +150,63 @@ class DeviceClient(object):
         self._bindaddr = (host, port)
         self._tb_limit = tb_limit
         self._logger = logger
-        # Indicate that client is running and ready connect
-        self._running = AsyncEvent()
-        # Indicate that the client is waiting for a reconnect. Purely for testing.
-        self._waiting_to_retry = AsyncEvent()
-        # Indicate that client is connected to its server
-        self._connected = AsyncEvent()
-        # Indicate that the client is disconnected
-        self._disconnected = AsyncEvent()
-        self._disconnected.set()
-        # Indicate that client has received KATCP protocol info from its server
-        self._received_protocol_info = AsyncEvent()
         self._auto_reconnect = auto_reconnect
         # Number of seconds to wait before retrying a connection
         self.auto_reconnect_delay = 0.5
         self._connect_failures = 0
-        self._server_supports_ids = False
-        self._protocol_flags = None
         self._static_protocol_configuration = False
+        self._static_protocol_flags = None
         # Last used unique message id counter
         self._last_msg_id = 0
-
-        self.ioloop = None
-        "The Tornado IOloop to use, set by self.set_ioloop()"
+        # The Tornado IOloop to use, set by self.set_ioloop()
+        self._ioloop = None
         # ID of Thread that hosts the IOLoop.
         # Used to check that we are running in the ioloop.
         self.ioloop_thread_id = None
         self._ioloop_manager = IOLoopManager(managed_default=True)
+        # Indicate thread safety. Managed by self.enable_thread_safety()
+        self._threadsafe = False
+        # Last time a connection was made in seconds since Unix Epoch
+        self.last_connect_time = None
+        self._init_state_per_run(ioloop=None)
+
+    def _init_state_per_run(self, ioloop):
+        """Initialise all state that can change per start..stop run.
+
+        The client can be started and stopped multiple times.  This method
+        initialises all the variables that keep client state related to a
+        single run.
+
+        This method must only be called from `__init__()`, and `start()` as
+        it modifies the overall state of the client.
+
+        """
+        # Indicate that client's main coroutine is not running
+        self._stopped = AsyncEvent(ioloop=ioloop)
+        self._stopped.set()
+        # Indicate that client is running and ready connect
+        self._running = AsyncEvent(ioloop=ioloop)
+        # Indicate that the client is waiting for a reconnect. Purely for testing.
+        self._waiting_to_retry = AsyncEvent(ioloop=ioloop)
+        # Indicate that client is connected to its server
+        self._connected = AsyncEvent(ioloop=ioloop)
+        # Indicate that the client is disconnected
+        self._disconnected = AsyncEvent(ioloop=ioloop)
+        self._disconnected.set()
+
+        # Indicate that client has received KATCP protocol info from its server
+        self._received_protocol_info = AsyncEvent(ioloop=ioloop)
+        self._server_supports_ids = False
+        self._protocol_flags = None
+        if self._static_protocol_configuration:
+            self.preset_protocol_flags(self._static_protocol_flags)
+
         # Current iostream instance, set by _connect()
         self._stream = None
         # tornado.tcpclient.TCPClient TCP connection factory, set by _install()
         self._tcp_client = None
-        # Indicate thread safety. Managed by self.enable_thread_safety()
-        self._threadsafe = False
         # Version information as received from the server
         self.versions = ObjectDict()
-        # Last time a connection was made in seconds since Unix Epoch
-        self.last_connect_time = None
 
     @property
     def protocol_flags(self):
@@ -220,6 +243,10 @@ class DeviceClient(object):
     def threadsafe(self):
         return self._threadsafe
 
+    @property
+    def ioloop(self):
+        return self._ioloop
+
     def convert_seconds(self, time_seconds):
         """Convert a time in seconds to the device timestamp units.
 
@@ -239,10 +266,10 @@ class DeviceClient(object):
             return device_time
 
     def _next_id(self):
-        """Return the next available message id."""
+        """Return the next available message id as a byte string."""
         assert get_thread_ident() == self.ioloop_thread_id
         self._last_msg_id += 1
-        return str(self._last_msg_id)
+        return b"%d" % self._last_msg_id
 
     def preset_protocol_flags(self, protocol_flags):
         """Preset server protocol flags.
@@ -256,6 +283,7 @@ class DeviceClient(object):
 
         """
         self._static_protocol_configuration = True
+        self._static_protocol_flags = protocol_flags
         self.protocol_flags = protocol_flags
 
     def inform_version_connect(self, msg):
@@ -263,9 +291,10 @@ class DeviceClient(object):
         if len(msg.arguments) < 2:
             return
         # Store version information.
-        name = msg.arguments[0]
-        self.versions[name] = tuple(msg.arguments[1:])
-        if msg.arguments[0] == "katcp-protocol":
+        name = ensure_native_str(msg.arguments[0])
+        self.versions[name] = tuple(
+            ensure_native_str(arg) for arg in msg.arguments[1:])
+        if msg.arguments[0] == b"katcp-protocol":
             protocol_flags = ProtocolFlags.parse_version(msg.arguments[1])
             self._set_protocol_from_inform(protocol_flags, msg)
 
@@ -372,7 +401,7 @@ class DeviceClient(object):
         return mid
 
     def send_request(self, msg):
-        """Send a request messsage.
+        """Send a request message.
 
         Parameters
         ----------
@@ -396,7 +425,8 @@ class DeviceClient(object):
 
         """
         assert get_thread_ident() == self.ioloop_thread_id
-        data = str(msg) + "\n"
+        data = bytes(msg) + b"\n"
+
         # Log all sent messages here so no one else has to.
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug("Sending to {}: {}"
@@ -438,7 +468,7 @@ class DeviceClient(object):
                 self._logger.warn("Reconnected to {0}"
                                   .format(self.bind_address_string))
             self._connect_failures = 0
-        except Exception, e:
+        except Exception as e:
             if self._connect_failures % 5 == 0:
                 # warn on every fifth failure
 
@@ -591,7 +621,7 @@ class DeviceClient(object):
                 self._logger.info("%s OK" % (msg.name,))
                 self.send_message(reply)
             else:
-                # Just pass on what is, potentially, a future. The implementor
+                # Just pass on what is, potentially, a future. The implementer
                 # of the request handler method must arrange for a reply to be
                 # sent. Since clients have no business dealing with requests in
                 # any case we don't do much to help them.
@@ -639,36 +669,35 @@ class DeviceClient(object):
 
     @gen.coroutine
     def _install(self):
-        ioloop_before = self.ioloop
-        # Do stuff to put us on the IOLoop
-        self._logger.debug("Starting client loop for {0!r}"
-                           .format(self._bindaddr))
-        self.ioloop_thread_id = get_thread_ident()
-        self._tcp_client = tornado.tcpclient.TCPClient()
-        self._running.set()
-        yield self._connect()
-        if self._stream is None and not self._auto_reconnect:
-            raise KatcpClientError("Failed to connect to {0!r}"
-                                   .format(self._bindaddr))
+        self._stopped.clear()
         try:
-            yield self._connect_loop()
-        except Exception:
-            self._logger.exception('Unhandled exception in _connect_loop()')
-        finally:
+            # Do stuff to put us on the IOLoop
+            self._logger.debug("Starting client loop for {0!r}"
+                               .format(self._bindaddr))
+            self.ioloop_thread_id = get_thread_ident()
+            self._tcp_client = tornado.tcpclient.TCPClient()
+            self._running.set()
+            yield self._connect()
+            if self._stream is None and not self._auto_reconnect:
+                raise KatcpClientError("Failed to connect to {0!r}"
+                                       .format(self._bindaddr))
             try:
-                # Make sure everything is torn down properly
-                if ioloop_before == self.ioloop:
-                    # But only if we are still using the same ioloop. If the ioloop has
-                    # changed that means this client has been stopped and re-started
-                    # before we could get back to this finally clause. This would result
-                    # in us stopping the new ioloop. D'oh!
-                    self.ioloop.add_callback(self.stop)
-            except RuntimeError, e:
-                if str(e) == 'IOLoop is closing':
-                    # Seems the ioloop was stopped already, no worries.
-                    self._running.clear()
-            self._logger.info("Client connect loop for {0!r} finished."
-                              .format(self._bindaddr))
+                yield self._connect_loop()
+            except Exception:
+                self._logger.exception('Unhandled exception in _connect_loop()')
+            finally:
+                try:
+                    # Make sure everything is torn down properly
+                    if self.running():
+                        self.stop()
+                except RuntimeError as e:
+                    if str(e) == 'IOLoop is closing':
+                        # Seems the ioloop was stopped already, no worries.
+                        self._running.clear()
+                self._logger.info("Client connect loop for {0!r} finished."
+                                  .format(self._bindaddr))
+        finally:
+            self._stopped.set()
 
     @gen.coroutine
     def _connect_loop(self):
@@ -682,7 +711,9 @@ class DeviceClient(object):
                 self.ioloop.add_callback(self._waiting_to_retry.set)
                 yield until_later(self.auto_reconnect_delay)
                 self._waiting_to_retry.clear()
-                yield self._connect()
+                # client may have been stopped while waiting on reconnect delay
+                if self.running():
+                    yield self._connect()
             else:
                 break
             # Allow stream-close handlers etc to run
@@ -695,7 +726,7 @@ class DeviceClient(object):
         latency_timer = LatencyTimer(self.MAX_LOOP_LATENCY)
         while self._running.isSet():
             try:
-                line_fut = self._stream.read_until_regex('\n|\r')
+                line_fut = self._stream.read_until_regex(b'\n|\r')
                 latency_timer.check_future(line_fut)
                 if latency_timer.time_to_yield():
                     yield gen.moment
@@ -705,7 +736,7 @@ class DeviceClient(object):
                 break
             except Exception:
                 if self._stream:
-                    line = ''
+                    line = b''
                     self._logger.warn('Unhandled Exception while reading from {0}:'
                                       .format(self._bindaddr), exc_info=True)
                     # Prevent potential tight error loops from blocking ioloop
@@ -715,7 +746,7 @@ class DeviceClient(object):
                     self._logger.warn('self._stream object seems to have disappeared.')
                     break
             try:
-                line = line.replace("\r", "\n").split("\n")[0]
+                line = line.replace(b"\r", b"\n").split(b"\n")[0]
                 msg = self._parser.parse(line) if line else None
             except Exception:
                 e_type, e_value, trace = sys.exc_info()
@@ -749,7 +780,7 @@ class DeviceClient(object):
 
         """
         self._ioloop_manager.set_ioloop(ioloop, managed=False)
-        self.ioloop = ioloop
+        self._ioloop = ioloop
 
     def enable_thread_safety(self):
         """Enable thread-safety features.
@@ -833,10 +864,12 @@ class DeviceClient(object):
         if self._running.isSet():
             raise RuntimeError("Device client already started.")
         # Make sure we have an ioloop
-        self.ioloop = self._ioloop_manager.get_ioloop()
+        self._ioloop = self._ioloop_manager.get_ioloop()
         if timeout:
             t0 = self.ioloop.time()
         self._ioloop_manager.start(timeout)
+        # update state variables before starting `_install()`
+        self._init_state_per_run(ioloop=self.ioloop)
         self.ioloop.add_callback(self._install)
         if timeout:
             remaining_timeout = timeout - (self.ioloop.time() - t0)
@@ -852,32 +885,72 @@ class DeviceClient(object):
 
         Notes
         -----
-        Does nothing if the ioloop is not managed.
+        Does nothing if the ioloop is not managed.  Use until_stopped() instead.
 
         """
         self._ioloop_manager.join(timeout)
 
     def stop(self, timeout=None):
-        """Stop a running client (from another thread).
+        """Stop a running client.
+
+        If using a managed ioloop, this must be called from a different
+        thread to the ioloop's.  This method only returns once the client's
+        main coroutine, `_install()`, has completed.
+
+        If using an unmanaged ioloop, this can be called from the
+        same thread as the ioloop.  The `until_stopped()` method can be
+        used to wait on completion of the main coroutine, `_install()`.
 
         Parameters
         ----------
         timeout : float in seconds
-           Seconds to wait for client thread to have *started*.
+           Seconds to wait for both client thread to have *started*, and
+           for stopping.
 
         """
         ioloop = getattr(self, 'ioloop', None)
         if not ioloop:
             raise RuntimeError('Call start() before stop()')
-        if timeout:
-            if get_thread_ident() == self.ioloop_thread_id:
-                raise RuntimeError('Cannot block inside ioloop')
-            self._running.wait_with_ioloop(self.ioloop, timeout)
+        stopped_from_ioloop_thread = get_thread_ident() == self.ioloop_thread_id
 
-        def _cleanup():
+        @tornado.gen.coroutine
+        def _stop():
+            if timeout:
+                yield self._running.until_set(timeout)
+            # clear _running before disconnecting to allow line_read_loop
+            # and connect_loop to exit
             self._running.clear()
             self._disconnect()
-        self._ioloop_manager.stop(timeout=timeout, callback=_cleanup)
+            if not stopped_from_ioloop_thread:
+                yield self._stopped.until_set(timeout)
+            # else unmanaged ioloop, so caller should yield on until_stopped()
+
+        self._ioloop_manager.stop(timeout=timeout, callback=_stop)
+
+    def until_stopped(self, timeout=None):
+        """Return future that resolves when the client has stopped.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for the client to stop.
+
+        Notes
+        -----
+
+        If already running, `stop()` must be called before this.
+
+        Must be called from the same ioloop as the client.
+        If using a different thread, or a managed ioloop, this
+        method should not be used.  Use `join()` instead.
+
+        Also note that stopped != not running.  Stopped means the
+        main coroutine has ended, or was never started.  When stopping,
+        the running flag is cleared some time before stopped is set.
+
+        """
+        assert get_thread_ident() == self.ioloop_thread_id
+        return self._stopped.until_set(timeout=timeout)
 
     def running(self):
         """Whether the client is running.
@@ -967,6 +1040,26 @@ class DeviceClient(object):
 
         """
         return self._connected.wait_with_ioloop(self.ioloop, timeout)
+
+    def wait_disconnected(self, timeout=None):
+        """Wait until the client is disconnected.
+
+        Parameters
+        ----------
+        timeout : float in seconds
+            Seconds to wait for the client to disconnect.
+
+        Returns
+        -------
+        disconnected : bool
+            Whether the client is disconnected.
+
+        Notes
+        -----
+        Do not call this from the ioloop, use until_disconnected().
+
+        """
+        return self._disconnected.wait_with_ioloop(self.ioloop, timeout)
 
     @tornado.gen.coroutine
     def until_protocol(self, timeout=None):
@@ -1152,7 +1245,7 @@ class AsyncClient(DeviceClient):
     @make_threadsafe
     def callback_request(self, msg, reply_cb=None, inform_cb=None,
                          user_data=None, timeout=None, use_mid=None):
-        """Send a request messsage.
+        """Send a request message.
 
         Parameters
         ----------
@@ -1191,13 +1284,13 @@ class AsyncClient(DeviceClient):
 
         try:
             self.send_request(msg)
-        except KatcpClientError, e:
+        except KatcpClientError as e:
             error_reply = Message.request(msg.name, "fail", str(e))
             error_reply.mid = mid
             self.handle_reply(error_reply)
 
     def future_request(self, msg, timeout=None, use_mid=None):
-        """Send a request messsage, with future replies.
+        """Send a request message, with future replies.
 
         Parameters
         ----------
@@ -1240,7 +1333,7 @@ class AsyncClient(DeviceClient):
         return f
 
     def blocking_request(self, msg, timeout=None, use_mid=None):
-        """Send a request messsage and wait for its reply.
+        """Send a request message and wait for its reply.
 
         Parameters
         ----------
@@ -1267,7 +1360,7 @@ class AsyncClient(DeviceClient):
             timeout = self._request_timeout
 
         f = Future()  # for thread safety
-        tf = [None]   # Placeholder for tornado Future for exception tracebacks
+        tf = [None]   # Place-holder for tornado Future for exception tracebacks
         def blocking_request_callback():
             try:
                 tf[0] = frf = self.future_request(msg, timeout=timeout,
@@ -1443,7 +1536,7 @@ class AsyncClient(DeviceClient):
 
     def _fail_waiting_requests(self, reason):
         # Fail all requests that have not yet received their replies
-        for request_data in self._async_queue.values():
+        for request_data in list(self._async_queue.values()):
             # Last one should be timeout handle
             timeout_handle = request_data[-1]
             if timeout_handle is not None:

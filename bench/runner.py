@@ -1,10 +1,18 @@
 #!/usr/bin/env python
+# Copyright 2010 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
+
+from __future__ import absolute_import, division, print_function
+
+import os
+import re
+import signal
+import sys
+from optparse import OptionParser
 
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol
-from optparse import OptionParser
 from twisted.python import log
-import re, os, sys, signal
 
 log.startLogging(open("log", "w"), setStdout=False)
 
@@ -32,9 +40,9 @@ class Master(object):
                 self.current_iteration += 1
             self.clients = []
             self.run()
-            print "next run"
+            print("next run")
         else:
-            print self.totals
+            print(self.totals)
             reactor.stop()
 
     def notify_connection_made(self, pid):
@@ -89,7 +97,7 @@ class BenchmarkClient(ProcessProtocol):
         val = int(out.strip())
         self.sensors.append(val)
         sys.stdout.write('[%d] ' % self.id + out)
-        avg = float(sum(self.sensors))/len(self.sensors)
+        avg = sum(self.sensors)/len(self.sensors)
         self.info = avg
         if len(self.sensors) > 30:
             self.sensors.pop(0)
@@ -97,7 +105,7 @@ class BenchmarkClient(ProcessProtocol):
             if diff < 0.30*avg:
                 self.master.stop()
             else:
-                print diff/avg
+                print(diff/avg)
 
     def errReceived(self, err):
         sys.stdout.write("ERR: " + err)
@@ -142,7 +150,7 @@ class BenchmarkServer(ProcessProtocol):
         self.master.notify_server_lost()
 
     def errReceived(self, err):
-        print "ERR:", err
+        print("ERR:", err)
 
 def main(python=sys.executable):
     parser = OptionParser()

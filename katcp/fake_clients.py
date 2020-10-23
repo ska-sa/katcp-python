@@ -1,17 +1,21 @@
-# Copyright 2015 SKA South Africa (http://ska.ac.za/)
-# BSD license - see COPYING for details
+# Copyright 2015 National Research Foundation (South African Radio Astronomy Observatory)
+# BSD license - see LICENSE for details
 
-from __future__ import division, print_function, absolute_import
+from __future__ import absolute_import, division, print_function
+from future import standard_library
+standard_library.install_aliases()  # noqa: E402
+
+from builtins import object
 
 import tornado.concurrent
 
-from thread import get_ident as get_thread_ident
-
-from tornado.gen import Return
+from _thread import get_ident as get_thread_ident
 from tornado.concurrent import Future
+from tornado.gen import Return
 
-from katcp import client, server, kattypes, resource, Sensor
-from katcp.core import AttrDict, ProtocolFlags, Message, convert_method_name
+from katcp import Sensor, client, kattypes, resource, server
+from katcp.core import AttrDict, Message, ProtocolFlags, convert_method_name
+
 
 def fake_KATCP_client_resource_factory(
         KATCPClientResourceClass, fake_options, resource_spec, *args, **kwargs):
@@ -156,6 +160,7 @@ class FakeKATCPClientResourceManager(object):
         """
         return self._fic_manager.add_request_handlers_dict(rh_dict)
 
+
 class FakeKATCPClientResourceContainerManager(object):
     def __init__(self, fake_katcp_resource_container):
         self._fkcrc = fake_katcp_resource_container
@@ -217,7 +222,11 @@ def fake_inspecting_client_factory(InspectingClass, fake_options, host, port,
     fic_manager = FakeInspectingClientManager(fic)
     return (fic, fic_manager)
 
+
 class FakeInspectingClientManager(object):
+
+    request_help = server.DeviceServer.__dict__["request_help"]
+
     def __init__(self, fake_inspecting_client):
         self._fic = fake_inspecting_client
         self._fkc = fake_inspecting_client.katcp_client
@@ -247,8 +256,6 @@ class FakeInspectingClientManager(object):
     def _request_handlers(self):
         """For compatibility with methods stolen from server.DeviceServer"""
         return self._fkc.request_handlers
-
-    request_help = server.DeviceServer.request_help.im_func
 
     def add_sensors(self, sensor_infos):
         """Add fake sensors
@@ -302,8 +309,10 @@ class FakeInspectingClientManager(object):
         self._fkc.request_handlers.update(rh_dict)
         self._fic._interface_changed.set()
 
+
 class FakeKATCPServerError(Exception):
     """Raised if a FakeKATCPServer is used in an unsupported way"""
+
 
 class FakeKATCPServer(object):
     """Fake the parts of a KATCP server used by katcp.server.ClientConnection"""
@@ -312,16 +321,17 @@ class FakeKATCPServer(object):
 
     def send_message(self, conn_id, msg):
         raise FakeKATCPServerError(
-            'Cannot send messages via fake request/conection object')
+            'Cannot send messages via fake request/connection object')
 
     def mass_send_message(self, msg):
         raise FakeKATCPServerError(
-            'Cannot send messages via fake request/conection object')
+            'Cannot send messages via fake request/connection object')
 
     def flush_on_close(self):
         f = Future()
         f.set_result(None)
         return f
+
 
 class FakeClientRequestConnection(server.ClientRequestConnection):
     def __init__(self, *args, **kwargs):
@@ -331,6 +341,7 @@ class FakeClientRequestConnection(server.ClientRequestConnection):
     def inform(self, *args):
         inf_msg = Message.reply_inform(self.msg, *args)
         self.informs_sent.append(inf_msg)
+
 
 class FakeAsyncClient(client.AsyncClient):
     """Fake version of :class:`katcp.client.AsyncClient`
@@ -368,7 +379,7 @@ class FakeAsyncClient(client.AsyncClient):
 
     @tornado.gen.coroutine
     def future_request(self, msg, timeout=None, use_mid=None):
-        """Send a request messsage, with future replies.
+        """Send a request message, with future replies.
 
         Parameters
         ----------
@@ -404,4 +415,3 @@ class FakeAsyncClient(client.AsyncClient):
 
         reply_msg.mid = mid
         raise Return((reply_msg, reply_informs))
-
