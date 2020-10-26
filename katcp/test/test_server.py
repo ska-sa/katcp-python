@@ -333,6 +333,63 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         msgs = [str(call[0][0]) for call in mock_conn.inform.call_args_list]
         self._assert_msgs_equal(msgs, self.expected_connect_messages)
 
+    def test_sensor_sampling(self):
+        start_thread_with_cleanup(self, self.server)
+        s = katcp.Sensor.float("a-sens")
+        s.set(1234, katcp.Sensor.NOMINAL, 5545.5)
+        self.server.add_sensor(s)
+        self.server._send_message = WaitingMock()
+        self.server.wait_running(timeout=1.0)
+        self.assertTrue(self.server.running())
+        self.server._strategies = defaultdict(lambda: {})
+        req = mock_req("sensor-sampling", "a-sens", "event")
+        self.server.request_sensor_sampling(req, req.msg).result(timeout=1)
+        inf = req.client_connection.inform
+        inf.assert_wait_call_count(count=1)
+        (inf_msg,) = inf.call_args[0]
+        self._assert_msgs_equal(
+            [inf_msg], (r"#sensor-status 1234.000000 1 a-sens nominal 5545.5",)
+        )
+        req = mock_req("sensor-sampling", "a-sens", "period", 1.5)
+        self.server.request_sensor_sampling(req, req.msg).result()
+        client = req.client_connection
+        strat = self.server._strategies[client][s]
+        self.assertEqual(strat._period, 1.5)
+
+        # We need to pass in the same client_conn as used by the previous
+        # request since strategies are bound to specific connections
+        req = mock_req("sensor-sampling", "a-sens", client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok a-sens period 1.5"])
+
+        req = mock_req(
+            "sensor-sampling", "a-sens", "differential", 1.5, client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok a-sens differential 1.5"])
+
+        req = mock_req(
+            "sensor-sampling", "a-sens", "event-rate", 1.5, 2.5, client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal(
+            [reply], ["!sensor-sampling ok a-sens event-rate 1.5 2.5"]
+        )
+
+        req = mock_req(
+            "sensor-sampling",
+            "a-sens",
+            "differential-rate",
+            1.5,
+            2.5,
+            3.5,
+            client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal(
+            [reply], ["!sensor-sampling ok a-sens differential-rate 1.5 2.5 3.5"]
+        )
+
     def test_request_sensor_sampling_clear(self):
         self.server.clear_strategies = mock.Mock()
         start_thread_with_cleanup(self, self.server, start_timeout=1)
@@ -389,7 +446,7 @@ class test_DeviceServerMemoryLeaks(unittest.TestCase):
 
 
 class test_DeviceServer51(test_DeviceServer):
-    """Proposed additional tests for Verion 5.1 server"""
+    """Proposed additional tests for Version 5.1 server"""
 
     expected_connect_messages = (
         r"#version-connect katcp-protocol 5.1-IMT",
