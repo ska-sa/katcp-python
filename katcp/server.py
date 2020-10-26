@@ -2196,9 +2196,10 @@ class DeviceServer(DeviceServerBase):
 
         Parameters
         ----------
-        names : list of str
+        names : str
             One or more names of sensors whose sampling strategy will be queried
-            or configured.
+            or configured. If specifying multiple sensors, these must be provided as a
+            comma-separated list.
             A query can only be done on a single sensor.  However, configuration
             can be done on many sensors with a single request, as long as they
             all use the same strategy.
@@ -2206,10 +2207,10 @@ class DeviceServer(DeviceServerBase):
             Multiple sensors are only allowed if the device server sets the protocol
             version to KATCP v5.1 or higher and enables the BULK_SET_SENSOR_SAMPLING
             flag in its PROTOCOL_INFO class attribute.
-        strategy : {'none', 'auto', 'event', 'differential', \
+        strategy : {'none', 'auto', 'event', 'differential', 'differential-rate',
                     'period', 'event-rate'}, optional
             Type of strategy to use to report the sensor value. The
-            differential strategy type may only be used with integer or float
+            differential strategy types may only be used with integer or float
             sensors. If this parameter is supplied, it sets the new strategy.
         params : list of str, optional
             Additional strategy parameters (dependent on the strategy type).
@@ -2225,15 +2226,19 @@ class DeviceServer(DeviceServerBase):
             given. If the event occurs more than once within the minimum period,
             only one update will occur. Whether or not the event occurs, the
             sensor value will be updated at least once per maximum period.
-            The differential-rate strategy is not supported in this release.
+            For the differential-rate strategy there are 3 parameters. The first is the
+            same as the differential strategy parameter. The second and third are the
+            minimum and maximum periods, respectively, as with the event-rate strategy.
 
         Returns
         -------
         success : {'ok', 'fail'}
             Whether the sensor-sampling request succeeded.
-        names : list str
-            Name(s) of the sensor queried or configured.
-        strategy : {'none', 'auto', 'event', 'differential', 'period'}
+        names : str
+            Name(s) of the sensor queried or configured. If multiple sensors, this will
+            be a comma-separated list.
+        strategy : {'none', 'auto', 'event', 'differential', 'differential-rate',
+                    'period', 'event-rate'}.
             Name(s) of the new or current sampling strategy for the sensor(s).
         params : list of str
             Additional strategy parameters (see description under Parameters).
@@ -2245,16 +2250,16 @@ class DeviceServer(DeviceServerBase):
             ?sensor-sampling cpu.power.on
             !sensor-sampling ok cpu.power.on none
 
-            ?sensor-sampling cpu.power.on period 500
-            !sensor-sampling ok cpu.power.on period 500
+            ?sensor-sampling cpu.power.on period 0.5
+            !sensor-sampling ok cpu.power.on period 0.5
 
             if BULK_SET_SENSOR_SAMPLING is enabled then:
 
-            ?sensor-sampling cpu.power.on fan.speed
+            ?sensor-sampling cpu.power.on,fan.speed
             !sensor-sampling fail Cannot\_query\_multiple\_sensors
 
-            ?sensor-sampling cpu.power.on fan.speed period 500
-            !sensor-sampling ok cpu.power.on fan.speed period 500
+            ?sensor-sampling cpu.power.on,fan.speed period 0.5
+            !sensor-sampling ok cpu.power.on,fan.speed period 0.5
 
         """
         if self.PROTOCOL_INFO.bulk_set_sensor_sampling and len(msg.arguments) > 1:
