@@ -341,8 +341,13 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self.server._send_message = WaitingMock()
         self.server.wait_running(timeout=1.0)
         self.assertTrue(self.server.running())
-        self.server._strategies = defaultdict(lambda: {})
-        req = mock_req("sensor-sampling", "a-sens", "event")
+
+        # We need to pass in the same client_conn for all requests
+        # since strategies are bound to specific connections.
+        client = WaitingMock()
+        self.server._strategies[client] = {}
+
+        req = mock_req("sensor-sampling", "a-sens", "event", client_conn=client)
         self.server.request_sensor_sampling(req, req.msg).result(timeout=1)
         inf = req.client_connection.inform
         inf.assert_wait_call_count(count=1)
@@ -350,14 +355,9 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         self._assert_msgs_equal(
             [inf_msg], (r"#sensor-status 1234.000000 1 a-sens nominal 5545.5",)
         )
-        req = mock_req("sensor-sampling", "a-sens", "period", 1.5)
-        self.server.request_sensor_sampling(req, req.msg).result()
-        client = req.client_connection
-        strat = self.server._strategies[client][s]
-        self.assertEqual(strat._period, 1.5)
 
-        # We need to pass in the same client_conn as used by the previous
-        # request since strategies are bound to specific connections
+        req = mock_req("sensor-sampling", "a-sens", "period", 1.5, client_conn=client)
+        self.server.request_sensor_sampling(req, req.msg).result()
         req = mock_req("sensor-sampling", "a-sens", client_conn=client)
         reply = self.server.request_sensor_sampling(req, req.msg).result()
         self._assert_msgs_equal([reply], ["!sensor-sampling ok a-sens period 1.5"])
