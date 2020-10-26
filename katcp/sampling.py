@@ -541,6 +541,10 @@ class SampleDifferentialRate(SampleEventRate):
             raise ValueError("The 'differential-rate' strategy takes three parameters.")
         super(SampleDifferentialRate, self).__init__(inform_callback, sensor,
                                                      *params[1:], **kwargs)
+        # Fix up the parameters so we do not loose the params that are not
+        # passed to SampleEventRate
+        self._params = params
+
         difference = params[0]
         if sensor.stype == 'integer':
             difference = int(difference)
