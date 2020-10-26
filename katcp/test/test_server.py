@@ -390,6 +390,26 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
             [reply], ["!sensor-sampling ok a-sens differential-rate 1.5 2.5 3.5"]
         )
 
+    def test_bulk_sensor_sampling_not_supported(self):
+        start_thread_with_cleanup(self, self.server)
+        self.server._send_message = WaitingMock()
+        self.server.wait_running(timeout=1.0)
+        self.assertTrue(self.server.running())
+
+        req = mock_req("sensor-sampling", "an.int,a.float", "period", 1.5)
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
+    def test_querying_multiple_sensor_sampling_strategies_fails(self):
+        start_thread_with_cleanup(self, self.server)
+        self.server._send_message = WaitingMock()
+        self.server.wait_running(timeout=1.0)
+        self.assertTrue(self.server.running())
+
+        req = mock_req("sensor-sampling", "an.int,a.float")
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
     def test_request_sensor_sampling_clear(self):
         self.server.clear_strategies = mock.Mock()
         start_thread_with_cleanup(self, self.server, start_timeout=1)
@@ -446,10 +466,10 @@ class test_DeviceServerMemoryLeaks(unittest.TestCase):
 
 
 class test_DeviceServer51(test_DeviceServer):
-    """Proposed additional tests for Version 5.1 server"""
+    """Additional tests for Version 5.1 server"""
 
     expected_connect_messages = (
-        r"#version-connect katcp-protocol 5.1-IMT",
+        r"#version-connect katcp-protocol 5.1-BIMT",
         r"#version-connect katcp-library katcp-python-%s" % katcp_version,
         r"#version-connect katcp-device deviceapi-5.6 buildy-1.2g",
     )
@@ -463,6 +483,7 @@ class test_DeviceServer51(test_DeviceServer):
                     katcp.ProtocolFlags.MULTI_CLIENT,
                     katcp.ProtocolFlags.MESSAGE_IDS,
                     katcp.ProtocolFlags.REQUEST_TIMEOUT_HINTS,
+                    katcp.ProtocolFlags.BULK_SET_SENSOR_SAMPLING,
                 ],
             )
 
@@ -518,6 +539,29 @@ class test_DeviceServer51(test_DeviceServer):
                 "#request-timeout-hint slow-command 99.0",
             ],
         )
+
+    def test_bulk_sensor_sampling_supported(self):
+        start_thread_with_cleanup(self, self.server)
+        self.server._send_message = WaitingMock()
+        self.server.wait_running(timeout=1.0)
+        self.assertTrue(self.server.running())
+
+        # We need to pass in the same client_conn for all requests
+        # since strategies are bound to specific connections.
+        client = WaitingMock()
+        self.server._strategies[client] = {}
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "period", 1.5, client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal(
+            [reply], ["!sensor-sampling ok an.int,a.float period 1.5"]
+        )
+
+    # TODO: AM - Add a comment to explain why we have an empty test
+    def test_bulk_sensor_sampling_not_supported(self):
+        pass
 
 
 class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
