@@ -2367,7 +2367,7 @@ class DeviceServer(DeviceServerBase):
             if name not in self._sensors:
                 invalid_names.append(name)
         if invalid_names:
-            raise FailReply("Unknown sensor names: %s." % " ".join(invalid_names))
+            raise FailReply("Unknown sensor names: %r." % invalid_names)
 
         requested_strategies = {}
         try:
@@ -2380,7 +2380,13 @@ class DeviceServer(DeviceServerBase):
         except Exception as e:
             raise FailReply("Invalid strategy requested: %s." % e)
         if not requested_strategies:
-            raise FailReply("No valid strategy provided: %s." % msg.arguments)
+            raise FailReply(
+                "Invalid request: names %r, strategy %r, params %r." % (
+                    names,
+                    ensure_native_str(strategy),
+                    [ensure_native_str(p) for p in params]
+                )
+            )
 
         for name in names:
             sensor = self._sensors[name]

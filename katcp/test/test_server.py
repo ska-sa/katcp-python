@@ -390,15 +390,16 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
             [reply], ["!sensor-sampling ok a-sens differential-rate 1.5 2.5 3.5"]
         )
 
-    def test_bulk_sensor_sampling_not_supported(self):
-        start_thread_with_cleanup(self, self.server)
-        self.server._send_message = WaitingMock()
-        self.server.wait_running(timeout=1.0)
-        self.assertTrue(self.server.running())
+    def test_bulk_sensor_sampling_fails_if_not_supported(self):
+        if not self.server.PROTOCOL_INFO.bulk_set_sensor_sampling:
+            start_thread_with_cleanup(self, self.server)
+            self.server._send_message = WaitingMock()
+            self.server.wait_running(timeout=1.0)
+            self.assertTrue(self.server.running())
 
-        req = mock_req("sensor-sampling", "an.int,a.float", "period", 1.5)
-        with self.assertRaises(FailReply):
-            self.server.request_sensor_sampling(req, req.msg).result()
+            req = mock_req("sensor-sampling", "an.int,a.float", "period", 1.5)
+            with self.assertRaises(FailReply):
+                self.server.request_sensor_sampling(req, req.msg).result()
 
     def test_querying_multiple_sensor_sampling_strategies_fails(self):
         start_thread_with_cleanup(self, self.server)
@@ -540,7 +541,7 @@ class test_DeviceServer51(test_DeviceServer):
             ],
         )
 
-    def test_bulk_sensor_sampling_supported(self):
+    def set_up_client_for_bulk_sensor_sampling(self):
         start_thread_with_cleanup(self, self.server)
         self.server._send_message = WaitingMock()
         self.server.wait_running(timeout=1.0)
@@ -550,6 +551,10 @@ class test_DeviceServer51(test_DeviceServer):
         # since strategies are bound to specific connections.
         client = WaitingMock()
         self.server._strategies[client] = {}
+        return client
+
+    def test_bulk_sensor_sampling_set_for_multiple_sensors(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
 
         req = mock_req(
             "sensor-sampling", "an.int,a.float", "period", 1.5, client_conn=client
@@ -559,8 +564,53 @@ class test_DeviceServer51(test_DeviceServer):
             [reply], ["!sensor-sampling ok an.int,a.float period 1.5"]
         )
 
-    # TODO: AM - Add a comment to explain why we have an empty test
-    def test_bulk_sensor_sampling_not_supported(self):
+        req = mock_req("sensor-sampling", "an.int", client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok an.int period 1.5"])
+
+        req = mock_req("sensor-sampling", "a.float", client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok a.float period 1.5"])
+
+    def test_bulk_sensor_sampling_sends_informs_for_multiple_sensors(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "event", client_conn=client
+        )
+        self.server.request_sensor_sampling(req, req.msg).result(timeout=1)
+        inform = req.client_connection.inform
+        inform.assert_wait_call_count(count=2)
+        inform_messages = [call.args[0] for call in inform.call_args_list]
+        self._assert_msgs_equal(
+            inform_messages, (
+                r"#sensor-status 12345.000000 1 an.int nominal 3",
+                r"#sensor-status 12345.000000 1 a.float nominal 12.0",
+            )
+        )
+
+    def test_bulk_sensor_sampling_fails_for_invalid_sensor_name(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,an.invalid", "period", 2.5, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+          self.server.request_sensor_sampling(req, req.msg).result()
+
+    def test_bulk_sensor_sampling_fails_for_empty_sensor_name(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "", "period", 2.5, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+          self.server.request_sensor_sampling(req, req.msg).result()
+
+    def test_bulk_sensor_sampling_fails_for_invalid_strategy(self):
+        pass
+
+    def test_bulk_sensor_sampling_fails_for_valid_strategy_invalid_params(self):
         pass
 
 
