@@ -2262,7 +2262,7 @@ class DeviceServer(DeviceServerBase):
             !sensor-sampling ok cpu.power.on,fan.speed period 0.5
 
         """
-        if self.PROTOCOL_INFO.bulk_set_sensor_sampling and len(msg.arguments) > 1 and (',' in msg.arguments[0]):
+        if self.PROTOCOL_INFO.bulk_set_sensor_sampling and len(msg.arguments) > 1:
             handler = self._handle_bulk_set_sensor_sampling
         else:
             handler = self._handle_sensor_sampling
@@ -2348,96 +2348,62 @@ class DeviceServer(DeviceServerBase):
         if not msg.arguments:
             raise FailReply("No sensor name given.")
 
+        # The client connection that is not specific to this request context
+        client = req.client_connection
+
         def inform_callback(sensor, reading):
             """Inform callback for sensor strategy."""
             timestamp, status, value = reading
-            cb_msg = format_inform(sensor, timestamp, status, value)
+            cb_msg = format_inform_v5(sensor, timestamp, status, value)
             client.inform(cb_msg)
 
-        # Arguments start with one or more sensor names.  Check the first one now.
-        # A sensor object is required for testing the sampling strategies, so
-        # the first one is as good as any.
-        _name = msg.arguments[0]
-        sensor_names = _name.split(',')
-        for name in sensor_names:
+        names_arg = ensure_native_str(msg.arguments[0])
+        names = names_arg.split(',')
+        strategy = msg.arguments[1]
+        params = msg.arguments[2:]
+
+        invalid_names = []
+        for name in names:
             if name not in self._sensors:
-                raise FailReply("Unknown sensor name: %s." % name)
-            sensor = self._sensors[name]
+                invalid_names.append(name)
+        if invalid_names:
+            raise FailReply("Unknown sensor names: %s." % " ".join(invalid_names))
 
-            # The client connection that is not specific to this request context
-            client = req.client_connection
-            katcp_version = self.PROTOCOL_INFO.major
-            format_inform = (format_inform_v5
-                            if katcp_version >= SEC_TS_KATCP_MAJOR
-                            else format_inform_v4)
-
-            # TODO: AM - Handle multiple sensors that will be separated by comma.
-            # Parse arguments from the back, trying all possible strategies until
-            # a valid one is found.  The number of arguments to define a strategy
-            # is one for the name, plus the number of params expected for that type
-            # of strategy.
-            # E.g., for 'none', only 1 argument.  For 'event-rate 5 60', 3 arguments.
-            requested_strategy = None
-            min_args = 1
-            max_args = 1 + max(SampleStrategy.SAMPLING_NUM_PARAMS_LOOKUP.values())
-            for num_strategy_args in range(min_args, max_args + 1):
-                args = msg.arguments[-num_strategy_args:]
-                try:
-                    strategy = args[0]
-                    params = args[1:]
-                    if self.PROTOCOL_INFO.strategy_allowed(strategy):
-                        if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
-                            # Slightly nasty hack, but since period is the only v4 strategy
-                            # involving timestamps it's not _too_ nasty :)
-                            params = [float(params[0]) * MS_TO_SEC_FAC] + params[1:]
-                        requested_strategy = SampleStrategy.get_strategy(
-                            strategy, inform_callback, sensor, *params, ioloop=self.ioloop)
-                        if requested_strategy:
-                            break
-                except Exception:
-                    pass
-
-            if not requested_strategy:
-                raise FailReply("No valid strategy provided: %s." % msg.arguments)
-
-            # with known strategy, remaining arguments are sensor names
-            names = msg.arguments[0:-num_strategy_args]
-            invalid_names = []
-            for name in names:
-                if name not in self._sensors:
-                    invalid_names.append(name)
-            if invalid_names:
-                raise FailReply("Unknown sensor names: %s." % " ".join(invalid_names))
-
+        requested_strategies = {}
+        try:
             for name in names:
                 sensor = self._sensors[name]
+                if self.PROTOCOL_INFO.strategy_allowed(strategy):
+                    requested_strategy = SampleStrategy.get_strategy(
+                        strategy, inform_callback, sensor, *params, ioloop=self.ioloop)
+                    requested_strategies[name] = requested_strategy
+        except Exception as e:
+            raise FailReply("Invalid strategy requested: %s." % e)
+        if not requested_strategies:
+            raise FailReply("No valid strategy provided: %s." % msg.arguments)
 
-                # attempt to set sampling strategy
-                new_strategy = SampleStrategy.get_strategy(
-                    strategy, inform_callback, sensor, *params, ioloop=self.ioloop)
+        for name in names:
+            sensor = self._sensors[name]
 
-                # Remove and cancel old strategy
-                old_strategy = self._strategies[client].pop(sensor, None)
-                if old_strategy:
-                    old_strategy.cancel()
+            # Remove and cancel old strategy
+            old_strategy = self._strategies[client].pop(sensor, None)
+            if old_strategy:
+                old_strategy.cancel()
 
-                # todo: replace isinstance check with something better
-                if not isinstance(new_strategy, SampleNone):
-                    self._strategies[client][sensor] = new_strategy
-                    new_strategy.start()
+            # Replace with new strategy
+            new_strategy = requested_strategies[name]
+            if not isinstance(new_strategy, SampleNone):
+                self._strategies[client][sensor] = new_strategy
+                new_strategy.start()
 
-            strategy, params = requested_strategy.get_sampling_formatted()
-            if katcp_version < SEC_TS_KATCP_MAJOR and strategy == 'period':
-                # Another slightly nasty hack, but since period is the only
-                # v4 strategy involving timestamps it's not _too_ nasty :)
-                params = [int(float(params[0]) * SEC_TO_MS_FAC)] + params[1:]
+        # Let the ioloop run so that the #sensor-status informs are sent before
+        # the reply. Not strictly neccesary, but a number of tests depend on
+        # this behaviour, less effort to fix it here :-/
+        yield gen.moment
 
-            # Let the ioloop run so that the #sensor-status informs are sent before
-            # the reply. Not strictly neccesary, but a number of tests depend on
-            # this behaviour, less effort to fix it here :-/
-            yield gen.moment
-            reply_args = names + [strategy] + params
-            raise gen.Return(req.make_reply("ok", *reply_args))
+        strategy, params = requested_strategy.get_sampling_formatted()
+        reply_args = [",".join(names)] + [strategy] + params
+        raise gen.Return(req.make_reply("ok", *reply_args))
 
     @request()
     @return_reply()
