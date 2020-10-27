@@ -596,7 +596,7 @@ class test_DeviceServer51(test_DeviceServer):
             "sensor-sampling", "an.int,an.invalid", "period", 2.5, client_conn=client
         )
         with self.assertRaises(FailReply):
-          self.server.request_sensor_sampling(req, req.msg).result()
+            self.server.request_sensor_sampling(req, req.msg).result()
 
     def test_bulk_sensor_sampling_fails_for_empty_sensor_name(self):
         client = self.set_up_client_for_bulk_sensor_sampling()
@@ -605,7 +605,7 @@ class test_DeviceServer51(test_DeviceServer):
             "sensor-sampling", "", "period", 2.5, client_conn=client
         )
         with self.assertRaises(FailReply):
-          self.server.request_sensor_sampling(req, req.msg).result()
+            self.server.request_sensor_sampling(req, req.msg).result()
 
     def test_bulk_sensor_sampling_fails_for_invalid_strategy(self):
         pass
