@@ -2273,7 +2273,7 @@ class DeviceServer(DeviceServerBase):
 
     def _is_bulk_sampling_required(self, msg_args):
         bulk_sampling_enabled = self.PROTOCOL_INFO.bulk_set_sensor_sampling
-        multiple_sensors_provided = ',' in msg_args[0] if msg_args else False
+        multiple_sensors_provided = b',' in msg_args[0] if msg_args else False
         strategy_provided = len(msg_args) > 1
         return (
             bulk_sampling_enabled and (multiple_sensors_provided or strategy_provided)
