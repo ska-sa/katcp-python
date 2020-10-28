@@ -632,7 +632,7 @@ class test_DeviceServer51(test_DeviceServer):
         req = mock_req(
             "sensor-sampling", "an.int,a.float", "invalid-strategy", 2.5, 1,
             client_conn=client
-            )
+        )
         with self.assertRaises(FailReply):
             self.server.request_sensor_sampling(req, req.msg).result()
 
