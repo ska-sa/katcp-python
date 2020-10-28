@@ -611,7 +611,8 @@ class test_DeviceServer51(test_DeviceServer):
         client = self.set_up_client_for_bulk_sensor_sampling()
 
         req = mock_req(
-            "sensor-sampling", "an.int,a.float", "invalid-strategy", 2.5, client_conn=client
+            "sensor-sampling", "an.int,a.float", "invalid-strategy", 2.5,
+            client_conn=client
         )
         with self.assertRaises(FailReply):
             self.server.request_sensor_sampling(req, req.msg).result()
@@ -629,8 +630,9 @@ class test_DeviceServer51(test_DeviceServer):
         client = self.set_up_client_for_bulk_sensor_sampling()
 
         req = mock_req(
-            "sensor-sampling", "an.int,a.float", "invalid-strategy", 2.5, 1.
-        )
+            "sensor-sampling", "an.int,a.float", "invalid-strategy", 2.5, 1,
+            client_conn=client
+            )
         with self.assertRaises(FailReply):
             self.server.request_sensor_sampling(req, req.msg).result()
 
