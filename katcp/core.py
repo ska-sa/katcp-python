@@ -630,7 +630,7 @@ class ProtocolFlags(object):
     * M - server supports multiple clients
     * I - server supports message identifiers
     * T - server provides request timeout hints via ?request-timeout-hint
-    * B - server supports bulk list of sensors to ?sensor-sample
+    * B - server supports bulk list of sensors to ?sensor-sampling
 
     Parameters
     ----------
