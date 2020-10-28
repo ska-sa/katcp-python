@@ -2262,7 +2262,7 @@ class DeviceServer(DeviceServerBase):
             !sensor-sampling ok cpu.power.on,fan.speed period 0.5
 
         """
-        if self.PROTOCOL_INFO.bulk_set_sensor_sampling and len(msg.arguments) > 1:
+        if self._is_bulk_sampling_required(msg.arguments):
             handler = self._handle_bulk_set_sensor_sampling
         else:
             handler = self._handle_sensor_sampling
@@ -2270,6 +2270,14 @@ class DeviceServer(DeviceServerBase):
         self.ioloop.add_callback(lambda: chain_future(
             handler(req, msg), f))
         return f
+
+    def _is_bulk_sampling_required(self, msg_args):
+        bulk_sampling_enabled = self.PROTOCOL_INFO.bulk_set_sensor_sampling
+        multiple_sensors_provided = ',' in msg_args[0] if msg_args else False
+        strategy_provided = len(msg_args) > 1
+        return (
+            bulk_sampling_enabled and (multiple_sensors_provided or strategy_provided)
+        )
 
     @gen.coroutine
     def _handle_sensor_sampling(self, req, msg):
@@ -2359,6 +2367,10 @@ class DeviceServer(DeviceServerBase):
 
         names_arg = ensure_native_str(msg.arguments[0])
         names = names_arg.split(',')
+
+        if not len(msg.arguments) > 1:
+            raise FailReply("Cannot query multiple sensors.")
+
         strategy = msg.arguments[1]
         params = msg.arguments[2:]
 
@@ -2410,6 +2422,7 @@ class DeviceServer(DeviceServerBase):
         strategy, params = requested_strategy.get_sampling_formatted()
         reply_args = [",".join(names)] + [strategy] + params
         raise gen.Return(req.make_reply("ok", *reply_args))
+
 
     @request()
     @return_reply()

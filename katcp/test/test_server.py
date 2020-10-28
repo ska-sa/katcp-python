@@ -636,6 +636,12 @@ class test_DeviceServer51(test_DeviceServer):
         with self.assertRaises(FailReply):
             self.server.request_sensor_sampling(req, req.msg).result()
 
+    def test_bulk_sensor_sampling_fails_for_no_strategy(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req("sensor-sampling", "an.int,a.float", client_conn=client)
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
 
 
 class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
