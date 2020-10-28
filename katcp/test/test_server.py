@@ -572,6 +572,25 @@ class test_DeviceServer51(test_DeviceServer):
         reply = self.server.request_sensor_sampling(req, req.msg).result()
         self._assert_msgs_equal([reply], ["!sensor-sampling ok a.float period 1.5"])
 
+    def test_bulk_sensor_sampling_set_for_multiple_sensors_and_individually(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "period", 1.5, client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal(
+            [reply], ["!sensor-sampling ok an.int,a.float period 1.5"]
+        )
+
+        req = mock_req("sensor-sampling", "an.int", "period", 3.14, client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok an.int period 3.14"])
+
+        req = mock_req("sensor-sampling", "a.float", "period", 0.7, client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok a.float period 0.7"])
+
     def test_bulk_sensor_sampling_sends_informs_for_multiple_sensors(self):
         client = self.set_up_client_for_bulk_sensor_sampling()
 
