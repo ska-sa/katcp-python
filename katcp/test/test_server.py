@@ -608,10 +608,23 @@ class test_DeviceServer51(test_DeviceServer):
             self.server.request_sensor_sampling(req, req.msg).result()
 
     def test_bulk_sensor_sampling_fails_for_invalid_strategy(self):
-        pass
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "some_strategy", 2.5, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
 
     def test_bulk_sensor_sampling_fails_for_valid_strategy_invalid_params(self):
-        pass
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "some_strategy", 2.5, 1.5, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
 
 
 class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
