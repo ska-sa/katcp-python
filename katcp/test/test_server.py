@@ -671,7 +671,7 @@ class test_DeviceServer51(test_DeviceServer):
             [reply], ["!sensor-sampling ok an.int,a.discrete event"]
         )
         # Save new strategies for comparison later
-        original_strategies = self.server._stratiegies
+        original_strategies = self.server._strategies
 
         # Request stategy that doens't work for one fo the sensors
         req = mock_req(
