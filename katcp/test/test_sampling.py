@@ -349,16 +349,15 @@ class TestSampling(TimewarpAsyncTestCase):
 
     @tornado.testing.gen_test(timeout=200)
     def test_differential_rate(self):
+        delta = 2
         shortest = 1.5
         longest = 4.5
-        delta = 2
         t, status, value = self.sensor.read()
-        # TODO change to be differentialrate test
 
         DUT = sampling.SampleDifferentialRate(
             self.inform, self.sensor, delta, shortest, longest)
         self.assertEqual(
-            DUT.get_sampling_formatted(), (b'differential-rate', [b'1.5', b'4.5']))
+            DUT.get_sampling_formatted(), (b'differential-rate', [b'2', b'1.5', b'4.5']))
         self.assertEqual(len(self.calls), 0)
         DUT.start()
         yield self.wake_ioloop()

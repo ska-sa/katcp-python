@@ -2164,13 +2164,13 @@ class DeviceServer(DeviceServerBase):
         ::
 
             ?sensor-value
-            #sensor-value 1244631611.415231 1 psu.voltage 4.5
-            #sensor-value 1244631611.415200 1 cpu.status off
+            #sensor-value 1244631611.415231 1 psu.voltage nominal 4.5
+            #sensor-value 1244631611.415200 1 cpu.status nominal off
             ...
             !sensor-value ok 5
 
             ?sensor-value cpu.power.on
-            #sensor-value 1244631611.415231 1 cpu.power.on 0
+            #sensor-value 1244631611.415231 1 cpu.power.on nominal 0
             !sensor-value ok 1
 
         """
@@ -2189,19 +2189,28 @@ class DeviceServer(DeviceServerBase):
         return req.make_reply("ok", str(len(sensors)))
 
     def request_sensor_sampling(self, req, msg):
-        """Configure or query the way a sensor is sampled.
+        r"""Configure or query the way a sensor is sampled.
 
         Sampled values are reported asynchronously using the #sensor-status
         message.
 
         Parameters
         ----------
-        name : str
-            Name of the sensor whose sampling strategy to query or configure.
-        strategy : {'none', 'auto', 'event', 'differential', \
+        names : str
+            One or more names of sensors whose sampling strategy will be queried
+            or configured. If specifying multiple sensors, these must be provided as a
+            comma-separated list.
+            A query can only be done on a single sensor.  However, configuration
+            can be done on many sensors with a single request, as long as they
+            all use the same strategy.
+            Note:  prior to KATCP v5.1 only a single sensor could be configured.
+            Multiple sensors are only allowed if the device server sets the protocol
+            version to KATCP v5.1 or higher and enables the BULK_SET_SENSOR_SAMPLING
+            flag in its PROTOCOL_INFO class attribute.
+        strategy : {'none', 'auto', 'event', 'differential', 'differential-rate',
                     'period', 'event-rate'}, optional
             Type of strategy to use to report the sensor value. The
-            differential strategy type may only be used with integer or float
+            differential strategy types may only be used with integer or float
             sensors. If this parameter is supplied, it sets the new strategy.
         params : list of str, optional
             Additional strategy parameters (dependent on the strategy type).
@@ -2217,19 +2226,36 @@ class DeviceServer(DeviceServerBase):
             given. If the event occurs more than once within the minimum period,
             only one update will occur. Whether or not the event occurs, the
             sensor value will be updated at least once per maximum period.
-            The differential-rate strategy is not supported in this release.
+            For the differential-rate strategy there are 3 parameters. The first is the
+            same as the differential strategy parameter. The second and third are the
+            minimum and maximum periods, respectively, as with the event-rate strategy.
+
+        Informs
+        -------
+        timestamp : float
+            Timestamp of the sensor reading in seconds since the Unix
+            epoch, or milliseconds for katcp versions <= 4.
+        count : {1}
+            Number of sensors described in this #sensor-status inform. Will
+            always be one. It exists to keep this inform compatible with
+            #sensor-value.
+        name : str
+            Name of the sensor whose value is being reported.
+        value : object
+            Value of the named sensor. Type depends on the type of the sensor.
 
         Returns
         -------
         success : {'ok', 'fail'}
             Whether the sensor-sampling request succeeded.
-        name : str
-            Name of the sensor queried or configured.
-        strategy : {'none', 'auto', 'event', 'differential', 'period'}
-            Name of the new or current sampling strategy for the sensor.
+        names : str
+            Name(s) of the sensor queried or configured. If multiple sensors, this will
+            be a comma-separated list.
+        strategy : {'none', 'auto', 'event', 'differential', 'differential-rate',
+                    'period', 'event-rate'}.
+            Name of the new or current sampling strategy for the sensor(s).
         params : list of str
             Additional strategy parameters (see description under Parameters).
-
         Examples
         --------
         ::
@@ -2237,14 +2263,37 @@ class DeviceServer(DeviceServerBase):
             ?sensor-sampling cpu.power.on
             !sensor-sampling ok cpu.power.on none
 
-            ?sensor-sampling cpu.power.on period 500
-            !sensor-sampling ok cpu.power.on period 500
+            ?sensor-sampling cpu.power.on period 0.5
+            #sensor-status 1244631611.415231 1 cpu.power.on nominal 1
+            !sensor-sampling ok cpu.power.on period 0.5
+
+            if BULK_SET_SENSOR_SAMPLING is enabled then:
+
+            ?sensor-sampling cpu.power.on,fan.speed
+            !sensor-sampling fail Cannot\_query\_multiple\_sensors
+
+            ?sensor-sampling cpu.power.on,fan.speed period 0.5
+            #sensor-status 1244631611.415231 1 cpu.power.on nominal 1
+            #sensor-status 1244631611.415200 1 fan.speed nominal 10.0
+            !sensor-sampling ok cpu.power.on,fan.speed period 0.5
 
         """
+        if self._is_bulk_sampling_required(msg.arguments):
+            handler = self._handle_bulk_set_sensor_sampling
+        else:
+            handler = self._handle_sensor_sampling
         f = Future()
         self.ioloop.add_callback(lambda: chain_future(
-            self._handle_sensor_sampling(req, msg), f))
+            handler(req, msg), f))
         return f
+
+    def _is_bulk_sampling_required(self, msg_args):
+        bulk_sampling_enabled = self.PROTOCOL_INFO.bulk_set_sensor_sampling
+        multiple_sensors_provided = b',' in msg_args[0] if msg_args else False
+        strategy_provided = len(msg_args) > 1
+        return (
+            bulk_sampling_enabled and (multiple_sensors_provided or strategy_provided)
+        )
 
     @gen.coroutine
     def _handle_sensor_sampling(self, req, msg):
@@ -2317,6 +2366,79 @@ class DeviceServer(DeviceServerBase):
         # this behaviour, less effort to fix it here :-/
         yield gen.moment
         raise gen.Return(req.make_reply("ok", name, strategy, *params))
+
+    @gen.coroutine
+    def _handle_bulk_set_sensor_sampling(self, req, msg):
+        if not msg.arguments:
+            raise FailReply("No sensor name given.")
+
+        # The client connection that is not specific to this request context
+        client = req.client_connection
+
+        def inform_callback(sensor, reading):
+            """Inform callback for sensor strategy."""
+            timestamp, status, value = reading
+            cb_msg = format_inform_v5(sensor, timestamp, status, value)
+            client.inform(cb_msg)
+
+        names_arg = ensure_native_str(msg.arguments[0])
+        names = names_arg.split(',')
+
+        if len(msg.arguments) <= 1:
+            raise FailReply("Cannot query multiple sensors.")
+
+        strategy = msg.arguments[1]
+        params = msg.arguments[2:]
+
+        invalid_names = []
+        for name in names:
+            if name not in self._sensors:
+                invalid_names.append(name)
+        if invalid_names:
+            raise FailReply("Unknown sensor names: %r." % invalid_names)
+
+        requested_strategies = {}
+        try:
+            for name in names:
+                sensor = self._sensors[name]
+                if self.PROTOCOL_INFO.strategy_allowed(strategy):
+                    requested_strategy = SampleStrategy.get_strategy(
+                        strategy, inform_callback, sensor, *params, ioloop=self.ioloop)
+                    requested_strategies[name] = requested_strategy
+        except Exception as e:
+            raise FailReply("Invalid strategy requested: %s." % e)
+        if not requested_strategies:
+            raise FailReply(
+                "Invalid request: names %r, strategy %r, params %r." % (
+                    names,
+                    ensure_native_str(strategy),
+                    [ensure_native_str(p) for p in params]
+                )
+            )
+
+        for name in names:
+            sensor = self._sensors[name]
+
+            # Remove and cancel old strategy
+            old_strategy = self._strategies[client].pop(sensor, None)
+            if old_strategy:
+                old_strategy.cancel()
+
+            # Replace with new strategy
+            new_strategy = requested_strategies[name]
+            if not isinstance(new_strategy, SampleNone):
+                self._strategies[client][sensor] = new_strategy
+                new_strategy.start()
+
+        # Let the ioloop run so that the #sensor-status informs are sent before
+        # the reply. Not strictly neccesary, but a number of tests depend on
+        # this behaviour, less effort to fix it here :-/
+        yield gen.moment
+
+        strategy, params = requested_strategy.get_sampling_formatted()
+        reply_args = [",".join(names)] + [strategy] + params
+        raise gen.Return(req.make_reply("ok", *reply_args))
+
 
     @request()
     @return_reply()

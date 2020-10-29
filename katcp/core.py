@@ -630,6 +630,7 @@ class ProtocolFlags(object):
     * M - server supports multiple clients
     * I - server supports message identifiers
     * T - server provides request timeout hints via ?request-timeout-hint
+    * B - server supports bulk list of sensors to ?sensor-sampling
 
     Parameters
     ----------
@@ -657,9 +658,8 @@ class ProtocolFlags(object):
 
     MULTI_CLIENT = b'M'
     MESSAGE_IDS = b'I'
-    # New proposal flag to indicate that a device supports ?request-timeout-hint
-    # See CB-2051
     REQUEST_TIMEOUT_HINTS = b'T'
+    BULK_SET_SENSOR_SAMPLING = b'B'
 
     STRATEGIES_V4 = frozenset([b'none', b'auto', b'period', b'event',
                                b'differential'])
@@ -672,6 +672,7 @@ class ProtocolFlags(object):
     }
 
     REQUEST_TIMEOUT_HINTS_MIN_VERSION = (5, 1)
+    BULK_SET_SENSOR_SAMPLING_MIN_VERSION = (5, 1)
 
     def __init__(self, major, minor, flags):
         # PY2 and Py3 compatibility.
@@ -682,15 +683,22 @@ class ProtocolFlags(object):
         self.multi_client = self.MULTI_CLIENT in self.flags
         self.message_ids = self.MESSAGE_IDS in self.flags
         self.request_timeout_hints = self.REQUEST_TIMEOUT_HINTS in self.flags
+        self.bulk_set_sensor_sampling = self.BULK_SET_SENSOR_SAMPLING in self.flags
         if self.message_ids and self.major < MID_KATCP_MAJOR:
             raise ValueError(
                 'MESSAGE_IDS is only supported in katcp v5 and newer')
-        version_supports_hints = ((self.major, self.minor) >=
-                                  self.REQUEST_TIMEOUT_HINTS_MIN_VERSION)
+        version_supports_hints = ((self.major, self.minor)
+                                  >= self.REQUEST_TIMEOUT_HINTS_MIN_VERSION)
         if self.request_timeout_hints and not version_supports_hints:
             raise ValueError(
                 'REQUEST_TIMEOUT_HINTS only suported in katcp v{}.{} and newer'
                 .format(*self.REQUEST_TIMEOUT_HINTS_MIN_VERSION))
+        version_supports_bulk = ((self.major, self.minor)
+                                 >= self.BULK_SET_SENSOR_SAMPLING_MIN_VERSION)
+        if self.bulk_set_sensor_sampling and not version_supports_bulk:
+            raise ValueError(
+                'BULK_SET_SENSOR_SAMPLING only suported in katcp v{}.{} and newer'
+                .format(*self.BULK_SET_SENSOR_SAMPLING_MIN_VERSION))
 
     def strategy_allowed(self, strategy):
         return strategy in self.STRATEGIES_ALLOWED_BY_MAJOR_VERSION[self.major]

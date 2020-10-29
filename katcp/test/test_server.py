@@ -333,6 +333,74 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
         msgs = [str(call[0][0]) for call in mock_conn.inform.call_args_list]
         self._assert_msgs_equal(msgs, self.expected_connect_messages)
 
+    def test_sensor_sampling(self):
+        start_thread_with_cleanup(self, self.server)
+        s = katcp.Sensor.float("a-sens")
+        s.set(1234, katcp.Sensor.NOMINAL, 5545.5)
+        self.server.add_sensor(s)
+        self.server._send_message = WaitingMock()
+        self.server.wait_running(timeout=1.0)
+        self.assertTrue(self.server.running())
+
+        # We need to pass in the same client_conn for all requests
+        # since strategies are bound to specific connections.
+        client = WaitingMock()
+        self.server._strategies[client] = {}
+
+        req = mock_req("sensor-sampling", "a-sens", "event", client_conn=client)
+        self.server.request_sensor_sampling(req, req.msg).result(timeout=1)
+        inf = req.client_connection.inform
+        inf.assert_wait_call_count(count=1)
+        (inf_msg,) = inf.call_args[0]
+        self._assert_msgs_equal(
+            [inf_msg], (r"#sensor-status 1234.000000 1 a-sens nominal 5545.5",)
+        )
+
+        req = mock_req("sensor-sampling", "a-sens", "period", 1.5, client_conn=client)
+        self.server.request_sensor_sampling(req, req.msg).result()
+        req = mock_req("sensor-sampling", "a-sens", client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok a-sens period 1.5"])
+
+        req = mock_req(
+            "sensor-sampling", "a-sens", "differential", 1.5, client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok a-sens differential 1.5"])
+
+        req = mock_req(
+            "sensor-sampling", "a-sens", "event-rate", 1.5, 2.5, client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal(
+            [reply], ["!sensor-sampling ok a-sens event-rate 1.5 2.5"]
+        )
+
+        req = mock_req(
+            "sensor-sampling",
+            "a-sens",
+            "differential-rate",
+            1.5,
+            2.5,
+            3.5,
+            client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal(
+            [reply], ["!sensor-sampling ok a-sens differential-rate 1.5 2.5 3.5"]
+        )
+
+    def test_bulk_sensor_sampling_fails_if_not_supported(self):
+        if not self.server.PROTOCOL_INFO.bulk_set_sensor_sampling:
+            start_thread_with_cleanup(self, self.server)
+            self.server._send_message = WaitingMock()
+            self.server.wait_running(timeout=1.0)
+            self.assertTrue(self.server.running())
+
+            req = mock_req("sensor-sampling", "an.int,a.float", "period", 1.5)
+            with self.assertRaises(FailReply):
+                self.server.request_sensor_sampling(req, req.msg).result()
+
     def test_request_sensor_sampling_clear(self):
         self.server.clear_strategies = mock.Mock()
         start_thread_with_cleanup(self, self.server, start_timeout=1)
@@ -389,10 +457,10 @@ class test_DeviceServerMemoryLeaks(unittest.TestCase):
 
 
 class test_DeviceServer51(test_DeviceServer):
-    """Proposed additional tests for Verion 5.1 server"""
+    """Additional tests for Version 5.1 server"""
 
     expected_connect_messages = (
-        r"#version-connect katcp-protocol 5.1-IMT",
+        r"#version-connect katcp-protocol 5.1-BIMT",
         r"#version-connect katcp-library katcp-python-%s" % katcp_version,
         r"#version-connect katcp-device deviceapi-5.6 buildy-1.2g",
     )
@@ -406,6 +474,7 @@ class test_DeviceServer51(test_DeviceServer):
                     katcp.ProtocolFlags.MULTI_CLIENT,
                     katcp.ProtocolFlags.MESSAGE_IDS,
                     katcp.ProtocolFlags.REQUEST_TIMEOUT_HINTS,
+                    katcp.ProtocolFlags.BULK_SET_SENSOR_SAMPLING,
                 ],
             )
 
@@ -462,6 +531,156 @@ class test_DeviceServer51(test_DeviceServer):
             ],
         )
 
+    def set_up_client_for_bulk_sensor_sampling(self):
+        start_thread_with_cleanup(self, self.server)
+        self.server._send_message = WaitingMock()
+        self.server.wait_running(timeout=1.0)
+        self.assertTrue(self.server.running())
+
+        # We need to pass in the same client_conn for all requests
+        # since strategies are bound to specific connections.
+        client = WaitingMock()
+        self.server._strategies[client] = {}
+        return client
+
+    def test_bulk_sensor_sampling_set_for_multiple_sensors(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "period", 1.5, client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal(
+            [reply], ["!sensor-sampling ok an.int,a.float period 1.5"]
+        )
+
+        req = mock_req("sensor-sampling", "an.int", client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok an.int period 1.5"])
+
+        req = mock_req("sensor-sampling", "a.float", client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok a.float period 1.5"])
+
+    def test_bulk_sensor_sampling_set_for_multiple_sensors_and_individually(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "period", 1.5, client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal(
+            [reply], ["!sensor-sampling ok an.int,a.float period 1.5"]
+        )
+
+        req = mock_req("sensor-sampling", "an.int", "period", 3.14, client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok an.int period 3.14"])
+
+        req = mock_req("sensor-sampling", "a.float", "period", 0.7, client_conn=client)
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal([reply], ["!sensor-sampling ok a.float period 0.7"])
+
+    def test_bulk_sensor_sampling_sends_informs_for_multiple_sensors(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "event", client_conn=client
+        )
+        self.server.request_sensor_sampling(req, req.msg).result(timeout=1)
+        inform = req.client_connection.inform
+        inform.assert_wait_call_count(count=2)
+        inform_messages = [call.args[0] for call in inform.call_args_list]
+        self._assert_msgs_equal(
+            inform_messages, (
+                r"#sensor-status 12345.000000 1 an.int nominal 3",
+                r"#sensor-status 12345.000000 1 a.float nominal 12.0",
+            )
+        )
+
+    def test_bulk_sensor_sampling_fails_for_invalid_sensor_name(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,an.invalid", "period", 2.5, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
+    def test_bulk_sensor_sampling_fails_for_empty_sensor_name(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "", "period", 2.5, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
+    def test_bulk_sensor_sampling_fails_for_invalid_strategy(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "invalid-strategy", 2.5,
+            client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
+    def test_bulk_sensor_sampling_fails_for_valid_strategy_invalid_params(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "period", 2.5, 1.5, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
+    def test_bulk_sensor_sampling_fails_for_valid_strategy_invalid_sensor_types(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.discrete", "differential", 2, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
+    def test_bulk_sensor_sampling_fails_for_invalid_strategy_invalid_params(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.float", "invalid-strategy", 2.5, 1,
+            client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
+    def test_bulk_sensor_sampling_fails_for_no_strategy(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req("sensor-sampling", "an.int,a.float", client_conn=client)
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
+    def test_bulk_sensor_sampling_all_strategies_unchanged_for_failure(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.discrete", "event", client_conn=client
+        )
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal(
+            [reply], ["!sensor-sampling ok an.int,a.discrete event"]
+        )
+        # Save copy of current strategies for comparison later
+        original_strategies = dict(self.server._strategies[client])
+
+        # Request strategy that doesn't work for the second sensor
+        req = mock_req(
+            "sensor-sampling", "an.int,a.discrete", "differential", 2, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+        self.assertEqual(self.server._strategies[client], original_strategies)
 
 class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 

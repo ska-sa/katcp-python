@@ -74,6 +74,9 @@ target/
 #   install all needed dependencies.
 #Pipfile.lock
 
+# virtualenv
+/venv*
+
 # celery beat schedule file
 celerybeat-schedule
 
