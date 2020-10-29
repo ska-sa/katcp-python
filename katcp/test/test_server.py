@@ -664,7 +664,9 @@ class test_DeviceServer51(test_DeviceServer):
     def test_bulk_sensor_sampling_all_strategies_unchanged_for_failure(self):
         client = self.set_up_client_for_bulk_sensor_sampling()
 
-        req = mock_req("sensor-sampling", "an.int,a.discrete", "event", client_conn=client)
+        req = mock_req(
+            "sensor-sampling", "an.int,a.discrete", "event", client_conn=client
+        )
         reply = self.server.request_sensor_sampling(req, req.msg).result()
         self._assert_msgs_equal(
             [reply], ["!sensor-sampling ok an.int,a.discrete event"]
