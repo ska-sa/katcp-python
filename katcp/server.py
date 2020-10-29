@@ -2164,13 +2164,13 @@ class DeviceServer(DeviceServerBase):
         ::
 
             ?sensor-value
-            #sensor-value 1244631611.415231 1 psu.voltage 4.5
-            #sensor-value 1244631611.415200 1 cpu.status off
+            #sensor-value 1244631611.415231 1 psu.voltage nominal 4.5
+            #sensor-value 1244631611.415200 1 cpu.status nominal off
             ...
             !sensor-value ok 5
 
             ?sensor-value cpu.power.on
-            #sensor-value 1244631611.415231 1 cpu.power.on 0
+            #sensor-value 1244631611.415231 1 cpu.power.on nominal 0
             !sensor-value ok 1
 
         """
@@ -2264,7 +2264,7 @@ class DeviceServer(DeviceServerBase):
             !sensor-sampling ok cpu.power.on none
 
             ?sensor-sampling cpu.power.on period 0.5
-            #sensor-status 1244631611.415231 1 cpu.power.on 1
+            #sensor-status 1244631611.415231 1 cpu.power.on nominal 1
             !sensor-sampling ok cpu.power.on period 0.5
 
             if BULK_SET_SENSOR_SAMPLING is enabled then:
@@ -2273,8 +2273,8 @@ class DeviceServer(DeviceServerBase):
             !sensor-sampling fail Cannot\_query\_multiple\_sensors
 
             ?sensor-sampling cpu.power.on,fan.speed period 0.5
-            #sensor-status 1244631611.415231 1 cpu.power.on 1
-            #sensor-status 1244631611.415200 1 fan.speed 10.0
+            #sensor-status 1244631611.415231 1 cpu.power.on nominal 1
+            #sensor-status 1244631611.415200 1 fan.speed nominal 10.0
             !sensor-sampling ok cpu.power.on,fan.speed period 0.5
 
         """
