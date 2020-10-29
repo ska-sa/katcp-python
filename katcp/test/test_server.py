@@ -401,16 +401,6 @@ class test_DeviceServer(unittest.TestCase, TestUtilMixin):
             with self.assertRaises(FailReply):
                 self.server.request_sensor_sampling(req, req.msg).result()
 
-    def test_querying_multiple_sensor_sampling_strategies_fails(self):
-        start_thread_with_cleanup(self, self.server)
-        self.server._send_message = WaitingMock()
-        self.server.wait_running(timeout=1.0)
-        self.assertTrue(self.server.running())
-
-        req = mock_req("sensor-sampling", "an.int,a.float")
-        with self.assertRaises(FailReply):
-            self.server.request_sensor_sampling(req, req.msg).result()
-
     def test_request_sensor_sampling_clear(self):
         self.server.clear_strategies = mock.Mock()
         start_thread_with_cleanup(self, self.server, start_timeout=1)
@@ -645,6 +635,15 @@ class test_DeviceServer51(test_DeviceServer):
         with self.assertRaises(FailReply):
             self.server.request_sensor_sampling(req, req.msg).result()
 
+    def test_bulk_sensor_sampling_fails_for_valid_strategy_invalid_sensor_types(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req(
+            "sensor-sampling", "an.int,a.discrete", "differential", 2, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
     def test_bulk_sensor_sampling_fails_for_invalid_strategy_invalid_params(self):
         client = self.set_up_client_for_bulk_sensor_sampling()
 
@@ -662,6 +661,26 @@ class test_DeviceServer51(test_DeviceServer):
         with self.assertRaises(FailReply):
             self.server.request_sensor_sampling(req, req.msg).result()
 
+    def test_bulk_sensor_sampling_all_strategies_unchanged_for_failure(self):
+        client = self.set_up_client_for_bulk_sensor_sampling()
+
+        req = mock_req("sensor-sampling", "an.int,a.discrete", "event", client_conn=client)
+
+        reply = self.server.request_sensor_sampling(req, req.msg).result()
+        self._assert_msgs_equal(
+            [reply], ["!sensor-sampling ok an.int,a.discrete event"]
+        )
+        # Save new strategies for comparison later
+        original_strategies = self.server._stratiegies
+
+        # Request stategy that doens't work for one fo the sensors
+        req = mock_req(
+            "sensor-sampling", "an.int,a.discrete", "differential", 2, client_conn=client
+        )
+        with self.assertRaises(FailReply):
+            self.server.request_sensor_sampling(req, req.msg).result()
+
+        self.assertEqual(self.server._strategies, original_strategies)
 
 class TestDeviceServerClientIntegrated(unittest.TestCase, TestUtilMixin):
 

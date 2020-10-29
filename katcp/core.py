@@ -658,11 +658,7 @@ class ProtocolFlags(object):
 
     MULTI_CLIENT = b'M'
     MESSAGE_IDS = b'I'
-    # New proposal flag to indicate that a device supports ?request-timeout-hint
-    # See CB-2051
     REQUEST_TIMEOUT_HINTS = b'T'
-    # New proposal flag to indicate that a device supports configuring multiple
-    # sensors in a single ?sensor-sampling request
     BULK_SET_SENSOR_SAMPLING = b'B'
 
     STRATEGIES_V4 = frozenset([b'none', b'auto', b'period', b'event',

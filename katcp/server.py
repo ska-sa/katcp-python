@@ -2230,6 +2230,20 @@ class DeviceServer(DeviceServerBase):
             same as the differential strategy parameter. The second and third are the
             minimum and maximum periods, respectively, as with the event-rate strategy.
 
+        Informs
+        -------
+        timestamp : float
+            Timestamp of the sensor reading in seconds since the Unix
+            epoch, or milliseconds for katcp versions <= 4.
+        count : {1}
+            Number of sensors described in this #sensor-status inform. Will
+            always be one. It exists to keep this inform compatible with
+            #sensor-value.
+        name : str
+            Name of the sensor whose value is being reported.
+        value : object
+            Value of the named sensor. Type depends on the type of the sensor.
+
         Returns
         -------
         success : {'ok', 'fail'}
@@ -2239,10 +2253,9 @@ class DeviceServer(DeviceServerBase):
             be a comma-separated list.
         strategy : {'none', 'auto', 'event', 'differential', 'differential-rate',
                     'period', 'event-rate'}.
-            Name(s) of the new or current sampling strategy for the sensor(s).
+            Name of the new or current sampling strategy for the sensor(s).
         params : list of str
             Additional strategy parameters (see description under Parameters).
-
         Examples
         --------
         ::
@@ -2251,6 +2264,7 @@ class DeviceServer(DeviceServerBase):
             !sensor-sampling ok cpu.power.on none
 
             ?sensor-sampling cpu.power.on period 0.5
+            #sensor-status 1244631611.415231 1 cpu.power.on 1
             !sensor-sampling ok cpu.power.on period 0.5
 
             if BULK_SET_SENSOR_SAMPLING is enabled then:
@@ -2259,6 +2273,8 @@ class DeviceServer(DeviceServerBase):
             !sensor-sampling fail Cannot\_query\_multiple\_sensors
 
             ?sensor-sampling cpu.power.on,fan.speed period 0.5
+            #sensor-status 1244631611.415231 1 cpu.power.on 1
+            #sensor-status 1244631611.415200 1 fan.speed 10.0
             !sensor-sampling ok cpu.power.on,fan.speed period 0.5
 
         """
@@ -2368,7 +2384,7 @@ class DeviceServer(DeviceServerBase):
         names_arg = ensure_native_str(msg.arguments[0])
         names = names_arg.split(',')
 
-        if not len(msg.arguments) > 1:
+        if len(msg.arguments) <= 1:
             raise FailReply("Cannot query multiple sensors.")
 
         strategy = msg.arguments[1]
