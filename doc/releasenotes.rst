@@ -3,9 +3,30 @@
 *************
 Release Notes
 *************
+
 0.8.0
 =====
 * Added bulk sensor sampling feature.
+
+0.7.2
+=====
+* Support for handling generator expressions in ``Discrete`` type.
+* Fix handling of strings and bytes in ``get_sensor`` in testutils.
+* Allow strings or bytes for ``assert_request_fails`` and ``test_assert_request_succeeds`` function arguments.
+* Handle ``str`` type correctly ('easier') in ``testutils.get_sensor`` for python 2 and python 3.
+* Allow bytes and strings in ``test_sensor_list`` comparison of sensors.
+* Correct handling of floats ``test_sensor_list``.
+* black formatting on certain test files.
+
+0.7.1
+=====
+* All params in ``future_get_sensor`` are now cast to byte strings.
+* Added tests to ``test_fake_clients.py`` and ``test_inspecting_client.py``.
+* Ensure ``testutils`` method casts expected requests to byte strings.
+
+0.7.0
+=====
+* Added Python 3 compatibility.
 
 See also :download:`CHANGELOG.md` for more details on changes.
 
