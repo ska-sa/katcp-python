@@ -1,3 +1,6 @@
+29 October 2020 (0.8.0)
+* Add bulk sensor sampling feature (PR [#197](https://github.com/ska-sa/katcp-python/pull/197))
+
 3 September 2020 (0.7.2)
 * Support for handling generator expressions in Discrete type (PR [#237](https://github.com/ska-sa/katcp-python/pull/237))
 * Fix handling of strings and bytes in `get_sensor` in testutils ([#240](https://github.com/ska-sa/katcp-python/pull/240))
@@ -5,10 +8,10 @@
 * Handle str type correctly('easier') in `testutils.get_sensor` for python 2 and python 3 ([#243](https://github.com/ska-sa/katcp-python/pull/243))
 * Allow bytes and strings in `test_sensor_list` comparison of sensors ([#244](https://github.com/ska-sa/katcp-python/pull/244))
 * Correct handling of floats `test_sensor_list` ([#245](https://github.com/ska-sa/katcp-python/pull/245))
-* black formatting on certain test files.
+* black formatting on certain test files. (PR [#246](https://github.com/ska-sa/katcp-python/pull/246))
 
 12 May 2020 (0.7.1)
-* All params in `future_get_sensor` are now cast to byte strings (PR [#235](https://github.com/ska-sa/katcp-python/pull/235)). 
+* All params in `future_get_sensor` are now cast to byte strings (PR [#235](https://github.com/ska-sa/katcp-python/pull/235)).
 * Added tests to`test_fake_clients.py` and `test_inspecting_client.py` (PR [#235](https://github.com/ska-sa/katcp-python/pull/235)).
 * Ensure testutils method casts expected requests to byte strings (PR [#233](https://github.com/ska-sa/katcp-python/pull/233)).
 

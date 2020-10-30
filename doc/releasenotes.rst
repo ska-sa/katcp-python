@@ -3,9 +3,9 @@
 *************
 Release Notes
 *************
-0.7.0
+0.8.0
 =====
-* Added Python 3 compatibility.
+* Added bulk sensor sampling feature.
 
 See also :download:`CHANGELOG.md` for more details on changes.
 
