@@ -115,7 +115,7 @@ Upload the new version to PyPI
       - ``$ git fetch``
       - ``$ git checkout v0.6.3``
       - ``$ python setup.py sdist bdist_wheel``
-      - ``$ python setup.py bdist_wheel``
+      - ``$ python3 setup.py bdist_wheel``
   * Upload to testpypi_, and make sure all is well:
       - ``$ twine upload -r testpypi dist/katcp-0.6.3.tar.gz``
       - ``$ twine upload -r testpypi dist/katcp-0.6.3-py2-none-any.whl``
