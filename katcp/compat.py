@@ -9,6 +9,8 @@
 from __future__ import absolute_import, division, print_function
 from future import standard_library
 standard_library.install_aliases()  # noqa: E402
+from future.types import newbytes
+from future.utils import bytes_to_native_str
 
 import builtins
 import future
@@ -18,7 +20,10 @@ if future.utils.PY2:
     def ensure_native_str(value):
         """Coerce unicode string or bytes to native string type (UTF-8 encoding)."""
         if isinstance(value, str):
-            return value
+            if isinstance(value, newbytes):
+                return bytes_to_native_str(value)
+            else:
+                return value
         elif isinstance(value, unicode):
             return value.encode('utf-8')
         else:
