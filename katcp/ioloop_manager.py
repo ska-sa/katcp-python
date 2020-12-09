@@ -19,7 +19,9 @@ import tornado.ioloop
 from _thread import get_ident as get_thread_ident
 from tornado import gen
 from tornado.concurrent import Future as tornado_Future
-from tornado.platform.asyncio import AsyncIOLoop
+
+if sys.version_info[0] == 3:
+    from tornado.platform.asyncio import AsyncIOLoop
 
 from katcp.object_proxies import ObjectWrapper
 
@@ -53,7 +55,10 @@ class IOLoopManager(object):
     def get_ioloop(self):
         if not self._ioloop:
             if self._ioloop_managed:
-                self.set_ioloop(AsyncIOLoop())
+                if sys.version_info[0] == 3:
+                    self.set_ioloop(AsyncIOLoop())
+                else:
+                    self.set_ioloop(tornado.ioloop.IOLoop())
             else:
                 self.set_ioloop(tornado.ioloop.IOLoop.current())
         return self._ioloop
