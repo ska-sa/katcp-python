@@ -4,6 +4,7 @@ from __future__ import absolute_import, division, print_function
 from future import standard_library
 standard_library.install_aliases()  # noqa: E402
 
+import sys
 import unittest
 
 from builtins import object
@@ -64,3 +65,16 @@ class test_ThreadsafeMethodAttrWrapper(unittest.TestCase):
         self.assertEqual(wrapped.a_callable(5, kwarg='bcd'), (10, 'bcd'*3))
         self.assertEqual(wrapped.only_in_ioloop, 'only_in')
         self.assertEqual(wrapped.not_in_ioloop, 'not_in')
+
+
+class test_IOLoopManager(unittest.TestCase):
+    def setUp(self):
+        self.ioloop_manager = ioloop_manager.IOLoopManager(managed_default=True)
+        self.ioloop = self.ioloop_manager.get_ioloop()
+        start_thread_with_cleanup(self, self.ioloop_manager, start_timeout=1)
+
+    def test_managed_io_loop_is_asyncio_in_python3(self):
+        if sys.version_info[0] == 3:
+            self.assertTrue(hasattr(self.ioloop, "asyncio_loop"))
+        else:
+            self.assertFalse(hasattr(self.ioloop, "asyncio_loop"))

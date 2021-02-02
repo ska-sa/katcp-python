@@ -1,3 +1,6 @@
+29 January 2021 (0.9.0)
+* Add asyncio compatible ioloop to ioloop manager (PR [#254](https://github.com/ska-sa/katcp-python/pull/254))
+
 29 October 2020 (0.8.0)
 * Add bulk sensor sampling feature (PR [#197](https://github.com/ska-sa/katcp-python/pull/197))
 

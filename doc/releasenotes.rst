@@ -4,6 +4,10 @@
 Release Notes
 *************
 
+0.9.0
+=====
+* Add asyncio compatible ioloop to ioloop manager.
+
 0.8.0
 =====
 * Added bulk sensor sampling feature.
