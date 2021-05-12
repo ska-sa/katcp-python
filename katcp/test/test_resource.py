@@ -198,4 +198,4 @@ class test_KATCPReply(unittest.TestCase):
 
         reply = resource.KATCPReply(Message.reply('help', 'this', 'is a test', mid=123))
         self.assertEqual('!help this is a test', repr(reply))
-        self.assertEqual('!help[123] this is\_a\_test', str(reply)) # noqa: W605
+        self.assertEqual('!help[123] this is\_a\_test', str(reply))  # noqa: W605
