@@ -1005,7 +1005,12 @@ class KATCPReply(_KATCPReplyTuple):
         """String representation for pretty-printing in IPython."""
         return '\n'.join(
             "%s%s %s" %
-            (Message.TYPE_SYMBOLS[m.mtype], m.name, ' '.join(m.arguments))
+            (
+                ensure_native_str(Message.TYPE_SYMBOLS[m.mtype]),
+                m.name,
+                ' '.join([ensure_native_str(arg)
+                          for arg in m.arguments])
+             )
             for m in self.messages)
 
     def __str__(self):
