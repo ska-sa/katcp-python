@@ -22,6 +22,7 @@ from tornado.gen import Return, with_timeout
 
 from katcp import Message, Sensor
 from katcp.core import hashable_identity
+from katcp.compat import ensure_native_str
 
 logger = logging.getLogger(__name__)
 

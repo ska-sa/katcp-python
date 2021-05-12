@@ -192,10 +192,10 @@ class test_KATCPRequest(unittest.TestCase):
 
 class test_KATCPReply(unittest.TestCase):
     def test_katcpreply(self):
-        reply = resource.KATCPReply(Message.reply('watchdog', 'ok', mid=123), [])
+        reply = resource.KATCPReply(Message.reply('watchdog', 'ok', mid=123))
         self.assertEqual('!watchdog ok', repr(reply))
         self.assertEqual('!watchdog[123] ok', str(reply))
 
-        reply = resource.KATCPReply(Message.reply('help', 'this', 'is a test', mid=123), [])
+        reply = resource.KATCPReply(Message.reply('help', 'this', 'is a test', mid=123))
         self.assertEqual('!help this is a test', repr(reply))
-        self.assertEqual('!help[123] this is\_a\_test', str(reply))
+        self.assertEqual('!help[123] this is\_a\_test', str(reply)) # noqa: W605
