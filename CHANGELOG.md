@@ -1,3 +1,6 @@
+13 May 2021 (0.9.1)
+* Fix issues in KATCPReply `__repr__` in py3 (PR [#256](https://github.com/ska-sa/katcp-python/pull/256))
+
 29 January 2021 (0.9.0)
 * Add asyncio compatible ioloop to ioloop manager (PR [#254](https://github.com/ska-sa/katcp-python/pull/254))
 
