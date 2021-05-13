@@ -4,6 +4,10 @@
 Release Notes
 *************
 
+0.9.1
+=====
+* Fix issues in KATCPReply `__repr__` in py3
+
 0.9.0
 =====
 * Add asyncio compatible ioloop to ioloop manager.

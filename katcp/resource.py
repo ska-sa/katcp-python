@@ -22,6 +22,7 @@ from tornado.gen import Return, with_timeout
 
 from katcp import Message, Sensor
 from katcp.core import hashable_identity
+from katcp.compat import ensure_native_str
 
 logger = logging.getLogger(__name__)
 
@@ -1003,10 +1004,15 @@ class KATCPReply(_KATCPReplyTuple):
 
     def __repr__(self):
         """String representation for pretty-printing in IPython."""
-        return '\n'.join(
-            "%s%s %s" %
-            (Message.TYPE_SYMBOLS[m.mtype], m.name, ' '.join(m.arguments))
-            for m in self.messages)
+        return "\n".join(
+            "%s%s %s"
+            % (
+                ensure_native_str(Message.TYPE_SYMBOLS[m.mtype]),
+                m.name,
+                " ".join([ensure_native_str(arg) for arg in m.arguments]),
+            )
+            for m in self.messages
+        )
 
     def __str__(self):
         """String representation using KATCP wire format"""

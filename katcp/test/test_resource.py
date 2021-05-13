@@ -12,7 +12,7 @@ import mock
 import tornado.testing
 
 # Module under test
-from katcp import Sensor, resource
+from katcp import Message, Sensor, resource
 from katcp.testutils import TimewarpAsyncTestCase
 
 
@@ -159,6 +159,7 @@ class ConcreteKATCPRequest(resource.KATCPRequest):
     def issue_request(self, *args, **kwargs):
         pass
 
+
 class test_KATCPRequest(unittest.TestCase):
     def test_active(self):
         active = False
@@ -187,3 +188,16 @@ class test_KATCPRequest(unittest.TestCase):
         rv = DUT(*req_args, **req_kwargs)
         self.assertEqual(rv, DUT.issue_request.return_value)
         DUT.issue_request.assert_called_once_with(*req_args, **req_kwargs)
+
+
+class test_KATCPReply(unittest.TestCase):
+    def test_katcpreply(self):
+        reply = resource.KATCPReply(Message.reply('watchdog', 'ok', mid=123),
+                                    [])
+        self.assertEqual('!watchdog ok', repr(reply))
+        self.assertEqual('!watchdog[123] ok', str(reply))
+
+        reply = resource.KATCPReply(Message.reply('help', 'this', 'is a test', mid=123),
+                                    [])
+        self.assertEqual('!help this is a test', repr(reply))
+        self.assertEqual('!help[123] this is\_a\_test', str(reply))  # noqa: W605
