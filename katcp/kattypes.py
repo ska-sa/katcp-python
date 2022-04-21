@@ -722,22 +722,26 @@ def request(*types, **options):
 
         if has_req and include_msg:
             def raw_handler(self, req, msg):
-                new_args = unpack_types(types, msg.arguments, argnames, major)
+                arguments = [ensure_native_str(arg) for arg in msg.arguments]
+                new_args = unpack_types(types, arguments, argnames, major)
                 return handler(self, req, msg, *new_args)
 
         elif has_req and not include_msg:
             def raw_handler(self, req, msg):
-                new_args = unpack_types(types, msg.arguments, argnames, major)
+                arguments = [ensure_native_str(arg) for arg in msg.arguments]
+                new_args = unpack_types(types, arguments, argnames, major)
                 return handler(self, req, *new_args)
 
         elif not has_req and include_msg:
             def raw_handler(self, msg):
-                new_args = unpack_types(types, msg.arguments, argnames, major)
+                arguments = [ensure_native_str(arg) for arg in msg.arguments]
+                new_args = unpack_types(types, arguments, argnames, major)
                 return handler(self, msg, *new_args)
 
         elif not has_req and not include_msg:
             def raw_handler(self, msg):
-                new_args = unpack_types(types, msg.arguments, argnames, major)
+                arguments = [ensure_native_str(arg) for arg in msg.arguments]
+                new_args = unpack_types(types, arguments, argnames, major)
                 return handler(self, *new_args)
 
         update_wrapper(raw_handler, handler)
