@@ -24,7 +24,7 @@ import future
 
 from tornado import gen
 
-from .compat import is_bytes, is_text
+from .compat import is_bytes, is_text, ensure_native_str
 from .core import (DEFAULT_KATCP_MAJOR, MS_TO_SEC_FAC, SEC_TO_MS_FAC,
                    SEC_TS_KATCP_MAJOR, FailReply, Message, convert_method_name)
 
@@ -420,6 +420,7 @@ class Timestamp(KatcpType):
         try:
             decoded = float(value)
         except:
+            value = ensure_native_str(value)
             raise ValueError("Could not parse value '%s' as timestamp." %
                              value)
         if major < SEC_TS_KATCP_MAJOR:
