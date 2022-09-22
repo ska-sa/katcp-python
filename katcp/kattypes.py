@@ -420,8 +420,7 @@ class Timestamp(KatcpType):
         try:
             decoded = float(value)
         except:
-            if is_text(value):
-                value = ensure_native_str(value)
+            value = ensure_native_str(value)
             raise ValueError("Could not parse value '%s' as timestamp." %
                              value)
         if major < SEC_TS_KATCP_MAJOR:
