@@ -3,6 +3,9 @@
 *************
 Release Notes
 *************
+0.9.2
+=====
+* Consistent error message in py2 and py3 for error in Timestamp decode
 
 0.9.1
 =====
