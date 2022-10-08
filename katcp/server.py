@@ -7,6 +7,8 @@
 """Servers for the KAT device control language."""
 
 from __future__ import absolute_import, division, print_function
+
+import future.utils
 from future import standard_library
 standard_library.install_aliases()  # noqa E402
 
@@ -871,8 +873,12 @@ class MessageHandlerThread(object):
             self._logger.info('Message handler thread stopped.')
 
     def start(self, timeout=None):
-        if self._thread and self._thread.isAlive():
-            raise RuntimeError('Cannot start since thread is already running')
+        if future.utils.PY2:
+            if self._thread and self._thread.isAlive():
+                raise RuntimeError('Cannot start since thread is already running')
+        else:
+            if self._thread and self._thread.is_alive():
+                raise RuntimeError('Cannot start since thread is already running')
         self._thread = threading.Thread(target=self.run, name=self.name)
         self._thread.start()
         if timeout:
@@ -905,7 +911,10 @@ class MessageHandlerThread(object):
         self._thread.join(timeout)
 
     def isAlive(self):
-        return self._thread and self._thread.isAlive()
+        if future.utils.PY2:
+            return self._thread and self._thread.isAlive()
+        else:
+            return self._thread and self._thread.is_alive()
 
     def running(self):
         """Whether the handler thread is running."""
@@ -1316,6 +1325,7 @@ class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
             Time in seconds to wait for server thread to start.
 
         """
+
         if self._handler_thread and self._handler_thread.isAlive():
             raise RuntimeError('Message handler thread already started')
         self._server.start(timeout)
