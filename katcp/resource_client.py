@@ -15,6 +15,12 @@ from builtins import object
 from concurrent.futures import Future
 from functools import partial
 
+try:
+    from collections.abc import Mapping  # noqa
+except ImportError:
+    from collections import Mapping  # noqa
+
+
 import tornado
 from future.utils import PY2
 
@@ -1601,7 +1607,7 @@ class ThreadSafeKATCPClientResourceRequestWrapper(ThreadSafeMethodAttrWrapper):
         return self._ioloop_wrapper.decorate_callable(self.__subject__.__call__)
 
 
-class MappingProxy(collections.Mapping):
+class MappingProxy(Mapping):
 
     def __init__(self, mapping, wrapper):
         self._mapping = mapping
