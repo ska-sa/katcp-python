@@ -19,6 +19,10 @@ import struct
 
 from builtins import object
 from functools import partial, update_wrapper, wraps
+try:
+    from inspect import getfullargspec as get_args
+except ImportError:
+    from inspect import getargspec as get_args
 
 import future
 
@@ -711,7 +715,7 @@ def request(*types, **options):
 
         if all_argnames is None:
             # We must be on the inside. Introspect the parameter names.
-            all_argnames = inspect.getargspec(handler)[0]
+            all_argnames = get_args(handler)[0]
 
         params_start = 1        # Skip 'self' parameter
         if has_req:         # Skip 'req' parameter
@@ -890,7 +894,7 @@ def return_reply(*types, **options):
             # We are on the inside.
             # We must preserve the original function parameter names for the
             # request decorator
-            raw_handler._orig_argnames = inspect.getargspec(handler)[0]
+            raw_handler._orig_argnames = get_args(handler)[0]
 
         return raw_handler
 

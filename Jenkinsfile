@@ -72,6 +72,13 @@ pipeline {
                         sh 'tox -e py38'
                     }
                 }
+
+                stage ('py39') {
+                    steps {
+                        echo "Running nosetests on Python 3.9"
+                        sh 'tox -e py39'
+                    }
+                }
             }
 
             post {

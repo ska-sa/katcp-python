@@ -3,6 +3,10 @@
 *************
 Release Notes
 *************
+0.9.3
+=====
+* Make compatible in Python 3.9 by addressing deprecation issues.
+
 0.9.2
 =====
 * Consistent error message in py2 and py3 for error in Timestamp decode
