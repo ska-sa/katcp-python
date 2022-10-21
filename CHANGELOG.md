@@ -1,3 +1,6 @@
+21 October 2022 (0.9.3)
+* Address deprecation issues in Python 3.9 (PR [#263](https://github.com/ska-sa/katcp-python/pull/263))
+
 22 September 2022 (0.9.2)
 * consistent error message in py2 and py3 for error in Timestamp decode (PR [#258](https://github.com/ska-sa/katcp-python/pull/258))  
 
