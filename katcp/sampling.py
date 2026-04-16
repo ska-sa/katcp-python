@@ -464,23 +464,38 @@ class SampleEventRate(SampleStrategy):
         return status != last_s or value != last_v
 
     @update_in_ioloop
-    def update(self, sensor, reading):
-        sensor_changed = self._sensor_changed(reading)
-        if not sensor_changed:
+    def _update(self, sensor, reading):
+        """
+        Performs the same checks as in update() to prevent race conditions.
+        """
+        if not self._sensor_changed(reading):
             # Ignore update if sensor value/status is unchanged
             return
-        now = self.ioloop.time()
-        if now < self._not_before:
+        if self.ioloop.time() < self._not_before:
             # Too soon to send an update again
-            if not self._short_timeout_handle:
-                # Make sure we schedule a callback to send the sensor value as
-                # soon as the minimum period since the last update has expired
-                self._short_timeout_handle = self.ioloop.call_at(
-                    self._not_before, self._short_timeout_handler)
+            if self._short_timeout_handle:
+                return
+            # Make sure we schedule a callback to send the sensor value as
+            # soon as the minimum period since the last update has expired
+            self._short_timeout_handle = self.ioloop.call_at(
+                self._not_before, self._short_timeout_handler)
         else:
             # Send the sensor value, updating self._not_before and
             # self._last_reading_sent in the process
             self.inform(reading)
+
+    def update(self, sensor, reading):
+        """
+        Pre-check of read-only conditions, prevents scheduling update() coroutine on
+        ioloop if update is not required.
+        """
+        if not self._sensor_changed(reading):
+            return
+        if self.ioloop.time() < self._not_before:
+            if self._short_timeout_handle:
+                return
+
+        self._update(sensor, reading)
 
     def get_sampling(self):
         return SampleStrategy.EVENT_RATE
