@@ -43,6 +43,47 @@ def format_inform_v5(sensor, *reading):
         "sensor-status", timestamp, "1", sensor.name, status, value)
 
 
+import functools
+import threading
+from tornado import stack_context
+
+class CallbackHandler:
+
+    def __init__(self):
+        self.periodic_handles = {}
+        self.handles_lock = threading.Lock()
+
+    def install_callback(self, ioloop):
+        with self.handles_lock:
+            loop_id = id(ioloop)
+            if self.periodic_handles.get(loop_id):
+                return
+
+            handle = tornado.ioloop.PeriodicCallback(
+                lambda x: None,
+                100,
+                ioloop
+            )
+
+            self.periodic_handles[loop_id] = handle
+
+            handle.start()
+
+    @staticmethod
+    def add_callback(callback, _self, *args, **kwargs):
+        if _self.ioloop._closing:
+            return
+
+        _self.ioloop._callbacks.append(functools.partial(
+                stack_context.wrap(callback), _self, *args, **kwargs))
+
+        if len(_self.ioloop._callbacks) >= 1000:
+            _self.ioloop._waker.wake()
+
+
+CALLBACK_HANDLER = CallbackHandler()
+
+
 def update_in_ioloop(update):
     """Decorator that ensures an update() method is run in the tornado ioloop.
 
@@ -60,6 +101,27 @@ def update_in_ioloop(update):
             update(self, sensor, reading)
         else:
             self.ioloop.add_callback(update, self, sensor, reading)
+
+    return wrapped_update
+
+
+def update_in_ioloop_buffered(update):
+    """Decorator that ensures an update() method is run in the tornado ioloop.
+
+    Does this by checking the thread identity. Requires that the object to
+    which the method is bound has the attributes :attr:`_ioloop_thread_id`
+    (the result of thread.get_ident() in the ioloop thread) and :attr:`ioloop`
+    (the ioloop instance in use). Also assumes the signature
+    `update(self, sensor, reading)` for the method.
+
+
+    """
+    @wraps(update)
+    def wrapped_update(self, sensor, reading):
+        if get_thread_ident() == self._ioloop_thread_id:
+            update(self, sensor, reading)
+        else:
+            CALLBACK_HANDLER.add_callback(update, self, sensor, reading)
 
     return wrapped_update
 
@@ -430,6 +492,7 @@ class SampleEventRate(SampleStrategy):
         # don't send updates until timestamp _not_before
         self._not_before = 0
         self._last_reading_sent = (None, None, None)
+        CALLBACK_HANDLER.install_callback(self.ioloop)
 
     def inform(self, reading):
         SampleStrategy.inform(self, reading)
@@ -463,7 +526,7 @@ class SampleEventRate(SampleStrategy):
         _, last_s, last_v = self._last_reading_sent
         return status != last_s or value != last_v
 
-    @update_in_ioloop
+    @update_in_ioloop_buffered
     def update(self, sensor, reading):
         sensor_changed = self._sensor_changed(reading)
         if not sensor_changed:
