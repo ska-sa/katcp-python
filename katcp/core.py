@@ -523,6 +523,41 @@ class Message(object):
     # pylint: enable-msg = W0142
 
 
+class ReceivedMessage(Message):
+
+    INVALID_NAME_PAT = re.compile(r'[^a-zA-Z0-9-]')
+
+    __slots__ = ["mtype", "name", "mid", "arguments"]
+
+    def __init__(self, mtype, name, arguments=None, mid=None):
+        self.mtype = mtype
+        self.name = name
+        self.mid = mid
+        self.arguments = arguments if arguments is not None else []
+
+        # check message type
+
+        if mtype not in self.TYPE_SYMBOLS:
+            raise KatcpSyntaxError("Invalid command type %r." % (mtype,))
+
+        # check message id
+
+        if self.mid is not None and not self.mid.isdigit():
+            raise KatcpSyntaxError("Invalid message id %r." % (mid,))
+
+        # check command name validity
+
+        if not name:
+            raise KatcpSyntaxError("Command missing command name.")
+        if self.INVALID_NAME_PAT.search(name):
+            raise KatcpSyntaxError("Command name should consist only of "
+                                   "alphanumeric characters and dashes (got %r)."
+                                   % (name,))
+        if not name[0].isalpha():
+            raise KatcpSyntaxError("Command name should start with an "
+                                   "alphabetic character (got %r)."
+                                   % (name,))
+
 class MessageParser(object):
     """Parses lines into Message objects."""
 
@@ -613,9 +648,7 @@ class MessageParser(object):
             raise KatcpSyntaxError("Bad message name (and possibly id) %r." %
                                    (ensure_native_str(name),))
 
-        name = ensure_native_str(name)
-
-        return Message(mtype, name, arguments, mid)
+        return ReceivedMessage(mtype, name, arguments, mid)
 
 
 class ProtocolFlags(object):
