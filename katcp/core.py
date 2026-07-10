@@ -255,9 +255,10 @@ class Message(object):
     ESCAPE_RE = re.compile(br"[\\ \0\n\r\x1b\t]")
 
     ## @brief Attempt to optimize messages by specifying attributes up front
-    __slots__ = ["mtype", "name", "mid", "arguments"]
+    __slots__ = ["mtype", "name", "mid", "arguments", "boundary_time"]
 
     def __init__(self, mtype, name, arguments=None, mid=None):
+        self.boundary_time = time.monotonic()
         self.mtype = mtype
         self.name = name
 
@@ -296,6 +297,9 @@ class Message(object):
             raise KatcpSyntaxError("Command name should start with an "
                                    "alphabetic character (got %r)."
                                    % (name,))
+
+    def reset_boundary_time(self):
+        self.boundary_time = time.monotonic()
 
     def format_argument(self, arg):
         """Format a Message argument to a byte string"""

@@ -522,6 +522,7 @@ class KATCPServer(object):
         client_address = self.get_address(stream)
         try:
             while True:
+                start_read_time = time.monotonic()
                 try:
                     if stream.closed():
                         # read_until_regex() below will still give us the
@@ -529,6 +530,7 @@ class KATCPServer(object):
                         # resulting in message handlers being called with a
                         # closed connection. Exit early instead.
                         break
+                    start_read_time = time.monotonic()
                     line = yield stream.read_until_regex(b'\n|\r')
                 except iostream.StreamClosedError:
                     # Assume that _stream_closed_callback() will handle this
@@ -552,6 +554,11 @@ class KATCPServer(object):
                     continue  # Wait for the next message and hope it is better
                 try:
                     if msg:  # Ignore empty messages (i.e empty lines)
+                        if msg.name == 'wide-gain':
+                            self._logger.info(
+                                '[DEBUG] Took {} seconds to read and parse wide-gain '
+                                'message'.format(time.monotonic() - start_read_time)
+                            )
                         yield self._device.on_message(client_conn, msg)
                 except Exception:
                     self._logger.error('Error handling message {0!s}'
@@ -834,9 +841,19 @@ class MessageHandlerThread(object):
             raise RuntimeError('MessageHandlerThread unhandled '
                                'message queue full, not handling message')
         ready_future = Future()
+        msg.reset_boundary_time()
         self._msg_queue.append((ready_future, client_conn, msg))
         self._wake.set()
         return ready_future
+
+    @gen.coroutine
+    def log_msg_boundary_time_on_complete_handler(self, handler, client_conn, msg):
+        yield handler(client_conn, msg)
+        self._logger.info(
+            '[DEBUG] Took {} seconds to handle wide-gain message.'.format(
+                msg.boundary_time - time.monotonic()
+            )
+        )
 
     def run(self):
         self._running.set()
@@ -849,9 +866,20 @@ class MessageHandlerThread(object):
                     self._wake.wait()
                 while self._msg_queue:
                     ready_future, client_conn, msg = self._msg_queue.popleft()
+                    if msg.name == 'wide-gain':
+                        self._logger.info(
+                            'Message wide-gain spent {} seconds in message handler queue.'.format(
+                                msg.boundary_time - time.monotonic()
+                            )
+                        )
                     try:
+                        msg.reset_boundary_time()
                         res = self.handler(client_conn, msg)
                         if gen.is_future(res):
+                            if msg.name == 'wide-gain':
+                                res = self.log_msg_boundary_time_on_complete_handler(
+                                    self.handler, client_conn, msg
+                                )
                             self.ioloop.add_callback(chain_future, res,
                                                      ready_future)
                         else:
