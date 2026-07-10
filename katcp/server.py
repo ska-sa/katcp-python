@@ -870,16 +870,23 @@ class MessageHandlerThread(object):
                                     time.time() - msg.boundary_time
                                 )
                             )
+                        msg.reset_boundary_time()
                         res = self.handler(client_conn, msg)
                         if gen.is_future(res):
                             if msg.name == 'wide-gain':
                                 self.ioloop.add_callback(
-                                    res.add_done_callback, log_msg_boundary_time_on_complete_handler
+                                    ready_future.add_done_callback, log_msg_boundary_time_on_complete_handler
                                 )
                             msg.reset_boundary_time()
                             self.ioloop.add_callback(chain_future, res,
                                                      ready_future)
                         else:
+                            if msg.name == 'wide-gain':
+                                self._logger.info(
+                                    '[DEBUG] Took {} seconds to handle wide-gain message.'.format(
+                                        time.time() - msg.boundary_time
+                                    )
+                                )
                             ready_future.set_result(res)
                     except Exception as e:
                         err_msg = ('Error calling message '
