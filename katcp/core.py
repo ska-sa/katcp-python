@@ -258,7 +258,7 @@ class Message(object):
     __slots__ = ["mtype", "name", "mid", "arguments", "boundary_time"]
 
     def __init__(self, mtype, name, arguments=None, mid=None):
-        self.boundary_time = time.monotonic()
+        self.boundary_time = time.time()
         self.mtype = mtype
         self.name = name
 
@@ -299,7 +299,7 @@ class Message(object):
                                    % (name,))
 
     def reset_boundary_time(self):
-        self.boundary_time = time.monotonic()
+        self.boundary_time = time.time()
 
     def format_argument(self, arg):
         """Format a Message argument to a byte string"""

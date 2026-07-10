@@ -522,7 +522,7 @@ class KATCPServer(object):
         client_address = self.get_address(stream)
         try:
             while True:
-                start_read_time = time.monotonic()
+                start_read_time = time.time()
                 try:
                     if stream.closed():
                         # read_until_regex() below will still give us the
@@ -530,7 +530,7 @@ class KATCPServer(object):
                         # resulting in message handlers being called with a
                         # closed connection. Exit early instead.
                         break
-                    start_read_time = time.monotonic()
+                    start_read_time = time.time()
                     line = yield stream.read_until_regex(b'\n|\r')
                 except iostream.StreamClosedError:
                     # Assume that _stream_closed_callback() will handle this
@@ -557,7 +557,7 @@ class KATCPServer(object):
                         if msg.name == 'wide-gain':
                             self._logger.info(
                                 '[DEBUG] Took {} seconds to read and parse wide-gain '
-                                'message'.format(time.monotonic() - start_read_time)
+                                'message'.format(time.time() - start_read_time)
                             )
                         yield self._device.on_message(client_conn, msg)
                 except Exception:
@@ -851,7 +851,7 @@ class MessageHandlerThread(object):
         yield handler(client_conn, msg)
         self._logger.info(
             '[DEBUG] Took {} seconds to handle wide-gain message.'.format(
-                msg.boundary_time - time.monotonic()
+                msg.boundary_time - time.time()
             )
         )
 
@@ -869,7 +869,7 @@ class MessageHandlerThread(object):
                     if msg.name == 'wide-gain':
                         self._logger.info(
                             'Message wide-gain spent {} seconds in message handler queue.'.format(
-                                msg.boundary_time - time.monotonic()
+                                msg.boundary_time - time.time()
                             )
                         )
                     try:
