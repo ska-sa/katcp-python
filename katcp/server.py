@@ -846,15 +846,6 @@ class MessageHandlerThread(object):
         self._wake.set()
         return ready_future
 
-    @gen.coroutine
-    def log_msg_boundary_time_on_complete_handler(self, handler, client_conn, msg):
-        yield handler(client_conn, msg)
-        self._logger.info(
-            '[DEBUG] Took {} seconds to handle wide-gain message.'.format(
-                msg.boundary_time - time.time()
-            )
-        )
-
     def run(self):
         self._running.set()
         # Set the default ioloop for anything using IOLoop.current()
@@ -869,17 +860,23 @@ class MessageHandlerThread(object):
                     if msg.name == 'wide-gain':
                         self._logger.info(
                             'Message wide-gain spent {} seconds in message handler queue.'.format(
-                                msg.boundary_time - time.time()
+                                time.time() - msg.boundary_time
                             )
                         )
                     try:
-                        msg.reset_boundary_time()
+                        def log_msg_boundary_time_on_complete_handler(f):
+                            self._logger.info(
+                                '[DEBUG] Took {} seconds to handle wide-gain message.'.format(
+                                    time.time() - msg.boundary_time
+                                )
+                            )
                         res = self.handler(client_conn, msg)
                         if gen.is_future(res):
                             if msg.name == 'wide-gain':
-                                res = self.log_msg_boundary_time_on_complete_handler(
-                                    self.handler, client_conn, msg
+                                self.ioloop.add_callback(
+                                    res.add_done_callback, log_msg_boundary_time_on_complete_handler
                                 )
+                            msg.reset_boundary_time()
                             self.ioloop.add_callback(chain_future, res,
                                                      ready_future)
                         else:
