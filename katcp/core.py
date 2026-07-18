@@ -321,8 +321,19 @@ class Message(object):
             else:
                 return encode_utf8_with_error_log(str(arg))
 
+    @classmethod
+    def _from_parsed(cls, mtype, name, arguments, mid):
+        """Construct a Message from pre-validated parts, bypassing __init__."""
+        msg = cls.__new__(cls)
+        msg.mtype = mtype
+        msg.name = name
+        msg.mid = mid
+        msg.arguments = arguments
+        return msg
+
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
+
 
         Returns
         -------
@@ -330,7 +341,8 @@ class Message(object):
             A copy of the message object.
 
         """
-        return Message(self.mtype, self.name, self.arguments)
+        return self._from_parsed(self.mtype, self.name, list(self.arguments),
+                                 None)
 
     def __bytes__(self):
         """Return Message serialized for transmission.
@@ -342,9 +354,14 @@ class Message(object):
 
         """
         if self.arguments:
-            escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
-                            for x in self.arguments]
-            escaped_args = [x or b"\\@" for x in escaped_args]
+            search = self.ESCAPE_RE.search
+            sub = self.ESCAPE_RE.sub
+            escape_match = self._escape_match
+            escaped_args = []
+            for x in self.arguments:
+                if search(x):
+                    x = sub(escape_match, x)
+                escaped_args.append(x or b"\\@")
             arg_str = b" " + b" ".join(escaped_args)
         else:
             arg_str = b""
@@ -541,6 +558,9 @@ class MessageParser(object):
     ## @brief Regular expression matching all escapes.
     UNESCAPE_RE = re.compile(br"\\(.?)")
 
+    ## @brief Non-whitespace specials that require escaping within arguments.
+    SPECIAL_NO_WHITESPACE_RE = re.compile(br"[\0\n\r\x1b]")
+
     ## @brief Regular expression matching KATCP whitespace (just space and tab)
     WHITESPACE_RE = re.compile(br"[ \t]+")
 
@@ -602,7 +622,14 @@ class MessageParser(object):
             del parts[-1]
 
         name = parts[0][1:]
-        arguments = [self._parse_arg(x) for x in parts[1:]]
+        if b"\\" not in line:
+            match = self.SPECIAL_NO_WHITESPACE_RE.search(line, len(parts[0]))
+            if match:
+                raise KatcpSyntaxError(
+                    "Un-escaped special %r." % (match.group(),))
+            arguments = parts[1:]
+        else:
+            arguments = [self._parse_arg(x) for x in parts[1:]]
 
         # split out message id
         match = self.NAME_RE.match(name)
@@ -615,7 +642,7 @@ class MessageParser(object):
 
         name = ensure_native_str(name)
 
-        return Message(mtype, name, arguments, mid)
+        return Message._from_parsed(mtype, name, arguments, mid)
 
 
 class ProtocolFlags(object):
