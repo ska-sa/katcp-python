@@ -334,7 +334,6 @@ class Message(object):
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
 
-
         Returns
         -------
         msg : Message
