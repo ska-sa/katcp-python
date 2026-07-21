@@ -4,6 +4,8 @@ Verification and benchmarking scripts for the `katcp/core.py` large-message fast
 
 Scripts resolve the target repository via the `KATCP_REPO` environment variable, defaulting to the parent repository containing this `bench/` directory.
 
+(The pre-existing `benchtx*`/`runner.py`/`results.py` scripts in this directory are legacy twisted-based benchmarks, unrelated to these tools.)
+
 ### Requirements
 
 Requires repository dependencies (`future`, `tornado>=4.3,<5` for e2e tests).

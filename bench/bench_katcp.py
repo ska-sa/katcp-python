@@ -27,10 +27,16 @@ PARSER = MessageParser()
 CHANNEL_COUNTS = [1, 256, 1024, 4096, 32768]
 
 
+def make_gain_value(i):
+    """One complex gain as wire bytes, varied slightly per channel."""
+    real = 0.9 + (i % 7) * 0.01
+    imag = 0.05 + (i % 5) * 0.01
+    return ("%.4f+%.4fj" % (real, imag)).encode('ascii')
+
+
 def make_gain_line(nchans, mid=123):
     """Wire-format ?gain request: stream, input, then one complex gain per channel."""
-    vals = [("%.4f+%.4fj" % (0.9 + (i % 7) * 0.01, 0.05 + (i % 5) * 0.01)).encode('ascii')
-            for i in range(nchans)]
+    vals = [make_gain_value(i) for i in range(nchans)]
     args = [b"wide.antenna-channelised-voltage", b"m001h"] + vals
     line = b"?wide-gain[%d] " % mid + b" ".join(args)
     return line, args
@@ -54,11 +60,11 @@ def main():
         line, args = make_gain_line(n)
         msg = PARSER.parse(line)
 
-        parse_s = bench(lambda: PARSER.parse(line))
-        encode_s = bench(lambda: msg.__bytes__())
-        init_s = bench(lambda: Message(Message.REQUEST, "wide-gain",
-                                       msg.arguments, b"123"))
-        copy_s = bench(lambda: msg.copy())
+        parse_s = bench(lambda line=line: PARSER.parse(line))
+        encode_s = bench(lambda msg=msg: msg.__bytes__())
+        init_s = bench(lambda msg=msg: Message(Message.REQUEST, "wide-gain",
+                                               msg.arguments, b"123"))
+        copy_s = bench(lambda msg=msg: msg.copy())
 
         print("%8d %8.1f %10.4f %10.4f %10.4f %10.4f" % (
             n, len(line) / 1024.0,

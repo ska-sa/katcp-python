@@ -29,7 +29,7 @@ if cli_args.fast:
     import fastkatcp  # noqa: F401
     print("[fastkatcp patch ACTIVE]")
 
-from katcp import AsyncReply, CallbackClient, DeviceServer, Message  # noqa: E402
+from katcp import AsyncReply, CallbackClient, DeviceServer  # noqa: E402
 
 
 class Device(DeviceServer):
@@ -83,9 +83,15 @@ class MiniProxy(DeviceServer):
         raise AsyncReply()
 
 
+def make_gain_value(i):
+    """One complex gain as wire bytes, varied slightly per channel."""
+    real = 0.9 + (i % 7) * 0.01
+    imag = 0.05 + (i % 5) * 0.01
+    return ("%.4f+%.4fj" % (real, imag)).encode('ascii')
+
+
 def make_line(nchans, mid):
-    vals = [("%.4f+%.4fj" % (0.9 + (i % 7) * 0.01, 0.05 + (i % 5) * 0.01)).encode('ascii')
-            for i in range(nchans)]
+    vals = [make_gain_value(i) for i in range(nchans)]
     return (b"?wide-gain[%d] wide.antenna-channelised-voltage m001h " % mid
             + b" ".join(vals) + b"\n")
 

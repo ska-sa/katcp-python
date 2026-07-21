@@ -153,14 +153,14 @@ def main():
     t0 = time.time()
     if opts.pipelined:
         mids = []
-        for p in range(opts.passes):
+        for _p in range(opts.passes):
             for inp in inputs:
                 mids.append(kc.send(b"wide-gain", [stream, inp] + gains[inp]))
         for mid in mids:
             reply, _ = kc.wait_reply(b"wide-gain", mid)
             assert b" ok" in reply, reply[:200]
     else:
-        for p in range(opts.passes):
+        for _p in range(opts.passes):
             for inp in inputs:
                 t1 = time.time()
                 mid = kc.send(b"wide-gain", [stream, inp] + gains[inp])

@@ -83,7 +83,7 @@ def outcome(parser, line):
 mismatches = 0
 N = 300000
 try:
-    for i in range(N):
+    for _i in range(N):
         line = rand_line()
         a = outcome(p_orig, line)
         b = outcome(p_fast, line)

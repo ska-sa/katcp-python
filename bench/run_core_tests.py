@@ -6,7 +6,6 @@ Usage:
     python run_core_tests.py --fast
 """
 from __future__ import print_function
-import os
 import sys
 import unittest
 
