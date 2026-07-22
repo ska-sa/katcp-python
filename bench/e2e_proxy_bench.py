@@ -7,7 +7,7 @@ Simulates KATCP proxied request flow (copy -> rename -> callback -> reply)
 with immediate device responses to measure proxy stack overhead.
 
 Usage:
-    python e2e_proxy_bench.py [--fast] [-n N] [--chans C1,C2,...]
+    python e2e_proxy_bench.py [-n N] [--chans C1,C2,...]
 """
 from __future__ import print_function
 import argparse
@@ -19,15 +19,9 @@ from _repo import katcp_repo
 sys.path.insert(0, katcp_repo())
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--fast', action='store_true',
-                    help='apply fast-path katcp patch before starting')
 parser.add_argument('-n', type=int, default=200, help='messages per run')
 parser.add_argument('--chans', default='1,4096')
 cli_args = parser.parse_args()
-
-if cli_args.fast:
-    import fastkatcp  # noqa: F401
-    print("[fastkatcp patch ACTIVE]")
 
 from katcp import AsyncReply, CallbackClient, DeviceServer  # noqa: E402
 

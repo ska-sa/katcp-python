@@ -6,7 +6,6 @@ to compare outputs (including exception types and messages) against current HEAD
 
 Usage:
     python fuzz_parse_branch.py
-    python fuzz_parse_branch.py --fastkatcp
 """
 from __future__ import print_function
 import os
@@ -36,10 +35,6 @@ for fname in ('core.py', 'compat.py', 'kattypes.py', 'sampling.py'):
 sys.path.insert(0, tmpdir)
 
 from katcp.core import MessageParser  # noqa: E402
-
-if '--fastkatcp' in sys.argv:
-    import fastkatcp  # noqa: F401
-    print("[testing fastkatcp monkeypatch]")
 
 from pristinekatcp.core import MessageParser as OrigParser  # noqa: E402
 

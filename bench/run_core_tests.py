@@ -3,7 +3,6 @@
 
 Usage:
     python run_core_tests.py
-    python run_core_tests.py --fast
 """
 from __future__ import print_function
 import sys
@@ -11,11 +10,6 @@ import unittest
 
 from _repo import katcp_repo
 sys.path.insert(0, katcp_repo())
-
-if '--fast' in sys.argv:
-    sys.argv.remove('--fast')
-    import fastkatcp  # noqa: F401
-    print("[fastkatcp patch ACTIVE]")
 
 loader = unittest.TestLoader()
 suite = unittest.TestSuite()

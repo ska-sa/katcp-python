@@ -6,7 +6,6 @@ env var, else the repo containing this bench/ directory).
 
 Usage:
     python bench_katcp.py
-    python bench_katcp.py --fast
 """
 from __future__ import print_function
 import sys
@@ -15,10 +14,6 @@ import timeit
 from _repo import katcp_repo
 
 sys.path.insert(0, katcp_repo())
-
-if '--fast' in sys.argv:
-    import fastkatcp  # noqa: F401  (optional monkeypatch, if on PYTHONPATH)
-    print("[fastkatcp patch ACTIVE]")
 
 from katcp.core import Message, MessageParser  # noqa: E402
 
