@@ -20,6 +20,7 @@ Requires repository dependencies (`future`, `tornado>=4.3,<5` for e2e tests).
 | `bench_katcp.py` | Standalone parse/encode/init/copy timings across channel counts for current checkout. | ~30 s |
 | `e2e_proxy_bench.py` | Local client → mini-proxy → mock device chain to measure serial vs pipelined per-message latency. Options: `-n`, `--chans`. | ~1 min |
 | `devm_repro.py` | Live test against a running CBF+ proxy. Queries and re-sets existing gains to keep state neutral. Requires `--port <proxy-port>` (see the proxy's `--addr` on its command line); `--smoke` (24 msgs), default 880 msgs. | ~5 min |
+| `test_latency_target.py` | Gain-set timing against either the CBF+ proxy (`?wide-gain`) or the product controller (`?gain`), so the two can be subtracted to isolate proxy overhead. Input labels discovered from the proxy, or given via `--inputs` (required for the product). `--serial` for per-request latency, default pipelined. Needs `aiokatcp`, `numpy`, `uvloop` — use the katsdpcontroller venv. | ~1 min per run |
 
 ### Quick Start
 
