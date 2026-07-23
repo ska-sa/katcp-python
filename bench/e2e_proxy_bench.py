@@ -61,6 +61,7 @@ class MiniProxy(DeviceServer):
         self._dev_client.stop()
 
     def request_wide_gain(self, req, msg):
+        """Forward gains to the device and relay its reply."""
         devmsg = msg.copy()
         devmsg.name = "wide-gain"
 
