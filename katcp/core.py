@@ -585,12 +585,12 @@ class MessageParser(object):
         if not is_bytes(line):
             raise KatcpTypeError("Line type must be bytes - not {}".format(type(line)))
 
-        type_char = line[:1]
-        if type_char not in self.TYPE_SYMBOL_LOOKUP:
+        try:
+            mtype = self.TYPE_SYMBOL_LOOKUP[line[:1]]
+        except KeyError:
             raise KatcpSyntaxError(
-                "Bad type character %r." % (ensure_native_str(type_char),))
-
-        mtype = self.TYPE_SYMBOL_LOOKUP[type_char]
+                "Bad type character %r." % (ensure_native_str(line[:1]),)
+            )
 
         # find command and arguments name
         # (removing possible empty argument resulting from whitespace at end
