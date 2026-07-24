@@ -595,9 +595,7 @@ class MessageParser(object):
         # find command and arguments name
         # (removing possible empty argument resulting from whitespace at end
         #  of command)
-        parts = self.WHITESPACE_RE.split(line)
-        if not parts[-1]:
-            del parts[-1]
+        parts = self.WHITESPACE_RE.split(line.rstrip(b" \t"))
 
         name = parts[0][1:]
         arguments = [self._parse_arg(x) for x in parts[1:]]
