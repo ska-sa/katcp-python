@@ -557,6 +557,12 @@ class MessageParser(object):
     ## @brief Regular expression matching all escapes.
     UNESCAPE_RE = re.compile(br"\\(.?)")
 
+    ## @brief (escape sequence, replacement) pairs generated from ESCAPE_LOOKUP.
+    #  Used to quickly unescape string arguments without regex callbacks.
+    ESCAPE_SEQUENCES = tuple(
+        (b"\\" + _code, _char)
+        for _code, _char in sorted(Message.ESCAPE_LOOKUP.items()))
+
     ## @brief Non-whitespace specials that require escaping within arguments.
     SPECIAL_NO_WHITESPACE_RE = re.compile(br"[\0\n\r\x1b]")
 
@@ -582,6 +588,20 @@ class MessageParser(object):
         match = self.SPECIAL_RE.search(arg)
         if match:
             raise KatcpSyntaxError("Un-escaped special %r." % (match.group(),))
+        if b"\\" not in arg:
+            return arg
+        if b"\\\\" not in arg:
+            # If there are no escaped backslashes (\\), escape sequences don't overlap.
+            # We can unescape using simple string replacement, which is much faster
+            # than running a regex with Python callback functions.
+            unescaped = arg
+            for sequence, char in self.ESCAPE_SEQUENCES:
+                unescaped = unescaped.replace(sequence, char)
+            if b"\\" not in unescaped:
+                return unescaped
+
+            # If a backslash remains, the escape sequence was invalid or incomplete.
+            # Fall back to regex parsing so we raise the expected error message.
         return self.UNESCAPE_RE.sub(self._unescape_match, arg)
 
     def parse(self, line):
