@@ -316,6 +316,23 @@ class Message(object):
             else:
                 return encode_utf8_with_error_log(str(arg))
 
+    @classmethod
+    def _from_parsed(cls, mtype, name, arguments, mid=None):
+        """
+        Message initialiser that bypasses Message.__init__() for pre-validated
+        parameters.
+
+        The common cases that make the validation in Message.__init__() redundant are:
+            1. Message decoding via MessageParser.parse().
+            2. Shallow copy intantiation via Message.copy().
+        """
+        msg = cls.__new__(cls)
+        msg.mtype = mtype
+        msg.name = name
+        msg.arguments = arguments
+        msg.mid = mid
+        return msg
+
     def copy(self):
         """Return a shallow copy of the message object and its arguments.
 
@@ -325,7 +342,7 @@ class Message(object):
             A copy of the message object.
 
         """
-        return Message(self.mtype, self.name, self.arguments)
+        return self._from_parsed(self.mtype, self.name, list(self.arguments))
 
     def __bytes__(self):
         """Return Message serialized for transmission.
@@ -603,7 +620,7 @@ class MessageParser(object):
             raise KatcpSyntaxError("Bad message name (and possibly id) %r." %
                                    (ensure_native_str(parts[0][1:]),))
 
-        return Message(mtype, name, arguments, mid)
+        return Message._from_parsed(mtype, name, arguments, mid=mid)
 
 
 class ProtocolFlags(object):
