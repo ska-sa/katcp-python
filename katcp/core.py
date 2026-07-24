@@ -260,14 +260,9 @@ class Message(object):
     def __init__(self, mtype, name, arguments=None, mid=None):
         self.mtype = mtype
         self.name = name
-
-        if mid is None:
-            self.mid = None
-        else:
-            if not is_bytes(mid):
-                self.mid = str(mid).encode('ascii')
-            else:
-                self.mid = mid
+        self.mid = mid
+        if mid is not None and not is_bytes(mid):
+            self.mid = str(mid).encode('ascii')
 
         if arguments is None:
             self.arguments = []
