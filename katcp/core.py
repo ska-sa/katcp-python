@@ -597,19 +597,16 @@ class MessageParser(object):
         #  of command)
         parts = self.WHITESPACE_RE.split(line.rstrip(b" \t"))
 
-        name = parts[0][1:]
         arguments = [self._parse_arg(x) for x in parts[1:]]
 
         # split out message id
-        match = self.NAME_RE.match(name)
+        match = self.NAME_RE.match(parts[0][1:])
         if match:
-            name = match.group('name')
+            name = ensure_native_str(match.group('name'))
             mid = match.group('id')
         else:
             raise KatcpSyntaxError("Bad message name (and possibly id) %r." %
-                                   (ensure_native_str(name),))
-
-        name = ensure_native_str(name)
+                                   (ensure_native_str(parts[0][1:]),))
 
         return Message(mtype, name, arguments, mid)
 
