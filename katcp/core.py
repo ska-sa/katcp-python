@@ -570,6 +570,21 @@ class MessageParser(object):
             raise KatcpSyntaxError("Un-escaped special %r." % (match.group(),))
         return self.UNESCAPE_RE.sub(self._unescape_match, arg)
 
+    def _parse_args(self, args):
+        """Parse a sequence of arguments."""
+        search = self.SPECIAL_RE.search
+        sub = self.UNESCAPE_RE.sub
+        unescape_match = self._unescape_match
+        parsed = []
+        for arg in args:
+            match = search(arg)
+            if match:
+                raise KatcpSyntaxError("Un-escaped special %r." % (match.group(),))
+            parsed.append(sub(unescape_match, arg))
+
+        return parsed
+
+
     def parse(self, line):
         """Parse a line, return a Message.
 
@@ -604,7 +619,7 @@ class MessageParser(object):
         #  of command)
         parts = self.WHITESPACE_RE.split(line.rstrip(b" \t"))
 
-        arguments = [self._parse_arg(x) for x in parts[1:]]
+        arguments = self._parse_args(parts[1:])
 
         # split out message id
         match = self.NAME_RE.match(parts[0][1:])
