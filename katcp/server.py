@@ -1024,7 +1024,7 @@ class DeviceServerBase(with_metaclass(DeviceServerMetaclass, object)):
 
         """
         # log messages received so that no one else has to
-        self._logger.debug('received: {0!s}'.format(msg))
+        self._logger.debug('received: %s', msg)
 
         if msg.mtype == msg.REQUEST:
             return self.handle_request(client_conn, msg)
