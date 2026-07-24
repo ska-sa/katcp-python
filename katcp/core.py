@@ -254,6 +254,9 @@ class Message(object):
     ## @brief Regular expression matching all unescaped character.
     ESCAPE_RE = re.compile(br"[\\ \0\n\r\x1b\t]")
 
+    ## @brief Regular expression matching valid name.
+    NAME_ONLY_RE = re.compile(br"^[a-zA-Z][a-zA-Z0-9-]*$")
+
     ## @brief Attempt to optimize messages by specifying attributes up front
     __slots__ = ["mtype", "name", "mid", "arguments"]
 
@@ -270,27 +273,19 @@ class Message(object):
             self.arguments = [self.format_argument(x) for x in arguments]
 
         # check message type
-
         if mtype not in self.TYPE_SYMBOLS:
             raise KatcpSyntaxError("Invalid command type %r." % (mtype,))
 
         # check message id
-
         if self.mid is not None and not self.mid.isdigit():
             raise KatcpSyntaxError("Invalid message id %r." % (mid,))
 
         # check command name validity
-
-        if not name:
-            raise KatcpSyntaxError("Command missing command name.")
-        if not name.replace("-", "").isalnum():
-            raise KatcpSyntaxError("Command name should consist only of "
-                                   "alphanumeric characters and dashes (got %r)."
-                                   % (name,))
-        if not name[0].isalpha():
-            raise KatcpSyntaxError("Command name should start with an "
-                                   "alphabetic character (got %r)."
-                                   % (name,))
+        if not self.NAME_ONLY_RE.match(name):
+            raise KatcpSyntaxError(
+                "Command name is either missing, doesn't start with an alphabetic "
+                "character, or contains invalid characters (got %r)." % (name,)
+            )
 
     def format_argument(self, arg):
         """Format a Message argument to a byte string"""
