@@ -126,12 +126,17 @@ async def main():
     opts = ap.parse_args()
 
     logging.basicConfig(level=logging.WARNING)
-    asyncio.get_event_loop().add_signal_handler(signal.SIGINT, asyncio.current_task().cancel)
+    asyncio.get_event_loop().add_signal_handler(
+        signal.SIGINT, asyncio.current_task().cancel
+    )
 
     loop = asyncio.get_running_loop()
     reader, writer = await asyncio.open_connection(opts.host, opts.port, limit=2 ** 22)
 
-    labels = opts.inputs.split(",") if opts.inputs else await discover_inputs(reader, writer)
+    labels = (
+        opts.inputs.split(",") if opts.inputs
+        else await discover_inputs(reader, writer)
+    )
     gains_text = make_gains(len(labels), opts.channels)
     messages = [
         bytes(aiokatcp.Message.request(opts.request, opts.stream, label, *row))
