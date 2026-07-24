@@ -341,21 +341,19 @@ class Message(object):
            The raw bytes of the serialised message, excluding terminating newline.
 
         """
-        if self.arguments:
-            escaped_args = [self.ESCAPE_RE.sub(self._escape_match, x)
-                            for x in self.arguments]
-            escaped_args = [x or b"\\@" for x in escaped_args]
-            arg_str = b" " + b" ".join(escaped_args)
-        else:
-            arg_str = b""
+        parts = [self.TYPE_SYMBOLS[self.mtype], self.name]
 
         if self.mid is not None:
-            mid_str = b"[%s]" % self.mid
-        else:
-            mid_str = b""
+            parts.extend((b"[", self.mid, b"]"))
 
-        return b"%s%s%s%s" % (self.TYPE_SYMBOLS[self.mtype], self.name.encode('ascii'),
-                              mid_str, arg_str)
+        if self.arguments:
+            sub = self.ESCAPE_RE.sub
+            escape_match = self._escape_match
+            escaped = [sub(escape_match, arg) or b"\\@" for arg in self.arguments]
+            parts.append(b" ")
+            parts.append(b" ".join(escaped))
+
+        return b"".join(parts)
 
     def __str__(self):
         """Return Message serialized for transmission as native string.
