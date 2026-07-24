@@ -543,6 +543,9 @@ class MessageParser(object):
     ## @brief Regular expression matching all special characters.
     SPECIAL_RE = re.compile(br"[\0\n\r\x1b\t ]")
 
+    ## @brief Regular expression matching all special characters excluding whitespace.
+    SPECIAL_NO_WHITESPACE_RE = re.compile(br"[\0\n\r\x1b]")
+
     ## @brief Regular expression matching all escapes.
     UNESCAPE_RE = re.compile(br"\\(.?)")
 
@@ -572,18 +575,9 @@ class MessageParser(object):
 
     def _parse_args(self, args):
         """Parse a sequence of arguments."""
-        search = self.SPECIAL_RE.search
         sub = self.UNESCAPE_RE.sub
         unescape_match = self._unescape_match
-        parsed = []
-        for arg in args:
-            match = search(arg)
-            if match:
-                raise KatcpSyntaxError("Un-escaped special %r." % (match.group(),))
-            parsed.append(sub(unescape_match, arg))
-
-        return parsed
-
+        return [sub(unescape_match, arg) for arg in args]
 
     def parse(self, line):
         """Parse a line, return a Message.
@@ -619,7 +613,14 @@ class MessageParser(object):
         #  of command)
         parts = self.WHITESPACE_RE.split(line.rstrip(b" \t"))
 
-        arguments = self._parse_args(parts[1:])
+        match = self.SPECIAL_NO_WHITESPACE_RE.search(line, len(parts[0]))
+        if match:
+            raise KatcpSyntaxError("Un-escaped special %r." % (match.group(),))
+
+        if b"\\" not in line:
+            arguments = parts[1:]
+        else:
+            arguments = self._parse_args(parts[1:])
 
         # split out message id
         match = self.NAME_RE.match(parts[0][1:])
