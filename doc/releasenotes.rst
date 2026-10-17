@@ -3,6 +3,11 @@
 *************
 Release Notes
 *************
+Unreleased
+==========
+* InspectingClientAsync resets its resync backoff after a successful sync, instead of
+  keeping the delay from earlier failures for the life of the client.
+
 0.9.3
 =====
 * Make compatible in Python 3.9 by addressing deprecation issues.

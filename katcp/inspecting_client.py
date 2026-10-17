@@ -442,6 +442,9 @@ class InspectingClientAsync(object):
                                    .format(self.bind_address_string))
                 yield self._send_state(connected=True, synced=True,
                                        model_changed=False, data_synced=True)
+                # Reset here: every path through this try ends in `continue`,
+                # so an `else:` clause would never run
+                self.resync_delay.success()
                 if last_sync_failed:
                     self._logger.warn(
                         'Succesfully resynced with {} after failure'
@@ -480,8 +483,6 @@ class InspectingClientAsync(object):
                 self.katcp_client.disconnect()
                 yield katcp.core.until_later(retry_wait_time)
                 continue
-            else:
-                self.resync_delay.success()
         try:
             self._logger.debug('{}: Sending final state - loop ended'
                                .format(self.bind_address_string))
