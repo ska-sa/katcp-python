@@ -1,3 +1,6 @@
+Unreleased
+* Reset `InspectingClientAsync` resync backoff after a successful sync (PR [#NNN](https://github.com/ska-sa/katcp-python/pull/NNN))
+
 21 October 2022 (0.9.3)
 * Address deprecation issues in Python 3.9 (PR [#263](https://github.com/ska-sa/katcp-python/pull/263))
 

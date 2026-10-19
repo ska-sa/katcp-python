@@ -618,6 +618,44 @@ class TestInspectingClientAsyncStateCallback(tornado.testing.AsyncTestCase):
         yield self._test_inspection_error(
             'break_sensor_list', 'Sensor-list is broken')
 
+    @tornado.testing.gen_test(timeout=1)
+    def test_resync_delay_reset_after_sync(self):
+        # Without the reset the delay keeps the value from earlier failures,
+        # so a later unrelated failure waits up to max_resync_timeout
+        initial = self.client.initial_resync_timeout
+        self.server.break_help = 'Help is broken'
+        # connect() creates resync_delay before the first request is sent
+        yield self.client.connect()
+        delay = self.client.resync_delay
+        failed, success = delay.failed, delay.success
+        failures = []
+        third_failure = tornado.concurrent.Future()
+        reset = tornado.concurrent.Future()
+
+        def count_failure():
+            failed()
+            failures.append(None)
+            if len(failures) == 3:
+                third_failure.set_result(None)
+
+        def notify_success():
+            success()
+            if not reset.done():
+                reset.set_result(None)
+
+        delay.failed, delay.success = count_failure, notify_success
+        # 3 failures make the base delay 27 x initial; the delay is never
+        # below 5 % of the base, so a delay <= initial means it was reset
+        yield third_failure
+        self.server.break_help = False
+        yield self.client.until_synced()
+        try:
+            yield tornado.gen.with_timeout(self.io_loop.time() + 0.5, reset)
+        except tornado.gen.TimeoutError:
+            self.fail('resync delay not reset after a successful sync')
+        self.assertLessEqual(delay.delay, initial)
+
+
 class Test_InformHookDeviceClient(tornado.testing.AsyncTestCase):
     def setUp(self):
         super(Test_InformHookDeviceClient, self).setUp()
